@@ -21,7 +21,11 @@ void LLF(TeamMember_t const &member, const EOS_Data &eos,
      const int m, const int k, const int j, const int il, const int iu, const int ivx,
      const ScrArray2D<Real> &wl, const ScrArray2D<Real> &wr,
      const ScrArray2D<Real> &bl, const ScrArray2D<Real> &br, const DvceArray4D<Real> &bx,
-     DvceArray5D<Real> flx, DvceArray4D<Real> ey, DvceArray4D<Real> ez) {
+     DvceArray5D<Real> flx, DvceArray4D<Real> ey, DvceArray4D<Real> ez,
+     DvceArray4D<Real> uct_aL = {}, DvceArray4D<Real> uct_dL = {},
+     DvceArray4D<Real> uct_dR = {}, DvceArray4D<Real> uct_vt1 = {},
+     DvceArray4D<Real> uct_vt2 = {}) {
+  bool compute_uct = uct_aL.is_allocated();
   int ivy = IVX + ((ivx-IVX) + 1)%3;
   int ivz = IVX + ((ivx-IVX) + 2)%3;
   int iby = ((ivx-IVX) + 1)%3;
@@ -64,6 +68,26 @@ void LLF(TeamMember_t const &member, const EOS_Data &eos,
     if (eos.is_ideal) {flx(m,IEN,k,j,i) = flux.e;}
     ey(m,k,j,i) = flux.by;
     ez(m,k,j,i) = flux.bz;
+
+    // Compute UCT coefficients for LLF (Rusanov): alpha_L = alpha_R = lambda_max
+    if (compute_uct) {
+      Real qa, qb;
+      if (eos.is_ideal) {
+        Real pl = eos.IdealGasPressure(wli.e);
+        Real pr = eos.IdealGasPressure(wri.e);
+        qa = eos.IdealMHDFastSpeed(wli.d, pl, bxi, wli.by, wli.bz);
+        qb = eos.IdealMHDFastSpeed(wri.d, pr, bxi, wri.by, wri.bz);
+      } else {
+        qa = eos.IdealMHDFastSpeed(wli.d, bxi, wli.by, wli.bz);
+        qb = eos.IdealMHDFastSpeed(wri.d, bxi, wri.by, wri.bz);
+      }
+      Real lmax = fmax((fabs(wli.vx) + qa), (fabs(wri.vx) + qb));
+      uct_aL(m,k,j,i)  = 0.5;
+      uct_dL(m,k,j,i)  = 0.5*lmax;
+      uct_dR(m,k,j,i)  = 0.5*lmax;
+      uct_vt1(m,k,j,i) = 0.5*(wli.vy + wri.vy);
+      uct_vt2(m,k,j,i) = 0.5*(wli.vz + wri.vz);
+    }
   });
 
   return;

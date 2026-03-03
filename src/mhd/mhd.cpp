@@ -303,6 +303,27 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
       }
     }
 
+    // select EMF averaging method (default ct_contact)
+    std::string emf_str = pin->GetOrAddString("mhd","emf","ct_contact");
+    if (emf_str.compare("ct_contact") == 0) {
+      emf_method = MHD_EMF::ct_contact;
+    } else if (emf_str.compare("uct_hll") == 0) {
+      emf_method = MHD_EMF::uct_hll;
+    } else if (emf_str.compare("uct_hlld") == 0) {
+      if (rsolver_method != MHD_RSolver::hlld) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "<mhd>/emf = 'uct_hlld' requires rsolver = 'hlld'"
+                  << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      emf_method = MHD_EMF::uct_hlld;
+    } else {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "<mhd>/emf = '" << emf_str << "' not implemented"
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+
     // Final memory allocations
     {
       // allocate second registers
@@ -333,6 +354,28 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
       Kokkos::realloc(e1_cc, nmb, ncells3, ncells2, ncells1);
       Kokkos::realloc(e2_cc, nmb, ncells3, ncells2, ncells1);
       Kokkos::realloc(e3_cc, nmb, ncells3, ncells2, ncells1);
+
+      // allocate UCT arrays if UCT method is selected
+      if (emf_method == MHD_EMF::uct_hll || emf_method == MHD_EMF::uct_hlld) {
+        // x1-face data
+        Kokkos::realloc(aL_x1f, nmb, ncells3, ncells2, ncells1);
+        Kokkos::realloc(dL_x1f, nmb, ncells3, ncells2, ncells1);
+        Kokkos::realloc(dR_x1f, nmb, ncells3, ncells2, ncells1);
+        Kokkos::realloc(vy_x1f, nmb, ncells3, ncells2, ncells1);
+        Kokkos::realloc(vz_x1f, nmb, ncells3, ncells2, ncells1);
+        // x2-face data
+        Kokkos::realloc(aL_x2f, nmb, ncells3, ncells2, ncells1);
+        Kokkos::realloc(dL_x2f, nmb, ncells3, ncells2, ncells1);
+        Kokkos::realloc(dR_x2f, nmb, ncells3, ncells2, ncells1);
+        Kokkos::realloc(vx_x2f, nmb, ncells3, ncells2, ncells1);
+        Kokkos::realloc(vz_x2f, nmb, ncells3, ncells2, ncells1);
+        // x3-face data
+        Kokkos::realloc(aL_x3f, nmb, ncells3, ncells2, ncells1);
+        Kokkos::realloc(dL_x3f, nmb, ncells3, ncells2, ncells1);
+        Kokkos::realloc(dR_x3f, nmb, ncells3, ncells2, ncells1);
+        Kokkos::realloc(vx_x3f, nmb, ncells3, ncells2, ncells1);
+        Kokkos::realloc(vy_x3f, nmb, ncells3, ncells2, ncells1);
+      }
 
       // allocate array of flags used with FOFC
       if (use_fofc) {

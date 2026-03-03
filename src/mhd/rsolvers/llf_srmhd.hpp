@@ -21,7 +21,11 @@ void LLF_SR(TeamMember_t const &member, const EOS_Data &eos,
      const int m, const int k, const int j, const int il, const int iu, const int ivx,
      const ScrArray2D<Real> &wl, const ScrArray2D<Real> &wr,
      const ScrArray2D<Real> &bl, const ScrArray2D<Real> &br, const DvceArray4D<Real> &bx,
-     DvceArray5D<Real> flx, DvceArray4D<Real> ey, DvceArray4D<Real> ez) {
+     DvceArray5D<Real> flx, DvceArray4D<Real> ey, DvceArray4D<Real> ez,
+     DvceArray4D<Real> uct_aL = {}, DvceArray4D<Real> uct_dL = {},
+     DvceArray4D<Real> uct_dR = {}, DvceArray4D<Real> uct_vt1 = {},
+     DvceArray4D<Real> uct_vt2 = {}) {
+  bool compute_uct = uct_aL.is_allocated();
   int ivy = IVX + ((ivx-IVX)+1)%3;
   int ivz = IVX + ((ivx-IVX)+2)%3;
   int iby = ((ivx-IVX) + 1)%3;
@@ -62,6 +66,33 @@ void LLF_SR(TeamMember_t const &member, const EOS_Data &eos,
     flx(m,ivz,k,j,i) = flux.mz;
     ey(m,k,j,i) = flux.by;
     ez(m,k,j,i) = flux.bz;
+
+    // UCT coefficients for SR LLF (Rusanov): alpha_L = alpha_R = lambda_max
+    if (compute_uct) {
+      Real gam_l = sqrt(1.0 + SQR(wli.vx) + SQR(wli.vy) + SQR(wli.vz));
+      Real gam_r = sqrt(1.0 + SQR(wri.vx) + SQR(wri.vy) + SQR(wri.vz));
+      Real b_l0 = bxi*wli.vx + wli.by*wli.vy + wli.bz*wli.vz;
+      Real b_l1 = (bxi   + b_l0*wli.vx)/gam_l;
+      Real b_l2 = (wli.by + b_l0*wli.vy)/gam_l;
+      Real b_l3 = (wli.bz + b_l0*wli.vz)/gam_l;
+      Real bsq_l = -SQR(b_l0) + SQR(b_l1) + SQR(b_l2) + SQR(b_l3);
+      Real b_r0 = bxi*wri.vx + wri.by*wri.vy + wri.bz*wri.vz;
+      Real b_r1 = (bxi   + b_r0*wri.vx)/gam_r;
+      Real b_r2 = (wri.by + b_r0*wri.vy)/gam_r;
+      Real b_r3 = (wri.bz + b_r0*wri.vz)/gam_r;
+      Real bsq_r = -SQR(b_r0) + SQR(b_r1) + SQR(b_r2) + SQR(b_r3);
+      Real pl = eos.IdealGasPressure(wli.e);
+      Real pr = eos.IdealGasPressure(wri.e);
+      Real lm_l, lp_l, lm_r, lp_r;
+      eos.IdealSRMHDFastSpeeds(wli.d, pl, wli.vx, gam_l, bsq_l, lp_l, lm_l);
+      eos.IdealSRMHDFastSpeeds(wri.d, pr, wri.vx, gam_r, bsq_r, lp_r, lm_r);
+      Real lmax = fmax(fmax(lp_l, lp_r), -fmin(lm_l, lm_r));
+      uct_aL(m,k,j,i)  = 0.5;
+      uct_dL(m,k,j,i)  = 0.5*lmax;
+      uct_dR(m,k,j,i)  = 0.5*lmax;
+      uct_vt1(m,k,j,i) = 0.5*(wli.vy + wri.vy);
+      uct_vt2(m,k,j,i) = 0.5*(wli.vz + wri.vz);
+    }
   });
 
   return;

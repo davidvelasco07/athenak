@@ -69,15 +69,29 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
   auto &e31_ = e3x1;
   auto &e21_ = e2x1;
   auto &bx_ = b0.x1f;
+  auto emf_method_ = emf_method;
+  auto &aL_x1f_ = aL_x1f;
+  auto &dL_x1f_ = dL_x1f;
+  auto &dR_x1f_ = dR_x1f;
+  auto &vy_x1f_ = vy_x1f;
+  auto &vz_x1f_ = vz_x1f;
 
   // set the loop limits for 1D/2D/3D problems
+  // For UCT with high-order reconstruction, the transverse WENOZ stencil at corners
+  // needs face data over a wider range (3 extra ghost zones each side).
+  int ng = indcs_.ng;
+  bool ho_uct = (emf_method != MHD_EMF::ct_contact) &&
+                (recon_method == ReconstructionMethod::wenoz ||
+                 recon_method == ReconstructionMethod::ppm4 ||
+                 recon_method == ReconstructionMethod::ppmx);
+  int extra = ho_uct ? 3 : 1;
   int jl,ju,kl,ku;
   if (pmy_pack->pmesh->one_d) {
     jl = js, ju = je, kl = ks, ku = ke;
   } else if (pmy_pack->pmesh->two_d) {
-    jl = js-1, ju = je+1, kl = ks, ku = ke;
+    jl = js-extra, ju = je+extra, kl = ks, ku = ke;
   } else {
-    jl = js-1, ju = je+1, kl = ks-1, ku = ke+1;
+    jl = js-extra, ju = je+extra, kl = ks-extra, ku = ke+extra;
   }
   int il = is, iu = ie+1;
   if (use_fofc) { il = is-1, iu = ie+2; }
@@ -126,22 +140,36 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
     auto flx1 = flx1_;
     auto e31 = e31_;
     auto e21 = e21_;
+    auto emf = emf_method_;
+    auto aL1 = aL_x1f_;
+    auto dL1 = dL_x1f_;
+    auto dR1 = dR_x1f_;
+    auto vy1 = vy_x1f_;
+    auto vz1 = vz_x1f_;
     if constexpr (rsolver_method_ == MHD_RSolver::advect) {
       Advect(member,eos,indcs,size,coord,m,k,j,il,iu,IVX,wl,wr,bl,br,bx,flx1,e31,e21);
     } else if constexpr (rsolver_method_ == MHD_RSolver::llf) {
-      LLF(member,eos,indcs,size,coord,m,k,j,il,iu,IVX,wl,wr,bl,br,bx,flx1,e31,e21);
+      LLF(member,eos,indcs,size,coord,m,k,j,il,iu,IVX,wl,wr,bl,br,bx,flx1,e31,e21,
+          aL1,dL1,dR1,vy1,vz1);
     } else if constexpr (rsolver_method_ == MHD_RSolver::hlle) {
-      HLLE(member,eos,indcs,size,coord,m,k,j,il,iu,IVX,wl,wr,bl,br,bx,flx1,e31,e21);
+      HLLE(member,eos,indcs,size,coord,m,k,j,il,iu,IVX,wl,wr,bl,br,bx,flx1,e31,e21,
+           aL1,dL1,dR1,vy1,vz1);
     } else if constexpr (rsolver_method_ == MHD_RSolver::hlld) {
-      HLLD(member,eos,indcs,size,coord,m,k,j,il,iu,IVX,wl,wr,bl,br,bx,flx1,e31,e21);
+      int uct_fl = (emf == MHD_EMF::uct_hlld) ? 2 : ((emf == MHD_EMF::uct_hll) ? 1 : 0);
+      HLLD(member,eos,indcs,size,coord,m,k,j,il,iu,IVX,wl,wr,bl,br,bx,flx1,e31,e21,
+           uct_fl,aL1,dL1,dR1,vy1,vz1);
     } else if constexpr (rsolver_method_ == MHD_RSolver::llf_sr) {
-      LLF_SR(member,eos,indcs,size,coord,m,k,j,il,iu,IVX,wl,wr,bl,br,bx,flx1,e31,e21);
+      LLF_SR(member,eos,indcs,size,coord,m,k,j,il,iu,IVX,wl,wr,bl,br,bx,flx1,e31,e21,
+             aL1,dL1,dR1,vy1,vz1);
     } else if constexpr (rsolver_method_ == MHD_RSolver::hlle_sr) {
-      HLLE_SR(member,eos,indcs,size,coord,m,k,j,il,iu,IVX,wl,wr,bl,br,bx,flx1,e31,e21);
+      HLLE_SR(member,eos,indcs,size,coord,m,k,j,il,iu,IVX,wl,wr,bl,br,bx,flx1,e31,e21,
+              aL1,dL1,dR1,vy1,vz1);
     } else if constexpr (rsolver_method_ == MHD_RSolver::llf_gr) {
-      LLF_GR(member,eos,indcs,size,coord,m,k,j,il,iu,IVX,wl,wr,bl,br,bx,flx1,e31,e21);
+      LLF_GR(member,eos,indcs,size,coord,m,k,j,il,iu,IVX,wl,wr,bl,br,bx,flx1,e31,e21,
+             aL1,dL1,dR1,vy1,vz1);
     } else if constexpr (rsolver_method_ == MHD_RSolver::hlle_gr) {
-      HLLE_GR(member,eos,indcs,size,coord,m,k,j,il,iu,IVX,wl,wr,bl,br,bx,flx1,e31,e21);
+      HLLE_GR(member,eos,indcs,size,coord,m,k,j,il,iu,IVX,wl,wr,bl,br,bx,flx1,e31,e21,
+              aL1,dL1,dR1,vy1,vz1);
     }
     member.team_barrier();
 
@@ -169,15 +197,27 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
     auto &by_ = b0.x2f;
     auto &e12_ = e1x2;
     auto &e32_ = e3x2;
+    auto &aL_x2f_ = aL_x2f;
+    auto &dL_x2f_ = dL_x2f;
+    auto &dR_x2f_ = dR_x2f;
+    auto &vx_x2f_ = vx_x2f;
+    auto &vz_x2f_ = vz_x2f;
 
     // set the loop limits for 2D/3D problems
+    // For UCT with high-order reconstruction, extend the transverse range so that
+    // UCT face quantities (a, d, v) are available over a wide enough stencil for
+    // the WENOZ reconstruction at corners in mhd_corner_e.cpp.
     if (pmy_pack->pmesh->two_d) {
       kl = ks, ku = ke;
     } else { // 3D
-      kl = ks-1, ku = ke+1;
+      kl = ho_uct ? ks-extra : ks-1;
+      ku = ho_uct ? ke+extra : ke+1;
     }
     jl = js-1, ju = je+1;
     if (use_fofc) { jl = js-2, ju = je+2; }
+    // i-range for y-direction reconstruction and Riemann solver
+    int il2 = ho_uct ? is-extra : is-1;
+    int iu2 = ho_uct ? ie+extra : ie+1;
 
     par_for_outer("mhd_flux2",DevExeSpace(),scr_size,scr_level,0,nmb1, kl, ku,
     KOKKOS_LAMBDA(TeamMember_t member, const int m, const int k) {
@@ -206,21 +246,21 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
         // Reconstruct qR[j] and qL[j+1], for both W and Bcc
         switch (recon_method_) {
           case ReconstructionMethod::dc:
-            DonorCellX2(member, m, k, j, is-1, ie+1, w0_, wl_jp1, wr);
-            DonorCellX2(member, m, k, j, is-1, ie+1, b0_, bl_jp1, br);
+            DonorCellX2(member, m, k, j, il2, iu2, w0_, wl_jp1, wr);
+            DonorCellX2(member, m, k, j, il2, iu2, b0_, bl_jp1, br);
             break;
           case ReconstructionMethod::plm:
-            PiecewiseLinearX2(member, m, k, j, is-1, ie+1, w0_, wl_jp1, wr);
-            PiecewiseLinearX2(member, m, k, j, is-1, ie+1, b0_, bl_jp1, br);
+            PiecewiseLinearX2(member, m, k, j, il2, iu2, w0_, wl_jp1, wr);
+            PiecewiseLinearX2(member, m, k, j, il2, iu2, b0_, bl_jp1, br);
             break;
           case ReconstructionMethod::ppm4:
           case ReconstructionMethod::ppmx:
-            PiecewiseParabolicX2(member,eos_,extrema,true, m,k,j,is-1,ie+1,w0_,wl_jp1,wr);
-            PiecewiseParabolicX2(member,eos_,extrema,false,m,k,j,is-1,ie+1,b0_,bl_jp1,br);
+            PiecewiseParabolicX2(member,eos_,extrema,true, m,k,j,il2,iu2,w0_,wl_jp1,wr);
+            PiecewiseParabolicX2(member,eos_,extrema,false,m,k,j,il2,iu2,b0_,bl_jp1,br);
             break;
           case ReconstructionMethod::wenoz:
-            WENOZX2(member, eos_, true,  m, k, j, is-1, ie+1, w0_, wl_jp1, wr);
-            WENOZX2(member, eos_, false, m, k, j, is-1, ie+1, b0_, bl_jp1, br);
+            WENOZX2(member, eos_, true,  m, k, j, il2, iu2, w0_, wl_jp1, wr);
+            WENOZX2(member, eos_, false, m, k, j, il2, iu2, b0_, bl_jp1, br);
             break;
           default:
             break;
@@ -240,30 +280,47 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
           auto flx2 = flx2_;
           auto e12 = e12_;
           auto e32 = e32_;
+          auto emf = emf_method_;
+          auto aL2 = aL_x2f_;
+          auto dL2 = dL_x2f_;
+          auto dR2 = dR_x2f_;
+          // For x2-direction (ivx=IVY): ivy=IVZ, ivz=IVX, so solver writes
+          // uct_vt1 = vz_component, uct_vt2 = vx_component.
+          // Pass vz_x2f as vt1 and vx_x2f as vt2 so names match contents.
+          auto vt1_2 = vz_x2f_;
+          auto vt2_2 = vx_x2f_;
           if constexpr (rsolver_method_ == MHD_RSolver::advect) {
             Advect(member,eos,indcs,size,coord,
-                    m,k,j,is-1,ie+1,IVY,wl,wr,bl,br,by,flx2,e12,e32);
+                    m,k,j,il2,iu2,IVY,wl,wr,bl,br,by,flx2,e12,e32);
           } else if constexpr (rsolver_method_ == MHD_RSolver::llf) {
             LLF(member,eos,indcs,size,coord,
-                    m,k,j,is-1,ie+1,IVY,wl,wr,bl,br,by,flx2,e12,e32);
+                    m,k,j,il2,iu2,IVY,wl,wr,bl,br,by,flx2,e12,e32,
+                    aL2,dL2,dR2,vt1_2,vt2_2);
           } else if constexpr (rsolver_method_ == MHD_RSolver::hlle) {
             HLLE(member,eos,indcs,size,coord,
-                    m,k,j,is-1,ie+1,IVY,wl,wr,bl,br,by,flx2,e12,e32);
+                    m,k,j,il2,iu2,IVY,wl,wr,bl,br,by,flx2,e12,e32,
+                    aL2,dL2,dR2,vt1_2,vt2_2);
           } else if constexpr (rsolver_method_ == MHD_RSolver::hlld) {
+            int uct_fl = (emf==MHD_EMF::uct_hlld)?2:((emf==MHD_EMF::uct_hll)?1:0);
             HLLD(member,eos,indcs,size,coord,
-                    m,k,j,is-1,ie+1,IVY,wl,wr,bl,br,by,flx2,e12,e32);
+                    m,k,j,il2,iu2,IVY,wl,wr,bl,br,by,flx2,e12,e32,
+                    uct_fl,aL2,dL2,dR2,vt1_2,vt2_2);
           } else if constexpr (rsolver_method_ == MHD_RSolver::llf_sr) {
             LLF_SR(member,eos,indcs,size,coord,
-                    m,k,j,is-1,ie+1,IVY,wl,wr,bl,br,by,flx2,e12,e32);
+                    m,k,j,il2,iu2,IVY,wl,wr,bl,br,by,flx2,e12,e32,
+                    aL2,dL2,dR2,vt1_2,vt2_2);
           } else if constexpr (rsolver_method_ == MHD_RSolver::hlle_sr) {
             HLLE_SR(member,eos,indcs,size,coord,
-                    m,k,j,is-1,ie+1,IVY,wl,wr,bl,br,by,flx2,e12,e32);
+                    m,k,j,il2,iu2,IVY,wl,wr,bl,br,by,flx2,e12,e32,
+                    aL2,dL2,dR2,vt1_2,vt2_2);
           } else if constexpr (rsolver_method_ == MHD_RSolver::llf_gr) {
             LLF_GR(member,eos,indcs,size,coord,
-                    m,k,j,is-1,ie+1,IVY,wl,wr,bl,br,by,flx2,e12,e32);
+                    m,k,j,il2,iu2,IVY,wl,wr,bl,br,by,flx2,e12,e32,
+                    aL2,dL2,dR2,vt1_2,vt2_2);
           } else if constexpr (rsolver_method_ == MHD_RSolver::hlle_gr) {
             HLLE_GR(member,eos,indcs,size,coord,
-                    m,k,j,is-1,ie+1,IVY,wl,wr,bl,br,by,flx2,e12,e32);
+                    m,k,j,il2,iu2,IVY,wl,wr,bl,br,by,flx2,e12,e32,
+                    aL2,dL2,dR2,vt1_2,vt2_2);
           }
           member.team_barrier();
         }
@@ -294,12 +351,24 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
     auto &bz_ = b0.x3f;
     auto &e23_ = e2x3;
     auto &e13_ = e1x3;
+    auto &aL_x3f_ = aL_x3f;
+    auto &dL_x3f_ = dL_x3f;
+    auto &dR_x3f_ = dR_x3f;
+    auto &vx_x3f_ = vx_x3f;
+    auto &vy_x3f_ = vy_x3f;
 
     // set the loop limits
+    // For UCT with high-order reconstruction, extend transverse ranges (i and j)
+    // so that UCT face quantities are available over a wide enough stencil for
+    // the WENOZ reconstruction at corners in mhd_corner_e.cpp.
     kl = ks-1, ku = ke+1;
     if (use_fofc) { kl = ks-2, ku = ke+2; }
+    int jl3 = ho_uct ? js-extra : js-1;
+    int ju3 = ho_uct ? je+extra : je+1;
+    int il3 = ho_uct ? is-extra : is-1;
+    int iu3 = ho_uct ? ie+extra : ie+1;
 
-    par_for_outer("mhd_flux3",DevExeSpace(), scr_size, scr_level, 0, nmb1, js-1, je+1,
+    par_for_outer("mhd_flux3",DevExeSpace(), scr_size, scr_level, 0, nmb1, jl3, ju3,
     KOKKOS_LAMBDA(TeamMember_t member, const int m, const int j) {
       ScrArray2D<Real> scr1(member.team_scratch(scr_level), nvars, ncells1);
       ScrArray2D<Real> scr2(member.team_scratch(scr_level), nvars, ncells1);
@@ -326,21 +395,21 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
         // Reconstruct qR[k] and qL[k+1], for both W and Bcc
         switch (recon_method_) {
           case ReconstructionMethod::dc:
-            DonorCellX3(member, m, k, j, is-1, ie+1, w0_, wl_kp1, wr);
-            DonorCellX3(member, m, k, j, is-1, ie+1, b0_, bl_kp1, br);
+            DonorCellX3(member, m, k, j, il3, iu3, w0_, wl_kp1, wr);
+            DonorCellX3(member, m, k, j, il3, iu3, b0_, bl_kp1, br);
             break;
           case ReconstructionMethod::plm:
-            PiecewiseLinearX3(member, m, k, j, is-1, ie+1, w0_, wl_kp1, wr);
-            PiecewiseLinearX3(member, m, k, j, is-1, ie+1, b0_, bl_kp1, br);
+            PiecewiseLinearX3(member, m, k, j, il3, iu3, w0_, wl_kp1, wr);
+            PiecewiseLinearX3(member, m, k, j, il3, iu3, b0_, bl_kp1, br);
             break;
           case ReconstructionMethod::ppm4:
           case ReconstructionMethod::ppmx:
-            PiecewiseParabolicX3(member,eos_,extrema,true, m,k,j,is-1,ie+1,w0_,wl_kp1,wr);
-            PiecewiseParabolicX3(member,eos_,extrema,false,m,k,j,is-1,ie+1,b0_,bl_kp1,br);
+            PiecewiseParabolicX3(member,eos_,extrema,true, m,k,j,il3,iu3,w0_,wl_kp1,wr);
+            PiecewiseParabolicX3(member,eos_,extrema,false,m,k,j,il3,iu3,b0_,bl_kp1,br);
             break;
           case ReconstructionMethod::wenoz:
-            WENOZX3(member, eos_, true,  m, k, j, is-1, ie+1, w0_, wl_kp1, wr);
-            WENOZX3(member, eos_, false, m, k, j, is-1, ie+1, b0_, bl_kp1, br);
+            WENOZX3(member, eos_, true,  m, k, j, il3, iu3, w0_, wl_kp1, wr);
+            WENOZX3(member, eos_, false, m, k, j, il3, iu3, b0_, bl_kp1, br);
             break;
           default:
             break;
@@ -360,30 +429,44 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
           auto flx3 = flx3_;
           auto e23 = e23_;
           auto e13 = e13_;
+          auto emf = emf_method_;
+          auto aL3 = aL_x3f_;
+          auto dL3 = dL_x3f_;
+          auto dR3 = dR_x3f_;
+          auto vx3 = vx_x3f_;
+          auto vy3 = vy_x3f_;
           if constexpr (rsolver_method_ == MHD_RSolver::advect) {
             Advect(member,eos,indcs,size,coord,
-                    m,k,j,is-1,ie+1,IVZ,wl,wr,bl,br,bz,flx3,e23,e13);
+                    m,k,j,il3,iu3,IVZ,wl,wr,bl,br,bz,flx3,e23,e13);
           } else if constexpr (rsolver_method_ == MHD_RSolver::llf) {
             LLF(member,eos,indcs,size,coord,
-                    m,k,j,is-1,ie+1,IVZ,wl,wr,bl,br,bz,flx3,e23,e13);
+                    m,k,j,il3,iu3,IVZ,wl,wr,bl,br,bz,flx3,e23,e13,
+                    aL3,dL3,dR3,vx3,vy3);
           } else if constexpr (rsolver_method_ == MHD_RSolver::hlle) {
             HLLE(member,eos,indcs,size,coord,
-                    m,k,j,is-1,ie+1,IVZ,wl,wr,bl,br,bz,flx3,e23,e13);
+                    m,k,j,il3,iu3,IVZ,wl,wr,bl,br,bz,flx3,e23,e13,
+                    aL3,dL3,dR3,vx3,vy3);
           } else if constexpr (rsolver_method_ == MHD_RSolver::hlld) {
+            int uct_fl = (emf==MHD_EMF::uct_hlld)?2:((emf==MHD_EMF::uct_hll)?1:0);
             HLLD(member,eos,indcs,size,coord,
-                    m,k,j,is-1,ie+1,IVZ,wl,wr,bl,br,bz,flx3,e23,e13);
+                    m,k,j,il3,iu3,IVZ,wl,wr,bl,br,bz,flx3,e23,e13,
+                    uct_fl,aL3,dL3,dR3,vx3,vy3);
           } else if constexpr (rsolver_method_ == MHD_RSolver::llf_sr) {
             LLF_SR(member,eos,indcs,size,coord,
-                    m,k,j,is-1,ie+1,IVZ,wl,wr,bl,br,bz,flx3,e23,e13);
+                    m,k,j,il3,iu3,IVZ,wl,wr,bl,br,bz,flx3,e23,e13,
+                    aL3,dL3,dR3,vx3,vy3);
           } else if constexpr (rsolver_method_ == MHD_RSolver::hlle_sr) {
             HLLE_SR(member,eos,indcs,size,coord,
-                    m,k,j,is-1,ie+1,IVZ,wl,wr,bl,br,bz,flx3,e23,e13);
+                    m,k,j,il3,iu3,IVZ,wl,wr,bl,br,bz,flx3,e23,e13,
+                    aL3,dL3,dR3,vx3,vy3);
           } else if constexpr (rsolver_method_ == MHD_RSolver::llf_gr) {
             LLF_GR(member,eos,indcs,size,coord,
-                    m,k,j,is-1,ie+1,IVZ,wl,wr,bl,br,bz,flx3,e23,e13);
+                    m,k,j,il3,iu3,IVZ,wl,wr,bl,br,bz,flx3,e23,e13,
+                    aL3,dL3,dR3,vx3,vy3);
           } else if constexpr (rsolver_method_ == MHD_RSolver::hlle_gr) {
             HLLE_GR(member,eos,indcs,size,coord,
-                    m,k,j,is-1,ie+1,IVZ,wl,wr,bl,br,bz,flx3,e23,e13);
+                    m,k,j,il3,iu3,IVZ,wl,wr,bl,br,bz,flx3,e23,e13,
+                    aL3,dL3,dR3,vx3,vy3);
           }
           member.team_barrier();
         }

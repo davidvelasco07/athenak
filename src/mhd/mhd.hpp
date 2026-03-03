@@ -40,6 +40,9 @@ enum class MHD_RSolver {advect, llf, hlle, hlld, roe,   // non-relativistic
                         llf_sr, hlle_sr,                // SR
                         llf_gr, hlle_gr};                       // GR
 
+// constants that enumerate EMF (corner electric field) averaging options
+enum class MHD_EMF {ct_contact, uct_hll, uct_hlld};
+
 //----------------------------------------------------------------------------------------
 //! \struct MHDTaskIDs
 //  \brief container to hold TaskIDs of all mhd tasks
@@ -93,6 +96,7 @@ class MHD {
   // data
   ReconstructionMethod recon_method;
   MHD_RSolver rsolver_method;
+  MHD_EMF emf_method;
   EquationOfState *peos;   // chosen EOS
 
   int nmhd;                // number of mhd variables (5/4 for ideal/isothermal EOS)
@@ -132,6 +136,13 @@ class MHD {
   DvceArray4D<Real> e3x1, e2x1;
   DvceArray4D<Real> e1x2, e3x2;
   DvceArray4D<Real> e2x3, e1x3;
+  // UCT data stored at cell faces by Riemann solvers (only allocated when UCT is used)
+  // x1-faces: flux weight, diffusion coefficients, upwind transverse velocities
+  DvceArray4D<Real> aL_x1f, dL_x1f, dR_x1f, vy_x1f, vz_x1f;
+  // x2-faces: flux weight, diffusion coefficients, upwind transverse velocities
+  DvceArray4D<Real> aL_x2f, dL_x2f, dR_x2f, vx_x2f, vz_x2f;
+  // x3-faces: flux weight, diffusion coefficients, upwind transverse velocities
+  DvceArray4D<Real> aL_x3f, dL_x3f, dR_x3f, vx_x3f, vy_x3f;
   Real dtnew;
 
   // following used for time derivatives in computation of jcon

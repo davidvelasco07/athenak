@@ -25,7 +25,11 @@ void HLLD(TeamMember_t const &member, const EOS_Data &eos,
      const int m, const int k, const int j, const int il, const int iu, const int ivx,
      const ScrArray2D<Real> &wl, const ScrArray2D<Real> &wr,
      const ScrArray2D<Real> &bl, const ScrArray2D<Real> &br, const DvceArray4D<Real> &bx,
-     DvceArray5D<Real> flx, DvceArray4D<Real> ey, DvceArray4D<Real> ez) {
+     DvceArray5D<Real> flx, DvceArray4D<Real> ey, DvceArray4D<Real> ez,
+     int uct_flag = 0,
+     DvceArray4D<Real> uct_aL = {}, DvceArray4D<Real> uct_dL = {},
+     DvceArray4D<Real> uct_dR = {}, DvceArray4D<Real> uct_vt1 = {},
+     DvceArray4D<Real> uct_vt2 = {}) {
   int ivy = IVX + ((ivx-IVX)+1)%3;
   int ivz = IVX + ((ivx-IVX)+2)%3;
   int iby = ((ivx-IVX) + 1)%3;
@@ -352,6 +356,79 @@ void HLLD(TeamMember_t const &member, const EOS_Data &eos,
       flx(m,IEN,k,j,i) = flxi.e;
       ey(m,k,j,i) = -flxi.by;
       ez(m,k,j,i) =  flxi.bz;
+
+      //--- UCT coefficients (Mignone & Del Zanna 2021)
+      if (uct_flag == 1) {
+        // UCT-HLL: use only fast wave speeds spd[0], spd[4]
+        Real alpha_r = fmax(0.0, spd[4]);
+        Real alpha_l = fmax(0.0, -spd[0]);
+        Real isum = 1.0/(alpha_r + alpha_l);
+        uct_aL(m,k,j,i)  = alpha_r * isum;
+        Real dval = alpha_r * alpha_l * isum;
+        uct_dL(m,k,j,i)  = dval;
+        uct_dR(m,k,j,i)  = dval;
+        uct_vt1(m,k,j,i) = (alpha_r*wl_ivy + alpha_l*wr_ivy)*isum;
+        uct_vt2(m,k,j,i) = (alpha_r*wl_ivz + alpha_l*wr_ivz)*isum;
+      } else if (uct_flag == 2) {
+        // UCT-HLLD: use all 5 wave speeds (Eq. 44-45)
+        // Upwind transverse velocity (Eq. 29) - use fast wave speeds
+        Real alpha_r = fmax(0.0, spd[4]);
+        Real alpha_l = fmax(0.0, -spd[0]);
+        Real isum = 1.0/(alpha_r + alpha_l);
+        uct_vt1(m,k,j,i) = (alpha_r*wl_ivy + alpha_l*wr_ivy)*isum;
+        uct_vt2(m,k,j,i) = (alpha_r*wl_ivz + alpha_l*wr_ivz)*isum;
+
+        // Compute nu* (Eq. 45-46)
+        Real eps = 1.0e-9;
+        Real nust;
+        if (fabs(spd[3] - spd[1]) > eps*fabs(spd[4] - spd[0])) {
+          nust = (fabs(spd[3]) - fabs(spd[1]))/(spd[3] - spd[1]);
+        } else {
+          nust = 0.0;
+        }
+
+        // Compute chi_tilde_s and nu_s for s=L (Eq. 42, 45)
+        // chi_L = (vxL - spd[2])*(spd[0] - spd[2]) /
+        //         ((spd[1] - spd[0])*(spd[1] + spd[0] - 2*spd[2]))
+        // chi_tilde_L = (spd[1] - spd[0]) * chi_L
+        //             = (vxL - spd[2])*(spd[0] - spd[2]) /
+        //               (spd[1] + spd[0] - 2*spd[2])
+        Real denom_L = spd[1] + spd[0] - 2.0*spd[2];
+        Real chitL;
+        if (fabs(denom_L) > 1.0e-30) {
+          chitL = (wl_ivx - spd[2])*(spd[0] - spd[2]) / denom_L;
+        } else {
+          chitL = 0.5*(wl_ivx - spd[2]);
+        }
+        Real nuL;
+        if (fabs(spd[1] - spd[0]) > 1.0e-30) {
+          nuL = (fabs(spd[1]) - fabs(spd[0]))/(spd[1] - spd[0]);
+        } else {
+          nuL = (spd[0] >= 0.0) ? 1.0 : -1.0;
+        }
+
+        // Compute chi_tilde_s and nu_s for s=R (Eq. 42, 45)
+        Real denom_R = spd[3] + spd[4] - 2.0*spd[2];
+        Real chitR;
+        if (fabs(denom_R) > 1.0e-30) {
+          chitR = (wr_ivx - spd[2])*(spd[4] - spd[2]) / denom_R;
+        } else {
+          chitR = 0.5*(wr_ivx - spd[2]);
+        }
+        Real nuR;
+        if (fabs(spd[3] - spd[4]) > 1.0e-30) {
+          nuR = (fabs(spd[3]) - fabs(spd[4]))/(spd[3] - spd[4]);
+        } else {
+          nuR = (spd[4] >= 0.0) ? 1.0 : -1.0;
+        }
+
+        // a_L, a_R, d_L, d_R (Eq. 44)
+        uct_aL(m,k,j,i) = 0.5*(1.0 + nust);
+        uct_dL(m,k,j,i) = 0.5*((nuL - nust)*chitL
+                                + fabs(spd[1]) - nust*spd[1]);
+        uct_dR(m,k,j,i) = 0.5*((nuR - nust)*chitR
+                                + fabs(spd[3]) - nust*spd[3]);
+      }
     });
 
   //------------------------- ISOTHERMAL HLLD solver -------------------------------------
@@ -552,6 +629,69 @@ void HLLD(TeamMember_t const &member, const EOS_Data &eos,
       flx(m,ivz,k,j,i) = flxi.mz;
       ey(m,k,j,i) = -flxi.by;
       ez(m,k,j,i) =  flxi.bz;
+
+      //--- UCT coefficients for isothermal HLLD
+      if (uct_flag == 1) {
+        // UCT-HLL: use only fast wave speeds spd[0], spd[4]
+        Real alpha_r = fmax(0.0, spd[4]);
+        Real alpha_l = fmax(0.0, -spd[0]);
+        Real isum = 1.0/(alpha_r + alpha_l);
+        uct_aL(m,k,j,i)  = alpha_r * isum;
+        Real dval = alpha_r * alpha_l * isum;
+        uct_dL(m,k,j,i)  = dval;
+        uct_dR(m,k,j,i)  = dval;
+        uct_vt1(m,k,j,i) = (alpha_r*wl_ivy + alpha_l*wr_ivy)*isum;
+        uct_vt2(m,k,j,i) = (alpha_r*wl_ivz + alpha_l*wr_ivz)*isum;
+      } else if (uct_flag == 2) {
+        // UCT-HLLD for isothermal (same structure, different chi)
+        Real alpha_r = fmax(0.0, spd[4]);
+        Real alpha_l = fmax(0.0, -spd[0]);
+        Real isum = 1.0/(alpha_r + alpha_l);
+        uct_vt1(m,k,j,i) = (alpha_r*wl_ivy + alpha_l*wr_ivy)*isum;
+        uct_vt2(m,k,j,i) = (alpha_r*wl_ivz + alpha_l*wr_ivz)*isum;
+
+        Real eps = 1.0e-9;
+        Real nust;
+        if (fabs(spd[3] - spd[1]) > eps*fabs(spd[4] - spd[0])) {
+          nust = (fabs(spd[3]) - fabs(spd[1]))/(spd[3] - spd[1]);
+        } else {
+          nust = 0.0;
+        }
+
+        Real denom_L = spd[1] + spd[0] - 2.0*spd[2];
+        Real chitL;
+        if (fabs(denom_L) > 1.0e-30) {
+          chitL = (wl_ivx - spd[2])*(spd[0] - spd[2]) / denom_L;
+        } else {
+          chitL = 0.5*(wl_ivx - spd[2]);
+        }
+        Real nuL;
+        if (fabs(spd[1] - spd[0]) > 1.0e-30) {
+          nuL = (fabs(spd[1]) - fabs(spd[0]))/(spd[1] - spd[0]);
+        } else {
+          nuL = (spd[0] >= 0.0) ? 1.0 : -1.0;
+        }
+
+        Real denom_R = spd[3] + spd[4] - 2.0*spd[2];
+        Real chitR;
+        if (fabs(denom_R) > 1.0e-30) {
+          chitR = (wr_ivx - spd[2])*(spd[4] - spd[2]) / denom_R;
+        } else {
+          chitR = 0.5*(wr_ivx - spd[2]);
+        }
+        Real nuR;
+        if (fabs(spd[3] - spd[4]) > 1.0e-30) {
+          nuR = (fabs(spd[3]) - fabs(spd[4]))/(spd[3] - spd[4]);
+        } else {
+          nuR = (spd[4] >= 0.0) ? 1.0 : -1.0;
+        }
+
+        uct_aL(m,k,j,i) = 0.5*(1.0 + nust);
+        uct_dL(m,k,j,i) = 0.5*((nuL - nust)*chitL
+                                + fabs(spd[1]) - nust*spd[1]);
+        uct_dR(m,k,j,i) = 0.5*((nuR - nust)*chitR
+                                + fabs(spd[3]) - nust*spd[3]);
+      }
     });
   } // end ideal gas/isothermal solvers
 
