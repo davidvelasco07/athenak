@@ -16,6 +16,7 @@
 #include "cell_locations.hpp"
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
+#include "laplacian.hpp"
 
 //----------------------------------------------------------------------------------------
 // constructor, initializes coordinates data
@@ -352,4 +353,159 @@ void Coordinates::CoordSrcTerms(const DvceArray5D<Real> &prim,
   });
 
   return;
+}
+
+void Coordinates::Apply_Laplacian3D_mixed(const DvceArray5D<Real> &q1,
+                                          DvceArray5D<Real> &q2,
+                                          DvceArray5D<Real> &Lap,
+                                          const bool average
+                            ){
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  auto &ng = indcs.ng;
+  bool &multi_d = pmy_pack->pmesh->multi_d;
+  bool &three_d = pmy_pack->pmesh->three_d;
+  int is = 1; int ie = indcs.ie+ng-1;
+  int js = multi_d ? 1:0; int je = indcs.je+(multi_d ? ng-1:0);
+  int ks = three_d ? 1:0; int ke = indcs.ke+(three_d ? ng-1:0);
+
+  int nmb1 = pmy_pack->nmb_thispack - 1;
+  int nvar = q1.extent_int(1);
+
+  par_for("coord_laplacian3d", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
+    KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      Real laplacian;
+      for (int n=0; n<nvar; ++n){
+        laplacian = LaplacianX1(m,n,k,j,i,q2);
+        laplacian += multi_d ? LaplacianX2(m,n,k,j,i,q2) : 0.0;
+        laplacian += three_d ? LaplacianX3(m,n,k,j,i,q2) : 0.0;
+        Lap(m,n,k,j,i) = laplacian/24.0;
+      }
+    });
+
+  par_for("coord_laplacian3d_apply", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
+    KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      for (int n=0; n<nvar; ++n){
+        if(average)
+          q2(m,n,k,j,i) = q1(m,n,k,j,i) + Lap(m,n,k,j,i);
+        else
+          q2(m,n,k,j,i) = q1(m,n,k,j,i) - Lap(m,n,k,j,i);
+      }
+    });
+}
+
+void Coordinates::Apply_Laplacian3D(const DvceArray5D<Real> &q1,
+                                    DvceArray5D<Real> &q2,
+                                    const bool average
+                            ){
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  auto &ng = indcs.ng;
+  bool &multi_d = pmy_pack->pmesh->multi_d;
+  bool &three_d = pmy_pack->pmesh->three_d;
+  int is = 1; int ie = indcs.ie+ng-1;
+  int js = multi_d ? 1:0; int je = indcs.je+(multi_d ? ng-1:0);
+  int ks = three_d ? 1:0; int ke = indcs.ke+(three_d ? ng-1:0);
+
+  int nmb1 = pmy_pack->nmb_thispack - 1;
+  int nvar = q1.extent_int(1);
+
+  par_for("coord_laplacian3d", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
+    KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      Real laplacian;
+      for (int n=0; n<nvar; ++n){
+        laplacian = LaplacianX1(m,n,k,j,i,q1);
+        laplacian += multi_d ? LaplacianX2(m,n,k,j,i,q1) : 0.0;
+        laplacian += three_d ? LaplacianX3(m,n,k,j,i,q1) : 0.0;
+        if(average)
+          q2(m,n,k,j,i) = q1(m,n,k,j,i) + laplacian/24.0;
+        else
+          q2(m,n,k,j,i) = q1(m,n,k,j,i) - laplacian/24.0;
+      }
+    });
+}
+
+void Coordinates::DeAverageVolume(const DvceArray5D<Real> &q_average,
+                                  DvceArray5D<Real> &q
+                            ){
+  Coordinates::Apply_Laplacian3D(q_average, q, false);
+}
+
+void Coordinates::AverageVolume(const DvceArray5D<Real> &q,
+                                DvceArray5D<Real> &q_average
+                            ){
+  Coordinates::Apply_Laplacian3D(q, q_average, true);
+}
+
+void Coordinates::AverageVolume_mixed(const DvceArray5D<Real> &q,
+                                      DvceArray5D<Real> &q_average,
+                                      DvceArray5D<Real> &Lap
+                            ){
+  Coordinates::Apply_Laplacian3D_mixed(q, q_average, Lap, true);
+}
+
+void Coordinates::Apply_Laplacian2D(const DvceArray5D<Real> &q1, DvceArray5D<Real> &q2,
+                                    const bool average, const int dim
+                            ){
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  auto &ng = indcs.ng;
+  bool &multi_d = pmy_pack->pmesh->multi_d;
+  bool &three_d = pmy_pack->pmesh->three_d;
+  int is = indcs.is-ng+1; int ie = indcs.ie+ng-1;
+  int js = indcs.js-(multi_d ? ng-1:0); int je = indcs.je+(multi_d ? ng-1:0);
+  int ks = indcs.ks-(three_d ? ng-1:0); int ke = indcs.ke+(three_d ? ng-1:0);
+
+  int nmb1 = pmy_pack->nmb_thispack - 1;
+  int nvar = q1.extent_int(1);
+  par_for("coord_laplacian2d", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
+    KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      Real delta_x1_x2;
+      for (int n=0; n<nvar; ++n){
+        if(three_d)
+            delta_x1_x2 = Laplacian2D(m,n,k,j,i,q1,dim);
+        else if(multi_d)
+            delta_x1_x2 = Laplacian1D(m,n,k,j,i,q1,dim);
+        else
+            delta_x1_x2 = 0.0;
+
+        if(average)
+          q2(m,n,k,j,i) = q1(m,n,k,j,i)+delta_x1_x2/24.0;
+        else
+          q2(m,n,k,j,i) = q1(m,n,k,j,i)-delta_x1_x2/24.0;
+      }
+    });
+}
+
+void Coordinates::DeAverageSurfaceX1(const DvceArray5D<Real> &q_average,
+                                     DvceArray5D<Real> &q
+                            ){
+  Coordinates::Apply_Laplacian2D(q_average, q, false, 1);
+}
+
+void Coordinates::DeAverageSurfaceX2(const DvceArray5D<Real> &q_average,
+                                     DvceArray5D<Real> &q
+                            ){
+  Coordinates::Apply_Laplacian2D(q_average, q, false, 2);
+}
+
+void Coordinates::DeAverageSurfaceX3(const DvceArray5D<Real> &q_average,
+                                     DvceArray5D<Real> &q
+                            ){
+  Coordinates::Apply_Laplacian2D(q_average, q, false, 3);
+}
+
+void Coordinates::AverageSurfaceX1(const DvceArray5D<Real> &q,
+                                   DvceArray5D<Real> &q_average
+                            ){
+  Coordinates::Apply_Laplacian2D(q, q_average, true, 1);
+}
+
+void Coordinates::AverageSurfaceX2(const DvceArray5D<Real> &q,
+                                   DvceArray5D<Real> &q_average
+                            ){
+  Coordinates::Apply_Laplacian2D(q, q_average, true, 2);
+}
+
+void Coordinates::AverageSurfaceX3(const DvceArray5D<Real> &q,
+                                   DvceArray5D<Real> &q_average
+                            ){
+  Coordinates::Apply_Laplacian2D(q, q_average, true, 3);
 }

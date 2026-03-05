@@ -53,7 +53,7 @@ class Driver {
   void Initialize(Mesh *pmesh, ParameterInput *pin, Outputs *pout, bool rflag);
   void Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout);
   void Finalize(Mesh *pmesh, ParameterInput *pin, Outputs *pout);
-  void InitBoundaryValuesAndPrimitives(Mesh *pm);
+  void InitBoundaryValuesAndPrimitives(Mesh *pm, bool is_ic = false);
 
  private:
   Kokkos::Timer run_time_;      // generalized timer for cpu/gpu/etc

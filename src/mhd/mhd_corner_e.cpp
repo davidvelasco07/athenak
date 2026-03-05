@@ -22,6 +22,7 @@
 #include "reconstruct/plm.hpp"
 #include "reconstruct/ppm.hpp"
 #include "reconstruct/wenoz.hpp"
+#include "reconstruct/wenoz_pw.hpp"
 
 //----------------------------------------------------------------------------------------
 //! \fn ReconstructEdge()
@@ -33,7 +34,7 @@
 //!          qR = right state at i-1/2 (reconstructed from cell i toward left)
 
 KOKKOS_INLINE_FUNCTION
-void ReconstructEdge(const ReconstructionMethod recon,
+void ReconstructEdge(const ReconstructionMethod recon, const bool use_pw,
                      const Real &q_im3, const Real &q_im2,
                      const Real &q_im1, const Real &q_i,
                      const Real &q_ip1, const Real &q_ip2,
@@ -57,8 +58,13 @@ void ReconstructEdge(const ReconstructionMethod recon,
       PPMX(q_im2, q_im1, q_i, q_ip1, q_ip2, dum, qR);
       break;
     case ReconstructionMethod::wenoz:
-      WENOZ(q_im3, q_im2, q_im1, q_i, q_ip1, qL, dum);
-      WENOZ(q_im2, q_im1, q_i, q_ip1, q_ip2, dum, qR);
+      if (use_pw) {
+        WENOZPW(q_im3, q_im2, q_im1, q_i, q_ip1, qL, dum);
+        WENOZPW(q_im2, q_im1, q_i, q_ip1, q_ip2, dum, qR);
+      } else {
+        WENOZ(q_im3, q_im2, q_im1, q_i, q_ip1, qL, dum);
+        WENOZ(q_im2, q_im1, q_i, q_ip1, q_ip2, dum, qR);
+      }
       break;
   }
 }
@@ -70,12 +76,12 @@ void ReconstructEdge(const ReconstructionMethod recon,
 //! a high-order pointwise estimate at the interface for smooth fields.
 
 KOKKOS_INLINE_FUNCTION
-Real InterpolateEdge(const ReconstructionMethod recon,
+Real InterpolateEdge(const ReconstructionMethod recon, const bool use_pw,
                      const Real &q_im3, const Real &q_im2,
                      const Real &q_im1, const Real &q_i,
                      const Real &q_ip1, const Real &q_ip2) {
   Real qL, qR;
-  ReconstructEdge(recon, q_im3, q_im2, q_im1, q_i, q_ip1, q_ip2, qL, qR);
+  ReconstructEdge(recon, use_pw, q_im3, q_im2, q_im1, q_i, q_ip1, q_ip2, qL, qR);
   return 0.5*(qL + qR);
 }
 
@@ -251,8 +257,25 @@ TaskStatus MHD::CornerE(Driver *pdriver, int stage) {
       });
     } else {
       // UCT composition formula (Eq. 39, Berta et al. 2024 / MDZ21 Eq. 33)
-      auto bx1f_ = b0.x1f;
-      auto bx2f_ = b0.x2f;
+      // Compute pointwise face B (DeAverageSurface) for Mignone scheme
+      if (use_mignone) {
+        auto bx1f = b0.x1f;
+        auto bx2f = b0.x2f;
+        auto bx1c = b0_c.x1f;
+        auto bx2c = b0_c.x2f;
+        par_for("b0c_x1_2d", DevExeSpace(), 0, nmb1, js-3, je+3, is, ie+1,
+        KOKKOS_LAMBDA(int m, int j, int i) {
+          bx1c(m,ks,j,i) = bx1f(m,ks,j,i)
+            - (bx1f(m,ks,j+1,i) - 2.0*bx1f(m,ks,j,i) + bx1f(m,ks,j-1,i)) / 24.0;
+        });
+        par_for("b0c_x2_2d", DevExeSpace(), 0, nmb1, js, je+1, is-3, ie+3,
+        KOKKOS_LAMBDA(int m, int j, int i) {
+          bx2c(m,ks,j,i) = bx2f(m,ks,j,i)
+            - (bx2f(m,ks,j,i+1) - 2.0*bx2f(m,ks,j,i) + bx2f(m,ks,j,i-1)) / 24.0;
+        });
+      }
+      auto bx1f_ = use_mignone ? b0_c.x1f : b0.x1f;
+      auto bx2f_ = use_mignone ? b0_c.x2f : b0.x2f;
       auto aL1 = aL_x1f;
       auto dL1 = dL_x1f;
       auto dR1 = dR_x1f;
@@ -262,6 +285,7 @@ TaskStatus MHD::CornerE(Driver *pdriver, int stage) {
       auto dR2 = dR_x2f;
       auto vx2 = vx_x2f;
       auto recon = recon_method;
+      bool use_pw_uct = use_mignone;
 
       par_for("emf2_uct", DevExeSpace(), 0, nmb1, js, je+1, is, ie+1,
       KOKKOS_LAMBDA(const int m, const int j, const int i) {
@@ -274,48 +298,48 @@ TaskStatus MHD::CornerE(Driver *pdriver, int stage) {
         // E3 at z-edge (i-1/2, j-1/2, k=ks)
         // --- UCT coefficients: reconstruct to edge via high-order interp ---
         // x1-face coefficients at (i-1/2, j): reconstruct along j to j-1/2
-        Real ax_W = InterpolateEdge(recon,
+        Real ax_W = InterpolateEdge(recon, use_pw_uct,
           aL1(m,ks,j-3,i), aL1(m,ks,j-2,i), aL1(m,ks,j-1,i),
           aL1(m,ks,j,i),   aL1(m,ks,j+1,i), aL1(m,ks,j+2,i));
         Real ax_E = 1.0 - ax_W;
-        Real dx_W = InterpolateEdge(recon,
+        Real dx_W = InterpolateEdge(recon, use_pw_uct,
           dL1(m,ks,j-3,i), dL1(m,ks,j-2,i), dL1(m,ks,j-1,i),
           dL1(m,ks,j,i),   dL1(m,ks,j+1,i), dL1(m,ks,j+2,i));
-        Real dx_E = InterpolateEdge(recon,
+        Real dx_E = InterpolateEdge(recon, use_pw_uct,
           dR1(m,ks,j-3,i), dR1(m,ks,j-2,i), dR1(m,ks,j-1,i),
           dR1(m,ks,j,i),   dR1(m,ks,j+1,i), dR1(m,ks,j+2,i));
         // x2-face coefficients at (i, j-1/2): reconstruct along i to i-1/2
-        Real ay_S = InterpolateEdge(recon,
+        Real ay_S = InterpolateEdge(recon, use_pw_uct,
           aL2(m,ks,j,i-3), aL2(m,ks,j,i-2), aL2(m,ks,j,i-1),
           aL2(m,ks,j,i),   aL2(m,ks,j,i+1), aL2(m,ks,j,i+2));
         Real ay_N = 1.0 - ay_S;
-        Real dy_S = InterpolateEdge(recon,
+        Real dy_S = InterpolateEdge(recon, use_pw_uct,
           dL2(m,ks,j,i-3), dL2(m,ks,j,i-2), dL2(m,ks,j,i-1),
           dL2(m,ks,j,i),   dL2(m,ks,j,i+1), dL2(m,ks,j,i+2));
-        Real dy_N = InterpolateEdge(recon,
+        Real dy_N = InterpolateEdge(recon, use_pw_uct,
           dR2(m,ks,j,i-3), dR2(m,ks,j,i-2), dR2(m,ks,j,i-1),
           dR2(m,ks,j,i),   dR2(m,ks,j,i+1), dR2(m,ks,j,i+2));
 
         // --- Transverse velocities: reconstruct to L/R at edge ---
         Real vy_S, vy_N;
-        ReconstructEdge(recon,
+        ReconstructEdge(recon, use_pw_uct,
           vy1(m,ks,j-3,i), vy1(m,ks,j-2,i), vy1(m,ks,j-1,i),
           vy1(m,ks,j,i),   vy1(m,ks,j+1,i), vy1(m,ks,j+2,i),
           vy_S, vy_N);
         Real vx_W, vx_E;
-        ReconstructEdge(recon,
+        ReconstructEdge(recon, use_pw_uct,
           vx2(m,ks,j,i-3), vx2(m,ks,j,i-2), vx2(m,ks,j,i-1),
           vx2(m,ks,j,i),   vx2(m,ks,j,i+1), vx2(m,ks,j,i+2),
           vx_W, vx_E);
 
         // --- Staggered B: reconstruct to L/R at edge ---
         Real By_W, By_E;
-        ReconstructEdge(recon,
+        ReconstructEdge(recon, use_pw_uct,
           bx2f_(m,ks,j,i-3), bx2f_(m,ks,j,i-2), bx2f_(m,ks,j,i-1),
           bx2f_(m,ks,j,i),   bx2f_(m,ks,j,i+1), bx2f_(m,ks,j,i+2),
           By_W, By_E);
         Real Bx_S, Bx_N;
-        ReconstructEdge(recon,
+        ReconstructEdge(recon, use_pw_uct,
           bx1f_(m,ks,j-3,i), bx1f_(m,ks,j-2,i), bx1f_(m,ks,j-1,i),
           bx1f_(m,ks,j,i),   bx1f_(m,ks,j+1,i), bx1f_(m,ks,j+2,i),
           Bx_S, Bx_N);
@@ -551,10 +575,40 @@ TaskStatus MHD::CornerE(Driver *pdriver, int stage) {
       });
     } else {
       // UCT composition formula (Eq. 33, Mignone & Del Zanna 2021)
-      // Staggered B fields
-      auto bx1f_ = b0.x1f;
-      auto bx2f_ = b0.x2f;
-      auto bx3f_ = b0.x3f;
+      // Compute pointwise face B (DeAverageSurface) for Mignone scheme
+      if (use_mignone) {
+        auto bx1f = b0.x1f;
+        auto bx2f = b0.x2f;
+        auto bx3f = b0.x3f;
+        auto bx1c = b0_c.x1f;
+        auto bx2c = b0_c.x2f;
+        auto bx3c = b0_c.x3f;
+        // b0_c.x1f: transverse Laplacian in y and z
+        par_for("b0c_x1_3d", DevExeSpace(), 0, nmb1, ks-3, ke+3, js-3, je+3, is, ie+1,
+        KOKKOS_LAMBDA(int m, int k, int j, int i) {
+          bx1c(m,k,j,i) = bx1f(m,k,j,i)
+            - (bx1f(m,k,j+1,i) - 2.0*bx1f(m,k,j,i) + bx1f(m,k,j-1,i)) / 24.0
+            - (bx1f(m,k+1,j,i) - 2.0*bx1f(m,k,j,i) + bx1f(m,k-1,j,i)) / 24.0;
+        });
+        // b0_c.x2f: transverse Laplacian in x and z
+        par_for("b0c_x2_3d", DevExeSpace(), 0, nmb1, ks-3, ke+3, js, je+1, is-3, ie+3,
+        KOKKOS_LAMBDA(int m, int k, int j, int i) {
+          bx2c(m,k,j,i) = bx2f(m,k,j,i)
+            - (bx2f(m,k,j,i+1) - 2.0*bx2f(m,k,j,i) + bx2f(m,k,j,i-1)) / 24.0
+            - (bx2f(m,k+1,j,i) - 2.0*bx2f(m,k,j,i) + bx2f(m,k-1,j,i)) / 24.0;
+        });
+        // b0_c.x3f: transverse Laplacian in x and y
+        par_for("b0c_x3_3d", DevExeSpace(), 0, nmb1, ks, ke+1, js-3, je+3, is-3, ie+3,
+        KOKKOS_LAMBDA(int m, int k, int j, int i) {
+          bx3c(m,k,j,i) = bx3f(m,k,j,i)
+            - (bx3f(m,k,j,i+1) - 2.0*bx3f(m,k,j,i) + bx3f(m,k,j,i-1)) / 24.0
+            - (bx3f(m,k,j+1,i) - 2.0*bx3f(m,k,j,i) + bx3f(m,k,j-1,i)) / 24.0;
+        });
+      }
+      // Staggered B fields: use pointwise if Mignone
+      auto bx1f_ = use_mignone ? b0_c.x1f : b0.x1f;
+      auto bx2f_ = use_mignone ? b0_c.x2f : b0.x2f;
+      auto bx3f_ = use_mignone ? b0_c.x3f : b0.x3f;
       // UCT coefficients from x1-faces
       auto aL1 = aL_x1f;
       auto dL1 = dL_x1f;
@@ -574,6 +628,7 @@ TaskStatus MHD::CornerE(Driver *pdriver, int stage) {
       auto vx3 = vx_x3f;  // vx component from x3-faces
       auto vy3 = vy_x3f;  // vy component from x3-faces
       auto recon = recon_method;
+      bool use_pw_uct = use_mignone;
 
       par_for("emf3_uct", DevExeSpace(), 0, nmb1, ks, ke+1, js, je+1, is, ie+1,
       KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
@@ -584,38 +639,38 @@ TaskStatus MHD::CornerE(Driver *pdriver, int stage) {
         {
           // UCT coefficients: reconstruct to edge using high-order interpolation
           // x2-face coefficients at (i, j-1/2, k): reconstruct along k to k-1/2
-          Real ay_S = InterpolateEdge(recon,
+          Real ay_S = InterpolateEdge(recon, use_pw_uct,
             aL2(m,k-3,j,i), aL2(m,k-2,j,i), aL2(m,k-1,j,i),
             aL2(m,k,j,i),   aL2(m,k+1,j,i), aL2(m,k+2,j,i));
           Real ay_N = 1.0 - ay_S;
-          Real dy_S = InterpolateEdge(recon,
+          Real dy_S = InterpolateEdge(recon, use_pw_uct,
             dL2(m,k-3,j,i), dL2(m,k-2,j,i), dL2(m,k-1,j,i),
             dL2(m,k,j,i),   dL2(m,k+1,j,i), dL2(m,k+2,j,i));
-          Real dy_N = InterpolateEdge(recon,
+          Real dy_N = InterpolateEdge(recon, use_pw_uct,
             dR2(m,k-3,j,i), dR2(m,k-2,j,i), dR2(m,k-1,j,i),
             dR2(m,k,j,i),   dR2(m,k+1,j,i), dR2(m,k+2,j,i));
           // x3-face coefficients at (i, j, k-1/2): reconstruct along j to j-1/2
-          Real az_B = InterpolateEdge(recon,
+          Real az_B = InterpolateEdge(recon, use_pw_uct,
             aL3(m,k,j-3,i), aL3(m,k,j-2,i), aL3(m,k,j-1,i),
             aL3(m,k,j,i),   aL3(m,k,j+1,i), aL3(m,k,j+2,i));
           Real az_T = 1.0 - az_B;
-          Real dz_B = InterpolateEdge(recon,
+          Real dz_B = InterpolateEdge(recon, use_pw_uct,
             dL3(m,k,j-3,i), dL3(m,k,j-2,i), dL3(m,k,j-1,i),
             dL3(m,k,j,i),   dL3(m,k,j+1,i), dL3(m,k,j+2,i));
-          Real dz_T = InterpolateEdge(recon,
+          Real dz_T = InterpolateEdge(recon, use_pw_uct,
             dR3(m,k,j-3,i), dR3(m,k,j-2,i), dR3(m,k,j-1,i),
             dR3(m,k,j,i),   dR3(m,k,j+1,i), dR3(m,k,j+2,i));
 
           // Transverse velocities: reconstruct to L/R at edge
           // vz from x2-faces: reconstruct along k to B/T
           Real vz_B, vz_T;
-          ReconstructEdge(recon,
+          ReconstructEdge(recon, use_pw_uct,
             vz2(m,k-3,j,i), vz2(m,k-2,j,i), vz2(m,k-1,j,i),
             vz2(m,k,j,i),   vz2(m,k+1,j,i), vz2(m,k+2,j,i),
             vz_B, vz_T);
           // vy from x3-faces: reconstruct along j to S/N
           Real vy_S, vy_N;
-          ReconstructEdge(recon,
+          ReconstructEdge(recon, use_pw_uct,
             vy3(m,k,j-3,i), vy3(m,k,j-2,i), vy3(m,k,j-1,i),
             vy3(m,k,j,i),   vy3(m,k,j+1,i), vy3(m,k,j+2,i),
             vy_S, vy_N);
@@ -623,13 +678,13 @@ TaskStatus MHD::CornerE(Driver *pdriver, int stage) {
           // Staggered B: reconstruct to L/R at edge
           // By from x2-faces: reconstruct along k to B/T
           Real By_B, By_T;
-          ReconstructEdge(recon,
+          ReconstructEdge(recon, use_pw_uct,
             bx2f_(m,k-3,j,i), bx2f_(m,k-2,j,i), bx2f_(m,k-1,j,i),
             bx2f_(m,k,j,i),   bx2f_(m,k+1,j,i), bx2f_(m,k+2,j,i),
             By_B, By_T);
           // Bz from x3-faces: reconstruct along j to S/N
           Real Bz_S, Bz_N;
-          ReconstructEdge(recon,
+          ReconstructEdge(recon, use_pw_uct,
             bx3f_(m,k,j-3,i), bx3f_(m,k,j-2,i), bx3f_(m,k,j-1,i),
             bx3f_(m,k,j,i),   bx3f_(m,k,j+1,i), bx3f_(m,k,j+2,i),
             Bz_S, Bz_N);
@@ -649,38 +704,38 @@ TaskStatus MHD::CornerE(Driver *pdriver, int stage) {
         {
           // UCT coefficients: reconstruct to edge using high-order interpolation
           // x3-face coefficients at (i, j, k-1/2): reconstruct along i to i-1/2
-          Real az_B = InterpolateEdge(recon,
+          Real az_B = InterpolateEdge(recon, use_pw_uct,
             aL3(m,k,j,i-3), aL3(m,k,j,i-2), aL3(m,k,j,i-1),
             aL3(m,k,j,i),   aL3(m,k,j,i+1), aL3(m,k,j,i+2));
           Real az_T = 1.0 - az_B;
-          Real dz_B = InterpolateEdge(recon,
+          Real dz_B = InterpolateEdge(recon, use_pw_uct,
             dL3(m,k,j,i-3), dL3(m,k,j,i-2), dL3(m,k,j,i-1),
             dL3(m,k,j,i),   dL3(m,k,j,i+1), dL3(m,k,j,i+2));
-          Real dz_T = InterpolateEdge(recon,
+          Real dz_T = InterpolateEdge(recon, use_pw_uct,
             dR3(m,k,j,i-3), dR3(m,k,j,i-2), dR3(m,k,j,i-1),
             dR3(m,k,j,i),   dR3(m,k,j,i+1), dR3(m,k,j,i+2));
           // x1-face coefficients at (i-1/2, j, k): reconstruct along k to k-1/2
-          Real ax_W = InterpolateEdge(recon,
+          Real ax_W = InterpolateEdge(recon, use_pw_uct,
             aL1(m,k-3,j,i), aL1(m,k-2,j,i), aL1(m,k-1,j,i),
             aL1(m,k,j,i),   aL1(m,k+1,j,i), aL1(m,k+2,j,i));
           Real ax_E = 1.0 - ax_W;
-          Real dx_W = InterpolateEdge(recon,
+          Real dx_W = InterpolateEdge(recon, use_pw_uct,
             dL1(m,k-3,j,i), dL1(m,k-2,j,i), dL1(m,k-1,j,i),
             dL1(m,k,j,i),   dL1(m,k+1,j,i), dL1(m,k+2,j,i));
-          Real dx_E = InterpolateEdge(recon,
+          Real dx_E = InterpolateEdge(recon, use_pw_uct,
             dR1(m,k-3,j,i), dR1(m,k-2,j,i), dR1(m,k-1,j,i),
             dR1(m,k,j,i),   dR1(m,k+1,j,i), dR1(m,k+2,j,i));
 
           // Transverse velocities: reconstruct to L/R at edge
           // vx from x3-faces: reconstruct along i to W/E
           Real vx_W, vx_E;
-          ReconstructEdge(recon,
+          ReconstructEdge(recon, use_pw_uct,
             vx3(m,k,j,i-3), vx3(m,k,j,i-2), vx3(m,k,j,i-1),
             vx3(m,k,j,i),   vx3(m,k,j,i+1), vx3(m,k,j,i+2),
             vx_W, vx_E);
           // vz from x1-faces: reconstruct along k to B/T
           Real vz_B, vz_T;
-          ReconstructEdge(recon,
+          ReconstructEdge(recon, use_pw_uct,
             vz1(m,k-3,j,i), vz1(m,k-2,j,i), vz1(m,k-1,j,i),
             vz1(m,k,j,i),   vz1(m,k+1,j,i), vz1(m,k+2,j,i),
             vz_B, vz_T);
@@ -688,13 +743,13 @@ TaskStatus MHD::CornerE(Driver *pdriver, int stage) {
           // Staggered B: reconstruct to L/R at edge
           // Bz from x3-faces: reconstruct along i to W/E
           Real Bz_W, Bz_E;
-          ReconstructEdge(recon,
+          ReconstructEdge(recon, use_pw_uct,
             bx3f_(m,k,j,i-3), bx3f_(m,k,j,i-2), bx3f_(m,k,j,i-1),
             bx3f_(m,k,j,i),   bx3f_(m,k,j,i+1), bx3f_(m,k,j,i+2),
             Bz_W, Bz_E);
           // Bx from x1-faces: reconstruct along k to B/T
           Real Bx_B, Bx_T;
-          ReconstructEdge(recon,
+          ReconstructEdge(recon, use_pw_uct,
             bx1f_(m,k-3,j,i), bx1f_(m,k-2,j,i), bx1f_(m,k-1,j,i),
             bx1f_(m,k,j,i),   bx1f_(m,k+1,j,i), bx1f_(m,k+2,j,i),
             Bx_B, Bx_T);
@@ -714,38 +769,38 @@ TaskStatus MHD::CornerE(Driver *pdriver, int stage) {
         {
           // UCT coefficients: reconstruct to edge using high-order interpolation
           // x1-face coefficients at (i-1/2, j, k): reconstruct along j to j-1/2
-          Real ax_W = InterpolateEdge(recon,
+          Real ax_W = InterpolateEdge(recon, use_pw_uct,
             aL1(m,k,j-3,i), aL1(m,k,j-2,i), aL1(m,k,j-1,i),
             aL1(m,k,j,i),   aL1(m,k,j+1,i), aL1(m,k,j+2,i));
           Real ax_E = 1.0 - ax_W;
-          Real dx_W = InterpolateEdge(recon,
+          Real dx_W = InterpolateEdge(recon, use_pw_uct,
             dL1(m,k,j-3,i), dL1(m,k,j-2,i), dL1(m,k,j-1,i),
             dL1(m,k,j,i),   dL1(m,k,j+1,i), dL1(m,k,j+2,i));
-          Real dx_E = InterpolateEdge(recon,
+          Real dx_E = InterpolateEdge(recon, use_pw_uct,
             dR1(m,k,j-3,i), dR1(m,k,j-2,i), dR1(m,k,j-1,i),
             dR1(m,k,j,i),   dR1(m,k,j+1,i), dR1(m,k,j+2,i));
           // x2-face coefficients at (i, j-1/2, k): reconstruct along i to i-1/2
-          Real ay_S = InterpolateEdge(recon,
+          Real ay_S = InterpolateEdge(recon, use_pw_uct,
             aL2(m,k,j,i-3), aL2(m,k,j,i-2), aL2(m,k,j,i-1),
             aL2(m,k,j,i),   aL2(m,k,j,i+1), aL2(m,k,j,i+2));
           Real ay_N = 1.0 - ay_S;
-          Real dy_S = InterpolateEdge(recon,
+          Real dy_S = InterpolateEdge(recon, use_pw_uct,
             dL2(m,k,j,i-3), dL2(m,k,j,i-2), dL2(m,k,j,i-1),
             dL2(m,k,j,i),   dL2(m,k,j,i+1), dL2(m,k,j,i+2));
-          Real dy_N = InterpolateEdge(recon,
+          Real dy_N = InterpolateEdge(recon, use_pw_uct,
             dR2(m,k,j,i-3), dR2(m,k,j,i-2), dR2(m,k,j,i-1),
             dR2(m,k,j,i),   dR2(m,k,j,i+1), dR2(m,k,j,i+2));
 
           // Transverse velocities: reconstruct to L/R at edge
           // vx from x2-faces: reconstruct along i to W/E
           Real vx_W, vx_E;
-          ReconstructEdge(recon,
+          ReconstructEdge(recon, use_pw_uct,
             vx2(m,k,j,i-3), vx2(m,k,j,i-2), vx2(m,k,j,i-1),
             vx2(m,k,j,i),   vx2(m,k,j,i+1), vx2(m,k,j,i+2),
             vx_W, vx_E);
           // vy from x1-faces: reconstruct along j to S/N
           Real vy_S, vy_N;
-          ReconstructEdge(recon,
+          ReconstructEdge(recon, use_pw_uct,
             vy1(m,k,j-3,i), vy1(m,k,j-2,i), vy1(m,k,j-1,i),
             vy1(m,k,j,i),   vy1(m,k,j+1,i), vy1(m,k,j+2,i),
             vy_S, vy_N);
@@ -753,13 +808,13 @@ TaskStatus MHD::CornerE(Driver *pdriver, int stage) {
           // Staggered B: reconstruct to L/R at edge
           // By from x2-faces: reconstruct along i to W/E
           Real By_W, By_E;
-          ReconstructEdge(recon,
+          ReconstructEdge(recon, use_pw_uct,
             bx2f_(m,k,j,i-3), bx2f_(m,k,j,i-2), bx2f_(m,k,j,i-1),
             bx2f_(m,k,j,i),   bx2f_(m,k,j,i+1), bx2f_(m,k,j,i+2),
             By_W, By_E);
           // Bx from x1-faces: reconstruct along j to S/N
           Real Bx_S, Bx_N;
-          ReconstructEdge(recon,
+          ReconstructEdge(recon, use_pw_uct,
             bx1f_(m,k,j-3,i), bx1f_(m,k,j-2,i), bx1f_(m,k,j-1,i),
             bx1f_(m,k,j,i),   bx1f_(m,k,j+1,i), bx1f_(m,k,j+2,i),
             Bx_S, Bx_N);

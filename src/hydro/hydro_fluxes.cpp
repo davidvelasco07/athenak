@@ -17,6 +17,7 @@
 #include "reconstruct/plm.hpp"
 #include "reconstruct/ppm.hpp"
 #include "reconstruct/wenoz.hpp"
+#include "reconstruct/wenoz_pw.hpp"
 #include "hydro/rsolvers/advect_hyd.hpp"
 #include "hydro/rsolvers/llf_hyd.hpp"
 #include "hydro/rsolvers/hlle_hyd.hpp"
@@ -54,14 +55,15 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
   auto &eos_ = peos->eos_data;
   auto &size_ = pmy_pack->pmb->mb_size;
   auto &coord_ = pmy_pack->pcoord->coord_data;
-  auto &w0_ = w0;
+  auto &w0_ = (use_4th_order && use_mignone) ? w0_c : w0;
 
   //--------------------------------------------------------------------------------------
   // i-direction
 
   size_t scr_size = ScrArray2D<Real>::shmem_size(nvars, ncells1) * 2;
   int scr_level = 0;
-  auto &flx1_ = uflx.x1f;
+  auto &flx1_ = (use_4th_order && use_mignone) ? uflx_f.x1f : uflx.x1f;
+  bool use_pw_recon_ = (use_4th_order && use_mignone);
 
   // set the loop limits for 1D/2D/3D problems
   int il = is, iu = ie+1, jl = js, ju = je, kl = ks, ku = ke;
@@ -71,6 +73,14 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
       jl = js-1, ju = je+1, kl = ks, ku = ke;
     } else {
       jl = js-1, ju = je+1, kl = ks-1, ku = ke+1;
+    }
+  }
+  if (use_4th_order) {
+    il = is-2, iu = ie+3;
+    if (pmy_pack->pmesh->two_d) {
+      jl = js-2, ju = je+2, kl = ks, ku = ke;
+    } else if (pmy_pack->pmesh->three_d) {
+      jl = js-2, ju = je+2, kl = ks-2, ku = ke+2;
     }
   }
 
@@ -92,7 +102,10 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
         PiecewiseParabolicX1(member,eos_,extrema,true, m, k, j, il-1, iu, w0_, wl, wr);
         break;
       case ReconstructionMethod::wenoz:
-        WENOZX1(member, eos_, true, m, k, j, il-1, iu, w0_, wl, wr);
+        if (use_pw_recon_)
+          WENOZPWX1(member, eos_, true, m, k, j, il-1, iu, w0_, wl, wr);
+        else
+          WENOZX1(member, eos_, true, m, k, j, il-1, iu, w0_, wl, wr);
         break;
       default:
         break;
@@ -149,7 +162,7 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
 
   if (pmy_pack->pmesh->multi_d) {
     scr_size = ScrArray2D<Real>::shmem_size(nvars, ncells1) * 3;
-    auto &flx2_ = uflx.x2f;
+    auto &flx2_ = (use_4th_order && use_mignone) ? uflx_f.x2f : uflx.x2f;
 
     // set the loop limits for 1D/2D/3D problems
     il = is, iu = ie, jl = js-1, ju = je+1, kl = ks, ku = ke;
@@ -159,6 +172,14 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
         il = is-1, iu = ie+1, kl = ks, ku = ke;
       } else {
         il = is-1, iu = ie+1, kl = ks-1, ku = ke+1;
+      }
+    }
+    if (use_4th_order) {
+      jl = js-2, ju = je+2;
+      if (pmy_pack->pmesh->two_d) {
+        il = is-2, iu = ie+2, kl = ks, ku = ke;
+      } else if (pmy_pack->pmesh->three_d) {
+        il = is-2, iu = ie+2, kl = ks-2, ku = ke+2;
       }
     }
 
@@ -191,7 +212,10 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
             PiecewiseParabolicX2(member,eos_,extrema,true,m,k,j,il,iu, w0_, wl_jp1, wr);
             break;
           case ReconstructionMethod::wenoz:
-            WENOZX2(member, eos_, true, m, k, j, il, iu, w0_, wl_jp1, wr);
+            if (use_pw_recon_)
+              WENOZPWX2(member, eos_, true, m, k, j, il, iu, w0_, wl_jp1, wr);
+            else
+              WENOZX2(member, eos_, true, m, k, j, il, iu, w0_, wl_jp1, wr);
             break;
           default:
             break;
@@ -251,11 +275,12 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
 
   if (pmy_pack->pmesh->three_d) {
     scr_size = ScrArray2D<Real>::shmem_size(nvars, ncells1) * 3;
-    auto &flx3_ = uflx.x3f;
+    auto &flx3_ = (use_4th_order && use_mignone) ? uflx_f.x3f : uflx.x3f;
 
     // set the loop limits
     il = is, iu = ie, jl = js, ju = je, kl = ks-1, ku = ke+1;
     if (use_fofc) { il = is-1, iu = ie+1, jl = js-1, ju = je+1, kl = ks-2, ku = ke+2; }
+    if (use_4th_order) { il = is-2, iu = ie+2, jl = js-2, ju = je+2, kl = ks-2, ku = ke+2; }
 
     par_for_outer("hflux_x3",DevExeSpace(), scr_size, scr_level, 0, nmb1, jl, ju,
     KOKKOS_LAMBDA(TeamMember_t member, const int m, const int j) {
@@ -286,7 +311,10 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
             PiecewiseParabolicX3(member,eos_,extrema,true,m,k,j,il,iu, w0_, wl_kp1, wr);
             break;
           case ReconstructionMethod::wenoz:
-            WENOZX3(member, eos_, true, m, k, j, il, iu, w0_, wl_kp1, wr);
+            if (use_pw_recon_)
+              WENOZPWX3(member, eos_, true, m, k, j, il, iu, w0_, wl_kp1, wr);
+            else
+              WENOZX3(member, eos_, true, m, k, j, il, iu, w0_, wl_kp1, wr);
             break;
           default:
             break;
@@ -339,6 +367,15 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
         }
       } // end loop over k
     });
+  }
+
+  if (use_4th_order && use_mignone) {
+    // Mignone approach: apply transverse Laplacian correction to face fluxes
+    pmy_pack->pcoord->AverageSurfaceX1(uflx_f.x1f, uflx.x1f);
+    if (pmy_pack->pmesh->multi_d)
+      pmy_pack->pcoord->AverageSurfaceX2(uflx_f.x2f, uflx.x2f);
+    if (pmy_pack->pmesh->three_d)
+      pmy_pack->pcoord->AverageSurfaceX3(uflx_f.x3f, uflx.x3f);
   }
 
   return;

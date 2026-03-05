@@ -154,12 +154,24 @@ class MHD {
   DvceArray4D<bool> fofc;  // flag for each cell to indicate if FOFC is needed
   bool use_fofc = false;   // flag to enable FOFC
 
+  // following used for Mignone 4th-order scheme
+  bool use_mignone = false;
+  DvceArray5D<Real> u0_c;      // pointwise conserved variables
+  DvceArray5D<Real> w0_c;      // pointwise primitives (cell-center values)
+  DvceArray5D<Real> bcc0_c;    // pointwise cell-centered B (3 components)
+  DvceFaceFld5D<Real> uflx_f;  // pointwise face fluxes (before surface averaging)
+  DvceFaceFld4D<Real> b0_c;    // pointwise face-centered B (for UCT CornerE)
+
   // container to hold names of TaskIDs
   MHDTaskIDs id;
 
   // functions...
   void SetSaveWBcc();
   void AssembleMHDTasks(std::map<std::string, std::shared_ptr<TaskList>> tl);
+  // 4th-order IC setup (called from Driver::InitBoundaryValuesAndPrimitives)
+  void InitMignoneIC();
+  // 4th-order reference solution setup (called from LinearWaveErrors after pgen sets b1/w0)
+  void InitMignoneRef();
   // ...in "before_timeintegrator" task list
   TaskStatus SaveMHDState(Driver *d, int stage);
   // ...in "before_stagen_tl" task list

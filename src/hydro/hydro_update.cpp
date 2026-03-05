@@ -52,7 +52,7 @@ TaskStatus Hydro::RKUpdate(Driver *pdriver, int stage) {
     ScrArray1D<Real> divf(member.team_scratch(scr_level), ncells1);
 
     // compute dF1/dx1
-    par_for_inner(member, is, ie, [&](const int i) {
+    par_for_inner(member, is-1, ie+1, [&](const int i) {
       divf(i) = (flx1(m,n,k,j,i+1) - flx1(m,n,k,j,i))/mbsize.d_view(m).dx1;
     });
     member.team_barrier();
@@ -60,7 +60,7 @@ TaskStatus Hydro::RKUpdate(Driver *pdriver, int stage) {
     // Add dF2/dx2
     // Fluxes must be summed in pairs to symmetrize round-off error in each dir
     if (multi_d) {
-      par_for_inner(member, is, ie, [&](const int i) {
+      par_for_inner(member, is-1, ie+1, [&](const int i) {
         divf(i) += (flx2(m,n,k,j+1,i) - flx2(m,n,k,j,i))/mbsize.d_view(m).dx2;
       });
       member.team_barrier();
@@ -69,7 +69,7 @@ TaskStatus Hydro::RKUpdate(Driver *pdriver, int stage) {
     // Add dF3/dx3
     // Fluxes must be summed in pairs to symmetrize round-off error in each dir
     if (three_d) {
-      par_for_inner(member, is, ie, [&](const int i) {
+      par_for_inner(member, is-1, ie+1, [&](const int i) {
         divf(i) += (flx3(m,n,k+1,j,i) - flx3(m,n,k,j,i))/mbsize.d_view(m).dx3;
       });
       member.team_barrier();
@@ -79,6 +79,8 @@ TaskStatus Hydro::RKUpdate(Driver *pdriver, int stage) {
       u0_(m,n,k,j,i) = gam0*u0_(m,n,k,j,i) + gam1*u1_(m,n,k,j,i) - beta_dt*divf(i);
     });
   });
+
+
   return TaskStatus::complete;
 }
 } // namespace hydro

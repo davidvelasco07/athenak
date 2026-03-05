@@ -311,7 +311,7 @@ void Driver::ExecuteTaskList(Mesh *pm, std::string tl, int stage) {
 
 void Driver::Initialize(Mesh *pmesh, ParameterInput *pin, Outputs *pout, bool res_flag) {
   //---- Step 1.  Set conserved variables in ghost zones for all physics
-  InitBoundaryValuesAndPrimitives(pmesh);
+  InitBoundaryValuesAndPrimitives(pmesh, true);
 
   //---- Step 2.  Compute time step (if problem involves time evolution)
   hydro::Hydro *phydro = pmesh->pmb_pack->phydro;
@@ -558,7 +558,7 @@ Real Driver::UpdateWallClock() {
 //! \brief Sets boundary conditions on conserved and initializes primitives.  Used both
 //! on initialization, and when new MBs created with AMR.
 
-void Driver::InitBoundaryValuesAndPrimitives(Mesh *pm) {
+void Driver::InitBoundaryValuesAndPrimitives(Mesh *pm, bool is_ic) {
   // Note: with MPI, sends on ALL MBs must be complete before receives execute
 
   // Initialize Z4c
@@ -617,6 +617,12 @@ void Driver::InitBoundaryValuesAndPrimitives(Mesh *pm) {
     (void) pmhd->RecvB_Shr(this, 0);
     (void) pmhd->ApplyPhysicalBCs(this, 0);
     (void) pmhd->Prolongate(this, 0);
+    // For Mignone 4th-order scheme: recompute u0 from the 4th-order pointwise
+    // primitives (w0_c from DeAverage(w0)) and pointwise B (bcc0_c from b0).
+    // This must be done BEFORE ConToPrim so that the subsequent DeAverageVolume(u0)
+    // produces 4th-order u0_c (needed for 4th-order w0_c and pressure).
+    // w0 must already contain GL-accurate cell-averages over all cells (set by pgen).
+    if (is_ic && pmhd->use_mignone) { pmhd->InitMignoneIC(); }
     if (pdyngr == nullptr) {
       (void) pmhd->ConToPrim(this, 0);
     } else {

@@ -53,7 +53,12 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
     e3_cc("e3_cc",1,1,1,1),
     utest("utest",1,1,1,1,1),
     bcctest("bcctest",1,1,1,1,1),
-    fofc("fofc",1,1,1,1) {
+    fofc("fofc",1,1,1,1),
+    u0_c("u0_c",1,1,1,1,1),
+    w0_c("w0_c",1,1,1,1,1),
+    bcc0_c("bcc0_c",1,1,1,1,1),
+    uflx_f("uflx_f",1,1,1,1,1),
+    b0_c("b0_c",1,1,1,1) {
   // Total number of MeshBlocks on this rank to be used in array dimensioning
   int nmb = std::max((ppack->nmb_thispack), (ppack->pmesh->nmb_maxperrank));
 
@@ -324,6 +329,30 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
       std::exit(EXIT_FAILURE);
     }
 
+    // Mignone 4th-order scheme
+    use_mignone = pin->GetOrAddBoolean("mhd", "mignone", false);
+    if (use_mignone) {
+      auto &indcs = pmy_pack->pmesh->mb_indcs;
+      if (emf_method == MHD_EMF::ct_contact) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Mignone 4th-order MHD requires UCT emf method"
+                  << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      if (recon_method != ReconstructionMethod::wenoz) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Mignone 4th-order MHD requires reconstruct = wenoz"
+                  << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      if (indcs.ng < 5) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Mignone 4th-order MHD requires nghost >= 5"
+                  << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+    }
+
     // Final memory allocations
     {
       // allocate second registers
@@ -375,6 +404,19 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
         Kokkos::realloc(dR_x3f, nmb, ncells3, ncells2, ncells1);
         Kokkos::realloc(vx_x3f, nmb, ncells3, ncells2, ncells1);
         Kokkos::realloc(vy_x3f, nmb, ncells3, ncells2, ncells1);
+      }
+
+      // allocate Mignone 4th-order arrays
+      if (use_mignone) {
+        Kokkos::realloc(u0_c,        nmb, (nmhd+nscalars), ncells3, ncells2, ncells1);
+        Kokkos::realloc(w0_c,        nmb, (nmhd+nscalars), ncells3, ncells2, ncells1);
+        Kokkos::realloc(bcc0_c,      nmb, 3,               ncells3, ncells2, ncells1);
+        Kokkos::realloc(uflx_f.x1f, nmb, (nmhd+nscalars), ncells3, ncells2, ncells1+1);
+        Kokkos::realloc(uflx_f.x2f, nmb, (nmhd+nscalars), ncells3, ncells2+1, ncells1);
+        Kokkos::realloc(uflx_f.x3f, nmb, (nmhd+nscalars), ncells3+1, ncells2, ncells1);
+        Kokkos::realloc(b0_c.x1f, nmb, ncells3, ncells2, ncells1+1);
+        Kokkos::realloc(b0_c.x2f, nmb, ncells3, ncells2+1, ncells1);
+        Kokkos::realloc(b0_c.x3f, nmb, ncells3+1, ncells2, ncells1);
       }
 
       // allocate array of flags used with FOFC

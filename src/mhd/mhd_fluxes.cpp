@@ -19,6 +19,7 @@
 #include "reconstruct/plm.hpp"
 #include "reconstruct/ppm.hpp"
 #include "reconstruct/wenoz.hpp"
+#include "reconstruct/wenoz_pw.hpp"
 #include "mhd/rsolvers/advect_mhd.hpp"
 #include "mhd/rsolvers/llf_mhd.hpp"
 #include "mhd/rsolvers/hlle_mhd.hpp"
@@ -56,8 +57,9 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
   auto &eos_ = peos->eos_data;
   auto &size_ = pmy_pack->pmb->mb_size;
   auto &coord_ = pmy_pack->pcoord->coord_data;
-  auto &w0_ = w0;
-  auto &b0_ = bcc0;
+  bool use_pw_ = use_mignone;
+  auto &w0_ = use_mignone ? w0_c : w0;
+  auto &b0_ = use_mignone ? bcc0_c : bcc0;
 
   //--------------------------------------------------------------------------------------
   // i-direction
@@ -65,10 +67,10 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
   size_t scr_size = (ScrArray2D<Real>::shmem_size(nvars, ncells1) +
                      ScrArray2D<Real>::shmem_size(3, ncells1)) * 2;
   int scr_level = 0;
-  auto &flx1_ = uflx.x1f;
+  auto &flx1_ = use_mignone ? uflx_f.x1f : uflx.x1f;
   auto &e31_ = e3x1;
   auto &e21_ = e2x1;
-  auto &bx_ = b0.x1f;
+  auto &bx_ = use_mignone ? b0_c.x1f : b0.x1f;
   auto emf_method_ = emf_method;
   auto &aL_x1f_ = aL_x1f;
   auto &dL_x1f_ = dL_x1f;
@@ -94,7 +96,8 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
     jl = js-extra, ju = je+extra, kl = ks-extra, ku = ke+extra;
   }
   int il = is, iu = ie+1;
-  if (use_fofc) { il = is-1, iu = ie+2; }
+  if (use_fofc)    { il = is-1; iu = ie+2; }
+  if (use_mignone) { il = is-2; iu = ie+3; }
 
   par_for_outer("mhd_flux1",DevExeSpace(), scr_size, scr_level, 0, nmb1, kl, ku, jl, ju,
   KOKKOS_LAMBDA(TeamMember_t member, const int m, const int k, const int j) {
@@ -119,8 +122,13 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
         PiecewiseParabolicX1(member,eos_,extrema,false, m, k, j, il-1, iu, b0_, bl, br);
         break;
       case ReconstructionMethod::wenoz:
-        WENOZX1(member, eos_, true,  m, k, j, il-1, iu, w0_, wl, wr);
-        WENOZX1(member, eos_, false, m, k, j, il-1, iu, b0_, bl, br);
+        if (use_pw_) {
+          WENOZPWX1(member, eos_, true,  m, k, j, il-1, iu, w0_, wl, wr);
+          WENOZPWX1(member, eos_, false, m, k, j, il-1, iu, b0_, bl, br);
+        } else {
+          WENOZX1(member, eos_, true,  m, k, j, il-1, iu, w0_, wl, wr);
+          WENOZX1(member, eos_, false, m, k, j, il-1, iu, b0_, bl, br);
+        }
         break;
       default:
         break;
@@ -193,8 +201,8 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
   if (pmy_pack->pmesh->multi_d) {
     scr_size = (ScrArray2D<Real>::shmem_size(nvars, ncells1) +
                 ScrArray2D<Real>::shmem_size(3, ncells1)) * 3;
-    auto &flx2_ = uflx.x2f;
-    auto &by_ = b0.x2f;
+    auto &flx2_ = use_mignone ? uflx_f.x2f : uflx.x2f;
+    auto &by_ = use_mignone ? b0_c.x2f : b0.x2f;
     auto &e12_ = e1x2;
     auto &e32_ = e3x2;
     auto &aL_x2f_ = aL_x2f;
@@ -259,8 +267,13 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
             PiecewiseParabolicX2(member,eos_,extrema,false,m,k,j,il2,iu2,b0_,bl_jp1,br);
             break;
           case ReconstructionMethod::wenoz:
-            WENOZX2(member, eos_, true,  m, k, j, il2, iu2, w0_, wl_jp1, wr);
-            WENOZX2(member, eos_, false, m, k, j, il2, iu2, b0_, bl_jp1, br);
+            if (use_pw_) {
+              WENOZPWX2(member, eos_, true,  m, k, j, il2, iu2, w0_, wl_jp1, wr);
+              WENOZPWX2(member, eos_, false, m, k, j, il2, iu2, b0_, bl_jp1, br);
+            } else {
+              WENOZX2(member, eos_, true,  m, k, j, il2, iu2, w0_, wl_jp1, wr);
+              WENOZX2(member, eos_, false, m, k, j, il2, iu2, b0_, bl_jp1, br);
+            }
             break;
           default:
             break;
@@ -347,8 +360,8 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
   if (pmy_pack->pmesh->three_d) {
     scr_size = (ScrArray2D<Real>::shmem_size(nvars, ncells1) +
                 ScrArray2D<Real>::shmem_size(3, ncells1)) * 3;
-    auto &flx3_ = uflx.x3f;
-    auto &bz_ = b0.x3f;
+    auto &flx3_ = use_mignone ? uflx_f.x3f : uflx.x3f;
+    auto &bz_ = use_mignone ? b0_c.x3f : b0.x3f;
     auto &e23_ = e2x3;
     auto &e13_ = e1x3;
     auto &aL_x3f_ = aL_x3f;
@@ -408,8 +421,13 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
             PiecewiseParabolicX3(member,eos_,extrema,false,m,k,j,il3,iu3,b0_,bl_kp1,br);
             break;
           case ReconstructionMethod::wenoz:
-            WENOZX3(member, eos_, true,  m, k, j, il3, iu3, w0_, wl_kp1, wr);
-            WENOZX3(member, eos_, false, m, k, j, il3, iu3, b0_, bl_kp1, br);
+            if (use_pw_) {
+              WENOZPWX3(member, eos_, true,  m, k, j, il3, iu3, w0_, wl_kp1, wr);
+              WENOZPWX3(member, eos_, false, m, k, j, il3, iu3, b0_, bl_kp1, br);
+            } else {
+              WENOZX3(member, eos_, true,  m, k, j, il3, iu3, w0_, wl_kp1, wr);
+              WENOZX3(member, eos_, false, m, k, j, il3, iu3, b0_, bl_kp1, br);
+            }
             break;
           default:
             break;
@@ -485,6 +503,15 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
         }
       } // end loop over k
     });
+  }
+
+  // Surface averaging: convert pointwise face fluxes to face-averaged
+  if (use_mignone) {
+    pmy_pack->pcoord->AverageSurfaceX1(uflx_f.x1f, uflx.x1f);
+    if (pmy_pack->pmesh->multi_d)
+      pmy_pack->pcoord->AverageSurfaceX2(uflx_f.x2f, uflx.x2f);
+    if (pmy_pack->pmesh->three_d)
+      pmy_pack->pcoord->AverageSurfaceX3(uflx_f.x3f, uflx.x3f);
   }
 
   return;

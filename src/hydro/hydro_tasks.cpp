@@ -397,7 +397,23 @@ TaskStatus Hydro::ConToPrim(Driver *pdrive, int stage) {
   int n1m1 = indcs.nx1 + 2*ng - 1;
   int n2m1 = (indcs.nx2 > 1)? (indcs.nx2 + 2*ng - 1) : 0;
   int n3m1 = (indcs.nx3 > 1)? (indcs.nx3 + 2*ng - 1) : 0;
-  peos->ConsToPrim(u0, w0, false, 0, n1m1, 0, n2m1, 0, n3m1);
+  if (use_4th_order) {
+    // Initialize u0_c = u0 so boundary ghost cells have valid values
+    // (DeAverageVolume only fills interior cells 1..n1m1-1)
+    Kokkos::deep_copy(u0_c, u0);
+    // Conservative variables: volume averages -> cell centers
+    pmy_pack->pcoord->DeAverageVolume(u0, u0_c);
+    // Convert to primitive variables at cell centers
+    peos->ConsToPrim(u0_c, w0_c, false, 0, n1m1, 0, n2m1, 0, n3m1);
+    // Primitive variables from volume averages (2nd order accurate)
+    peos->ConsToPrim(u0, w0, false, 0, n1m1, 0, n2m1, 0, n3m1);
+    if (!use_mignone) {
+      // Primitive variables: volume averages to 4th order accuracy
+      pmy_pack->pcoord->AverageVolume_mixed(w0_c, w0, laplacian);
+    }
+  } else {
+    peos->ConsToPrim(u0, w0, false, 0, n1m1, 0, n2m1, 0, n3m1);
+  }
   return TaskStatus::complete;
 }
 
