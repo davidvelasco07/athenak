@@ -29,12 +29,15 @@ class Conduction {
   bool tdep_kappa;    // temperature-dependent conductivity
   Real kappa_ceiling; // ceiling of thermal conductivity
   bool sat_hflux;     // saturtion of heat flux
+  bool use_ho;        // flag for 4th-order diffusive operators
 
-  // function to add heat fluxes to Hydro and/or MHD fluxes
+  // functions to add heat fluxes to Hydro and/or MHD fluxes
   void AddHeatFlux(const DvceArray5D<Real> &w, const EOS_Data &eos,
                    DvceFaceFld5D<Real> &f);
   void IsotropicHeatFlux(const DvceArray5D<Real> &w, const EOS_Data &eos,
                          DvceFaceFld5D<Real> &f);
+  void FourthOrderIsotropicHeatFlux(const DvceArray5D<Real> &w, const EOS_Data &eos,
+                                    DvceFaceFld5D<Real> &f);
   void TempDependentHeatFlux(const DvceArray5D<Real> &w, const EOS_Data &eos,
                              DvceFaceFld5D<Real> &f);
   void NewTimeStep(const DvceArray5D<Real> &w, const EOS_Data &eos_data);

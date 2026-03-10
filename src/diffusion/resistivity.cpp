@@ -25,6 +25,8 @@ Resistivity::Resistivity(MeshBlockPack *pp, ParameterInput *pin) :
   // Read parameters for Ohmic diffusion (if any)
   eta_ohm = pin->GetReal("mhd","ohmic_resistivity");
 
+  use_ho = pin->GetOrAddBoolean("mhd","fourth_order_diff",false);
+
   // resistive timestep on MeshBlock(s) in this pack
   dtnew = std::numeric_limits<float>::max();
   auto size = pmy_pack->pmb->mb_size;
@@ -57,6 +59,7 @@ Resistivity::~Resistivity() {
 //    E_{resistive} = \eta J     [computed in this function]
 
 void Resistivity::OhmicEField(const DvceFaceFld4D<Real> &b0, DvceEdgeFld4D<Real> &efld) {
+  if (use_ho) { FourthOrderOhmicEField(b0, efld); return; }
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   int is = indcs.is, ie = indcs.ie;
   int js = indcs.js, je = indcs.je;
@@ -169,6 +172,7 @@ void Resistivity::OhmicEField(const DvceFaceFld4D<Real> &b0, DvceEdgeFld4D<Real>
 
 void Resistivity::OhmicEnergyFlux(const DvceFaceFld4D<Real> &b,
                                   DvceFaceFld5D<Real> &flx) {
+  if (use_ho) { FourthOrderOhmicEnergyFlux(b, flx); return; }
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   int is = indcs.is, ie = indcs.ie;
   int js = indcs.js, je = indcs.je;
@@ -260,3 +264,186 @@ void Resistivity::OhmicEnergyFlux(const DvceFaceFld4D<Real> &b,
 
   return;
 }
+
+//----------------------------------------------------------------------------------------
+//! \fn FourthOrderOhmicEField()
+//  \brief Adds 4th-order resistive electric field. Same structure as OhmicEField
+//  but uses CurrentDensityFourthOrder.
+
+void Resistivity::FourthOrderOhmicEField(const DvceFaceFld4D<Real> &b0,
+                                         DvceEdgeFld4D<Real> &efld) {
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  int is = indcs.is, ie = indcs.ie;
+  int js = indcs.js, je = indcs.je;
+  int ks = indcs.ks, ke = indcs.ke;
+  int ncells1 = indcs.nx1 + 2*(indcs.ng);
+  int nmb1 = pmy_pack->nmb_thispack - 1;
+
+  if (pmy_pack->pmesh->one_d) {
+    auto e2 = efld.x2e;
+    auto e3 = efld.x3e;
+    auto &mbsize = pmy_pack->pmb->mb_size;
+    auto eta_o = eta_ohm;
+    int scr_level = 0;
+    size_t scr_size = ScrArray1D<Real>::shmem_size(ncells1) * 3;
+    par_for_outer("ohm4_1", DevExeSpace(), scr_size, scr_level, 0, nmb1,
+    KOKKOS_LAMBDA(TeamMember_t member, const int m) {
+      ScrArray1D<Real> j1(member.team_scratch(scr_level), ncells1);
+      ScrArray1D<Real> j2(member.team_scratch(scr_level), ncells1);
+      ScrArray1D<Real> j3(member.team_scratch(scr_level), ncells1);
+      CurrentDensityFourthOrder(member, m, ks, js, is, ie+1, b0, mbsize.d_view(m),
+                                j1, j2, j3);
+      par_for_inner(member, is, ie+1, [&](const int i) {
+        e2(m,ks,  js  ,i) += eta_o*j2(i);
+        e2(m,ke+1,js  ,i) += eta_o*j2(i);
+        e3(m,ks  ,js  ,i) += eta_o*j3(i);
+        e3(m,ks  ,je+1,i) += eta_o*j3(i);
+      });
+    });
+    return;
+  }
+
+  if (pmy_pack->pmesh->two_d) {
+    auto e1 = efld.x1e;
+    auto e2 = efld.x2e;
+    auto e3 = efld.x3e;
+    auto &mbsize = pmy_pack->pmb->mb_size;
+    auto eta_o = eta_ohm;
+    int scr_level = 0;
+    size_t scr_size = ScrArray1D<Real>::shmem_size(ncells1) * 3;
+    par_for_outer("ohm4_2", DevExeSpace(), scr_size, scr_level, 0, nmb1, js, je+1,
+    KOKKOS_LAMBDA(TeamMember_t member, const int m, const int j) {
+      ScrArray1D<Real> j1(member.team_scratch(scr_level), ncells1);
+      ScrArray1D<Real> j2(member.team_scratch(scr_level), ncells1);
+      ScrArray1D<Real> j3(member.team_scratch(scr_level), ncells1);
+      CurrentDensityFourthOrder(member, m, ks, j, is, ie+1, b0, mbsize.d_view(m),
+                                j1, j2, j3);
+      par_for_inner(member, is, ie+1, [&](const int i) {
+        e1(m,ks,  j,i) += eta_o*j1(i);
+        e1(m,ke+1,j,i) += eta_o*j1(i);
+        e2(m,ks,  j,i) += eta_o*j2(i);
+        e2(m,ke+1,j,i) += eta_o*j2(i);
+        e3(m,ks  ,j,i) += eta_o*j3(i);
+      });
+    });
+    return;
+  }
+
+  // 3D
+  auto e1 = efld.x1e;
+  auto e2 = efld.x2e;
+  auto e3 = efld.x3e;
+  auto &mbsize = pmy_pack->pmb->mb_size;
+  auto eta_o = eta_ohm;
+  int scr_level = 0;
+  size_t scr_size = ScrArray1D<Real>::shmem_size(ncells1) * 3;
+  par_for_outer("ohm4_3", DevExeSpace(), scr_size, scr_level, 0, nmb1, ks, ke+1, js, je+1,
+  KOKKOS_LAMBDA(TeamMember_t member, const int m, const int k, const int j) {
+    ScrArray1D<Real> j1(member.team_scratch(scr_level), ncells1);
+    ScrArray1D<Real> j2(member.team_scratch(scr_level), ncells1);
+    ScrArray1D<Real> j3(member.team_scratch(scr_level), ncells1);
+    CurrentDensityFourthOrder(member, m, k, j, is, ie+1, b0, mbsize.d_view(m),
+                              j1, j2, j3);
+    par_for_inner(member, is, ie+1, [&](const int i) {
+      e1(m,k,j,i) += eta_o*j1(i);
+      e2(m,k,j,i) += eta_o*j2(i);
+      e3(m,k,j,i) += eta_o*j3(i);
+    });
+  });
+
+  return;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn FourthOrderOhmicEnergyFlux()
+//  \brief Adds 4th-order Poynting flux from Ohmic resistivity to energy flux.
+//  Replaces each 2-point B-field difference with 4-point stencil via D4 macro.
+
+void Resistivity::FourthOrderOhmicEnergyFlux(const DvceFaceFld4D<Real> &b,
+                                             DvceFaceFld5D<Real> &flx) {
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  int is = indcs.is, ie = indcs.ie;
+  int js = indcs.js, je = indcs.je;
+  int ks = indcs.ks, ke = indcs.ke;
+  int nmb1 = pmy_pack->nmb_thispack - 1;
+  auto size = pmy_pack->pmb->mb_size;
+  bool &multi_d = pmy_pack->pmesh->multi_d;
+  bool &three_d = pmy_pack->pmesh->three_d;
+  Real qa = 0.25*eta_ohm;
+
+  // 4th-order first derivative: (15(f0 - fm) - (fp - fmm)) / 12
+#define D4(fp, f0, fm, fmm) (15.0*((f0)-(fm)) - ((fp)-(fmm)))/(12.0)
+
+  auto &flx1 = flx.x1f;
+  par_for("ohm4_heat1", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie+1,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    Real idx1 = 1.0/size.d_view(m).dx1;
+    Real j2k   = -D4(b.x3f(m,k  ,j,i+1),b.x3f(m,k  ,j,i  ),b.x3f(m,k  ,j,i-1),b.x3f(m,k  ,j,i-2))*idx1;
+    Real j2kp1 = -D4(b.x3f(m,k+1,j,i+1),b.x3f(m,k+1,j,i  ),b.x3f(m,k+1,j,i-1),b.x3f(m,k+1,j,i-2))*idx1;
+    Real j3j   =  D4(b.x2f(m,k,j  ,i+1),b.x2f(m,k,j  ,i  ),b.x2f(m,k,j  ,i-1),b.x2f(m,k,j  ,i-2))*idx1;
+    Real j3jp1 =  D4(b.x2f(m,k,j+1,i+1),b.x2f(m,k,j+1,i  ),b.x2f(m,k,j+1,i-1),b.x2f(m,k,j+1,i-2))*idx1;
+    if (multi_d) {
+      Real idy2 = 1.0/size.d_view(m).dx2;
+      j3j   -= D4(b.x1f(m,k,j+1,i),b.x1f(m,k,j  ,i),b.x1f(m,k,j-1,i),b.x1f(m,k,j-2,i))*idy2;
+      j3jp1 -= D4(b.x1f(m,k,j+2,i),b.x1f(m,k,j+1,i),b.x1f(m,k,j  ,i),b.x1f(m,k,j-1,i))*idy2;
+    }
+    if (three_d) {
+      Real idz3 = 1.0/size.d_view(m).dx3;
+      j2k   += D4(b.x1f(m,k+1,j,i),b.x1f(m,k  ,j,i),b.x1f(m,k-1,j,i),b.x1f(m,k-2,j,i))*idz3;
+      j2kp1 += D4(b.x1f(m,k+2,j,i),b.x1f(m,k+1,j,i),b.x1f(m,k  ,j,i),b.x1f(m,k-1,j,i))*idz3;
+    }
+    flx1(m,IEN,k,j,i) += qa*(j2k  *(b.x3f(m,k  ,j  ,i) + b.x3f(m,k  ,j  ,i-1)) +
+                             j2kp1*(b.x3f(m,k+1,j  ,i) + b.x3f(m,k+1,j  ,i-1)) -
+                             j3j  *(b.x2f(m,k  ,j  ,i) + b.x2f(m,k  ,j  ,i-1)) -
+                             j3jp1*(b.x2f(m,k  ,j+1,i) + b.x2f(m,k  ,j+1,i-1)));
+  });
+  if (pmy_pack->pmesh->one_d) {return;}
+
+  auto &flx2 = flx.x2f;
+  par_for("ohm4_heat2", DevExeSpace(), 0, nmb1, ks, ke, js, je+1, is, ie,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    Real idy2 = 1.0/size.d_view(m).dx2;
+    Real j1k   =  D4(b.x3f(m,k  ,j+1,i),b.x3f(m,k  ,j  ,i),b.x3f(m,k  ,j-1,i),b.x3f(m,k  ,j-2,i))*idy2;
+    Real j1kp1 =  D4(b.x3f(m,k+1,j+1,i),b.x3f(m,k+1,j  ,i),b.x3f(m,k+1,j-1,i),b.x3f(m,k+1,j-2,i))*idy2;
+    Real idx1  = 1.0/size.d_view(m).dx1;
+    Real j3i   =  D4(b.x2f(m,k,j,i+1),b.x2f(m,k,j,i  ),b.x2f(m,k,j,i-1),b.x2f(m,k,j,i-2))*idx1
+               -  D4(b.x1f(m,k,j+1,i),b.x1f(m,k,j  ,i),b.x1f(m,k,j-1,i),b.x1f(m,k,j-2,i))*idy2;
+    Real j3ip1 =  D4(b.x2f(m,k,j,i+2),b.x2f(m,k,j,i+1),b.x2f(m,k,j,i  ),b.x2f(m,k,j,i-1))*idx1
+               -  D4(b.x1f(m,k,j+1,i+1),b.x1f(m,k,j  ,i+1),b.x1f(m,k,j-1,i+1),b.x1f(m,k,j-2,i+1))*idy2;
+    if (three_d) {
+      Real idz3 = 1.0/size.d_view(m).dx3;
+      j1k   -= D4(b.x2f(m,k+1,j,i),b.x2f(m,k  ,j,i),b.x2f(m,k-1,j,i),b.x2f(m,k-2,j,i))*idz3;
+      j1kp1 -= D4(b.x2f(m,k+2,j,i),b.x2f(m,k+1,j,i),b.x2f(m,k  ,j,i),b.x2f(m,k-1,j,i))*idz3;
+    }
+    flx2(m,IEN,k,j,i) += qa*(j3i  *(b.x1f(m,k  ,j,i  ) + b.x1f(m,k  ,j-1,i  )) +
+                             j3ip1*(b.x1f(m,k  ,j,i+1) + b.x1f(m,k  ,j-1,i+1)) -
+                             j1k  *(b.x3f(m,k  ,j,i  ) + b.x3f(m,k  ,j-1,i  )) -
+                             j1kp1*(b.x3f(m,k+1,j,i  ) + b.x3f(m,k+1,j-1,i  )));
+  });
+  if (pmy_pack->pmesh->two_d) {return;}
+
+  auto &flx3 = flx.x3f;
+  par_for("ohm4_heat3", DevExeSpace(), 0, nmb1, ks, ke+1, js, je, is, ie,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    Real idy2 = 1.0/size.d_view(m).dx2;
+    Real idz3 = 1.0/size.d_view(m).dx3;
+    Real j1j   =  D4(b.x3f(m,k,j+1,i),b.x3f(m,k,j  ,i),b.x3f(m,k,j-1,i),b.x3f(m,k,j-2,i))*idy2
+               -  D4(b.x2f(m,k+1,j,i),b.x2f(m,k  ,j,i),b.x2f(m,k-1,j,i),b.x2f(m,k-2,j,i))*idz3;
+    Real j1jp1 =  D4(b.x3f(m,k,j+2,i),b.x3f(m,k,j+1,i),b.x3f(m,k,j  ,i),b.x3f(m,k,j-1,i))*idy2
+               -  D4(b.x2f(m,k+1,j+1,i),b.x2f(m,k  ,j+1,i),b.x2f(m,k-1,j+1,i),b.x2f(m,k-2,j+1,i))*idz3;
+    Real idx1  = 1.0/size.d_view(m).dx1;
+    Real j2i   = -D4(b.x3f(m,k,j,i+1),b.x3f(m,k,j,i  ),b.x3f(m,k,j,i-1),b.x3f(m,k,j,i-2))*idx1
+               +  D4(b.x1f(m,k+1,j,i),b.x1f(m,k  ,j,i),b.x1f(m,k-1,j,i),b.x1f(m,k-2,j,i))*idz3;
+    Real j2ip1 = -D4(b.x3f(m,k,j,i+2),b.x3f(m,k,j,i+1),b.x3f(m,k,j,i  ),b.x3f(m,k,j,i-1))*idx1
+               +  D4(b.x1f(m,k+1,j,i+1),b.x1f(m,k  ,j,i+1),b.x1f(m,k-1,j,i+1),b.x1f(m,k-2,j,i+1))*idz3;
+    flx3(m,IEN,k,j,i) += qa*(j1j  *(b.x2f(m,k,j  ,i  ) + b.x2f(m,k-1,j  ,i  )) +
+                             j1jp1*(b.x2f(m,k,j+1,i  ) + b.x2f(m,k-1,j+1,i  )) -
+                             j2i  *(b.x1f(m,k,j  ,i  ) + b.x1f(m,k-1,j  ,i  )) -
+                             j2ip1*(b.x1f(m,k,j  ,i+1) + b.x1f(m,k-1,j  ,i+1)));
+  });
+
+#undef D4
+
+  return;
+}
+

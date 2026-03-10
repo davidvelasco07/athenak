@@ -81,6 +81,7 @@ Conduction::Conduction(std::string block, MeshBlockPack *pp, ParameterInput *pin
   kappa_ceiling = pin->GetOrAddReal(block,"cond_ceiling",
                   static_cast<Real>(std::numeric_limits<float>::max()));
   sat_hflux = pin->GetOrAddBoolean(block,"sat_hflux",false);
+  use_ho = pin->GetOrAddBoolean(block,"fourth_order_diff",false);
 }
 
 //----------------------------------------------------------------------------------------
@@ -98,6 +99,9 @@ void Conduction::AddHeatFlux(const DvceArray5D<Real> &w0, const EOS_Data &eos,
   if (tdep_kappa) {
     TempDependentHeatFlux(w0, eos, flx);
   } else if (kappa > 0.0) {
+    if(use_ho)
+    FourthOrderIsotropicHeatFlux(w0, eos, flx);
+    else
     IsotropicHeatFlux(w0, eos, flx);
   } else {
     return;
@@ -174,6 +178,85 @@ void Conduction::IsotropicHeatFlux(const DvceArray5D<Real> &w0, const EOS_Data &
       dtempdx = (w0(m,ITM,k,j,i) - w0(m,ITM,k-1,j,i)) / size.d_view(m).dx3;
     }
     flx3(m,IEN,k,j,i) -= kappa_ * dtempdx;
+  });
+
+  return;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void FourthOrderIsotropicHeatFlux()
+//! \brief Adds 4th-order isotropic heat flux to face-centered fluxes.
+//  Uses 4-point stencil: (15(T_i - T_{i-1}) - (T_{i+1} - T_{i-2})) / (12*dx)
+
+void Conduction::FourthOrderIsotropicHeatFlux(const DvceArray5D<Real> &w0,
+  const EOS_Data &eos, DvceFaceFld5D<Real> &flx) {
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  int is = indcs.is, ie = indcs.ie;
+  int js = indcs.js, je = indcs.je;
+  int ks = indcs.ks, ke = indcs.ke;
+  int nmb1 = pmy_pack->nmb_thispack - 1;
+  auto size = pmy_pack->pmb->mb_size;
+  const bool &use_e = eos.use_e;
+  Real gm1 = eos.gamma-1.0;
+  Real kappa_ = kappa;
+
+  auto &flx1 = flx.x1f;
+  par_for("cond4_1", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie+1,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    Real T_im2, T_im1, T_i, T_ip1;
+    if (use_e) {
+      T_im2 = w0(m,IEN,k,j,i-2)/w0(m,IDN,k,j,i-2)*gm1;
+      T_im1 = w0(m,IEN,k,j,i-1)/w0(m,IDN,k,j,i-1)*gm1;
+      T_i   = w0(m,IEN,k,j,i  )/w0(m,IDN,k,j,i  )*gm1;
+      T_ip1 = w0(m,IEN,k,j,i+1)/w0(m,IDN,k,j,i+1)*gm1;
+    } else {
+      T_im2 = w0(m,ITM,k,j,i-2);
+      T_im1 = w0(m,ITM,k,j,i-1);
+      T_i   = w0(m,ITM,k,j,i  );
+      T_ip1 = w0(m,ITM,k,j,i+1);
+    }
+    Real dTdx = (15.0*(T_i - T_im1) - (T_ip1 - T_im2)) / (12.0*size.d_view(m).dx1);
+    flx1(m,IEN,k,j,i) -= kappa_ * dTdx;
+  });
+  if (pmy_pack->pmesh->one_d) {return;}
+
+  auto &flx2 = flx.x2f;
+  par_for("cond4_2", DevExeSpace(), 0, nmb1, ks, ke, js, je+1, is, ie,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    Real T_jm2, T_jm1, T_j, T_jp1;
+    if (use_e) {
+      T_jm2 = w0(m,IEN,k,j-2,i)/w0(m,IDN,k,j-2,i)*gm1;
+      T_jm1 = w0(m,IEN,k,j-1,i)/w0(m,IDN,k,j-1,i)*gm1;
+      T_j   = w0(m,IEN,k,j  ,i)/w0(m,IDN,k,j  ,i)*gm1;
+      T_jp1 = w0(m,IEN,k,j+1,i)/w0(m,IDN,k,j+1,i)*gm1;
+    } else {
+      T_jm2 = w0(m,ITM,k,j-2,i);
+      T_jm1 = w0(m,ITM,k,j-1,i);
+      T_j   = w0(m,ITM,k,j  ,i);
+      T_jp1 = w0(m,ITM,k,j+1,i);
+    }
+    Real dTdy = (15.0*(T_j - T_jm1) - (T_jp1 - T_jm2)) / (12.0*size.d_view(m).dx2);
+    flx2(m,IEN,k,j,i) -= kappa_ * dTdy;
+  });
+  if (pmy_pack->pmesh->two_d) {return;}
+
+  auto &flx3 = flx.x3f;
+  par_for("cond4_3", DevExeSpace(), 0, nmb1, ks, ke+1, js, je, is, ie,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    Real T_km2, T_km1, T_k, T_kp1;
+    if (use_e) {
+      T_km2 = w0(m,IEN,k-2,j,i)/w0(m,IDN,k-2,j,i)*gm1;
+      T_km1 = w0(m,IEN,k-1,j,i)/w0(m,IDN,k-1,j,i)*gm1;
+      T_k   = w0(m,IEN,k  ,j,i)/w0(m,IDN,k  ,j,i)*gm1;
+      T_kp1 = w0(m,IEN,k+1,j,i)/w0(m,IDN,k+1,j,i)*gm1;
+    } else {
+      T_km2 = w0(m,ITM,k-2,j,i);
+      T_km1 = w0(m,ITM,k-1,j,i);
+      T_k   = w0(m,ITM,k  ,j,i);
+      T_kp1 = w0(m,ITM,k+1,j,i);
+    }
+    Real dTdz = (15.0*(T_k - T_km1) - (T_kp1 - T_km2)) / (12.0*size.d_view(m).dx3);
+    flx3(m,IEN,k,j,i) -= kappa_ * dTdz;
   });
 
   return;
@@ -433,9 +516,12 @@ void Conduction::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_da
     fac = 0.5;
   }
 
-  Real temp_unit = pmy_pack->punit->temperature_cgs();
-  Real kappa_unit = pmy_pack->punit->pressure_cgs()*pmy_pack->punit->velocity_cgs()*
-                    pmy_pack->punit->length_cgs()/pmy_pack->punit->temperature_cgs();
+  Real temp_unit = 1.0, kappa_unit = 1.0;
+  if (tdep_kappa) {
+    temp_unit  = pmy_pack->punit->temperature_cgs();
+    kappa_unit = pmy_pack->punit->pressure_cgs()*pmy_pack->punit->velocity_cgs()*
+                 pmy_pack->punit->length_cgs()/pmy_pack->punit->temperature_cgs();
+  }
 
   dtnew = static_cast<Real>(std::numeric_limits<float>::max());
 

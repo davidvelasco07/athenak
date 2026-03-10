@@ -25,10 +25,13 @@ class Resistivity {
   // data
   Real dtnew;
   Real eta_ohm;
+  bool use_ho;     // flag for 4th-order diffusive operators
 
   // functions to add resistive E-Field and energy flux
   void OhmicEField(const DvceFaceFld4D<Real> &b0, DvceEdgeFld4D<Real> &efld);
   void OhmicEnergyFlux(const DvceFaceFld4D<Real> &b, DvceFaceFld5D<Real> &flx);
+  void FourthOrderOhmicEField(const DvceFaceFld4D<Real> &b0, DvceEdgeFld4D<Real> &efld);
+  void FourthOrderOhmicEnergyFlux(const DvceFaceFld4D<Real> &b, DvceFaceFld5D<Real> &flx);
 
  private:
   MeshBlockPack* pmy_pack;

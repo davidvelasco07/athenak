@@ -28,10 +28,13 @@ class Viscosity {
   // data
   Real dtnew;
   Real nu_iso;     // coefficient of isotropic kinematic shear viscosity
+  bool use_ho;     // flag for 4th-order diffusive operators
 
-  // function to add viscous fluxes to Hydro and/or MHD fluxes
+  // functions to add viscous fluxes to Hydro and/or MHD fluxes
   void IsotropicViscousFlux(const DvceArray5D<Real> &w, const Real nu,
                             const EOS_Data &eos, DvceFaceFld5D<Real> &f);
+  void FourthOrderIsotropicViscousFlux(const DvceArray5D<Real> &w, const Real nu,
+                                       const EOS_Data &eos, DvceFaceFld5D<Real> &f);
 
  private:
   MeshBlockPack* pmy_pack;
