@@ -1550,26 +1550,27 @@ void MultigridBoundaryValues::RemapIndicesForMG() {
     }
   }
 
-  // Reallocate buffers if the new icoar/ifine ndat values are larger than current
   int nvar = pmy_mg->nvar_;
   int nmb = std::max(pmy_pack->nmb_thispack, pmy_pack->pmesh->nmb_maxperrank);
-  for (int n = 0; n < nnghbr; ++n) {
-    int smax = std::max(sendbuf[n].isame_ndat,
-                 std::max(sendbuf[n].icoar_ndat, sendbuf[n].ifine_ndat));
-    if (nvar * smax > sendbuf[n].vars.extent_int(1)) {
-      Kokkos::realloc(sendbuf[n].vars, nmb, nvar * smax);
+  if (pmy_pack->pmesh->multilevel) {
+    for (int n = 0; n < nnghbr; ++n) {
+      int smax = std::max(sendbuf[n].isame_ndat,
+                   std::max(sendbuf[n].icoar_ndat, sendbuf[n].ifine_ndat));
+      if (nvar * smax > sendbuf[n].vars.extent_int(1)) {
+        Kokkos::realloc(sendbuf[n].vars, nmb, nvar * smax);
+      }
+      int rmax = std::max(recvbuf[n].isame_ndat,
+                   std::max(recvbuf[n].icoar_ndat, recvbuf[n].ifine_ndat));
+      if (nvar * rmax > recvbuf[n].vars.extent_int(1)) {
+        Kokkos::realloc(recvbuf[n].vars, nmb, nvar * rmax);
+      }
     }
-    int rmax = std::max(recvbuf[n].isame_ndat,
-                 std::max(recvbuf[n].icoar_ndat, recvbuf[n].ifine_ndat));
-    if (nvar * rmax > recvbuf[n].vars.extent_int(1)) {
-      Kokkos::realloc(recvbuf[n].vars, nmb, nvar * rmax);
-    }
-  }
 
-  int cbnx3 = cnx3 + 2*ngh;
-  int cbnx2 = cnx2 + 2*ngh;
-  int cbnx1 = cnx1 + 2*ngh;
-  Kokkos::realloc(coarse_buf_, nmb, nvar, cbnx3, cbnx2, cbnx1);
+    int cbnx3 = cnx3 + 2*ngh;
+    int cbnx2 = cnx2 + 2*ngh;
+    int cbnx1 = cnx1 + 2*ngh;
+    Kokkos::realloc(coarse_buf_, nmb, nvar, cbnx3, cbnx2, cbnx1);
+  }
 }
 
 //----------------------------------------------------------------------------------------
@@ -1620,14 +1621,28 @@ void MultigridBoundaryValues::ComputePerLevelIndices() {
     }
 
     // -- icoar (send to coarser) --
+    // Face neighbors (nface==1): indices point to coarse_buf_ ghost cells
+    // where face-aligned 2x2 averages are stored by FillCoarseMG.
+    // Edge/corner neighbors (nface>1): indices point to coarse_buf_ interior
+    // where volume averages are stored by FillCoarseMG.
     {
       auto &c = out.icoar;
-      c.bis = (ox1 > 0) ? (cie_m - ng1) : cis_m;
-      c.bie = (ox1 < 0) ? (cis_m + ng1) : cie_m;
-      c.bjs = (ox2 > 0) ? (cje_m - ng1) : cjs_m;
-      c.bje = (ox2 < 0) ? (cjs_m + ng1) : cje_m;
-      c.bks = (ox3 > 0) ? (cke_m - ng1) : cks_m;
-      c.bke = (ox3 < 0) ? (cks_m + ng1) : cke_m;
+      int nface = (ox1!=0?1:0) + (ox2!=0?1:0) + (ox3!=0?1:0);
+      if (nface == 1) {
+        c.bis = (ox1 > 0) ? (cie_m + 1)   : (ox1 < 0) ? (cis_m - ngh) : cis_m;
+        c.bie = (ox1 > 0) ? (cie_m + ngh)  : (ox1 < 0) ? (cis_m - 1)  : cie_m;
+        c.bjs = (ox2 > 0) ? (cje_m + 1)   : (ox2 < 0) ? (cjs_m - ngh) : cjs_m;
+        c.bje = (ox2 > 0) ? (cje_m + ngh)  : (ox2 < 0) ? (cjs_m - 1)  : cje_m;
+        c.bks = (ox3 > 0) ? (cke_m + 1)   : (ox3 < 0) ? (cks_m - ngh) : cks_m;
+        c.bke = (ox3 > 0) ? (cke_m + ngh)  : (ox3 < 0) ? (cks_m - 1)  : cke_m;
+      } else {
+        c.bis = (ox1 > 0) ? (cie_m - ng1) : cis_m;
+        c.bie = (ox1 < 0) ? (cis_m + ng1) : cie_m;
+        c.bjs = (ox2 > 0) ? (cje_m - ng1) : cjs_m;
+        c.bje = (ox2 < 0) ? (cjs_m + ng1) : cje_m;
+        c.bks = (ox3 > 0) ? (cke_m - ng1) : cks_m;
+        c.bke = (ox3 < 0) ? (cks_m + ng1) : cke_m;
+      }
       out.icoar_ndat = (c.bie-c.bis+1)*(c.bje-c.bjs+1)*(c.bke-c.bks+1);
     }
 
@@ -1844,29 +1859,31 @@ void MultigridBoundaryValues::ComputePerLevelIndices() {
     }
   }
 
-  // Ensure buffers are large enough for the finest-level (largest) indices.
   int nvar = pmy_mg->nvar_;
   int nmb = std::max(pmy_pack->nmb_thispack, pmy_pack->pmesh->nmb_maxperrank);
   int nnghbr = pmy_pack->pmb->nnghbr;
   int finest = nlevel - 1;
-  for (int n = 0; n < nnghbr; ++n) {
-    int smax = std::max(send_mg_indcs_[n][finest].isame_ndat,
-                 std::max(send_mg_indcs_[n][finest].icoar_ndat,
-                          send_mg_indcs_[n][finest].ifine_ndat));
-    if (nvar * smax > sendbuf[n].vars.extent_int(1)) {
-      Kokkos::realloc(sendbuf[n].vars, nmb, nvar * smax);
-    }
-    int rmax = std::max(recv_mg_indcs_[n][finest].isame_ndat,
-                 std::max(recv_mg_indcs_[n][finest].icoar_ndat,
-                          recv_mg_indcs_[n][finest].ifine_ndat));
-    if (nvar * rmax > recvbuf[n].vars.extent_int(1)) {
-      Kokkos::realloc(recvbuf[n].vars, nmb, nvar * rmax);
-    }
-  }
 
-  int cnx_f = nx_max / 2;
-  int cbn = cnx_f + 2*ngh;
-  Kokkos::realloc(coarse_buf_, nmb, nvar, cbn, cbn, cbn);
+  if (pmy_pack->pmesh->multilevel) {
+    for (int n = 0; n < nnghbr; ++n) {
+      int smax = std::max(send_mg_indcs_[n][finest].isame_ndat,
+                   std::max(send_mg_indcs_[n][finest].icoar_ndat,
+                            send_mg_indcs_[n][finest].ifine_ndat));
+      if (nvar * smax > sendbuf[n].vars.extent_int(1)) {
+        Kokkos::realloc(sendbuf[n].vars, nmb, nvar * smax);
+      }
+      int rmax = std::max(recv_mg_indcs_[n][finest].isame_ndat,
+                   std::max(recv_mg_indcs_[n][finest].icoar_ndat,
+                            recv_mg_indcs_[n][finest].ifine_ndat));
+      if (nvar * rmax > recvbuf[n].vars.extent_int(1)) {
+        Kokkos::realloc(recvbuf[n].vars, nmb, nvar * rmax);
+      }
+    }
+
+    int cnx_f = nx_max / 2;
+    int cbn = cnx_f + 2*ngh;
+    Kokkos::realloc(coarse_buf_, nmb, nvar, cbn, cbn, cbn);
+  }
 }
 
 //----------------------------------------------------------------------------------------
@@ -1886,6 +1903,7 @@ void MultigridBoundaryValues::FillCoarseMG(const DvceArray5D<Real> &u) {
   int nmb = pmy_pack->nmb_thispack;
   auto cbuf = coarse_buf_;
 
+  // Volume-average restriction: fill coarse_buf_ interior
   Kokkos::parallel_for("FillCoarseMG",
     Kokkos::MDRangePolicy<Kokkos::Rank<4>, DevExeSpace>(
       {0, 0, 0, 0}, {nmb * nvar, cnc, cnc, cnc}),
@@ -1900,6 +1918,44 @@ void MultigridBoundaryValues::FillCoarseMG(const DvceArray5D<Real> &u) {
         u(m,v,fk,  fj+1,fi) + u(m,v,fk,  fj+1,fi+1) +
         u(m,v,fk+1,fj,  fi) + u(m,v,fk+1,fj,  fi+1) +
         u(m,v,fk+1,fj+1,fi) + u(m,v,fk+1,fj+1,fi+1));
+    });
+
+  if (!(pmy_pack->pmesh->multilevel)) return;
+
+  // Face-aligned restriction: store 2x2 face averages in coarse_buf_ ghost cells.
+  // These are consumed by PackAndSendMG for fine-to-coarse face sends.
+  // face_id: 0=x-left, 1=x-right, 2=y-left, 3=y-right, 4=z-left, 5=z-right
+  Kokkos::parallel_for("FillCoarseMG_faces",
+    Kokkos::MDRangePolicy<Kokkos::Rank<4>, DevExeSpace>(
+      {0, 0, 0, 0}, {nmb * nvar, 6, cnc, cnc}),
+    KOKKOS_LAMBDA(const int mv, const int face, const int c1, const int c0) {
+      int m = mv / nvar;
+      int v = mv - m * nvar;
+      if (face < 2) {
+        int fj = ngh + 2*c0;
+        int fk = ngh + 2*c1;
+        int fi = (face == 0) ? ngh : ngh + ncells - 1;
+        int ci = (face == 0) ? ngh - 1 : ngh + cnc;
+        cbuf(m, v, ngh + c1, ngh + c0, ci) = 0.25 * (
+          u(m,v,fk,  fj,  fi) + u(m,v,fk,  fj+1,fi) +
+          u(m,v,fk+1,fj,  fi) + u(m,v,fk+1,fj+1,fi));
+      } else if (face < 4) {
+        int fi = ngh + 2*c0;
+        int fk = ngh + 2*c1;
+        int fj = (face == 2) ? ngh : ngh + ncells - 1;
+        int cj = (face == 2) ? ngh - 1 : ngh + cnc;
+        cbuf(m, v, ngh + c1, cj, ngh + c0) = 0.25 * (
+          u(m,v,fk,  fj,fi  ) + u(m,v,fk,  fj,fi+1) +
+          u(m,v,fk+1,fj,fi  ) + u(m,v,fk+1,fj,fi+1));
+      } else {
+        int fi = ngh + 2*c0;
+        int fj = ngh + 2*c1;
+        int fk = (face == 4) ? ngh : ngh + ncells - 1;
+        int ck = (face == 4) ? ngh - 1 : ngh + cnc;
+        cbuf(m, v, ck, ngh + c1, ngh + c0) = 0.25 * (
+          u(m,v,fk,fj,  fi  ) + u(m,v,fk,fj,  fi+1) +
+          u(m,v,fk,fj+1,fi  ) + u(m,v,fk,fj+1,fi+1));
+      }
     });
 }
 
@@ -2746,14 +2802,13 @@ TaskStatus MultigridBoundaryValues::PackAndSendMG(const DvceArray5D<Real> &u) {
   auto &sbuf = sendbuf;
   auto &rbuf = recvbuf;
 
-  int ngh_ = pmy_mg->GetGhostCells();
   int lev_ = pmy_mg->GetCurrentLevel();
   int nlev_total = pmy_mg->GetNumberOfLevels();
   int shift_ps = nlev_total - 1 - lev_;
   int ncells_ps = pmy_mg->GetSize() >> shift_ps;
   bool skip_fc_this_level = (ncells_ps < 2);
   auto &smgi = send_mg_indcs_;
-  int finest_lev = nlev_total - 1;
+  auto cbuf = coarse_buf_;
 
 #if MPI_PARALLEL_ENABLED
   for (int m=0; m<nmb; ++m) {
@@ -2809,60 +2864,36 @@ TaskStatus MultigridBoundaryValues::PackAndSendMG(const DvceArray5D<Real> &u) {
       kl = smgi[n][lev_].ifine.bks; ku = smgi[n][lev_].ifine.bke;
     }
 
-      int ni = iu - il + 1;
-      int nj = ju - jl + 1;
-      int nk = ku - kl + 1;
-      int nkj = nk * nj;
+    int ni = iu - il + 1;
+    int nj = ju - jl + 1;
+    int nk = ku - kl + 1;
+    int nkj = nk * nj;
 
-      int dm = nghbr.d_view(m, n).gid - mbgid.d_view(0);
-      int dn = nghbr.d_view(m, n).dest;
+    int dm = nghbr.d_view(m, n).gid - mbgid.d_view(0);
+    int dn = nghbr.d_view(m, n).dest;
 
     if (is_coarser) {
-      int nface_n = sbuf[n].faces.d_view(0) + sbuf[n].faces.d_view(1)
-                  + sbuf[n].faces.d_view(2);
-      bool ox1_pos = sbuf[n].faces.d_view(0) && (smgi[n][finest_lev].icoar.bis > ngh_);
-      bool ox2_pos = sbuf[n].faces.d_view(1) && (smgi[n][finest_lev].icoar.bjs > ngh_);
-      bool ox3_pos = sbuf[n].faces.d_view(2) && (smgi[n][finest_lev].icoar.bks > ngh_);
-
+      // Restricted data is pre-computed in coarse_buf_ by FillCoarseMG:
+      //   face neighbors  -> face-aligned 2x2 avg in ghost cells
+      //   edge/corner     -> volume 2x2x2 avg in interior cells
       Kokkos::parallel_for(Kokkos::TeamThreadRange<>(tmember, nkj),
       [&](const int idx) {
         int k = idx / nj;
         int j = (idx - k * nj) + jl;
         k += kl;
-        int fk = ngh_ + 2*(k - ngh_);
-        int fj = ngh_ + 2*(j - ngh_);
-
-        Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember, il, iu + 1),
-        [&](const int i) {
-          int fi = ngh_ + 2*(i - ngh_);
-          Real val;
-          if (nface_n == 1) {
-            if (sbuf[n].faces.d_view(0)) {
-              int fib = ox1_pos ? fi + 1 : fi;
-              val = 0.25 * (u(m,v,fk,fj,fib) + u(m,v,fk,fj+1,fib)
-                          + u(m,v,fk+1,fj,fib) + u(m,v,fk+1,fj+1,fib));
-            } else if (sbuf[n].faces.d_view(1)) {
-              int fjb = ox2_pos ? fj + 1 : fj;
-              val = 0.25 * (u(m,v,fk,fjb,fi) + u(m,v,fk,fjb,fi+1)
-                          + u(m,v,fk+1,fjb,fi) + u(m,v,fk+1,fjb,fi+1));
-            } else {
-              int fkb = ox3_pos ? fk + 1 : fk;
-              val = 0.25 * (u(m,v,fkb,fj,fi) + u(m,v,fkb,fj,fi+1)
-                          + u(m,v,fkb,fj+1,fi) + u(m,v,fkb,fj+1,fi+1));
-            }
-          } else {
-            val = 0.125 * (u(m,v,fk,fj,fi)     + u(m,v,fk,fj,fi+1)
-                         + u(m,v,fk,fj+1,fi)   + u(m,v,fk,fj+1,fi+1)
-                         + u(m,v,fk+1,fj,fi)   + u(m,v,fk+1,fj,fi+1)
-                         + u(m,v,fk+1,fj+1,fi) + u(m,v,fk+1,fj+1,fi+1));
-          }
-          int offset = i-il + ni*(j-jl + nj*(k-kl + nk*v));
-          if (nghbr.d_view(m, n).rank == my_rank) {
-            rbuf[dn].vars(dm, offset) = val;
-          } else {
-            sbuf[n].vars(m, offset) = val;
-          }
-        });
+        if (nghbr.d_view(m, n).rank == my_rank) {
+          Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember, il, iu + 1),
+          [&](const int i) {
+            rbuf[dn].vars(dm, (i-il + ni*(j-jl + nj*(k-kl + nk*v))))
+                = cbuf(m, v, k, j, i);
+          });
+        } else {
+          Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember, il, iu + 1),
+          [&](const int i) {
+            sbuf[n].vars(m, (i-il + ni*(j-jl + nj*(k-kl + nk*v))))
+                = cbuf(m, v, k, j, i);
+          });
+        }
       });
     } else {
       Kokkos::parallel_for(Kokkos::TeamThreadRange<>(tmember, nkj),
@@ -2936,6 +2967,9 @@ TaskStatus MultigridBoundaryValues::PackAndSendMG(const DvceArray5D<Real> &u) {
           int ierr = MPI_Isend(send_ptr.data(), data_size, MPI_ATHENA_REAL, drank, tag,
                                comm_vars, &(sendbuf[n].vars_req[m]));
           if (ierr != MPI_SUCCESS) {no_errors=false;}
+          pmy_mg->pmy_driver_->mg_timers_.msg_count++;
+          pmy_mg->pmy_driver_->mg_timers_.bytes_sent +=
+              data_size * static_cast<int64_t>(sizeof(Real));
         }
       }
     }
@@ -3043,11 +3077,12 @@ TaskStatus MultigridBoundaryValues::RecvAndUnpackMG(DvceArray5D<Real> &u) {
       kl = rmgi[n][lev_].ifine.bks; ku = rmgi[n][lev_].ifine.bke;
     }
 
-      int ni = iu - il + 1;
-      int nj = ju - jl + 1;
-      int nk = ku - kl + 1;
-      int nkj = nk * nj;
+    int ni = iu - il + 1;
+    int nj = ju - jl + 1;
+    int nk = ku - kl + 1;
+    int nkj = nk * nj;
 
+    if (from_coarser) {
       Kokkos::parallel_for(Kokkos::TeamThreadRange<>(tmember, nkj),
       [&](const int idx) {
         int k = idx / nj;

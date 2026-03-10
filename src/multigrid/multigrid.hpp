@@ -175,6 +175,12 @@ struct MultigridTaskIDs {
       TaskID fc_ghostsR2;
       TaskID fc_ghostsB2;
       TaskID fc_ghosts_prol;
+      TaskID fill_coarse0;
+      TaskID fill_coarse1;
+      TaskID fill_coarseR;
+      TaskID fill_coarseB;
+      TaskID fill_coarseR2;
+      TaskID fill_coarseB2;
 };
 
 struct MGTimers {
