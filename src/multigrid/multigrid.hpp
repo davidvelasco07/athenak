@@ -11,6 +11,7 @@
 // C headers
 
 // C++ headers
+#include <chrono>
 #include <cstdint>  // std::int64_t
 #include <cstdio> // std::size_t
 #include <cstring> // memcpy
@@ -174,6 +175,45 @@ struct MultigridTaskIDs {
       TaskID fc_ghostsR2;
       TaskID fc_ghostsB2;
       TaskID fc_ghosts_prol;
+};
+
+struct MGTimers {
+  using Clock = std::chrono::high_resolution_clock;
+  double pack_send_sec     = 0.0;
+  double recv_unpack_sec   = 0.0;
+  double allreduce_sec     = 0.0;
+  double vcycle_sec        = 0.0;
+  double smooth_sec        = 0.0;
+  double restrict_sec      = 0.0;
+  double prolongate_sec    = 0.0;
+  double prolongate_fc_sec = 0.0;
+  double fillfc_sec        = 0.0;
+  int    msg_count         = 0;
+  int64_t bytes_sent       = 0;
+  int    vcycle_count      = 0;
+
+  void Reset() {
+    pack_send_sec = recv_unpack_sec = allreduce_sec = 0.0;
+    vcycle_sec = smooth_sec = restrict_sec = prolongate_sec = 0.0;
+    prolongate_fc_sec = fillfc_sec = 0.0;
+    msg_count = 0; bytes_sent = 0; vcycle_count = 0;
+  }
+  void Print(int rank) {
+    std::cout << "[Rank " << rank << "] MG timers:"
+              << " vcycles=" << vcycle_count
+              << " vcycle=" << vcycle_sec << "s"
+              << " pack_send=" << pack_send_sec << "s"
+              << " recv_unpack=" << recv_unpack_sec << "s"
+              << " allreduce=" << allreduce_sec << "s"
+              << " smooth=" << smooth_sec << "s"
+              << " restrict=" << restrict_sec << "s"
+              << " prolongate=" << prolongate_sec << "s"
+              << " prolongate_fc=" << prolongate_fc_sec << "s"
+              << " fillfc=" << fillfc_sec << "s"
+              << " msgs=" << msg_count
+              << " bytes=" << bytes_sent
+              << std::endl;
+  }
 };
 
 //! \class Multigrid
@@ -448,6 +488,8 @@ class MultigridDriver {
   TaskStatus ProlongateBoundary(Driver *pdrive, int stag);
   TaskStatus ProlongateBoundaryForProlongation(Driver *pdrive, int stag);
   TaskStatus FillFCBoundary(Driver *pdrive, int stag);
+  TaskStatus FillCoarseBoundary(Driver *pdrive, int stag);
+  TaskStatus ProlongateFCBoundary(Driver *pdrive, int stag);
   TaskStatus CalculateFASRHS(Driver *pdrive, int stag);
   TaskStatus StoreOldData(Driver *pdrive, int stag);
   TaskStatus ClearRecv(Driver *pdrive, int stag);
@@ -488,8 +530,14 @@ class MultigridDriver {
   int coffset_;
   int fprolongation_;
   int fshowdef_;
+  int mg_verbose_;
+
   bool full_multigrid_;
   int fmg_ncycle_;
+
+ public:
+  MGTimers mg_timers_;
+ protected:
 
   // Source masking (zero source outside mask_radius_)
   Real mask_radius_;
@@ -533,18 +581,35 @@ class MultigridDriver {
   int nb_rank_;
 };
 
+struct MGPerLevelIndcs {
+  MeshBufferIndcs isame, icoar, ifine;
+  int isame_ndat, icoar_ndat, ifine_ndat;
+};
+
 class MultigridBoundaryValues : public MeshBoundaryValuesCC {
  public:
+  static constexpr int kMaxMGLevels = 20;
+
   MultigridBoundaryValues(MeshBlockPack *pmbp, ParameterInput *pin, bool coarse, Multigrid *pmg);
   ~MultigridBoundaryValues();
 
   void RemapIndicesForMG();
+  void ComputePerLevelIndices();
 
   // pack/restrict fluxes at fine/coarse boundaries into boundary buffers and send
   TaskStatus PackAndSendMG(const DvceArray5D<Real> &u);
   TaskStatus RecvAndUnpackMG(DvceArray5D<Real> &u);
   TaskStatus InitRecvMG(const int nvars);
   TaskStatus FillFineCoarseMGGhosts(DvceArray5D<Real> &u);
+
+  // New FC communication via pack/send/recv/unpack infrastructure
+  void FillCoarseMG(const DvceArray5D<Real> &u);
+  TaskStatus ProlongateFCMG(DvceArray5D<Real> &u);
+
+  DvceArray5D<Real> coarse_buf_;
+
+  MGPerLevelIndcs send_mg_indcs_[56][kMaxMGLevels];
+  MGPerLevelIndcs recv_mg_indcs_[56][kMaxMGLevels];
 
  private:
   Multigrid *pmy_mg;

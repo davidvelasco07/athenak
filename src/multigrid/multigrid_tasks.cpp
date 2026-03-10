@@ -42,23 +42,20 @@ TaskStatus MultigridDriver::ClearSend(Driver *pdrive, int stage) {
   return tstat;
 }
 
+TaskStatus MultigridDriver::StartReceive(Driver *pdrive, int stage) {
+  TaskStatus tstat = pmg->pbval->InitRecvMG(pmg->nvar_);
+  return tstat;
+}
+
 TaskStatus MultigridDriver::SendBoundary(Driver *pdrive, int stage) {
-  TaskStatus tstat;
   DvceArray5D<Real> u = pmg->GetCurrentData();
-  tstat = pmg->pbval->PackAndSendMG(u);
+  TaskStatus tstat = pmg->pbval->PackAndSendMG(u);
   return tstat;
 }
 
 TaskStatus MultigridDriver::RecvBoundary(Driver *pdrive, int stage) {
-  TaskStatus tstat;
   DvceArray5D<Real> u = pmg->GetCurrentData();
-  tstat = pmg->pbval->RecvAndUnpackMG(u);
-  return tstat;
-}
-
-TaskStatus MultigridDriver::StartReceive(Driver *pdrive, int stage) {
-  TaskStatus tstat;
-  tstat = pmg->pbval->InitRecvMG(pmg->nvar_);
+  TaskStatus tstat = pmg->pbval->RecvAndUnpackMG(u);
   return tstat;
 }
 
@@ -110,6 +107,21 @@ TaskStatus MultigridDriver::FillFCBoundary(Driver *pdrive, int stage) {
   if (nreflevel_ == 0) return TaskStatus::complete;
   DvceArray5D<Real> u = pmg->GetCurrentData();
   pmg->pbval->FillFineCoarseMGGhosts(u);
+  return TaskStatus::complete;
+}
+
+TaskStatus MultigridDriver::FillCoarseBoundary(Driver *pdrive, int stage) {
+  if (nreflevel_ == 0) return TaskStatus::complete;
+  DvceArray5D<Real> u = pmg->GetCurrentData();
+  pmg->pbval->FillCoarseMG(u);
+  return TaskStatus::complete;
+}
+
+TaskStatus MultigridDriver::ProlongateFCBoundary(Driver *pdrive, int stage) {
+  if (nreflevel_ == 0) return TaskStatus::complete;
+  DvceArray5D<Real> u = pmg->GetCurrentData();
+  pmg->pbval->FillCoarseMG(u);
+  pmg->pbval->ProlongateFCMG(u);
   return TaskStatus::complete;
 }
 
@@ -367,7 +379,8 @@ void MultigridDriver::SetMGTaskListToFiner(int nsmooth, int ngh, int flag) {
     id.send0    = tl["mg_to_finer"]->AddTask(&MultigridDriver::SendBoundary, this, none);
     id.recv0    = tl["mg_to_finer"]->AddTask(&MultigridDriver::RecvBoundary, this, id.send0);
     id.physb0   = tl["mg_to_finer"]->AddTask(&MultigridDriver::PhysicalBoundary, this, id.recv0);
-    id.fc_ghosts0 = tl["mg_to_finer"]->AddTask(&MultigridDriver::FillFCBoundary, this, id.physb0);
+    id.fc_ghosts0 = tl["mg_to_finer"]->AddTask(
+                      &MultigridDriver::ProlongateFCBoundary, this, id.physb0);
     id.prolongate = tl["mg_to_finer"]->AddTask(&MultigridDriver::Prolongate, this, id.fc_ghosts0);
   }
 
@@ -378,7 +391,8 @@ void MultigridDriver::SetMGTaskListToFiner(int nsmooth, int ngh, int flag) {
     id.send1    = tl["mg_to_finer"]->AddTask(&MultigridDriver::SendBoundary, this, id.prolongate);
     id.recv1    = tl["mg_to_finer"]->AddTask(&MultigridDriver::RecvBoundary, this, id.send1);
     id.physb1   = tl["mg_to_finer"]->AddTask(&MultigridDriver::PhysicalBoundary, this, id.recv1);
-    id.fc_ghosts_prol = tl["mg_to_finer"]->AddTask(&MultigridDriver::FillFCBoundary, this, id.physb1);
+    id.fc_ghosts_prol = tl["mg_to_finer"]->AddTask(
+                      &MultigridDriver::ProlongateFCBoundary, this, id.physb1);
 
     // Post-smoothing (red-black)
     id.smoothR   = tl["mg_to_finer"]->AddTask(&MultigridDriver::SmoothRed, this, id.fc_ghosts_prol);
@@ -386,7 +400,8 @@ void MultigridDriver::SetMGTaskListToFiner(int nsmooth, int ngh, int flag) {
     id.sendR    = tl["mg_to_finer"]->AddTask(&MultigridDriver::SendBoundary, this, id.smoothR);
     id.recvR    = tl["mg_to_finer"]->AddTask(&MultigridDriver::RecvBoundary, this, id.sendR);
     id.physbR   = tl["mg_to_finer"]->AddTask(&MultigridDriver::PhysicalBoundary, this, id.recvR);
-    id.fc_ghostsR = tl["mg_to_finer"]->AddTask(&MultigridDriver::FillFCBoundary, this, id.physbR);
+    id.fc_ghostsR = tl["mg_to_finer"]->AddTask(
+                      &MultigridDriver::ProlongateFCBoundary, this, id.physbR);
 
     id.smoothB   = tl["mg_to_finer"]->AddTask(&MultigridDriver::SmoothBlack, this, id.fc_ghostsR);
     last_smooth = id.smoothB;
@@ -396,7 +411,8 @@ void MultigridDriver::SetMGTaskListToFiner(int nsmooth, int ngh, int flag) {
       id.sendB    = tl["mg_to_finer"]->AddTask(&MultigridDriver::SendBoundary, this, id.smoothB);
       id.recvB    = tl["mg_to_finer"]->AddTask(&MultigridDriver::RecvBoundary, this, id.ircvB);
       id.physbB   = tl["mg_to_finer"]->AddTask(&MultigridDriver::PhysicalBoundary, this, id.recvB);
-      id.fc_ghostsB = tl["mg_to_finer"]->AddTask(&MultigridDriver::FillFCBoundary, this, id.physbB);
+      id.fc_ghostsB = tl["mg_to_finer"]->AddTask(
+                        &MultigridDriver::ProlongateFCBoundary, this, id.physbB);
 
       id.smoothR2   = tl["mg_to_finer"]->AddTask(&MultigridDriver::SmoothRed, this, id.fc_ghostsB);
 
@@ -404,7 +420,8 @@ void MultigridDriver::SetMGTaskListToFiner(int nsmooth, int ngh, int flag) {
       id.sendR2    = tl["mg_to_finer"]->AddTask(&MultigridDriver::SendBoundary, this, id.smoothR2);
       id.recvR2    = tl["mg_to_finer"]->AddTask(&MultigridDriver::RecvBoundary, this, id.ircvR2);
       id.physbR2   = tl["mg_to_finer"]->AddTask(&MultigridDriver::PhysicalBoundary, this, id.recvR2);
-      id.fc_ghostsR2 = tl["mg_to_finer"]->AddTask(&MultigridDriver::FillFCBoundary, this, id.physbR2);
+      id.fc_ghostsR2 = tl["mg_to_finer"]->AddTask(
+                          &MultigridDriver::ProlongateFCBoundary, this, id.physbR2);
 
       id.smoothB2   = tl["mg_to_finer"]->AddTask(&MultigridDriver::SmoothBlack, this, id.fc_ghostsR2);
       last_smooth = id.smoothB2;
@@ -414,22 +431,24 @@ void MultigridDriver::SetMGTaskListToFiner(int nsmooth, int ngh, int flag) {
   // flag==2: last step to finest level -- add final boundary exchange so ghost cells
   // are up-to-date for CalculateDefectNorm (matching Athena++ MG_STARTRECVL etc.)
   if (flag == 2) {
-    id.clear_sendB2 = tl["mg_to_finer"]->AddTask(&MultigridDriver::ClearSend, this, none);
-    id.clear_recvB2 = tl["mg_to_finer"]->AddTask(&MultigridDriver::ClearRecv, this, id.clear_sendB2);
-    TaskID last_clear = id.clear_recvB2;
-
-    TaskID ircvL  = tl["mg_to_finer"]->AddTask(&MultigridDriver::StartReceive, this, last_clear);
-    TaskID send_dep = last_smooth | last_clear;
-    TaskID sendL  = tl["mg_to_finer"]->AddTask(&MultigridDriver::SendBoundary, this, send_dep);
-    TaskID recvL  = tl["mg_to_finer"]->AddTask(&MultigridDriver::RecvBoundary, this, sendL);
-    TaskID physL  = tl["mg_to_finer"]->AddTask(&MultigridDriver::PhysicalBoundary, this, recvL);
-    TaskID fcL    = tl["mg_to_finer"]->AddTask(&MultigridDriver::FillFCBoundary, this, physL);
-    id.clear_send0 = tl["mg_to_finer"]->AddTask(&MultigridDriver::ClearSend, this, fcL);
-    id.clear_recv0 = tl["mg_to_finer"]->AddTask(&MultigridDriver::ClearRecv, this, id.clear_send0);
-  } else {
-    id.clear_send0 = tl["mg_to_finer"]->AddTask(&MultigridDriver::ClearSend, this, none);
-    id.clear_recv0 = tl["mg_to_finer"]->AddTask(&MultigridDriver::ClearRecv, this, id.clear_send0);
+    TaskID ircvL  = tl["mg_to_finer"]->AddTask(
+                      &MultigridDriver::StartReceive, this, last_smooth);
+    TaskID sendL  = tl["mg_to_finer"]->AddTask(
+                      &MultigridDriver::SendBoundary, this, last_smooth);
+    TaskID recvL  = tl["mg_to_finer"]->AddTask(
+                      &MultigridDriver::RecvBoundary, this, sendL);
+    TaskID physL  = tl["mg_to_finer"]->AddTask(
+                      &MultigridDriver::PhysicalBoundary, this, recvL);
+    TaskID fcL    = tl["mg_to_finer"]->AddTask(
+                      &MultigridDriver::ProlongateFCBoundary, this, physL);
+    last_smooth = fcL;
   }
+
+    id.clear_send0 = tl["mg_to_finer"]->AddTask(
+                      &MultigridDriver::ClearSend, this, last_smooth);
+    id.clear_recv0 = tl["mg_to_finer"]->AddTask(
+                      &MultigridDriver::ClearRecv, this, id.clear_send0);
+
 }
 
 //----------------------------------------------------------------------------------------
@@ -442,7 +461,6 @@ void MultigridDriver::SetMGTaskListFMGProlongate(int ngh) {
   tl.emplace(std::make_pair("mg_fmg_prolongate", std::make_shared<TaskList>()));
   TaskID none(0);
 
-  // Boundary comm before prolongation
   id.ircv0    = tl["mg_fmg_prolongate"]->AddTask(
                   &MultigridDriver::StartReceive, this, none);
   id.send0    = tl["mg_fmg_prolongate"]->AddTask(
@@ -452,14 +470,13 @@ void MultigridDriver::SetMGTaskListFMGProlongate(int ngh) {
   id.physb0   = tl["mg_fmg_prolongate"]->AddTask(
                   &MultigridDriver::PhysicalBoundary, this, id.recv0);
   id.fc_ghosts0 = tl["mg_fmg_prolongate"]->AddTask(
-                  &MultigridDriver::FillFCBoundary, this, id.physb0);
+                  &MultigridDriver::ProlongateFCBoundary, this, id.physb0);
 
-  // FMG prolongation (direct overwrite)
   id.fmg_prolongate = tl["mg_fmg_prolongate"]->AddTask(
                   &MultigridDriver::FMGProlongateTask, this, id.fc_ghosts0);
 
   id.clear_send0 = tl["mg_fmg_prolongate"]->AddTask(
-                  &MultigridDriver::ClearSend, this, none);
+                  &MultigridDriver::ClearSend, this, id.fmg_prolongate);
   id.clear_recv0 = tl["mg_fmg_prolongate"]->AddTask(
                   &MultigridDriver::ClearRecv, this, id.clear_send0);
 }
@@ -478,7 +495,8 @@ void MultigridDriver::SetMGTaskListToCoarser(int nsmooth, int cycle) {
   id.send0      = tl["mg_to_coarser"]->AddTask(&MultigridDriver::SendBoundary, this, none);
   id.recv0      = tl["mg_to_coarser"]->AddTask(&MultigridDriver::RecvBoundary, this, id.send0);
   id.physb0     = tl["mg_to_coarser"]->AddTask(&MultigridDriver::PhysicalBoundary, this, id.recv0);
-  id.fc_ghosts0 = tl["mg_to_coarser"]->AddTask(&MultigridDriver::FillFCBoundary, this, id.physb0);
+  id.fc_ghosts0 = tl["mg_to_coarser"]->AddTask(
+                    &MultigridDriver::ProlongateFCBoundary, this, id.physb0);
 
   id.calc_rhs   = tl["mg_to_coarser"]->AddTask(&MultigridDriver::CalculateFASRHS, this, id.fc_ghosts0);
 
@@ -488,29 +506,32 @@ void MultigridDriver::SetMGTaskListToCoarser(int nsmooth, int cycle) {
     id.sendR      = tl["mg_to_coarser"]->AddTask(&MultigridDriver::SendBoundary, this, id.smoothR);
     id.recvR      = tl["mg_to_coarser"]->AddTask(&MultigridDriver::RecvBoundary, this, id.sendR);
     id.physbR     = tl["mg_to_coarser"]->AddTask(&MultigridDriver::PhysicalBoundary, this, id.recvR);
-    id.fc_ghostsR = tl["mg_to_coarser"]->AddTask(&MultigridDriver::FillFCBoundary, this, id.physbR);
+    id.fc_ghostsR = tl["mg_to_coarser"]->AddTask(
+                      &MultigridDriver::ProlongateFCBoundary, this, id.physbR);
 
     id.ircvB      = tl["mg_to_coarser"]->AddTask(&MultigridDriver::StartReceive, this, id.fc_ghostsR);
     id.smoothB    = tl["mg_to_coarser"]->AddTask(&MultigridDriver::SmoothBlack, this, id.fc_ghostsR);
     id.sendB      = tl["mg_to_coarser"]->AddTask(&MultigridDriver::SendBoundary, this, id.smoothB);
     id.recvB      = tl["mg_to_coarser"]->AddTask(&MultigridDriver::RecvBoundary, this, id.sendB);
     id.physbB     = tl["mg_to_coarser"]->AddTask(&MultigridDriver::PhysicalBoundary, this, id.recvB);
-    id.fc_ghostsB = tl["mg_to_coarser"]->AddTask(&MultigridDriver::FillFCBoundary, this, id.physbB);
+    id.fc_ghostsB = tl["mg_to_coarser"]->AddTask(
+                      &MultigridDriver::ProlongateFCBoundary, this, id.physbB);
     if (nsmooth > 1) {
+      id.ircvR2    = tl["mg_to_coarser"]->AddTask(&MultigridDriver::StartReceive, this, id.fc_ghostsB);
       id.smoothR2   = tl["mg_to_coarser"]->AddTask(&MultigridDriver::SmoothRed, this, id.fc_ghostsB);
-
-      id.ircvR2    = tl["mg_to_coarser"]->AddTask(&MultigridDriver::StartReceive, this, id.smoothR2);
       id.sendR2      = tl["mg_to_coarser"]->AddTask(&MultigridDriver::SendBoundary, this, id.smoothR2);
       id.recvR2     = tl["mg_to_coarser"]->AddTask(&MultigridDriver::RecvBoundary, this, id.sendR2);
       id.physbR2     = tl["mg_to_coarser"]->AddTask(&MultigridDriver::PhysicalBoundary, this, id.recvR2);
-      id.fc_ghostsR2 = tl["mg_to_coarser"]->AddTask(&MultigridDriver::FillFCBoundary, this, id.physbR2);
-
+      id.fc_ghostsR2 = tl["mg_to_coarser"]->AddTask(
+                          &MultigridDriver::ProlongateFCBoundary, this, id.physbR2);
+      
+      id.ircvB2     = tl["mg_to_coarser"]->AddTask(&MultigridDriver::StartReceive, this, id.fc_ghostsR2);
       id.smoothB2   = tl["mg_to_coarser"]->AddTask(&MultigridDriver::SmoothBlack, this, id.fc_ghostsR2);
-
       id.sendB2      = tl["mg_to_coarser"]->AddTask(&MultigridDriver::SendBoundary, this, id.smoothB2);
-      id.recvB2      = tl["mg_to_coarser"]->AddTask(&MultigridDriver::RecvBoundary, this, id.ircvB2);
+      id.recvB2      = tl["mg_to_coarser"]->AddTask(&MultigridDriver::RecvBoundary, this, id.sendB2);
       id.physbB2     = tl["mg_to_coarser"]->AddTask(&MultigridDriver::PhysicalBoundary, this, id.recvB2);
-      id.fc_ghostsB2 = tl["mg_to_coarser"]->AddTask(&MultigridDriver::FillFCBoundary, this, id.physbB2);
+      id.fc_ghostsB2 = tl["mg_to_coarser"]->AddTask(
+                          &MultigridDriver::ProlongateFCBoundary, this, id.physbB2);
 
       id.restrict_  = tl["mg_to_coarser"]->AddTask(&MultigridDriver::Restrict, this, id.fc_ghostsB2);
     } else {
@@ -519,7 +540,7 @@ void MultigridDriver::SetMGTaskListToCoarser(int nsmooth, int cycle) {
   } else {
     id.restrict_  = tl["mg_to_coarser"]->AddTask(&MultigridDriver::Restrict, this, id.calc_rhs);
   }
-  id.clear_send0 = tl["mg_to_coarser"]->AddTask(&MultigridDriver::ClearSend, this, none);
+  id.clear_send0 = tl["mg_to_coarser"]->AddTask(&MultigridDriver::ClearSend, this, id.restrict_);
   id.clear_recv0 = tl["mg_to_coarser"]->AddTask(&MultigridDriver::ClearRecv, this, id.clear_send0);
 
 }

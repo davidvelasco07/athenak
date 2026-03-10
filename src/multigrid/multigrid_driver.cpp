@@ -41,7 +41,7 @@ MultigridDriver::MultigridDriver(MeshBlockPack *pmbp, int invar):
     pmy_pack_(pmbp),
     pmy_mesh_(pmbp->pmesh),
     needinit_(true), amr_seq_(0), nreflevel_(0), eps_(-1.0),
-    niter_(-1), npresmooth_(1), npostsmooth_(1), coffset_(0), fprolongation_(0),
+    niter_(-1), npresmooth_(1), npostsmooth_(1), coffset_(0), fprolongation_(0), mg_verbose_(0),
     nb_rank_(0), ncoeff_(0),
     octets_(nullptr), octetmap_(nullptr), octetbflag_(nullptr), noctets_(nullptr),
     oct_u_buf_(nullptr), oct_def_buf_(nullptr),
@@ -204,7 +204,7 @@ void MultigridDriver::PrepareForAMR() {
       int lev = pmy_mesh_->lloc_eachmb[n].level - locrootlevel_;
       nreflevel_ = std::max(nreflevel_, lev);
     }
-    if (nreflevel_ != old_nreflevel) {
+    if (nreflevel_ != old_nreflevel && global_variable::my_rank == 0) {
       std::cout << "MultigridDriver::SetupMultigrid: Number of refinement levels = "
                 << nreflevel_ << std::endl;
     }
@@ -229,6 +229,7 @@ void MultigridDriver::PrepareForAMR() {
     if (pmy_mesh_->multilevel) {
       mglevels_->UpdateBlockDx();
     }
+    
   }
   needinit_ = false;
 }
@@ -428,8 +429,10 @@ void MultigridDriver::InitializeOctets() {
   cbufold_.assign(nv * cbnc * cbnc * cbnc, 0.0);
   ncoarse_.assign(3 * 3 * 3, false);
 
-  for (int l = 0; l < nreflevel_; ++l) {
-    std::cout << "  Octet level " << l << ": " << noctets_[l] << " octets" << std::endl;
+  if (mg_verbose_ && global_variable::my_rank == 0) {
+    for (int l = 0; l < nreflevel_; ++l) {
+      std::cout << "  Octet level " << l << ": " << noctets_[l] << " octets" << std::endl;
+    }
   }
 }
 
@@ -773,7 +776,7 @@ void MultigridDriver::SolveIterative(Driver *pdriver) {
   for (int v = 0; v < nvar_; ++v) {
     def += CalculateDefectNorm(MGNormType::l2, v);
   }
-  if (fshowdef_) {
+  if (fshowdef_ && global_variable::my_rank == 0) {
     std::cout << "MG initial defect = " << def << std::endl;
   }
   int n = 0;
@@ -784,21 +787,23 @@ void MultigridDriver::SolveIterative(Driver *pdriver) {
     for (int v = 0; v < nvar_; ++v) {
       def += CalculateDefectNorm(MGNormType::l2, v);
     }
-    if (fshowdef_) {
+    if (fshowdef_ && global_variable::my_rank == 0) {
       std::cout << "  MG iteration " << n << ": defect = " << def << std::endl;
     }
     if (def/olddef > 0.9) {
       if (eps_ == 0.0) break;
-      if (fshowdef_) {
+      if (fshowdef_ && global_variable::my_rank == 0) {
         std::cout << "### WARNING in MultigridDriver::SolveIterative" << std::endl
                   << "Slow convergence: defect ratio = " << def/olddef << std::endl;
       }
     }
     ++n;
     if (n >= 40) {
-      std::cout << "### FATAL ERROR in MultigridDriver::SolveIterative" << std::endl
-                << "Failed to converge after " << n << " iterations (defect = "
-                << def << ", threshold = " << eps_ << ")" << std::endl;
+      if (global_variable::my_rank == 0) {
+        std::cout << "### FATAL ERROR in MultigridDriver::SolveIterative" << std::endl
+                  << "Failed to converge after " << n << " iterations (defect = "
+                  << def << ", threshold = " << eps_ << ")" << std::endl;
+      }
       pdriver->nlim = pmy_mesh_->ncycle;
       break;
     }
@@ -815,13 +820,17 @@ void MultigridDriver::SolveIterative(Driver *pdriver) {
 void MultigridDriver::SolveIterativeFixedTimes(Driver *pdriver) {
   if (fshowdef_) {
     Real norm = CalculateDefectNorm(MGNormType::l2, 0);
-    std::cout << "MG initial defect = " << norm << std::endl;
+    if (global_variable::my_rank == 0) {
+      std::cout << "MG initial defect = " << norm << std::endl;
+    }
   }
   for (int n = 0; n < niter_; ++n) {
     SolveVCycle(pdriver, npresmooth_, npostsmooth_);
     if (fshowdef_) {
       Real norm = CalculateDefectNorm(MGNormType::l2, 0);
-      std::cout << "MG iteration " << n << ": defect = " << norm << std::endl;
+      if (global_variable::my_rank == 0) {
+        std::cout << "MG iteration " << n << ": defect = " << norm << std::endl;
+      }
     }
   }
   Kokkos::fence();

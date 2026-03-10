@@ -47,6 +47,7 @@ MGGravityDriver::MGGravityDriver(MeshBlockPack *pmbp, ParameterInput *pin)
     full_multigrid_ = pin->GetOrAddBoolean("gravity", "full_multigrid", false);
     fmg_ncycle_ = pin->GetOrAddInteger("gravity", "fmg_ncycle", 1);
     fshowdef_ = pin->GetOrAddBoolean("gravity", "show_defect", false);
+    mg_verbose_ = pin->GetOrAddInteger("gravity", "mg_verbose", 0);
     fsubtract_average_ = pin->GetOrAddBoolean("gravity", "subtract_average", true);
     if (eps_ < 0.0 && niter_ < 0) {
         std::cout<< "### FATAL ERROR in MGGravityDriver::MGGravityDriver" << std::endl
@@ -133,6 +134,7 @@ MGGravityDriver::MGGravityDriver(MeshBlockPack *pmbp, ParameterInput *pin)
   mglevels_->pbval = new MultigridBoundaryValues(pmbp, pin, false, mglevels_);
   mglevels_->pbval->InitializeBuffers((nvar_));
   mglevels_->pbval->RemapIndicesForMG();
+  mglevels_->pbval->ComputePerLevelIndices();
 }
 
 
@@ -225,10 +227,12 @@ void MGGravityDriver::Solve(Driver *pdriver, int stage, Real dt) {
   if (fshowdef_) {
     auto t_end = std::chrono::high_resolution_clock::now();
     double mg_elapsed = std::chrono::duration<double>(t_end - t_start).count();
-    std::cout << "mg_solve_time = " << std::scientific << std::setprecision(6)
-              << mg_elapsed << std::endl;
     Real norm = CalculateDefectNorm(MGNormType::l2, 0);
-    std::cout << "MGGravityDriver::Solve: Final defect norm = " << norm << std::endl;
+    if (global_variable::my_rank == 0) {
+      std::cout << "mg_solve_time = " << std::scientific << std::setprecision(6)
+                << mg_elapsed << std::endl;
+      std::cout << "MGGravityDriver::Solve: Final defect norm = " << norm << std::endl;
+    }
   }
 
   mglevels_->RetrieveResult(pmy_pack_->pgrav->phi, 0, indcs_.ng);
