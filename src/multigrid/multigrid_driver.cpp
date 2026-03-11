@@ -2298,19 +2298,22 @@ void MultigridDriver::CalculateMultipoleCoefficients() {
 //! \brief Apply normalization to raw multipole moments
 
 void MultigridDriver::ScaleMultipoleCoefficients() {
-  constexpr Real c0  = -0.25 / M_PI;
-  constexpr Real c1  = -0.25 / M_PI;
-  constexpr Real c2  = -0.0625 / M_PI;
-  constexpr Real c2a = -0.75 / M_PI;
-  constexpr Real c30 = -0.0625 / M_PI;
-  constexpr Real c31 = -0.0625 * 1.5 / M_PI;
-  constexpr Real c32 = -0.25 * 15.0 / M_PI;
-  constexpr Real c33 = -0.0625 * 2.5 / M_PI;
-  constexpr Real c40 = -0.0625 * 0.0625 / M_PI;
-  constexpr Real c41 = -0.0625 * 2.5 / M_PI;
-  constexpr Real c42 = -0.0625 * 5.0 / M_PI;
-  constexpr Real c43 = -0.0625 * 17.5 / M_PI;
-  constexpr Real c44 = -0.25 * 35.0 / M_PI;
+  // AthenaK convention: multigrid solves -nabla^2 phi = src, with src = -4*pi*G*rho.
+  // Multipole moments are computed from src (negative density), so the scaling constants
+  // must have POSITIVE sign to produce the correct (negative) gravitational potential.
+  constexpr Real c0  = 0.25 / M_PI;
+  constexpr Real c1  = 0.25 / M_PI;
+  constexpr Real c2  = 0.0625 / M_PI;
+  constexpr Real c2a = 0.75 / M_PI;
+  constexpr Real c30 = 0.0625 / M_PI;
+  constexpr Real c31 = 0.0625 * 1.5 / M_PI;
+  constexpr Real c32 = 0.25 * 15.0 / M_PI;
+  constexpr Real c33 = 0.0625 * 2.5 / M_PI;
+  constexpr Real c40 = 0.0625 * 0.0625 / M_PI;
+  constexpr Real c41 = 0.0625 * 2.5 / M_PI;
+  constexpr Real c42 = 0.0625 * 5.0 / M_PI;
+  constexpr Real c43 = 0.0625 * 17.5 / M_PI;
+  constexpr Real c44 = 0.25 * 35.0 / M_PI;
 
   mpcoeff_[0] *= c0;
   mpcoeff_[1] *= c1;
