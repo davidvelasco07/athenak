@@ -127,6 +127,7 @@ add_executable(
         pgen/tests/rad_linear_wave.cpp
         pgen/tests/z4c_boosted_puncture.cpp
         pgen/tests/z4c_linear_wave.cpp
+        pgen/tests/gresho_vortex.cpp
 
         radiation/radiation.cpp
         radiation/radiation_fluxes.cpp
