@@ -16,6 +16,7 @@
 #include "eos/eos.hpp"
 #include "diffusion/viscosity.hpp"
 #include "diffusion/conduction.hpp"
+#include "diffusion/scalar_diffusion.hpp"
 #include "srcterms/srcterms.hpp"
 #include "shearing_box/shearing_box.hpp"
 #include "shearing_box/orbital_advection.hpp"
@@ -88,6 +89,13 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
     pcond = new Conduction("hydro", ppack, pin);
   } else {
     pcond = nullptr;
+  }
+
+  // Scalar diffusion (if requested in input file)
+  if (pin->DoesParameterExist("hydro","nu_scalar")) {
+    pscalardiff = new ScalarDiffusion("hydro", ppack, pin);
+  } else {
+    pscalardiff = nullptr;
   }
 
   // Source terms (if needed)
@@ -311,6 +319,7 @@ Hydro::~Hydro() {
   if (porb_u != nullptr) {delete porb_u;}
   delete pbval_u;
   if (psrc != nullptr) {delete psrc;}
+  if (pscalardiff != nullptr) {delete pscalardiff;}
   if (pcond != nullptr) {delete pcond;}
   if (pvisc != nullptr) {delete pvisc;}
   delete peos;
