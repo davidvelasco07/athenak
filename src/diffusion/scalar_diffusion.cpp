@@ -30,6 +30,7 @@ ScalarDiffusion::ScalarDiffusion(std::string block, MeshBlockPack *pp,
                                  ParameterInput *pin) :
   pmy_pack(pp) {
   nu_scalar = pin->GetReal(block, "nu_scalar");
+  use_ho = pin->GetOrAddBoolean(block, "fourth_order_diff", false);
 
   // Retrieve nhydro and nscalars from the appropriate physics object
   if (pmy_pack->phydro != nullptr) {
@@ -65,6 +66,10 @@ ScalarDiffusion::~ScalarDiffusion() {
 
 void ScalarDiffusion::IsotropicScalarDiffusiveFlux(const DvceArray5D<Real> &w,
   DvceFaceFld5D<Real> &flx) {
+  if (use_ho) {
+    FourthOrderIsotropicScalarDiffusiveFlux(w, flx);
+    return;
+  }
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   int is = indcs.is, ie = indcs.ie;
   int js = indcs.js, je = indcs.je;
@@ -116,6 +121,73 @@ void ScalarDiffusion::IsotropicScalarDiffusiveFlux(const DvceArray5D<Real> &w,
     for (int n = 0; n < nscal; ++n) {
       flx3(m, nhyd+n, k, j, i) -= rho_face * nu * (w(m,nhyd+n,k,j,i) -
                                                      w(m,nhyd+n,k-1,j,i)) * idx3;
+    }
+  });
+
+  return;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void ScalarDiffusion::FourthOrderIsotropicScalarDiffusiveFlux()
+//! \brief Adds 4th-order isotropic scalar diffusion flux to face-centered fluxes.
+//! Uses 4-point stencil: (15*(C_i - C_{i-1}) - (C_{i+1} - C_{i-2})) / (12*dx)
+
+void ScalarDiffusion::FourthOrderIsotropicScalarDiffusiveFlux(const DvceArray5D<Real> &w,
+  DvceFaceFld5D<Real> &flx) {
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  int is = indcs.is, ie = indcs.ie;
+  int js = indcs.js, je = indcs.je;
+  int ks = indcs.ks, ke = indcs.ke;
+  int nmb1 = pmy_pack->nmb_thispack - 1;
+  auto &size = pmy_pack->pmb->mb_size;
+  int nhyd  = nhydro;
+  int nscal = nscalars;
+  Real nu = nu_scalar;
+
+  //--------------------------------------------------------------------------------------
+  // fluxes in x1-direction
+
+  auto &flx1 = flx.x1f;
+  par_for("scaldiff4_1", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie+1,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    Real rho_face = 0.5*(w(m,IDN,k,j,i) + w(m,IDN,k,j,i-1));
+    Real idx1 = 1.0/(12.0*size.d_view(m).dx1);
+    for (int n = 0; n < nscal; ++n) {
+      Real dCdx = (15.0*(w(m,nhyd+n,k,j,i  ) - w(m,nhyd+n,k,j,i-1)) -
+                        (w(m,nhyd+n,k,j,i+1) - w(m,nhyd+n,k,j,i-2))) * idx1;
+      flx1(m, nhyd+n, k, j, i) -= rho_face * nu * dCdx;
+    }
+  });
+  if (pmy_pack->pmesh->one_d) {return;}
+
+  //--------------------------------------------------------------------------------------
+  // fluxes in x2-direction
+
+  auto &flx2 = flx.x2f;
+  par_for("scaldiff4_2", DevExeSpace(), 0, nmb1, ks, ke, js, je+1, is, ie,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    Real rho_face = 0.5*(w(m,IDN,k,j,i) + w(m,IDN,k,j-1,i));
+    Real idx2 = 1.0/(12.0*size.d_view(m).dx2);
+    for (int n = 0; n < nscal; ++n) {
+      Real dCdy = (15.0*(w(m,nhyd+n,k,j  ,i) - w(m,nhyd+n,k,j-1,i)) -
+                        (w(m,nhyd+n,k,j+1,i) - w(m,nhyd+n,k,j-2,i))) * idx2;
+      flx2(m, nhyd+n, k, j, i) -= rho_face * nu * dCdy;
+    }
+  });
+  if (pmy_pack->pmesh->two_d) {return;}
+
+  //--------------------------------------------------------------------------------------
+  // fluxes in x3-direction
+
+  auto &flx3 = flx.x3f;
+  par_for("scaldiff4_3", DevExeSpace(), 0, nmb1, ks, ke+1, js, je, is, ie,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    Real rho_face = 0.5*(w(m,IDN,k,j,i) + w(m,IDN,k-1,j,i));
+    Real idx3 = 1.0/(12.0*size.d_view(m).dx3);
+    for (int n = 0; n < nscal; ++n) {
+      Real dCdz = (15.0*(w(m,nhyd+n,k  ,j,i) - w(m,nhyd+n,k-1,j,i)) -
+                        (w(m,nhyd+n,k+1,j,i) - w(m,nhyd+n,k-2,j,i))) * idx3;
+      flx3(m, nhyd+n, k, j, i) -= rho_face * nu * dCdz;
     }
   });
 

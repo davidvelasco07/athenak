@@ -26,12 +26,15 @@ class ScalarDiffusion {
 
   // data
   Real nu_scalar;   // scalar diffusion coefficient
+  bool use_ho;      // flag for 4th-order diffusive operators
   int nhydro;       // number of hydro/mhd variables (offset to first scalar in arrays)
   int nscalars;     // number of passive scalars
 
   // functions
   void IsotropicScalarDiffusiveFlux(const DvceArray5D<Real> &w,
                                     DvceFaceFld5D<Real> &f);
+  void FourthOrderIsotropicScalarDiffusiveFlux(const DvceArray5D<Real> &w,
+                                               DvceFaceFld5D<Real> &f);
 
  private:
   MeshBlockPack* pmy_pack;
