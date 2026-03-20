@@ -32,16 +32,31 @@ ScalarDiffusion::ScalarDiffusion(std::string block, MeshBlockPack *pp,
   nu_scalar = pin->GetReal(block, "nu_scalar");
   use_ho = pin->GetOrAddBoolean(block, "fourth_order_diff", false);
 
-  // Retrieve nhydro and nscalars from the appropriate physics object
-  if (pmy_pack->phydro != nullptr) {
+  // Requires phydro/pmhd on the pack — construct ScalarDiffusion only after those
+  // pointers are assigned (see MeshBlockPack::AddPhysics).  Use `block` so ion-neutral
+  // runs with both modules get counts from the correct physics.
+  if (block == "hydro") {
+    if (pmy_pack->phydro == nullptr) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "ScalarDiffusion(\"hydro\",...) but phydro is null" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
     nhydro   = pmy_pack->phydro->nhydro;
     nscalars = pmy_pack->phydro->nscalars;
-  } else if (pmy_pack->pmhd != nullptr) {
+  } else if (block == "mhd") {
+    if (pmy_pack->pmhd == nullptr) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "ScalarDiffusion(\"mhd\",...) but pmhd is null" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
     nhydro   = pmy_pack->pmhd->nmhd;
     nscalars = pmy_pack->pmhd->nscalars;
   } else {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "ScalarDiffusion requires Hydro or MHD" << std::endl;
+              << std::endl
+              << "ScalarDiffusion: block must be \"hydro\" or \"mhd\"" << std::endl;
     std::exit(EXIT_FAILURE);
   }
 

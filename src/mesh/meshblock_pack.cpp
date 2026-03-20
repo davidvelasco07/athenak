@@ -25,6 +25,7 @@
 #include "dyn_grmhd/dyn_grmhd.hpp"
 #include "z4c/cce/cce.hpp"
 #include "diffusion/viscosity.hpp"
+#include "diffusion/scalar_diffusion.hpp"
 #include "diffusion/resistivity.hpp"
 #include "radiation/radiation.hpp"
 #include "srcterms/turb_driver.hpp"
@@ -115,6 +116,10 @@ void MeshBlockPack::AddPhysics(ParameterInput *pin) {
   // (Note TaskLists stored in MeshBlockPack)
   if (pin->DoesBlockExist("hydro")) {
     phydro = new hydro::Hydro(this, pin);
+    // Scalar diffusion needs ppack->phydro set (not available inside Hydro::Hydro).
+    if (pin->DoesParameterExist("hydro", "nu_scalar")) {
+      phydro->pscalardiff = new ScalarDiffusion("hydro", this, pin);
+    }
     nphysics++;
     if (!(pin->DoesBlockExist("mhd")) && !(pin->DoesBlockExist("radiation")) &&
         !(pin->DoesBlockExist("adm")) && !(pin->DoesBlockExist("z4c")) ) {
@@ -128,6 +133,10 @@ void MeshBlockPack::AddPhysics(ParameterInput *pin) {
   // Create MHD physics module.  Create TaskLists only for single-fluid MHD
   if (pin->DoesBlockExist("mhd")) {
     pmhd = new mhd::MHD(this, pin);
+    // Scalar diffusion needs ppack->pmhd set (not available inside MHD::MHD).
+    if (pin->DoesParameterExist("mhd", "nu_scalar")) {
+      pmhd->pscalardiff = new ScalarDiffusion("mhd", this, pin);
+    }
     nphysics++;
     if (!(pin->DoesBlockExist("hydro")) && !(pin->DoesBlockExist("radiation")) &&
         !(pin->DoesBlockExist("adm")) && !(pin->DoesBlockExist("z4c")) ) {

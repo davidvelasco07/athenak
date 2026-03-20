@@ -16,7 +16,6 @@
 #include "eos/eos.hpp"
 #include "diffusion/viscosity.hpp"
 #include "diffusion/conduction.hpp"
-#include "diffusion/scalar_diffusion.hpp"
 #include "srcterms/srcterms.hpp"
 #include "shearing_box/shearing_box.hpp"
 #include "shearing_box/orbital_advection.hpp"
@@ -91,12 +90,9 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
     pcond = nullptr;
   }
 
-  // Scalar diffusion (if requested in input file)
-  if (pin->DoesParameterExist("hydro","nu_scalar")) {
-    pscalardiff = new ScalarDiffusion("hydro", ppack, pin);
-  } else {
-    pscalardiff = nullptr;
-  }
+  // Scalar diffusion: constructed in MeshBlockPack::AddPhysics after phydro is assigned,
+  // since ScalarDiffusion reads nhydro/nscalars from ppack->phydro.
+  pscalardiff = nullptr;
 
   // Source terms (if needed)
   if (pin->DoesBlockExist("hydro_srcterms")) {

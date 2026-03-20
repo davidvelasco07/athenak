@@ -23,6 +23,7 @@ class Coordinates;
 class Viscosity;
 class Resistivity;
 class Conduction;
+class ScalarDiffusion;
 class SourceTerms;
 class OrbitalAdvectionCC;
 class OrbitalAdvectionFC;
@@ -121,10 +122,12 @@ class MHD {
   ShearingBoxCC *psbox_u = nullptr;
   ShearingBoxFC *psbox_b = nullptr;
 
-  // Object(s) for extra physics (viscosity, resistivity, thermal conduction, srcterms)
+  // Object(s) for extra physics (viscosity, resistivity, thermal conduction,
+  // scalar diffusion, srcterms)
   Viscosity *pvisc = nullptr;
   Resistivity *presist = nullptr;
   Conduction *pcond = nullptr;
+  ScalarDiffusion *pscalardiff = nullptr;
   SourceTerms *psrc = nullptr;
 
   // following only used for time-evolving flow

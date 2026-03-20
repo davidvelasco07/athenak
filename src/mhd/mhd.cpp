@@ -122,6 +122,9 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
     pcond = nullptr;
   }
 
+  // Scalar diffusion: constructed in MeshBlockPack::AddPhysics after pmhd is assigned.
+  pscalardiff = nullptr;
+
   // Source terms (if needed)
   if (pin->DoesBlockExist("mhd_srcterms")) {
     psrc = new SourceTerms("mhd_srcterms", ppack, pin);
@@ -442,6 +445,7 @@ MHD::~MHD() {
   delete pbval_b;
   delete pbval_u;
   if (psrc!= nullptr) {delete psrc;}
+  if (pscalardiff != nullptr) {delete pscalardiff;}
   if (pcond != nullptr) {delete pcond;}
   if (presist!= nullptr) {delete presist;}
   if (pvisc != nullptr) {delete pvisc;}

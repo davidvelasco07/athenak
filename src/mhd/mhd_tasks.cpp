@@ -22,6 +22,7 @@
 #include "diffusion/viscosity.hpp"
 #include "diffusion/resistivity.hpp"
 #include "diffusion/conduction.hpp"
+#include "diffusion/scalar_diffusion.hpp"
 #include "srcterms/srcterms.hpp"
 #include "bvals/bvals.hpp"
 #include "shearing_box/shearing_box.hpp"
@@ -205,6 +206,9 @@ TaskStatus MHD::Fluxes(Driver *pdrive, int stage) {
   }
   if (pcond != nullptr) {
     pcond->AddHeatFlux(w0, peos->eos_data, uflx);
+  }
+  if (pscalardiff != nullptr) {
+    pscalardiff->IsotropicScalarDiffusiveFlux(w0, uflx);
   }
 
   // call FOFC if necessary
