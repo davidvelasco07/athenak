@@ -97,9 +97,12 @@ niteration = 20
 npresmooth = 1
 npostsmooth = 1
 full_multigrid = true
-show_defect = 2
+fmg_ncycle = 1
+show_defect = 0
+mg_verbose = 0
 mg_nghost = 1
 root_on_host = false
+fc_use_packsend = 1
 
 <hydro_srcterms>
 self_gravity = true

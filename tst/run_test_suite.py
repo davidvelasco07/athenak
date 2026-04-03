@@ -65,6 +65,17 @@ parser.add_argument(
     "--gpu", nargs="*", help="Run test on GPU. Can add optional cmake arguments."
 )
 parser.add_argument("--test", type=str, help="Run a specific test by name.")
+parser.add_argument(
+    "--clean", action=argparse.BooleanOptionalAction, default=True,
+    help="Clean output data (use --no-clean to skip)."
+)
+parser.add_argument(
+    "--make", action=argparse.BooleanOptionalAction, default=True,
+    help="Clean build for athenak (use --no-make to skip)."
+)
+parser.add_argument(
+    "--case", default="", help="Select folder inside test_suite."
+)
 
 
 args = parser.parse_args()
@@ -81,7 +92,7 @@ if args.style:
     test(["test_suite/style"])
 
 original_dir = os.getcwd()
-tests = "test_suite/"
+tests = "test_suite/"+args.case
 
 if args.test is not None:
     tests = args.test
@@ -100,17 +111,33 @@ if args.test is not None:
 
 tests = os.path.abspath(tests)
 
+athena_dir = os.path.abspath("build/src/")
+athena = athena_dir+"/athena"
+#Check if build exists
+built = os.path.exists(athena)
+build = args.make or not(built)
+
 if args.cpu is not None:
-    testutils.clean_make(flags=cmake_flags(args.cpu, []))
+    if build:
+        testutils.clean_make(flags=cmake_flags(args.cpu, []))
+    else:
+        os.chdir(athena_dir)
     test([tests, "-k", "_cpu"])  # run all scripts with _cpu in name
 
 if args.mpicpu is not None:
-    testutils.clean_make(flags=cmake_flags(args.mpicpu, ["-D", "Athena_ENABLE_MPI=ON"]))
+    if build:
+        testutils.clean_make(flags=cmake_flags(args.mpicpu, ["-D", "Athena_ENABLE_MPI=ON"]))
+    else:
+        os.chdir(athena_dir)
     test([tests, "-k", "_mpicpu"])  # run all scripts with _mpicpu in name
 
 if args.gpu is not None:
-    testutils.clean_make(flags=cmake_flags(args.gpu, ["-D", "Kokkos_ENABLE_CUDA=On"]))
+    if build:
+        testutils.clean_make(flags=cmake_flags(args.gpu, ["-D", "Kokkos_ENABLE_CUDA=On"]))
+    else:
+        os.chdir(athena_dir)
     test([tests, "-k", "_gpu"])  # run all scripts with _gpu in name
 
 os.chdir(original_dir)
-testutils.clean()
+if args.clean:
+    testutils.clean()

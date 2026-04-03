@@ -46,7 +46,7 @@ MGGravityDriver::MGGravityDriver(MeshBlockPack *pmbp, ParameterInput *pin)
     npostsmooth_ = pin->GetOrAddReal("gravity", "npostsmooth", npostsmooth_);
     full_multigrid_ = pin->GetOrAddBoolean("gravity", "full_multigrid", false);
     fmg_ncycle_ = pin->GetOrAddInteger("gravity", "fmg_ncycle", 1);
-    fshowdef_ = pin->GetOrAddBoolean("gravity", "show_defect", false);
+    fshowdef_ = pin->GetOrAddInteger("gravity", "show_defect", 0);
     mg_verbose_ = pin->GetOrAddInteger("gravity", "mg_verbose", 0);
     fsubtract_average_ = pin->GetOrAddBoolean("gravity", "subtract_average", true);
     if (eps_ < 0.0 && niter_ < 0) {
@@ -224,14 +224,17 @@ void MGGravityDriver::Solve(Driver *pdriver, int stage, Real dt) {
 
   Kokkos::fence();
 
-  if (fshowdef_) {
+  if (fshowdef_ >= 1) {
     auto t_end = std::chrono::high_resolution_clock::now();
     double mg_elapsed = std::chrono::duration<double>(t_end - t_start).count();
-    Real norm = CalculateDefectNorm(MGNormType::l2, 0);
+    Real def = 0.0;
+    for (int v = 0; v < nvar_; ++v) {
+      def += CalculateDefectNorm(MGNormType::l2, v);
+    }
     if (global_variable::my_rank == 0) {
       std::cout << "mg_solve_time = " << std::scientific << std::setprecision(6)
                 << mg_elapsed << std::endl;
-      std::cout << "MGGravityDriver::Solve: Final defect norm = " << norm << std::endl;
+      std::cout << "MGGravityDriver::Solve: Final defect norm = " << def << std::endl;
     }
   }
 

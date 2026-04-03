@@ -27,6 +27,7 @@
 #include "mesh/mesh.hpp"
 #include "eos/eos.hpp"
 #include "hydro/hydro.hpp"
+#include "mhd/mhd.hpp"
 #include "gravity/gravity.hpp"
 #include "gravity/mg_gravity.hpp"
 #include "pgen/pgen.hpp"
@@ -78,10 +79,18 @@ void ProblemGenerator::BinaryGravity(ParameterInput *pin, const bool restart) {
   int ks = indcs.ks, ke = indcs.ke;
   MeshBlockPack *pmbp = pmy_mesh_->pmb_pack;
   auto &size = pmbp->pmb->mb_size;
-  if (pmbp->phydro == nullptr) return;
 
-  auto &u0 = pmbp->phydro->u0;
-  bool is_ideal = pmbp->phydro->peos->eos_data.is_ideal;
+  DvceArray5D<Real> u0;
+  bool is_ideal = false;
+  if (pmbp->phydro != nullptr) {
+    u0 = pmbp->phydro->u0;
+    is_ideal = pmbp->phydro->peos->eos_data.is_ideal;
+  } else if (pmbp->pmhd != nullptr) {
+    u0 = pmbp->pmhd->u0;
+    is_ideal = pmbp->pmhd->peos->eos_data.is_ideal;
+  } else {
+    return;
+  }
   int nmb = pmbp->nmb_thispack;
 
   // Initialize density to match Athena++ exactly: plain Euclidean distance,
@@ -199,6 +208,25 @@ void ProblemGenerator::BinaryGravity(ParameterInput *pin, const bool restart) {
           u0(m, IEN, k, j, i) *= fac;
         }
       });
+
+  // Initialize uniform B-field for MHD
+  if (pmbp->pmhd != nullptr) {
+    Real b0_val = pin->GetOrAddReal("problem", "b0", 0.0);
+    auto &b0 = pmbp->pmhd->b0;
+    auto &bcc0 = pmbp->pmhd->bcc0;
+    par_for("binary_gravity_bfield", DevExeSpace(), 0, nmb-1, ks, ke, js, je, is, ie,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      b0.x1f(m,k,j,i) = b0_val;
+      b0.x2f(m,k,j,i) = 0.0;
+      b0.x3f(m,k,j,i) = 0.0;
+      if (i==ie) b0.x1f(m,k,j,i+1) = b0_val;
+      if (j==je) b0.x2f(m,k,j+1,i) = 0.0;
+      if (k==ke) b0.x3f(m,k+1,j,i) = 0.0;
+      bcc0(m,IBX,k,j,i) = b0_val;
+      bcc0(m,IBY,k,j,i) = 0.0;
+      bcc0(m,IBZ,k,j,i) = 0.0;
+    });
+  }
 }
 
 //----------------------------------------------------------------------------------------

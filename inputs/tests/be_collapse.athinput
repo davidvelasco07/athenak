@@ -61,7 +61,7 @@ npresmooth = 2
 npostsmooth = 2
 full_multigrid = true
 fmg_ncycle = 1
-show_defect = true
+show_defect = 1
 mg_nghost = 1
 
 <hydro_srcterms>
