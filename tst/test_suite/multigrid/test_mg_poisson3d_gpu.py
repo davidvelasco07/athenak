@@ -14,6 +14,7 @@ from test_suite.multigrid.mg_utils import (
 
 threshold = 1E-8
 
+
 def _selfgravity_flags_gpu(res, mb=None, soe="hydro"):
     """Common flags for selfgravity defect tests on GPU."""
     if mb is None:
@@ -38,8 +39,9 @@ def test_selfgravity_uniform_hydro_gpu():
             _selfgravity_flags_gpu(64),
         )
         assert results[0], "Selfgravity hydro GPU run failed"
-        assert_solver_convergence(results[1], threshold, max_iterations=10,
-                                max_avg_ratio=0.07, label="selfgravity_uniform_hydro_gpu: ")
+        assert_solver_convergence(
+            results[1], threshold, max_iterations=10,
+            max_avg_ratio=0.07, label="selfgravity_uniform_hydro_gpu: ")
     finally:
         cleanup()
 
@@ -52,8 +54,9 @@ def test_selfgravity_uniform_mhd_gpu():
             _selfgravity_flags_gpu(64, soe="mhd"),
         )
         assert results[0], "Selfgravity MHD GPU run failed"
-        assert_solver_convergence(results[1], threshold, max_iterations=10,
-                                max_avg_ratio=0.07, label="selfgravity_uniform_mhd_gpu: ")
+        assert_solver_convergence(
+            results[1], threshold, max_iterations=10,
+            max_avg_ratio=0.07, label="selfgravity_uniform_mhd_gpu: ")
     finally:
         cleanup()
 

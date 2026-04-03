@@ -20,7 +20,7 @@ from test_suite.multigrid.mg_utils import (
     parse_final_defect, assert_defect_consistency, cleanup,
 )
 
-threshold=1E-10
+threshold = 1E-10
 
 _GRAVITY_FLAGS = [
     "time/nlim=1",
@@ -53,8 +53,8 @@ def test_binary_gravity_uniform_mpicpu():
         )
         assert results[0], "Binary gravity uniform MPI run failed"
         assert_solver_convergence(results[1], threshold, max_iterations=9,
-                                max_avg_ratio=0.05,
-                                label="binary_gravity_uniform_mpicpu: ")
+                                  max_avg_ratio=0.05,
+                                  label="binary_gravity_uniform_mpicpu: ")
         d = parse_final_defect(results[1])
         if d is not None:
             _stored_defects["uniform"] = d
@@ -63,7 +63,7 @@ def test_binary_gravity_uniform_mpicpu():
 
 
 def test_binary_gravity_smr_mpicpu():
-    """Binary gravity with 1-level SMR (16^3 base, effective finest = 32^3, 4 MPI ranks)."""
+    """Binary gravity with 1-level SMR (16^3 base, finest = 32^3, 4 MPI ranks)."""
     try:
         results = run_athenak(
             "inputs/binary_gravity.athinput",
@@ -79,8 +79,8 @@ def test_binary_gravity_smr_mpicpu():
         )
         assert results[0], "Binary gravity SMR MPI run failed"
         assert_solver_convergence(results[1], threshold, max_iterations=9,
-                                max_avg_ratio=0.05,
-                                label="binary_gravity_smr_mpicpu: ")
+                                  max_avg_ratio=0.05,
+                                  label="binary_gravity_smr_mpicpu: ")
         d = parse_final_defect(results[1])
         if d is not None:
             _stored_defects["smr"] = d

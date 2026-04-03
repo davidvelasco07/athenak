@@ -29,9 +29,10 @@
 //! \brief Constructor for multigrid boundary values object
 //----------------------------------------------------------------------------------------
 
-MultigridBoundaryValues::MultigridBoundaryValues(MeshBlockPack *pmbp, ParameterInput *pin, bool coarse, Multigrid *pmg) 
-  :
-   MeshBoundaryValuesCC(pmbp, pin, coarse), pmy_mg(pmg) {
+MultigridBoundaryValues::MultigridBoundaryValues(
+    MeshBlockPack *pmbp, ParameterInput *pin,
+    bool coarse, Multigrid *pmg)
+  : MeshBoundaryValuesCC(pmbp, pin, coarse), pmy_mg(pmg) {
 }
 
 //----------------------------------------------------------------------------------------
@@ -57,16 +58,26 @@ void MultigridBoundaryValues::RemapIndicesForMG() {
     int ng1_m = ngh - 1;
 
     auto remap_send = [](int &lo, int &hi,
-                         int s_h, int e_h, int s_m, int e_m, int ng1) {
-      if (lo == s_h && hi == e_h) { lo = s_m; hi = e_m; }
-      else if (lo > s_h)          { lo = e_m - ng1; hi = e_m; }
-      else                        { lo = s_m; hi = s_m + ng1; }
+                         int s_h, int e_h,
+                         int s_m, int e_m, int ng1) {
+      if (lo == s_h && hi == e_h) {
+        lo = s_m; hi = e_m;
+      } else if (lo > s_h) {
+        lo = e_m - ng1; hi = e_m;
+      } else {
+        lo = s_m; hi = s_m + ng1;
+      }
     };
     auto remap_recv = [](int &lo, int &hi,
-                         int s_h, int e_h, int s_m, int e_m, int ng_m) {
-      if (lo >= s_h && hi <= e_h) { lo = s_m; hi = e_m; }
-      else if (lo > e_h)          { lo = e_m + 1; hi = e_m + ng_m; }
-      else                        { lo = s_m - ng_m; hi = s_m - 1; }
+                         int s_h, int e_h,
+                         int s_m, int e_m, int ng_m) {
+      if (lo >= s_h && hi <= e_h) {
+        lo = s_m; hi = e_m;
+      } else if (lo > e_h) {
+        lo = e_m + 1; hi = e_m + ng_m;
+      } else {
+        lo = s_m - ng_m; hi = s_m - 1;
+      }
     };
 
     for (int n = 0; n < nnghbr; ++n) {
@@ -126,36 +137,59 @@ void MultigridBoundaryValues::RemapIndicesForMG() {
     ifn.bks = (ox3 > 0) ? (ke_m - ng1_m) : ks_m;
     ifn.bke = (ox3 < 0) ? (ks_m + ng1_m) : ke_m;
     if (ox1 == 0) {
-      if (f1 == 1) { ifn.bis += cnx1 - ngh; }
-      else         { ifn.bie -= cnx1 - ngh; }
+      if (f1 == 1) {
+        ifn.bis += cnx1 - ngh;
+      } else {
+        ifn.bie -= cnx1 - ngh;
+      }
     }
     if (ox2 == 0 && nx2 > 1) {
       if (ox1 != 0) {
-        if (f1 == 1) { ifn.bjs += cnx2 - ngh; }
-        else         { ifn.bje -= cnx2 - ngh; }
+        if (f1 == 1) {
+          ifn.bjs += cnx2 - ngh;
+        } else {
+          ifn.bje -= cnx2 - ngh;
+        }
       } else {
-        if (f2 == 1) { ifn.bjs += cnx2 - ngh; }
-        else         { ifn.bje -= cnx2 - ngh; }
+        if (f2 == 1) {
+          ifn.bjs += cnx2 - ngh;
+        } else {
+          ifn.bje -= cnx2 - ngh;
+        }
       }
     }
     if (ox3 == 0 && nx3 > 1) {
       if (ox1 != 0 && ox2 != 0) {
-        if (f1 == 1) { ifn.bks += cnx3 - ngh; }
-        else         { ifn.bke -= cnx3 - ngh; }
+        if (f1 == 1) {
+          ifn.bks += cnx3 - ngh;
+        } else {
+          ifn.bke -= cnx3 - ngh;
+        }
       } else {
-        if (f2 == 1) { ifn.bks += cnx3 - ngh; }
-        else         { ifn.bke -= cnx3 - ngh; }
+        if (f2 == 1) {
+          ifn.bks += cnx3 - ngh;
+        } else {
+          ifn.bke -= cnx3 - ngh;
+        }
       }
     }
-    buf.ifine_ndat = (ifn.bie-ifn.bis+1)*(ifn.bje-ifn.bjs+1)*(ifn.bke-ifn.bks+1);
+    buf.ifine_ndat =
+        (ifn.bie-ifn.bis+1)
+        * (ifn.bje-ifn.bjs+1)
+        * (ifn.bke-ifn.bks+1);
   };
 
   auto compute_recv_icoar = [&](MeshBoundaryBuffer &buf,
-                                int ox1, int ox2, int ox3, int f1, int f2) {
+                                int ox1, int ox2, int ox3,
+                                int f1, int f2) {
     auto &ic = buf.icoar[0];
     if (ox1 == 0) {
       ic.bis = cis_m; ic.bie = cie_m;
-      if (f1 == 0) { ic.bie += ngh; } else { ic.bis -= ngh; }
+      if (f1 == 0) {
+        ic.bie += ngh;
+      } else {
+        ic.bis -= ngh;
+      }
     } else if (ox1 > 0) {
       ic.bis = cie_m + 1; ic.bie = cie_m + ngh;
     } else {
@@ -165,9 +199,17 @@ void MultigridBoundaryValues::RemapIndicesForMG() {
       ic.bjs = cjs_m; ic.bje = cje_m;
       if (nx2 > 1) {
         if (ox1 != 0) {
-          if (f1 == 0) { ic.bje += ngh; } else { ic.bjs -= ngh; }
+          if (f1 == 0) {
+            ic.bje += ngh;
+          } else {
+            ic.bjs -= ngh;
+          }
         } else {
-          if (f2 == 0) { ic.bje += ngh; } else { ic.bjs -= ngh; }
+          if (f2 == 0) {
+            ic.bje += ngh;
+          } else {
+            ic.bjs -= ngh;
+          }
         }
       }
     } else if (ox2 > 0) {
@@ -179,9 +221,17 @@ void MultigridBoundaryValues::RemapIndicesForMG() {
       ic.bks = cks_m; ic.bke = cke_m;
       if (nx3 > 1) {
         if (ox1 != 0 && ox2 != 0) {
-          if (f1 == 0) { ic.bke += ngh; } else { ic.bks -= ngh; }
+          if (f1 == 0) {
+            ic.bke += ngh;
+          } else {
+            ic.bks -= ngh;
+          }
         } else {
-          if (f2 == 0) { ic.bke += ngh; } else { ic.bks -= ngh; }
+          if (f2 == 0) {
+            ic.bke += ngh;
+          } else {
+            ic.bks -= ngh;
+          }
         }
       }
     } else if (ox3 > 0) {
@@ -189,15 +239,23 @@ void MultigridBoundaryValues::RemapIndicesForMG() {
     } else {
       ic.bks = cks_m - ngh; ic.bke = cks_m - 1;
     }
-    buf.icoar_ndat = (ic.bie-ic.bis+1)*(ic.bje-ic.bjs+1)*(ic.bke-ic.bks+1);
+    buf.icoar_ndat =
+        (ic.bie-ic.bis+1)
+        * (ic.bje-ic.bjs+1)
+        * (ic.bke-ic.bks+1);
   };
 
   auto compute_recv_ifine = [&](MeshBoundaryBuffer &buf,
-                                int ox1, int ox2, int ox3, int f1, int f2) {
+                                int ox1, int ox2, int ox3,
+                                int f1, int f2) {
     auto &ifn = buf.ifine[0];
     if (ox1 == 0) {
       ifn.bis = is_m; ifn.bie = ie_m;
-      if (f1 == 1) { ifn.bis += cnx1; } else { ifn.bie -= cnx1; }
+      if (f1 == 1) {
+        ifn.bis += cnx1;
+      } else {
+        ifn.bie -= cnx1;
+      }
     } else if (ox1 > 0) {
       ifn.bis = ie_m + 1; ifn.bie = ie_m + ngh;
     } else {
@@ -207,9 +265,17 @@ void MultigridBoundaryValues::RemapIndicesForMG() {
       ifn.bjs = js_m; ifn.bje = je_m;
       if (nx2 > 1) {
         if (ox1 != 0) {
-          if (f1 == 1) { ifn.bjs += cnx2; } else { ifn.bje -= cnx2; }
+          if (f1 == 1) {
+            ifn.bjs += cnx2;
+          } else {
+            ifn.bje -= cnx2;
+          }
         } else {
-          if (f2 == 1) { ifn.bjs += cnx2; } else { ifn.bje -= cnx2; }
+          if (f2 == 1) {
+            ifn.bjs += cnx2;
+          } else {
+            ifn.bje -= cnx2;
+          }
         }
       }
     } else if (ox2 > 0) {
@@ -221,9 +287,17 @@ void MultigridBoundaryValues::RemapIndicesForMG() {
       ifn.bks = ks_m; ifn.bke = ke_m;
       if (nx3 > 1) {
         if (ox1 != 0 && ox2 != 0) {
-          if (f1 == 1) { ifn.bks += cnx3; } else { ifn.bke -= cnx3; }
+          if (f1 == 1) {
+            ifn.bks += cnx3;
+          } else {
+            ifn.bke -= cnx3;
+          }
         } else {
-          if (f2 == 1) { ifn.bks += cnx3; } else { ifn.bke -= cnx3; }
+          if (f2 == 1) {
+            ifn.bks += cnx3;
+          } else {
+            ifn.bke -= cnx3;
+          }
         }
       }
     } else if (ox3 > 0) {
@@ -231,7 +305,10 @@ void MultigridBoundaryValues::RemapIndicesForMG() {
     } else {
       ifn.bks = ks_m - ngh; ifn.bke = ks_m - 1;
     }
-    buf.ifine_ndat = (ifn.bie-ifn.bis+1)*(ifn.bje-ifn.bjs+1)*(ifn.bke-ifn.bks+1);
+    buf.ifine_ndat =
+        (ifn.bie-ifn.bis+1)
+        * (ifn.bje-ifn.bjs+1)
+        * (ifn.bke-ifn.bks+1);
   };
 
   // Iterate over all buffer directions (mirrors InitializeBuffers order)
@@ -430,28 +507,46 @@ void MultigridBoundaryValues::ComputePerLevelIndices() {
       f.bks = (ox3 > 0) ? (ke_m - ng1) : ks_m;
       f.bke = (ox3 < 0) ? (ks_m + ng1) : ke_m;
       if (ox1 == 0) {
-        if (f1 == 1) { f.bis += cnx - ngh; }
-        else         { f.bie -= cnx - ngh; }
+        if (f1 == 1) {
+          f.bis += cnx - ngh;
+        } else {
+          f.bie -= cnx - ngh;
+        }
       }
       if (ox2 == 0 && md) {
         if (ox1 != 0) {
-          if (f1 == 1) { f.bjs += cnx - ngh; }
-          else         { f.bje -= cnx - ngh; }
+          if (f1 == 1) {
+            f.bjs += cnx - ngh;
+          } else {
+            f.bje -= cnx - ngh;
+          }
         } else {
-          if (f2 == 1) { f.bjs += cnx - ngh; }
-          else         { f.bje -= cnx - ngh; }
+          if (f2 == 1) {
+            f.bjs += cnx - ngh;
+          } else {
+            f.bje -= cnx - ngh;
+          }
         }
       }
       if (ox3 == 0 && td) {
         if (ox1 != 0 && ox2 != 0) {
-          if (f1 == 1) { f.bks += cnx - ngh; }
-          else         { f.bke -= cnx - ngh; }
+          if (f1 == 1) {
+            f.bks += cnx - ngh;
+          } else {
+            f.bke -= cnx - ngh;
+          }
         } else {
-          if (f2 == 1) { f.bks += cnx - ngh; }
-          else         { f.bke -= cnx - ngh; }
+          if (f2 == 1) {
+            f.bks += cnx - ngh;
+          } else {
+            f.bke -= cnx - ngh;
+          }
         }
       }
-      out.ifine_ndat = (f.bie-f.bis+1)*(f.bje-f.bjs+1)*(f.bke-f.bks+1);
+      out.ifine_ndat =
+          (f.bie-f.bis+1)
+          * (f.bje-f.bjs+1)
+          * (f.bke-f.bks+1);
     }
   };
 
@@ -469,50 +564,98 @@ void MultigridBoundaryValues::ComputePerLevelIndices() {
     // -- isame (same-level recv) --
     if (f1 == 0 && f2 == 0) {
       auto &s = out.isame;
-      if (ox1 == 0)      { s.bis = is_m;      s.bie = ie_m; }
-      else if (ox1 > 0)  { s.bis = ie_m + 1;  s.bie = ie_m + ngh; }
-      else               { s.bis = is_m - ngh; s.bie = is_m - 1; }
-      if (ox2 == 0)      { s.bjs = js_m;      s.bje = je_m; }
-      else if (ox2 > 0)  { s.bjs = je_m + 1;  s.bje = je_m + ngh; }
-      else               { s.bjs = js_m - ngh; s.bje = js_m - 1; }
-      if (ox3 == 0)      { s.bks = ks_m;      s.bke = ke_m; }
-      else if (ox3 > 0)  { s.bks = ke_m + 1;  s.bke = ke_m + ngh; }
-      else               { s.bks = ks_m - ngh; s.bke = ks_m - 1; }
-      out.isame_ndat = (s.bie-s.bis+1)*(s.bje-s.bjs+1)*(s.bke-s.bks+1);
+      if (ox1 == 0) {
+        s.bis = is_m; s.bie = ie_m;
+      } else if (ox1 > 0) {
+        s.bis = ie_m + 1; s.bie = ie_m + ngh;
+      } else {
+        s.bis = is_m - ngh; s.bie = is_m - 1;
+      }
+      if (ox2 == 0) {
+        s.bjs = js_m; s.bje = je_m;
+      } else if (ox2 > 0) {
+        s.bjs = je_m + 1; s.bje = je_m + ngh;
+      } else {
+        s.bjs = js_m - ngh; s.bje = js_m - 1;
+      }
+      if (ox3 == 0) {
+        s.bks = ks_m; s.bke = ke_m;
+      } else if (ox3 > 0) {
+        s.bks = ke_m + 1; s.bke = ke_m + ngh;
+      } else {
+        s.bks = ks_m - ngh; s.bke = ks_m - 1;
+      }
+      out.isame_ndat =
+          (s.bie-s.bis+1)
+          * (s.bje-s.bjs+1)
+          * (s.bke-s.bks+1);
     }
 
     // -- icoar (recv from coarser, matches send-to-finer) --
     {
       auto &c = out.icoar;
-      if (ox1 == 0)      { c.bis = cis_m;      c.bie = cie_m;
-                           if (f1 == 0) { c.bie += ngh; } else { c.bis -= ngh; } }
-      else if (ox1 > 0)  { c.bis = cie_m + 1;  c.bie = cie_m + ngh; }
-      else               { c.bis = cis_m - ngh; c.bie = cis_m - 1; }
+      if (ox1 == 0) {
+        c.bis = cis_m; c.bie = cie_m;
+        if (f1 == 0) {
+          c.bie += ngh;
+        } else {
+          c.bis -= ngh;
+        }
+      } else if (ox1 > 0) {
+        c.bis = cie_m + 1; c.bie = cie_m + ngh;
+      } else {
+        c.bis = cis_m - ngh; c.bie = cis_m - 1;
+      }
 
       if (ox2 == 0) {
         c.bjs = cjs_m; c.bje = cje_m;
         if (md) {
           if (ox1 != 0) {
-            if (f1 == 0) { c.bje += ngh; } else { c.bjs -= ngh; }
+            if (f1 == 0) {
+              c.bje += ngh;
+            } else {
+              c.bjs -= ngh;
+            }
           } else {
-            if (f2 == 0) { c.bje += ngh; } else { c.bjs -= ngh; }
+            if (f2 == 0) {
+              c.bje += ngh;
+            } else {
+              c.bjs -= ngh;
+            }
           }
         }
-      } else if (ox2 > 0)  { c.bjs = cje_m + 1;  c.bje = cje_m + ngh; }
-      else                  { c.bjs = cjs_m - ngh; c.bje = cjs_m - 1; }
+      } else if (ox2 > 0) {
+        c.bjs = cje_m + 1; c.bje = cje_m + ngh;
+      } else {
+        c.bjs = cjs_m - ngh; c.bje = cjs_m - 1;
+      }
 
       if (ox3 == 0) {
         c.bks = cks_m; c.bke = cke_m;
         if (td) {
           if (ox1 != 0 && ox2 != 0) {
-            if (f1 == 0) { c.bke += ngh; } else { c.bks -= ngh; }
+            if (f1 == 0) {
+              c.bke += ngh;
+            } else {
+              c.bks -= ngh;
+            }
           } else {
-            if (f2 == 0) { c.bke += ngh; } else { c.bks -= ngh; }
+            if (f2 == 0) {
+              c.bke += ngh;
+            } else {
+              c.bks -= ngh;
+            }
           }
         }
-      } else if (ox3 > 0)  { c.bks = cke_m + 1;  c.bke = cke_m + ngh; }
-      else                  { c.bks = cks_m - ngh; c.bke = cks_m - 1; }
-      out.icoar_ndat = (c.bie-c.bis+1)*(c.bje-c.bjs+1)*(c.bke-c.bks+1);
+      } else if (ox3 > 0) {
+        c.bks = cke_m + 1; c.bke = cke_m + ngh;
+      } else {
+        c.bks = cks_m - ngh; c.bke = cks_m - 1;
+      }
+      out.icoar_ndat =
+          (c.bie-c.bis+1)
+          * (c.bje-c.bjs+1)
+          * (c.bke-c.bks+1);
     }
 
     // -- ifine (recv from finer, matches send-to-coarser) --
@@ -520,34 +663,66 @@ void MultigridBoundaryValues::ComputePerLevelIndices() {
       auto &fn = out.ifine;
       if (ox1 == 0) {
         fn.bis = is_m; fn.bie = ie_m;
-        if (f1 == 1) { fn.bis += cnx; } else { fn.bie -= cnx; }
-      } else if (ox1 > 0) { fn.bis = ie_m + 1;  fn.bie = ie_m + ngh; }
-      else                 { fn.bis = is_m - ngh; fn.bie = is_m - 1; }
+        if (f1 == 1) {
+          fn.bis += cnx;
+        } else {
+          fn.bie -= cnx;
+        }
+      } else if (ox1 > 0) {
+        fn.bis = ie_m + 1; fn.bie = ie_m + ngh;
+      } else {
+        fn.bis = is_m - ngh; fn.bie = is_m - 1;
+      }
 
       if (ox2 == 0) {
         fn.bjs = js_m; fn.bje = je_m;
         if (md) {
           if (ox1 != 0) {
-            if (f1 == 1) { fn.bjs += cnx; } else { fn.bje -= cnx; }
+            if (f1 == 1) {
+              fn.bjs += cnx;
+            } else {
+              fn.bje -= cnx;
+            }
           } else {
-            if (f2 == 1) { fn.bjs += cnx; } else { fn.bje -= cnx; }
+            if (f2 == 1) {
+              fn.bjs += cnx;
+            } else {
+              fn.bje -= cnx;
+            }
           }
         }
-      } else if (ox2 > 0) { fn.bjs = je_m + 1;  fn.bje = je_m + ngh; }
-      else                 { fn.bjs = js_m - ngh; fn.bje = js_m - 1; }
+      } else if (ox2 > 0) {
+        fn.bjs = je_m + 1; fn.bje = je_m + ngh;
+      } else {
+        fn.bjs = js_m - ngh; fn.bje = js_m - 1;
+      }
 
       if (ox3 == 0) {
         fn.bks = ks_m; fn.bke = ke_m;
         if (td) {
           if (ox1 != 0 && ox2 != 0) {
-            if (f1 == 1) { fn.bks += cnx; } else { fn.bke -= cnx; }
+            if (f1 == 1) {
+              fn.bks += cnx;
+            } else {
+              fn.bke -= cnx;
+            }
           } else {
-            if (f2 == 1) { fn.bks += cnx; } else { fn.bke -= cnx; }
+            if (f2 == 1) {
+              fn.bks += cnx;
+            } else {
+              fn.bke -= cnx;
+            }
           }
         }
-      } else if (ox3 > 0) { fn.bks = ke_m + 1;  fn.bke = ke_m + ngh; }
-      else                 { fn.bks = ks_m - ngh; fn.bke = ks_m - 1; }
-      out.ifine_ndat = (fn.bie-fn.bis+1)*(fn.bje-fn.bjs+1)*(fn.bke-fn.bks+1);
+      } else if (ox3 > 0) {
+        fn.bks = ke_m + 1; fn.bke = ke_m + ngh;
+      } else {
+        fn.bks = ks_m - ngh; fn.bke = ks_m - 1;
+      }
+      out.ifine_ndat =
+          (fn.bie-fn.bis+1)
+          * (fn.bje-fn.bjs+1)
+          * (fn.bke-fn.bks+1);
     }
   };
 
@@ -797,27 +972,50 @@ TaskStatus MultigridBoundaryValues::ProlongateFCMG(DvceArray5D<Real> &u) {
                   int ok = (ox3 < 0) ? 1 : (ox3 > 0) ? -1 : 0;
 
                   int sub_x = 0, sub_y = 0, sub_z = 0;
-                  if (ox1 != 0) { sub_y = f1; sub_z = f2; }
-                  else if (ox2 != 0) { sub_x = f1; sub_z = f2; }
-                  else { sub_x = f1; sub_y = f2; }
+                  if (ox1 != 0) {
+                    sub_y = f1; sub_z = f2;
+                  } else if (ox2 != 0) {
+                    sub_x = f1; sub_z = f2;
+                  } else {
+                    sub_x = f1; sub_y = f2;
+                  }
 
                   int gis, gie, gjs, gje, gks, gke;
-                  if (ox1 < 0)      { gis = 0;              gie = ngh_l - 1; }
-                  else if (ox1 > 0) { gis = ngh_l+ncells_l;  gie = ngh_l+ncells_l+ngh_l-1; }
-                  else { gis = ngh_l+sub_x*half; gie = ngh_l+sub_x*half+half-1; }
-                  if (ox2 < 0)      { gjs = 0;              gje = ngh_l - 1; }
-                  else if (ox2 > 0) { gjs = ngh_l+ncells_l;  gje = ngh_l+ncells_l+ngh_l-1; }
-                  else { gjs = ngh_l+sub_y*half; gje = ngh_l+sub_y*half+half-1; }
-                  if (ox3 < 0)      { gks = 0;              gke = ngh_l - 1; }
-                  else if (ox3 > 0) { gks = ngh_l+ncells_l;  gke = ngh_l+ncells_l+ngh_l-1; }
-                  else { gks = ngh_l+sub_z*half; gke = ngh_l+sub_z*half+half-1; }
+                  if (ox1 < 0) {
+                    gis = 0; gie = ngh_l - 1;
+                  } else if (ox1 > 0) {
+                    gis = ngh_l + ncells_l;
+                    gie = ngh_l + ncells_l + ngh_l - 1;
+                  } else {
+                    gis = ngh_l + sub_x*half;
+                    gie = ngh_l + sub_x*half + half - 1;
+                  }
+                  if (ox2 < 0) {
+                    gjs = 0; gje = ngh_l - 1;
+                  } else if (ox2 > 0) {
+                    gjs = ngh_l + ncells_l;
+                    gje = ngh_l + ncells_l + ngh_l - 1;
+                  } else {
+                    gjs = ngh_l + sub_y*half;
+                    gje = ngh_l + sub_y*half + half - 1;
+                  }
+                  if (ox3 < 0) {
+                    gks = 0; gke = ngh_l - 1;
+                  } else if (ox3 > 0) {
+                    gks = ngh_l + ncells_l;
+                    gke = ngh_l + ncells_l + ngh_l - 1;
+                  } else {
+                    gks = ngh_l + sub_z*half;
+                    gke = ngh_l + sub_z*half + half - 1;
+                  }
 
                   for (int v = 0; v < nvar_l; ++v) {
                     for (int gk = gks; gk <= gke; ++gk) {
                       for (int gj = gjs; gj <= gje; ++gj) {
                         for (int gi = gis; gi <= gie; ++gi) {
                           Real avg = u(m,v,gk,gj,gi);
-                          u(m,v,gk,gj,gi) = ot*(4.0*avg
+                          u(m,v,gk,gj,gi) =
+                              ot*(4.0*avg
                               - u(m,v,gk+ok,gj+oj,gi+oi));
                         }
                       }
@@ -826,7 +1024,7 @@ TaskStatus MultigridBoundaryValues::ProlongateFCMG(DvceArray5D<Real> &u) {
                   continue;
                 }
 
-                if (nlev >= m_lev) continue;  // skip same-level and remaining finer
+                if (nlev >= m_lev) continue;
 
                 // Face neighbor from coarser: flux-conserving prolongation
                 // from coarse_buf_ into fine ghost cells of u
@@ -908,17 +1106,34 @@ TaskStatus MultigridBoundaryValues::ProlongateFCMG(DvceArray5D<Real> &u) {
                     }
                   }
                 } else {
-                  // Edge/corner from coarser: simple injection from coarse_buf_
                   int gis, gie, gjs, gje, gks, gke;
-                  if (ox1 < 0)      { gis = 0;             gie = ngh_l - 1; }
-                  else if (ox1 > 0) { gis = ngh_l+ncells_l; gie = ngh_l+ncells_l+ngh_l-1; }
-                  else              { gis = ngh_l;           gie = ngh_l + ncells_l - 1; }
-                  if (ox2 < 0)      { gjs = 0;             gje = ngh_l - 1; }
-                  else if (ox2 > 0) { gjs = ngh_l+ncells_l; gje = ngh_l+ncells_l+ngh_l-1; }
-                  else              { gjs = ngh_l;           gje = ngh_l + ncells_l - 1; }
-                  if (ox3 < 0)      { gks = 0;             gke = ngh_l - 1; }
-                  else if (ox3 > 0) { gks = ngh_l+ncells_l; gke = ngh_l+ncells_l+ngh_l-1; }
-                  else              { gks = ngh_l;           gke = ngh_l + ncells_l - 1; }
+                  if (ox1 < 0) {
+                    gis = 0; gie = ngh_l - 1;
+                  } else if (ox1 > 0) {
+                    gis = ngh_l + ncells_l;
+                    gie = ngh_l + ncells_l + ngh_l - 1;
+                  } else {
+                    gis = ngh_l;
+                    gie = ngh_l + ncells_l - 1;
+                  }
+                  if (ox2 < 0) {
+                    gjs = 0; gje = ngh_l - 1;
+                  } else if (ox2 > 0) {
+                    gjs = ngh_l + ncells_l;
+                    gje = ngh_l + ncells_l + ngh_l - 1;
+                  } else {
+                    gjs = ngh_l;
+                    gje = ngh_l + ncells_l - 1;
+                  }
+                  if (ox3 < 0) {
+                    gks = 0; gke = ngh_l - 1;
+                  } else if (ox3 > 0) {
+                    gks = ngh_l + ncells_l;
+                    gke = ngh_l + ncells_l + ngh_l - 1;
+                  } else {
+                    gks = ngh_l;
+                    gke = ngh_l + ncells_l - 1;
+                  }
 
                   for (int v = 0; v < nvar_l; ++v) {
                     for (int gk = gks; gk <= gke; ++gk) {
@@ -1121,20 +1336,44 @@ TaskStatus MultigridBoundaryValues::FillFineCoarseMGGhosts(DvceArray5D<Real> &u)
                 } else if (nlev > m_lev && nface == 1) {
                   // Finer neighbor, face: flux-conserving restriction
                   int sub_x = 0, sub_y = 0, sub_z = 0;
-                  if (ox1 != 0) { sub_y = f1; sub_z = f2; }
-                  if (ox2 != 0) { sub_x = f1; sub_z = f2; }
-                  if (ox3 != 0) { sub_x = f1; sub_y = f2; }
+                  if (ox1 != 0) {
+                    sub_y = f1; sub_z = f2;
+                  }
+                  if (ox2 != 0) {
+                    sub_x = f1; sub_z = f2;
+                  }
+                  if (ox3 != 0) {
+                    sub_x = f1; sub_y = f2;
+                  }
 
                   int gis, gie, gjs, gje, gks, gke;
-                  if (ox1 < 0)      { gis = 0;             gie = ngh_l - 1; }
-                  else if (ox1 > 0) { gis = ngh_l+ncells_l; gie = ngh_l+ncells_l+ngh_l-1; }
-                  else { gis = ngh_l+sub_x*half; gie = ngh_l+sub_x*half+half-1; }
-                  if (ox2 < 0)      { gjs = 0;             gje = ngh_l - 1; }
-                  else if (ox2 > 0) { gjs = ngh_l+ncells_l; gje = ngh_l+ncells_l+ngh_l-1; }
-                  else { gjs = ngh_l+sub_y*half; gje = ngh_l+sub_y*half+half-1; }
-                  if (ox3 < 0)      { gks = 0;             gke = ngh_l - 1; }
-                  else if (ox3 > 0) { gks = ngh_l+ncells_l; gke = ngh_l+ncells_l+ngh_l-1; }
-                  else { gks = ngh_l+sub_z*half; gke = ngh_l+sub_z*half+half-1; }
+                  if (ox1 < 0) {
+                    gis = 0; gie = ngh_l - 1;
+                  } else if (ox1 > 0) {
+                    gis = ngh_l + ncells_l;
+                    gie = ngh_l + ncells_l + ngh_l - 1;
+                  } else {
+                    gis = ngh_l + sub_x*half;
+                    gie = ngh_l + sub_x*half + half - 1;
+                  }
+                  if (ox2 < 0) {
+                    gjs = 0; gje = ngh_l - 1;
+                  } else if (ox2 > 0) {
+                    gjs = ngh_l + ncells_l;
+                    gje = ngh_l + ncells_l + ngh_l - 1;
+                  } else {
+                    gjs = ngh_l + sub_y*half;
+                    gje = ngh_l + sub_y*half + half - 1;
+                  }
+                  if (ox3 < 0) {
+                    gks = 0; gke = ngh_l - 1;
+                  } else if (ox3 > 0) {
+                    gks = ngh_l + ncells_l;
+                    gke = ngh_l + ncells_l + ngh_l - 1;
+                  } else {
+                    gks = ngh_l + sub_z*half;
+                    gke = ngh_l + sub_z*half + half - 1;
+                  }
 
                   int oi = (ox1 < 0) ? 1 : (ox1 > 0) ? -1 : 0;
                   int oj = (ox2 < 0) ? 1 : (ox2 > 0) ? -1 : 0;
@@ -1182,17 +1421,34 @@ TaskStatus MultigridBoundaryValues::FillFineCoarseMGGhosts(DvceArray5D<Real> &u)
                   }
 
                 } else if (nlev < m_lev) {
-                  // Coarser neighbor, edge/corner: simple injection
                   int gis, gie, gjs, gje, gks, gke;
-                  if (ox1 < 0)      { gis = 0;             gie = ngh_l - 1; }
-                  else if (ox1 > 0) { gis = ngh_l+ncells_l; gie = ngh_l+ncells_l+ngh_l-1; }
-                  else              { gis = ngh_l;           gie = ngh_l + ncells_l - 1; }
-                  if (ox2 < 0)      { gjs = 0;             gje = ngh_l - 1; }
-                  else if (ox2 > 0) { gjs = ngh_l+ncells_l; gje = ngh_l+ncells_l+ngh_l-1; }
-                  else              { gjs = ngh_l;           gje = ngh_l + ncells_l - 1; }
-                  if (ox3 < 0)      { gks = 0;             gke = ngh_l - 1; }
-                  else if (ox3 > 0) { gks = ngh_l+ncells_l; gke = ngh_l+ncells_l+ngh_l-1; }
-                  else              { gks = ngh_l;           gke = ngh_l + ncells_l - 1; }
+                  if (ox1 < 0) {
+                    gis = 0; gie = ngh_l - 1;
+                  } else if (ox1 > 0) {
+                    gis = ngh_l + ncells_l;
+                    gie = ngh_l + ncells_l + ngh_l - 1;
+                  } else {
+                    gis = ngh_l;
+                    gie = ngh_l + ncells_l - 1;
+                  }
+                  if (ox2 < 0) {
+                    gjs = 0; gje = ngh_l - 1;
+                  } else if (ox2 > 0) {
+                    gjs = ngh_l + ncells_l;
+                    gje = ngh_l + ncells_l + ngh_l - 1;
+                  } else {
+                    gjs = ngh_l;
+                    gje = ngh_l + ncells_l - 1;
+                  }
+                  if (ox3 < 0) {
+                    gks = 0; gke = ngh_l - 1;
+                  } else if (ox3 > 0) {
+                    gks = ngh_l + ncells_l;
+                    gke = ngh_l + ncells_l + ngh_l - 1;
+                  } else {
+                    gks = ngh_l;
+                    gke = ngh_l + ncells_l - 1;
+                  }
 
                   for (int v = 0; v < nvar_l; ++v) {
                     for (int gk = gks; gk <= gke; ++gk) {
@@ -1201,13 +1457,16 @@ TaskStatus MultigridBoundaryValues::FillFineCoarseMGGhosts(DvceArray5D<Real> &u)
                           int si, sj, sk;
                           if (ox1 < 0)      si = ngh_l + ncells_l - 1;
                           else if (ox1 > 0) si = ngh_l;
-                          else si = ngh_l + child_x*half + (gi - ngh_l)/2;
+                          else
+                            si = ngh_l + child_x*half + (gi - ngh_l)/2;
                           if (ox2 < 0)      sj = ngh_l + ncells_l - 1;
                           else if (ox2 > 0) sj = ngh_l;
-                          else sj = ngh_l + child_y*half + (gj - ngh_l)/2;
+                          else
+                            sj = ngh_l + child_y*half + (gj - ngh_l)/2;
                           if (ox3 < 0)      sk = ngh_l + ncells_l - 1;
                           else if (ox3 > 0) sk = ngh_l;
-                          else sk = ngh_l + child_z*half + (gk - ngh_l)/2;
+                          else
+                            sk = ngh_l + child_z*half + (gk - ngh_l)/2;
 
                           u(m, v, gk, gj, gi) = u(dm, v, sk, sj, si);
                         }
@@ -1224,15 +1483,33 @@ TaskStatus MultigridBoundaryValues::FillFineCoarseMGGhosts(DvceArray5D<Real> &u)
                     if (ox3 == 0) sub_z = f1;
                   }
                   int gis, gie, gjs, gje, gks, gke;
-                  if (ox1 < 0)      { gis = 0;             gie = ngh_l - 1; }
-                  else if (ox1 > 0) { gis = ngh_l+ncells_l; gie = ngh_l+ncells_l+ngh_l-1; }
-                  else { gis = ngh_l+sub_x*half; gie = ngh_l+sub_x*half+half-1; }
-                  if (ox2 < 0)      { gjs = 0;             gje = ngh_l - 1; }
-                  else if (ox2 > 0) { gjs = ngh_l+ncells_l; gje = ngh_l+ncells_l+ngh_l-1; }
-                  else { gjs = ngh_l+sub_y*half; gje = ngh_l+sub_y*half+half-1; }
-                  if (ox3 < 0)      { gks = 0;             gke = ngh_l - 1; }
-                  else if (ox3 > 0) { gks = ngh_l+ncells_l; gke = ngh_l+ncells_l+ngh_l-1; }
-                  else { gks = ngh_l+sub_z*half; gke = ngh_l+sub_z*half+half-1; }
+                  if (ox1 < 0) {
+                    gis = 0; gie = ngh_l - 1;
+                  } else if (ox1 > 0) {
+                    gis = ngh_l + ncells_l;
+                    gie = ngh_l + ncells_l + ngh_l - 1;
+                  } else {
+                    gis = ngh_l + sub_x*half;
+                    gie = ngh_l + sub_x*half + half - 1;
+                  }
+                  if (ox2 < 0) {
+                    gjs = 0; gje = ngh_l - 1;
+                  } else if (ox2 > 0) {
+                    gjs = ngh_l + ncells_l;
+                    gje = ngh_l + ncells_l + ngh_l - 1;
+                  } else {
+                    gjs = ngh_l + sub_y*half;
+                    gje = ngh_l + sub_y*half + half - 1;
+                  }
+                  if (ox3 < 0) {
+                    gks = 0; gke = ngh_l - 1;
+                  } else if (ox3 > 0) {
+                    gks = ngh_l + ncells_l;
+                    gke = ngh_l + ncells_l + ngh_l - 1;
+                  } else {
+                    gks = ngh_l + sub_z*half;
+                    gke = ngh_l + sub_z*half + half - 1;
+                  }
 
                   for (int v = 0; v < nvar_l; ++v) {
                     for (int gk = gks; gk <= gke; ++gk) {
@@ -1295,7 +1572,9 @@ TaskStatus MultigridBoundaryValues::FillFineCoarseMGGhosts(DvceArray5D<Real> &u)
         for (int ox2 = -1; ox2 <= 1; ++ox2) {
           for (int ox1 = -1; ox1 <= 1; ++ox1) {
             if (ox1 == 0 && ox2 == 0 && ox3 == 0) continue;
-            int nf_ = (ox1!=0?1:0)+(ox2!=0?1:0)+(ox3!=0?1:0);
+            int nf_ = (ox1 != 0 ? 1 : 0)
+                      + (ox2 != 0 ? 1 : 0)
+                      + (ox3 != 0 ? 1 : 0);
             int f2_max = (nf_ == 1) ? 1 : 0;
             int f1_max = (nf_ <= 2) ? 1 : 0;
             for (int f2_ = 0; f2_ <= f2_max; ++f2_) {
@@ -1310,7 +1589,9 @@ TaskStatus MultigridBoundaryValues::FillFineCoarseMGGhosts(DvceArray5D<Real> &u)
                 p.m = m; p.n = nn;
                 p.ox1 = ox1; p.ox2 = ox2; p.ox3 = ox3;
                 p.f1 = f1_; p.f2 = f2_;
-                p.nface = (ox1!=0?1:0)+(ox2!=0?1:0)+(ox3!=0?1:0);
+                p.nface = (ox1 != 0 ? 1 : 0)
+                          + (ox2 != 0 ? 1 : 0)
+                          + (ox3 != 0 ? 1 : 0);
                 p.remote_rank = nghbr_h.h_view(m,nn).rank;
                 p.remote_gid = nghbr_h.h_view(m,nn).gid;
                 p.nlev = nlev_n;
@@ -1373,8 +1654,10 @@ TaskStatus MultigridBoundaryValues::FillFineCoarseMGGhosts(DvceArray5D<Real> &u)
         int cz = (loc_ml.level > root_level) ?
                  static_cast<int>(loc_ml.lx3 & 1) : 0;
         int hl = ncells / 2;
-        int nl = pr.nlev, mlev = pr.m_lev, nf = pr.nface;
-        int ox1=pr.ox1, ox2=pr.ox2, ox3=pr.ox3, f1_=pr.f1, f2_=pr.f2;
+        int nl = pr.nlev, mlev = pr.m_lev;
+        int nf = pr.nface;
+        int ox1 = pr.ox1, ox2 = pr.ox2, ox3 = pr.ox3;
+        int f1_ = pr.f1, f2_ = pr.f2;
 
         auto R = [&](int v, int k, int j, int i) -> Real {
           return rdata[p][((v*ntot + k)*ntot + j)*ntot + i];
@@ -1382,171 +1665,326 @@ TaskStatus MultigridBoundaryValues::FillFineCoarseMGGhosts(DvceArray5D<Real> &u)
 
         if (nl < mlev && nf == 1) {
           if (ox1 != 0) {
-            int fig=(ox1<0)?ngh-1:ngh+ncells;
-            int fi=(ox1<0)?ngh:ngh+ncells-1;
-            int si=(ox1<0)?ngh+ncells-1:ngh;
-            int sj0=ngh+cy*hl, sk0=ngh+cz*hl;
-            for (int v=0;v<nvar;++v)
-              for (int sk=sk0;sk<sk0+hl;++sk)
-                for (int sj=sj0;sj<sj0+hl;++sj) {
-                  int fj=ngh+2*(sj-sj0), fk=ngh+2*(sk-sk0);
-                  Real cc=R(v,sk,sj,si);
-                  int sjm=(sj>ngh)?sj-1:sj, sjp=(sj<ngh+ncells-1)?sj+1:sj;
-                  int skm=(sk>ngh)?sk-1:sk, skp=(sk<ngh+ncells-1)?sk+1:sk;
-                  Real gy=0.125*(R(v,sk,sjp,si)-R(v,sk,sjm,si));
-                  Real gz=0.125*(R(v,skp,sj,si)-R(v,skm,sj,si));
-                  u(ml,v,fk,fj,fig)=ot_h*(2.0*(cc-gy-gz)+u(ml,v,fk,fj,fi));
-                  u(ml,v,fk,fj+1,fig)=ot_h*(2.0*(cc+gy-gz)+u(ml,v,fk,fj+1,fi));
-                  u(ml,v,fk+1,fj,fig)=ot_h*(2.0*(cc-gy+gz)+u(ml,v,fk+1,fj,fi));
-                  u(ml,v,fk+1,fj+1,fig)=ot_h*(2.0*(cc+gy+gz)+u(ml,v,fk+1,fj+1,fi));
+            int fig = (ox1 < 0) ? ngh - 1 : ngh + ncells;
+            int fi = (ox1 < 0) ? ngh : ngh + ncells - 1;
+            int si = (ox1 < 0) ? ngh + ncells - 1 : ngh;
+            int sj0 = ngh + cy*hl;
+            int sk0 = ngh + cz*hl;
+            for (int v = 0; v < nvar; ++v) {
+              for (int sk = sk0; sk < sk0+hl; ++sk) {
+                for (int sj = sj0; sj < sj0+hl; ++sj) {
+                  int fj = ngh + 2*(sj - sj0);
+                  int fk = ngh + 2*(sk - sk0);
+                  Real cc = R(v, sk, sj, si);
+                  int sjm = (sj > ngh) ? sj-1 : sj;
+                  int sjp = (sj < ngh+ncells-1) ? sj+1 : sj;
+                  int skm = (sk > ngh) ? sk-1 : sk;
+                  int skp = (sk < ngh+ncells-1) ? sk+1 : sk;
+                  Real gy = 0.125 *
+                      (R(v,sk,sjp,si) - R(v,sk,sjm,si));
+                  Real gz = 0.125 *
+                      (R(v,skp,sj,si) - R(v,skm,sj,si));
+                  u(ml,v,fk,fj,fig) =
+                      ot_h*(2.0*(cc-gy-gz) + u(ml,v,fk,fj,fi));
+                  u(ml,v,fk,fj+1,fig) =
+                      ot_h*(2.0*(cc+gy-gz) + u(ml,v,fk,fj+1,fi));
+                  u(ml,v,fk+1,fj,fig) =
+                      ot_h*(2.0*(cc-gy+gz) + u(ml,v,fk+1,fj,fi));
+                  u(ml,v,fk+1,fj+1,fig) =
+                      ot_h*(2.0*(cc+gy+gz) + u(ml,v,fk+1,fj+1,fi));
                 }
+              }
+            }
           } else if (ox2 != 0) {
-            int fjg=(ox2<0)?ngh-1:ngh+ncells;
-            int fj=(ox2<0)?ngh:ngh+ncells-1;
-            int sj=(ox2<0)?ngh+ncells-1:ngh;
-            int si0=ngh+cx*hl, sk0=ngh+cz*hl;
-            for (int v=0;v<nvar;++v)
-              for (int sk=sk0;sk<sk0+hl;++sk)
-                for (int si=si0;si<si0+hl;++si) {
-                  int fi=ngh+2*(si-si0), fk=ngh+2*(sk-sk0);
-                  Real cc=R(v,sk,sj,si);
-                  int sim=(si>ngh)?si-1:si, sip=(si<ngh+ncells-1)?si+1:si;
-                  int skm=(sk>ngh)?sk-1:sk, skp=(sk<ngh+ncells-1)?sk+1:sk;
-                  Real gx=0.125*(R(v,sk,sj,sip)-R(v,sk,sj,sim));
-                  Real gz=0.125*(R(v,skp,sj,si)-R(v,skm,sj,si));
-                  u(ml,v,fk,fjg,fi)=ot_h*(2.0*(cc-gx-gz)+u(ml,v,fk,fj,fi));
-                  u(ml,v,fk,fjg,fi+1)=ot_h*(2.0*(cc+gx-gz)+u(ml,v,fk,fj,fi+1));
-                  u(ml,v,fk+1,fjg,fi)=ot_h*(2.0*(cc-gx+gz)+u(ml,v,fk+1,fj,fi));
-                  u(ml,v,fk+1,fjg,fi+1)=ot_h*(2.0*(cc+gx+gz)+u(ml,v,fk+1,fj,fi+1));
+            int fjg = (ox2 < 0) ? ngh - 1 : ngh + ncells;
+            int fj = (ox2 < 0) ? ngh : ngh + ncells - 1;
+            int sj = (ox2 < 0) ? ngh + ncells - 1 : ngh;
+            int si0 = ngh + cx*hl;
+            int sk0 = ngh + cz*hl;
+            for (int v = 0; v < nvar; ++v) {
+              for (int sk = sk0; sk < sk0+hl; ++sk) {
+                for (int si = si0; si < si0+hl; ++si) {
+                  int fi = ngh + 2*(si - si0);
+                  int fk = ngh + 2*(sk - sk0);
+                  Real cc = R(v, sk, sj, si);
+                  int sim = (si > ngh) ? si-1 : si;
+                  int sip = (si < ngh+ncells-1) ? si+1 : si;
+                  int skm = (sk > ngh) ? sk-1 : sk;
+                  int skp = (sk < ngh+ncells-1) ? sk+1 : sk;
+                  Real gx = 0.125 *
+                      (R(v,sk,sj,sip) - R(v,sk,sj,sim));
+                  Real gz = 0.125 *
+                      (R(v,skp,sj,si) - R(v,skm,sj,si));
+                  u(ml,v,fk,fjg,fi) =
+                      ot_h*(2.0*(cc-gx-gz) + u(ml,v,fk,fj,fi));
+                  u(ml,v,fk,fjg,fi+1) =
+                      ot_h*(2.0*(cc+gx-gz) + u(ml,v,fk,fj,fi+1));
+                  u(ml,v,fk+1,fjg,fi) =
+                      ot_h*(2.0*(cc-gx+gz) + u(ml,v,fk+1,fj,fi));
+                  u(ml,v,fk+1,fjg,fi+1) =
+                      ot_h*(2.0*(cc+gx+gz) + u(ml,v,fk+1,fj,fi+1));
                 }
+              }
+            }
           } else {
-            int fkg=(ox3<0)?ngh-1:ngh+ncells;
-            int fk=(ox3<0)?ngh:ngh+ncells-1;
-            int sk=(ox3<0)?ngh+ncells-1:ngh;
-            int si0=ngh+cx*hl, sj0=ngh+cy*hl;
-            for (int v=0;v<nvar;++v)
-              for (int sj=sj0;sj<sj0+hl;++sj)
-                for (int si=si0;si<si0+hl;++si) {
-                  int fi=ngh+2*(si-si0), fj=ngh+2*(sj-sj0);
-                  Real cc=R(v,sk,sj,si);
-                  int sim=(si>ngh)?si-1:si, sip=(si<ngh+ncells-1)?si+1:si;
-                  int sjm=(sj>ngh)?sj-1:sj, sjp=(sj<ngh+ncells-1)?sj+1:sj;
-                  Real gx=0.125*(R(v,sk,sj,sip)-R(v,sk,sj,sim));
-                  Real gy=0.125*(R(v,sk,sjp,si)-R(v,sk,sjm,si));
-                  u(ml,v,fkg,fj,fi)=ot_h*(2.0*(cc-gx-gy)+u(ml,v,fk,fj,fi));
-                  u(ml,v,fkg,fj,fi+1)=ot_h*(2.0*(cc+gx-gy)+u(ml,v,fk,fj,fi+1));
-                  u(ml,v,fkg,fj+1,fi)=ot_h*(2.0*(cc-gx+gy)+u(ml,v,fk,fj+1,fi));
-                  u(ml,v,fkg,fj+1,fi+1)=ot_h*(2.0*(cc+gx+gy)+u(ml,v,fk,fj+1,fi+1));
+            int fkg = (ox3 < 0) ? ngh - 1 : ngh + ncells;
+            int fk = (ox3 < 0) ? ngh : ngh + ncells - 1;
+            int sk = (ox3 < 0) ? ngh + ncells - 1 : ngh;
+            int si0 = ngh + cx*hl;
+            int sj0 = ngh + cy*hl;
+            for (int v = 0; v < nvar; ++v) {
+              for (int sj = sj0; sj < sj0+hl; ++sj) {
+                for (int si = si0; si < si0+hl; ++si) {
+                  int fi = ngh + 2*(si - si0);
+                  int fj = ngh + 2*(sj - sj0);
+                  Real cc = R(v, sk, sj, si);
+                  int sim = (si > ngh) ? si-1 : si;
+                  int sip = (si < ngh+ncells-1) ? si+1 : si;
+                  int sjm = (sj > ngh) ? sj-1 : sj;
+                  int sjp = (sj < ngh+ncells-1) ? sj+1 : sj;
+                  Real gx = 0.125 *
+                      (R(v,sk,sj,sip) - R(v,sk,sj,sim));
+                  Real gy = 0.125 *
+                      (R(v,sk,sjp,si) - R(v,sk,sjm,si));
+                  u(ml,v,fkg,fj,fi) =
+                      ot_h*(2.0*(cc-gx-gy) + u(ml,v,fk,fj,fi));
+                  u(ml,v,fkg,fj,fi+1) =
+                      ot_h*(2.0*(cc+gx-gy) + u(ml,v,fk,fj,fi+1));
+                  u(ml,v,fkg,fj+1,fi) =
+                      ot_h*(2.0*(cc-gx+gy) + u(ml,v,fk,fj+1,fi));
+                  u(ml,v,fkg,fj+1,fi+1) =
+                      ot_h*(2.0*(cc+gx+gy) + u(ml,v,fk,fj+1,fi+1));
                 }
+              }
+            }
           }
         } else if (nl > mlev && nf == 1) {
-          int sx=0,sy=0,sz=0;
-          if (ox1!=0){sy=f1_;sz=f2_;} if (ox2!=0){sx=f1_;sz=f2_;}
-          if (ox3!=0){sx=f1_;sy=f2_;}
-          int gis,gie,gjs,gje,gks,gke;
-          if (ox1<0){gis=0;gie=ngh-1;}
-          else if(ox1>0){gis=ngh+ncells;gie=ngh+ncells+ngh-1;}
-          else{gis=ngh+sx*hl;gie=ngh+sx*hl+hl-1;}
-          if (ox2<0){gjs=0;gje=ngh-1;}
-          else if(ox2>0){gjs=ngh+ncells;gje=ngh+ncells+ngh-1;}
-          else{gjs=ngh+sy*hl;gje=ngh+sy*hl+hl-1;}
-          if (ox3<0){gks=0;gke=ngh-1;}
-          else if(ox3>0){gks=ngh+ncells;gke=ngh+ncells+ngh-1;}
-          else{gks=ngh+sz*hl;gke=ngh+sz*hl+hl-1;}
-          int oi=(ox1<0)?1:(ox1>0)?-1:0;
-          int oj=(ox2<0)?1:(ox2>0)?-1:0;
-          int ok=(ox3<0)?1:(ox3>0)?-1:0;
-          if (ox1!=0) {
-            int fi=(ox1>0)?ngh:ngh+ncells-1;
-            for (int v=0;v<nvar;++v)
-              for (int gk=gks;gk<=gke;++gk)
-                for (int gj=gjs;gj<=gje;++gj){
-                  int fj0=ngh+2*(gj-(ngh+sy*hl));
-                  int fk0=ngh+2*(gk-(ngh+sz*hl));
-                  Real fa=0.25*(R(v,fk0,fj0,fi)+R(v,fk0,fj0+1,fi)
-                               +R(v,fk0+1,fj0,fi)+R(v,fk0+1,fj0+1,fi));
-                  u(ml,v,gk,gj,gis)=ot_h*(4.0*fa-u(ml,v,gk+ok,gj+oj,gis+oi));
-                }
-          } else if (ox2!=0) {
-            int fj=(ox2>0)?ngh:ngh+ncells-1;
-            for (int v=0;v<nvar;++v)
-              for (int gk=gks;gk<=gke;++gk)
-                for (int gi=gis;gi<=gie;++gi){
-                  int fi0=ngh+2*(gi-(ngh+sx*hl));
-                  int fk0=ngh+2*(gk-(ngh+sz*hl));
-                  Real fa=0.25*(R(v,fk0,fj,fi0)+R(v,fk0,fj,fi0+1)
-                               +R(v,fk0+1,fj,fi0)+R(v,fk0+1,fj,fi0+1));
-                  u(ml,v,gk,gjs,gi)=ot_h*(4.0*fa-u(ml,v,gk+ok,gjs+oj,gi+oi));
-                }
+          int sx = 0, sy = 0, sz = 0;
+          if (ox1 != 0) {
+            sy = f1_; sz = f2_;
+          }
+          if (ox2 != 0) {
+            sx = f1_; sz = f2_;
+          }
+          if (ox3 != 0) {
+            sx = f1_; sy = f2_;
+          }
+          int gis, gie, gjs, gje, gks, gke;
+          if (ox1 < 0) {
+            gis = 0; gie = ngh - 1;
+          } else if (ox1 > 0) {
+            gis = ngh + ncells;
+            gie = ngh + ncells + ngh - 1;
           } else {
-            int fk=(ox3>0)?ngh:ngh+ncells-1;
-            for (int v=0;v<nvar;++v)
-              for (int gj=gjs;gj<=gje;++gj)
-                for (int gi=gis;gi<=gie;++gi){
-                  int fi0=ngh+2*(gi-(ngh+sx*hl));
-                  int fj0=ngh+2*(gj-(ngh+sy*hl));
-                  Real fa=0.25*(R(v,fk,fj0,fi0)+R(v,fk,fj0,fi0+1)
-                               +R(v,fk,fj0+1,fi0)+R(v,fk,fj0+1,fi0+1));
-                  u(ml,v,gks,gj,gi)=ot_h*(4.0*fa-u(ml,v,gks+ok,gj+oj,gi+oi));
+            gis = ngh + sx*hl;
+            gie = ngh + sx*hl + hl - 1;
+          }
+          if (ox2 < 0) {
+            gjs = 0; gje = ngh - 1;
+          } else if (ox2 > 0) {
+            gjs = ngh + ncells;
+            gje = ngh + ncells + ngh - 1;
+          } else {
+            gjs = ngh + sy*hl;
+            gje = ngh + sy*hl + hl - 1;
+          }
+          if (ox3 < 0) {
+            gks = 0; gke = ngh - 1;
+          } else if (ox3 > 0) {
+            gks = ngh + ncells;
+            gke = ngh + ncells + ngh - 1;
+          } else {
+            gks = ngh + sz*hl;
+            gke = ngh + sz*hl + hl - 1;
+          }
+          int oi = (ox1 < 0) ? 1 : (ox1 > 0) ? -1 : 0;
+          int oj = (ox2 < 0) ? 1 : (ox2 > 0) ? -1 : 0;
+          int ok = (ox3 < 0) ? 1 : (ox3 > 0) ? -1 : 0;
+          if (ox1 != 0) {
+            int fi = (ox1 > 0) ? ngh : ngh + ncells - 1;
+            for (int v = 0; v < nvar; ++v) {
+              for (int gk = gks; gk <= gke; ++gk) {
+                for (int gj = gjs; gj <= gje; ++gj) {
+                  int fj0 = ngh + 2*(gj - (ngh + sy*hl));
+                  int fk0 = ngh + 2*(gk - (ngh + sz*hl));
+                  Real fa = 0.25 *
+                      (R(v,fk0,fj0,fi) + R(v,fk0,fj0+1,fi)
+                       + R(v,fk0+1,fj0,fi)
+                       + R(v,fk0+1,fj0+1,fi));
+                  u(ml,v,gk,gj,gis) =
+                      ot_h*(4.0*fa
+                            - u(ml,v,gk+ok,gj+oj,gis+oi));
                 }
+              }
+            }
+          } else if (ox2 != 0) {
+            int fj = (ox2 > 0) ? ngh : ngh + ncells - 1;
+            for (int v = 0; v < nvar; ++v) {
+              for (int gk = gks; gk <= gke; ++gk) {
+                for (int gi = gis; gi <= gie; ++gi) {
+                  int fi0 = ngh + 2*(gi - (ngh + sx*hl));
+                  int fk0 = ngh + 2*(gk - (ngh + sz*hl));
+                  Real fa = 0.25 *
+                      (R(v,fk0,fj,fi0) + R(v,fk0,fj,fi0+1)
+                       + R(v,fk0+1,fj,fi0)
+                       + R(v,fk0+1,fj,fi0+1));
+                  u(ml,v,gk,gjs,gi) =
+                      ot_h*(4.0*fa
+                            - u(ml,v,gk+ok,gjs+oj,gi+oi));
+                }
+              }
+            }
+          } else {
+            int fk = (ox3 > 0) ? ngh : ngh + ncells - 1;
+            for (int v = 0; v < nvar; ++v) {
+              for (int gj = gjs; gj <= gje; ++gj) {
+                for (int gi = gis; gi <= gie; ++gi) {
+                  int fi0 = ngh + 2*(gi - (ngh + sx*hl));
+                  int fj0 = ngh + 2*(gj - (ngh + sy*hl));
+                  Real fa = 0.25 *
+                      (R(v,fk,fj0,fi0) + R(v,fk,fj0,fi0+1)
+                       + R(v,fk,fj0+1,fi0)
+                       + R(v,fk,fj0+1,fi0+1));
+                  u(ml,v,gks,gj,gi) =
+                      ot_h*(4.0*fa
+                            - u(ml,v,gks+ok,gj+oj,gi+oi));
+                }
+              }
+            }
           }
         } else if (nl < mlev) {
-          int gis,gie,gjs,gje,gks,gke;
-          if (ox1<0){gis=0;gie=ngh-1;}
-          else if(ox1>0){gis=ngh+ncells;gie=ngh+ncells+ngh-1;}
-          else{gis=ngh;gie=ngh+ncells-1;}
-          if (ox2<0){gjs=0;gje=ngh-1;}
-          else if(ox2>0){gjs=ngh+ncells;gje=ngh+ncells+ngh-1;}
-          else{gjs=ngh;gje=ngh+ncells-1;}
-          if (ox3<0){gks=0;gke=ngh-1;}
-          else if(ox3>0){gks=ngh+ncells;gke=ngh+ncells+ngh-1;}
-          else{gks=ngh;gke=ngh+ncells-1;}
-          for (int v=0;v<nvar;++v)
-            for (int gk=gks;gk<=gke;++gk)
-              for (int gj=gjs;gj<=gje;++gj)
-                for (int gi=gis;gi<=gie;++gi){
-                  int si,sj,sk;
-                  if (ox1<0)si=ngh+ncells-1; else if(ox1>0)si=ngh;
-                  else si=ngh+cx*hl+(gi-ngh)/2;
-                  if (ox2<0)sj=ngh+ncells-1; else if(ox2>0)sj=ngh;
-                  else sj=ngh+cy*hl+(gj-ngh)/2;
-                  if (ox3<0)sk=ngh+ncells-1; else if(ox3>0)sk=ngh;
-                  else sk=ngh+cz*hl+(gk-ngh)/2;
-                  u(ml,v,gk,gj,gi)=R(v,sk,sj,si);
+          int gis, gie, gjs, gje, gks, gke;
+          if (ox1 < 0) {
+            gis = 0; gie = ngh - 1;
+          } else if (ox1 > 0) {
+            gis = ngh + ncells;
+            gie = ngh + ncells + ngh - 1;
+          } else {
+            gis = ngh; gie = ngh + ncells - 1;
+          }
+          if (ox2 < 0) {
+            gjs = 0; gje = ngh - 1;
+          } else if (ox2 > 0) {
+            gjs = ngh + ncells;
+            gje = ngh + ncells + ngh - 1;
+          } else {
+            gjs = ngh; gje = ngh + ncells - 1;
+          }
+          if (ox3 < 0) {
+            gks = 0; gke = ngh - 1;
+          } else if (ox3 > 0) {
+            gks = ngh + ncells;
+            gke = ngh + ncells + ngh - 1;
+          } else {
+            gks = ngh; gke = ngh + ncells - 1;
+          }
+          for (int v = 0; v < nvar; ++v) {
+            for (int gk = gks; gk <= gke; ++gk) {
+              for (int gj = gjs; gj <= gje; ++gj) {
+                for (int gi = gis; gi <= gie; ++gi) {
+                  int si, sj, sk;
+                  if (ox1 < 0) {
+                    si = ngh + ncells - 1;
+                  } else if (ox1 > 0) {
+                    si = ngh;
+                  } else {
+                    si = ngh + cx*hl + (gi - ngh)/2;
+                  }
+                  if (ox2 < 0) {
+                    sj = ngh + ncells - 1;
+                  } else if (ox2 > 0) {
+                    sj = ngh;
+                  } else {
+                    sj = ngh + cy*hl + (gj - ngh)/2;
+                  }
+                  if (ox3 < 0) {
+                    sk = ngh + ncells - 1;
+                  } else if (ox3 > 0) {
+                    sk = ngh;
+                  } else {
+                    sk = ngh + cz*hl + (gk - ngh)/2;
+                  }
+                  u(ml,v,gk,gj,gi) = R(v,sk,sj,si);
                 }
+              }
+            }
+          }
         } else {
-          int sx=0,sy=0,sz=0;
-          if (nf==2){if(ox1==0)sx=f1_;if(ox2==0)sy=f1_;if(ox3==0)sz=f1_;}
-          int gis,gie,gjs,gje,gks,gke;
-          if (ox1<0){gis=0;gie=ngh-1;}
-          else if(ox1>0){gis=ngh+ncells;gie=ngh+ncells+ngh-1;}
-          else{gis=ngh+sx*hl;gie=ngh+sx*hl+hl-1;}
-          if (ox2<0){gjs=0;gje=ngh-1;}
-          else if(ox2>0){gjs=ngh+ncells;gje=ngh+ncells+ngh-1;}
-          else{gjs=ngh+sy*hl;gje=ngh+sy*hl+hl-1;}
-          if (ox3<0){gks=0;gke=ngh-1;}
-          else if(ox3>0){gks=ngh+ncells;gke=ngh+ncells+ngh-1;}
-          else{gks=ngh+sz*hl;gke=ngh+sz*hl+hl-1;}
-          for (int v=0;v<nvar;++v)
-            for (int gk=gks;gk<=gke;++gk)
-              for (int gj=gjs;gj<=gje;++gj)
-                for (int gi=gis;gi<=gie;++gi){
-                  int fi0,fi1,fj0,fj1,fk0,fk1;
-                  if (ox1<0){fi0=ngh+ncells-2;fi1=ngh+ncells-1;}
-                  else if(ox1>0){fi0=ngh;fi1=ngh+1;}
-                  else{fi0=ngh+2*(gi-(ngh+sx*hl));fi1=fi0+1;}
-                  if (ox2<0){fj0=ngh+ncells-2;fj1=ngh+ncells-1;}
-                  else if(ox2>0){fj0=ngh;fj1=ngh+1;}
-                  else{fj0=ngh+2*(gj-(ngh+sy*hl));fj1=fj0+1;}
-                  if (ox3<0){fk0=ngh+ncells-2;fk1=ngh+ncells-1;}
-                  else if(ox3>0){fk0=ngh;fk1=ngh+1;}
-                  else{fk0=ngh+2*(gk-(ngh+sz*hl));fk1=fk0+1;}
-                  u(ml,v,gk,gj,gi)=0.125*(
-                    R(v,fk0,fj0,fi0)+R(v,fk0,fj0,fi1)+
-                    R(v,fk0,fj1,fi0)+R(v,fk0,fj1,fi1)+
-                    R(v,fk1,fj0,fi0)+R(v,fk1,fj0,fi1)+
-                    R(v,fk1,fj1,fi0)+R(v,fk1,fj1,fi1));
+          int sx = 0, sy = 0, sz = 0;
+          if (nf == 2) {
+            if (ox1 == 0) sx = f1_;
+            if (ox2 == 0) sy = f1_;
+            if (ox3 == 0) sz = f1_;
+          }
+          int gis, gie, gjs, gje, gks, gke;
+          if (ox1 < 0) {
+            gis = 0; gie = ngh - 1;
+          } else if (ox1 > 0) {
+            gis = ngh + ncells;
+            gie = ngh + ncells + ngh - 1;
+          } else {
+            gis = ngh + sx*hl;
+            gie = ngh + sx*hl + hl - 1;
+          }
+          if (ox2 < 0) {
+            gjs = 0; gje = ngh - 1;
+          } else if (ox2 > 0) {
+            gjs = ngh + ncells;
+            gje = ngh + ncells + ngh - 1;
+          } else {
+            gjs = ngh + sy*hl;
+            gje = ngh + sy*hl + hl - 1;
+          }
+          if (ox3 < 0) {
+            gks = 0; gke = ngh - 1;
+          } else if (ox3 > 0) {
+            gks = ngh + ncells;
+            gke = ngh + ncells + ngh - 1;
+          } else {
+            gks = ngh + sz*hl;
+            gke = ngh + sz*hl + hl - 1;
+          }
+          for (int v = 0; v < nvar; ++v) {
+            for (int gk = gks; gk <= gke; ++gk) {
+              for (int gj = gjs; gj <= gje; ++gj) {
+                for (int gi = gis; gi <= gie; ++gi) {
+                  int fi0, fi1, fj0, fj1, fk0, fk1;
+                  if (ox1 < 0) {
+                    fi0 = ngh + ncells - 2;
+                    fi1 = ngh + ncells - 1;
+                  } else if (ox1 > 0) {
+                    fi0 = ngh; fi1 = ngh + 1;
+                  } else {
+                    fi0 = ngh + 2*(gi - (ngh + sx*hl));
+                    fi1 = fi0 + 1;
+                  }
+                  if (ox2 < 0) {
+                    fj0 = ngh + ncells - 2;
+                    fj1 = ngh + ncells - 1;
+                  } else if (ox2 > 0) {
+                    fj0 = ngh; fj1 = ngh + 1;
+                  } else {
+                    fj0 = ngh + 2*(gj - (ngh + sy*hl));
+                    fj1 = fj0 + 1;
+                  }
+                  if (ox3 < 0) {
+                    fk0 = ngh + ncells - 2;
+                    fk1 = ngh + ncells - 1;
+                  } else if (ox3 > 0) {
+                    fk0 = ngh; fk1 = ngh + 1;
+                  } else {
+                    fk0 = ngh + 2*(gk - (ngh + sz*hl));
+                    fk1 = fk0 + 1;
+                  }
+                  u(ml,v,gk,gj,gi) = 0.125 * (
+                      R(v,fk0,fj0,fi0) + R(v,fk0,fj0,fi1)
+                      + R(v,fk0,fj1,fi0) + R(v,fk0,fj1,fi1)
+                      + R(v,fk1,fj0,fi0) + R(v,fk1,fj0,fi1)
+                      + R(v,fk1,fj1,fi0) + R(v,fk1,fj1,fi1));
                 }
+              }
+            }
+          }
         }
       }
       MPI_Waitall(np, sreqs.data(), MPI_STATUSES_IGNORE);
@@ -1559,8 +1997,9 @@ TaskStatus MultigridBoundaryValues::FillFineCoarseMGGhosts(DvceArray5D<Real> &u)
 
 //----------------------------------------------------------------------------------------
 //! \fn TaskStatus MultigridBoundaryValues::PackAndSend()
-//! \brief Pack restricted fluxes of multigrid variables at fine/coarse boundaries
-//! into boundary buffers and send to neighbors. Adapts to different block sizes per level.
+//! \brief Pack restricted fluxes of multigrid variables at fine/coarse
+//! boundaries into boundary buffers and send to neighbors.
+//! Adapts to different block sizes per level.
 
 TaskStatus MultigridBoundaryValues::PackAndSendMG(const DvceArray5D<Real> &u) {
   if (pmy_mg == nullptr) return TaskStatus::complete;
@@ -1740,7 +2179,9 @@ TaskStatus MultigridBoundaryValues::PackAndSendMG(const DvceArray5D<Real> &u) {
           auto send_ptr = Kokkos::subview(sendbuf[n].vars, m, Kokkos::ALL);
           int ierr = MPI_Isend(send_ptr.data(), data_size, MPI_ATHENA_REAL, drank, tag,
                                comm_vars, &(sendbuf[n].vars_req[m]));
-          if (ierr != MPI_SUCCESS) {no_errors=false;}
+          if (ierr != MPI_SUCCESS) {
+            no_errors = false;
+          }
           pmy_mg->pmy_driver_->mg_timers_.msg_count++;
           pmy_mg->pmy_driver_->mg_timers_.bytes_sent +=
               data_size * static_cast<int64_t>(sizeof(Real));
@@ -1780,7 +2221,8 @@ TaskStatus MultigridBoundaryValues::RecvAndUnpackMG(DvceArray5D<Real> &u) {
   bool bflag = false;
   for (int m=0; m<nmb; ++m) {
     for (int n=0; n<nnghbr; ++n) {
-      if (nghbr.h_view(m,n).gid >= 0 && nghbr.h_view(m,n).rank != global_variable::my_rank) {
+      if (nghbr.h_view(m,n).gid >= 0
+          && nghbr.h_view(m,n).rank != global_variable::my_rank) {
         int nlev_h = nghbr.h_view(m,n).lev;
         int mlev_h = mblev.h_view(m);
         bool is_fc_h = (nlev_h != mlev_h);
@@ -1801,7 +2243,9 @@ TaskStatus MultigridBoundaryValues::RecvAndUnpackMG(DvceArray5D<Real> &u) {
       }
     }
   }
-  if (bflag) {return TaskStatus::incomplete;}
+  if (bflag) {
+    return TaskStatus::incomplete;
+  }
 #endif
 
   //----- STEP 2: buffers have all completed, so unpack
@@ -1934,14 +2378,18 @@ TaskStatus MultigridBoundaryValues::InitRecvMG(const int nvars) {
 
           int ierr = MPI_Irecv(recv_ptr.data(), data_size, MPI_ATHENA_REAL, drank, tag,
                                comm_vars, &(recvbuf[n].vars_req[m]));
-          if (ierr != MPI_SUCCESS) {no_errors=false;}
+          if (ierr != MPI_SUCCESS) {
+            no_errors = false;
+          }
         }
       }
     }
   }
   if (!(no_errors)) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-       << std::endl << "MPI error in posting non-blocking receives" << std::endl;
+    std::cout << "### FATAL ERROR in " << __FILE__
+       << " at line " << __LINE__ << std::endl
+       << "MPI error in posting non-blocking receives"
+       << std::endl;
     std::exit(EXIT_FAILURE);
   }
 #endif

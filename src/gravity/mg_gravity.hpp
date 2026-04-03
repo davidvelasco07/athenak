@@ -8,6 +8,9 @@
 //! \file mg_gravity.hpp
 //! \brief defines MGGravity class
 
+// C++ headers
+#include <vector>
+
 // Athenak headers
 #include "../athena.hpp"
 #include "../multigrid/multigrid.hpp"
@@ -51,25 +54,27 @@ class MGGravity : public Multigrid {
 //! \brief Multigrid gravity solver
 
 class MGGravityDriver : public MultigridDriver {
-  public:
-    MGGravityDriver(MeshBlockPack *pmbp, ParameterInput *pin);
-    ~MGGravityDriver();
+ public:
+  MGGravityDriver(MeshBlockPack *pmbp, ParameterInput *pin);
+  ~MGGravityDriver();
 
-    // Allocate a pack-aware multigrid instance for meshblock levels (attach to pack->pgrav->pmg)
-    void CreateMeshblockMultigrids(MeshBlockPack *pmbp);
-    void Solve(Driver *pdriver, int stage, Real dt = 0.0) final;
-    void SetFourPiG(Real four_pi_G);
+  void CreateMeshblockMultigrids(MeshBlockPack *pmbp);
+  void Solve(Driver *pdriver, int stage,
+             Real dt = 0.0) final;
+  void SetFourPiG(Real four_pi_G);
 
-    // octet physics (host-side)
-    void SmoothOctet(MGOctet &oct, int rlev, int color) final;
-    void CalculateDefectOctet(MGOctet &oct, int rlev) final;
-    void CalculateFASRHSOctet(MGOctet &oct, int rlev) final;
-    void ProlongateOctetBoundariesFluxCons(MGOctet &oct,
-         std::vector<Real> &cbuf, const std::vector<bool> &ncoarse) final;
+  void SmoothOctet(MGOctet &oct, int rlev,
+                   int color) final;
+  void CalculateDefectOctet(MGOctet &oct, int rlev) final;
+  void CalculateFASRHSOctet(MGOctet &oct, int rlev) final;
+  void ProlongateOctetBoundariesFluxCons(
+      MGOctet &oct, std::vector<Real> &cbuf,
+      const std::vector<bool> &ncoarse) final;
 
-    friend class MGGravity;
-  private:
-    Real four_pi_G_, omega_;
+  friend class MGGravity;
+
+ private:
+  Real four_pi_G_, omega_;
 };
 
 #endif // GRAVITY_MG_GRAVITY_HPP_

@@ -13,9 +13,8 @@ and verifies that the mesh actually adapts during the simulation while still
 recovering the correct growth rate.
 """
 
-import pytest
 from test_suite.multigrid.mg_utils import (
-    run_athenak, assert_jeans_growth_rate, assert_solver_convergence,
+    run_athenak, assert_solver_convergence,
     parse_jeans_omega, parse_amr_block_counts, cleanup,
 )
 
@@ -41,10 +40,10 @@ def _growth_rate_flags(res, n_jeans, nsmooth, fmg):
     ]
 
 
-#@pytest.mark.parametrize("nsmooth", [1])
-#@pytest.mark.parametrize("njeans", [0.5, 2.0])
-#@pytest.mark.parametrize("method", ["fmg"])
-#def test_jeans_growth_rate_mpicpu(nsmooth, njeans, method):
+# @pytest.mark.parametrize("nsmooth", [1])
+# @pytest.mark.parametrize("njeans", [0.5, 2.0])
+# @pytest.mark.parametrize("method", ["fmg"])
+# def test_jeans_growth_rate_mpicpu(nsmooth, njeans, method):
 #    """Jeans wave growth rate / frequency should converge to analytical (MPI)."""
 #    fmg = method == "fmg"
 #    assert_jeans_growth_rate(

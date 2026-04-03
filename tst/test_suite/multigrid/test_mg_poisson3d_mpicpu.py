@@ -13,9 +13,10 @@ from test_suite.multigrid.mg_utils import (
     parse_final_defect, assert_defect_consistency, cleanup,
 )
 
-threshold=1E-9
+threshold = 1E-9
 
-def _selfgravity_flags_mpi(res,nsmooth,fmg,mb=None):
+
+def _selfgravity_flags_mpi(res, nsmooth, fmg, mb=None):
     """Common flags for selfgravity MPI tests."""
     if mb is None:
         mb = max(res // 4, 8)
@@ -30,23 +31,24 @@ def _selfgravity_flags_mpi(res,nsmooth,fmg,mb=None):
     ]
 
 
-
 # ---------------------------------------------------------------------------
 # Defect convergence (MPI)
 # ---------------------------------------------------------------------------
-@pytest.mark.parametrize("nsmooth", [1,2])
+@pytest.mark.parametrize("nsmooth", [1, 2])
 @pytest.mark.parametrize("method", ["fmg", "mgi"])
-def test_selfgravity_uniform_hydro_mpicpu(nsmooth,method):
+def test_selfgravity_uniform_hydro_mpicpu(nsmooth, method):
     """MG defect should converge to near machine precision on 64^3 hydro mesh."""
     try:
         results = run_athenak(
             "inputs/selfgravity.athinput",
-            _selfgravity_flags_mpi(64,nsmooth,method=="fmg") + ["gravity/show_defect=2"],
+            _selfgravity_flags_mpi(64, nsmooth, method == "fmg") +
+            ["gravity/show_defect=2"],
             mpi=True, threads=4,
         )
         assert results[0], "Selfgravity hydro MPI run failed"
-        assert_solver_convergence(results[1], threshold, max_iterations=7,
-                                max_avg_ratio=0.14, label="selfgravity_uniform_hydro_mpipu: ")
+        assert_solver_convergence(
+            results[1], threshold, max_iterations=7,
+            max_avg_ratio=0.14, label="selfgravity_uniform_hydro_mpipu: ")
     finally:
         cleanup()
 

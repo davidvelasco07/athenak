@@ -37,6 +37,7 @@ def _growth_rate_flags(res, n_jeans, fmg):
         "gravity/show_defect=0",
     ]
 
+
 @pytest.mark.parametrize("method", ["fmg", "mgi"])
 def test_jeans_stable_convergence_cpu(method):
     """Stable Jeans wave: oscillation frequency should converge to analytical."""
@@ -44,11 +45,12 @@ def test_jeans_stable_convergence_cpu(method):
     assert_jeans_growth_rate(
         "inputs/jeans_wave.athinput",
         lambda res: _growth_rate_flags(res, 0.5, fmg),
-        res_list=[32,64],
+        res_list=[32, 64],
         max_rel_error=0.01,
         max_ratio=0.3,
         label=f"jeans_stable_{method}_cpu: ",
     )
+
 
 @pytest.mark.parametrize("method", ["fmg", "mgi"])
 def test_jeans_unstable_convergence_cpu(method):

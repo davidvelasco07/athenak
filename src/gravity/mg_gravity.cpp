@@ -10,12 +10,12 @@
 
 // C++ headers
 #include <algorithm>
-#include <chrono>
 #include <iostream>
 #include <sstream>    // sstream
 #include <stdexcept>  // runtime_error
 #include <string>     // c_str()
 #include <iomanip>
+#include <vector>
 
 // Athena++ headers
 #include "../athena.hpp"
@@ -202,8 +202,9 @@ void MGGravityDriver::Solve(Driver *pdriver, int stage, Real dt) {
   mglevels_->ApplyMask();
 
   // iterative mode - load initial guess
-  if(!full_multigrid_) 
+  if (!full_multigrid_) {
     mglevels_->LoadFinestData(pmy_pack_->pgrav->phi, 0, indcs_.ng);
+  }
 
   // Finalize setup (SubtractAverage, level counts) after data is loaded
   SetupMultigrid(dt, false);
@@ -358,10 +359,12 @@ void MGGravityDriver::CalculateFASRHSOctet(MGOctet &oct, int rlev) {
 //!        Implements the "Conservative Formulation" from Tomida & Stone (2023) Eq. 24-27.
 //!        Ghost = (2/3)*coarse_interpolated + (1/3)*fine_active, where transverse
 //!        gradients from the coarse buffer provide sub-cell interpolation.
-//!        Only face neighbors are handled (edges/corners are unused by the 7-point stencil).
+//!        Only face neighbors are handled
+//!        (edges/corners are unused by the 7-point stencil).
 
-void MGGravityDriver::ProlongateOctetBoundariesFluxCons(MGOctet &oct,
-     std::vector<Real> &cbuf, const std::vector<bool> &ncoarse) {
+void MGGravityDriver::ProlongateOctetBoundariesFluxCons(
+    MGOctet &oct, std::vector<Real> &cbuf,
+    const std::vector<bool> &ncoarse) {
   constexpr Real ot = 1.0/3.0;
   const int ngh = mgroot_->GetGhostCells();
   const int l = ngh, r = ngh + 1;
@@ -370,8 +373,11 @@ void MGGravityDriver::ProlongateOctetBoundariesFluxCons(MGOctet &oct,
   for (int ox1 = -1; ox1 <= 1; ox1 += 2) {
     if (ncoarse[1*9 + 1*3 + (ox1+1)]) {
       int i, fi, fig;
-      if (ox1 > 0) { i = ngh + 1; fi = ngh + 1; fig = ngh + 2; }
-      else         { i = ngh - 1; fi = ngh;     fig = ngh - 1; }
+      if (ox1 > 0) {
+        i = ngh + 1; fi = ngh + 1; fig = ngh + 2;
+      } else {
+        i = ngh - 1; fi = ngh;     fig = ngh - 1;
+      }
       Real ccval = BufRef(cbuf, 3, 0, ngh, ngh, i);
       Real gx2c = 0.125*(BufRef(cbuf, 3, 0, ngh, ngh+1, i)
                         - BufRef(cbuf, 3, 0, ngh, ngh-1, i));
@@ -388,8 +394,11 @@ void MGGravityDriver::ProlongateOctetBoundariesFluxCons(MGOctet &oct,
   for (int ox2 = -1; ox2 <= 1; ox2 += 2) {
     if (ncoarse[1*9 + (ox2+1)*3 + 1]) {
       int j, fj, fjg;
-      if (ox2 > 0) { j = ngh + 1; fj = ngh + 1; fjg = ngh + 2; }
-      else         { j = ngh - 1; fj = ngh;     fjg = ngh - 1; }
+      if (ox2 > 0) {
+        j = ngh + 1; fj = ngh + 1; fjg = ngh + 2;
+      } else {
+        j = ngh - 1; fj = ngh;     fjg = ngh - 1;
+      }
       Real ccval = BufRef(cbuf, 3, 0, ngh, j, ngh);
       Real gx1c = 0.125*(BufRef(cbuf, 3, 0, ngh, j, ngh+1)
                         - BufRef(cbuf, 3, 0, ngh, j, ngh-1));
@@ -406,8 +415,11 @@ void MGGravityDriver::ProlongateOctetBoundariesFluxCons(MGOctet &oct,
   for (int ox3 = -1; ox3 <= 1; ox3 += 2) {
     if (ncoarse[(ox3+1)*9 + 1*3 + 1]) {
       int k, fk, fkg;
-      if (ox3 > 0) { k = ngh + 1; fk = ngh + 1; fkg = ngh + 2; }
-      else         { k = ngh - 1; fk = ngh;     fkg = ngh - 1; }
+      if (ox3 > 0) {
+        k = ngh + 1; fk = ngh + 1; fkg = ngh + 2;
+      } else {
+        k = ngh - 1; fk = ngh;     fkg = ngh - 1;
+      }
       Real ccval = BufRef(cbuf, 3, 0, k, ngh, ngh);
       Real gx1c = 0.125*(BufRef(cbuf, 3, 0, k, ngh, ngh+1)
                         - BufRef(cbuf, 3, 0, k, ngh, ngh-1));

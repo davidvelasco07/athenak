@@ -113,9 +113,9 @@ tests = os.path.abspath(tests)
 
 athena_dir = os.path.abspath("build/src/")
 athena = athena_dir+"/athena"
-#Check if build exists
+# Check if build exists
 built = os.path.exists(athena)
-build = args.make or not(built)
+build = args.make or not (built)
 
 if args.cpu is not None:
     if build:
@@ -126,7 +126,8 @@ if args.cpu is not None:
 
 if args.mpicpu is not None:
     if build:
-        testutils.clean_make(flags=cmake_flags(args.mpicpu, ["-D", "Athena_ENABLE_MPI=ON"]))
+        testutils.clean_make(flags=cmake_flags(
+            args.mpicpu, ["-D", "Athena_ENABLE_MPI=ON"]))
     else:
         os.chdir(athena_dir)
     test([tests, "-k", "_mpicpu"])  # run all scripts with _mpicpu in name

@@ -11,11 +11,13 @@
 // C headers
 
 // C++ headers
-#include <chrono>
 #include <cstdint>  // std::int64_t
 #include <cstdio> // std::size_t
 #include <cstring> // memcpy
 #include <iostream>
+#include <map>
+#include <memory>
+#include <string>
 #include <type_traits>
 #include <unordered_map>
 #include <vector>
@@ -369,7 +371,7 @@ class Multigrid {
       src(m,0,k,j,i) += stencil.Apply(u, coeff, m, 0, k, j, i) * idx2;
     });
   }
-  
+
   friend class MultigridDriver;
   friend class MultigridBoundaryValues;
 
@@ -543,8 +545,8 @@ class MultigridDriver {
 
  public:
   MGTimers mg_timers_;
- protected:
 
+ protected:
   // Source masking (zero source outside mask_radius_)
   Real mask_radius_;
   Real mask_origin_[3];
@@ -596,7 +598,8 @@ class MultigridBoundaryValues : public MeshBoundaryValuesCC {
  public:
   static constexpr int kMaxMGLevels = 20;
 
-  MultigridBoundaryValues(MeshBlockPack *pmbp, ParameterInput *pin, bool coarse, Multigrid *pmg);
+  MultigridBoundaryValues(MeshBlockPack *pmbp, ParameterInput *pin,
+                          bool coarse, Multigrid *pmg);
   ~MultigridBoundaryValues();
 
   void RemapIndicesForMG();

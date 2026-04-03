@@ -24,6 +24,7 @@ from test_suite.multigrid.mg_utils import (
 
 input_file = "inputs/jeans_wave.athinput"
 
+
 def _growth_rate_flags(res, n_jeans, nsmooth, fmg):
     """Flags for Jeans wave growth-rate test at a given resolution."""
     mb = max(res // 4, 8)
@@ -43,6 +44,7 @@ def _growth_rate_flags(res, n_jeans, nsmooth, fmg):
         f"gravity/full_multigrid={'true' if fmg else 'false'}",
         "gravity/show_defect=0",
     ]
+
 
 @pytest.mark.parametrize("njeans", [0.5, 2.0])
 @pytest.mark.parametrize("method", ["fmg", "mgi"])
@@ -100,6 +102,7 @@ def test_jeans_solve_iterative_gpu():
 # AMR
 # ---------------------------------------------------------------------------
 
+
 def test_jeans_amr_gpu():
     """Jeans wave with AMR and background velocity: mesh should adapt
     (creating and destroying blocks as the wave sweeps) and growth rate converge."""
@@ -116,7 +119,7 @@ def test_jeans_amr_gpu():
                 "time/cfl_number=0.3",
                 "problem/n_jeans=1.01",
                 "problem/amp=1.0e-3",
-                "problem/v0=0.5",
+                "problem/v0=0.4",
                 "amr_criterion0/value_max=1.0005",
                 "gravity/threshold=-1",
                 "gravity/niteration=5",

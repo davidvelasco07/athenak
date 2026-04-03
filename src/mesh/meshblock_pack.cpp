@@ -247,10 +247,9 @@ void MeshBlockPack::AddPhysics(ParameterInput *pin) {
     pgrav = new gravity::Gravity(this, pin);
     //pgrav->AssembleTasks(tl_map);
     nphysics++;
-  }
-  else {
+  } else {
     pgrav = nullptr;
-  } 
+  }
   // Check that at least ONE is requested and initialized.
   // Error if there are no physics blocks in the input file.
   if (nphysics == 0) {

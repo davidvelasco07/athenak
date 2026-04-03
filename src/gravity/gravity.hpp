@@ -26,25 +26,25 @@ class Coordinates;
 class Multigrid;
 namespace gravity {
 class Gravity {
-    public:
-        Gravity(MeshBlockPack *pmbp, ParameterInput *pin);
-        ~Gravity();
+ public:
+  Gravity(MeshBlockPack *pmbp, ParameterInput *pin);
+  ~Gravity();
 
-        MeshBlockPack* pmy_pack;  // ptr to MeshBlock containing this Field
-        DvceArray5D<Real> phi, coarse_phi;   // gravitational potential
-        DvceArray5D<Real> def;   // defect from the Multigrid solver
-        Real four_pi_G;
-        bool output_defect;
-        bool fill_ghost;
-        MGGravityDriver *pmgd;
-        MGGravity *pmg;
-        void SaveFaceBoundaries();
-        void RestoreFaceBoundaries();
+  MeshBlockPack* pmy_pack;
+  DvceArray5D<Real> phi, coarse_phi;
+  DvceArray5D<Real> def;
+  Real four_pi_G;
+  bool output_defect;
+  bool fill_ghost;
+  MGGravityDriver *pmgd;
+  MGGravity *pmg;
+  void SaveFaceBoundaries();
+  void RestoreFaceBoundaries();
 
-        friend class MGGravityDriver;
+  friend class MGGravityDriver;
 
-    private:
-        DvceArray5D<Real> fbuf_[6];
+ private:
+  DvceArray5D<Real> fbuf_[6];
 };
-} // namespace gravity
+}  // namespace gravity
 #endif // GRAVITY_GRAVITY_HPP_

@@ -58,7 +58,7 @@ def run_command(command: List[str], text: bool = False, **kwargs) -> bool:
     if process.returncode != 0:
         logging.error(f"Command failed with return code {process.returncode}")
     result = process.returncode == 0
-    return [result,output]
+    return [result, output]
 
 
 def cmake(flags: List[str] = [], **kwargs) -> bool:
@@ -105,7 +105,7 @@ def make(threads: int = os.cpu_count(), **kwargs) -> bool:
     os.chdir(ATHENAK_BUILD)
     command = ["make", "-j", f"{threads}"]
     start_time = time.time()
-    status,_ = run_command(command, **kwargs)
+    status, _ = run_command(command, **kwargs)
     end_time = time.time()
     elapsed_time = end_time - start_time  # Calculate elapsed time
     logging.info(f"make completed in {elapsed_time:.2f} seconds")
@@ -159,8 +159,8 @@ def mpi_run(
     results = run_command(command, **kwargs)
     if not results[0]:
         logging.error(
-           f"Failed to execute {inputfile} with flags {flags} using MPI "
-           f"and {threads}-threads"
+            f"Failed to execute {inputfile} with flags {flags} using MPI "
+            f"and {threads}-threads"
         )
         raise RuntimeError(
             f"Failed to execute {inputfile} with flags {flags} using MPI "
@@ -168,9 +168,10 @@ def mpi_run(
         )
     return results
 
+
 def run_athenak(inputfile: str, flags=[], mpi=False, **kwargs):
-    RUN =  mpi_run if mpi else run
-    return RUN(inputfile,flags,**kwargs)
+    RUN = mpi_run if mpi else run
+    return RUN(inputfile, flags, **kwargs)
 
 
 def cleanup(text=False) -> None:
@@ -258,8 +259,8 @@ def test_error_convergence(
     for wv in _wave:
         try:
             for res in _res:
-                results,_ = run_athenak(
-                    input_file, arguments(iv, rv, fv, wv, res, soe, test_name),mpi=mpi
+                results, _ = run_athenak(
+                    input_file, arguments(iv, rv, fv, wv, res, soe, test_name), mpi=mpi
                 )
                 assert results, f"Run failed for {soe}+{iv}+{res}+{fv}+{rv}+{wv}."
             maxerror, maxerrorratio = errors[(soe, iv, rv, wv)]

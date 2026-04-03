@@ -10,7 +10,6 @@
 
 // C++ headers
 #include <algorithm>
-#include <chrono>
 #include <climits>
 #include <cmath>
 #include <cstdint>
@@ -20,6 +19,7 @@
 #include <sstream>    // sstream
 #include <stdexcept>  // runtime_error
 #include <string>     // c_str()
+#include <unordered_map>
 #include <vector>
 
 // Athena++ headers
@@ -36,12 +36,16 @@
 MultigridDriver::MultigridDriver(MeshBlockPack *pmbp, int invar):
     nranks_(global_variable::nranks), nthreads_(1), nbtotal_(pmbp->pmesh->nmb_total),
     nvar_(invar),
-    maxreflevel_(pmbp->pmesh->multilevel?pmbp->pmesh->max_level-pmbp->pmesh->root_level:0),
-    nrbx1_(pmbp->pmesh->nmb_rootx1), nrbx2_(pmbp->pmesh->nmb_rootx2), nrbx3_(pmbp->pmesh->nmb_rootx3),
+    maxreflevel_(pmbp->pmesh->multilevel ?
+        pmbp->pmesh->max_level - pmbp->pmesh->root_level : 0),
+    nrbx1_(pmbp->pmesh->nmb_rootx1),
+    nrbx2_(pmbp->pmesh->nmb_rootx2),
+    nrbx3_(pmbp->pmesh->nmb_rootx3),
     pmy_pack_(pmbp),
     pmy_mesh_(pmbp->pmesh),
     needinit_(true), amr_seq_(0), nreflevel_(0), eps_(-1.0),
-    niter_(-1), npresmooth_(1), npostsmooth_(1), coffset_(0), fprolongation_(0), mg_verbose_(0),
+    niter_(-1), npresmooth_(1), npostsmooth_(1), coffset_(0),
+    fprolongation_(0), mg_verbose_(0),
     nb_rank_(0), ncoeff_(0),
     octets_(nullptr), octetmap_(nullptr), octetbflag_(nullptr), noctets_(nullptr),
     oct_u_buf_(nullptr), oct_def_buf_(nullptr),
@@ -89,7 +93,8 @@ MultigridDriver::MultigridDriver(MeshBlockPack *pmbp, int invar):
   // Allocate octet arrays for max possible refinement levels
   if (maxreflevel_ > 0) {
     octets_ = new std::vector<MGOctet>[maxreflevel_];
-    octetmap_ = new std::unordered_map<LogicalLocation, int, LogicalLocationHash>[maxreflevel_];
+    octetmap_ = new std::unordered_map<
+        LogicalLocation, int, LogicalLocationHash>[maxreflevel_];
     octetbflag_ = new std::vector<bool>[maxreflevel_];
     noctets_ = new int[maxreflevel_]();
     oct_u_buf_    = new std::vector<Real>[maxreflevel_];
@@ -229,7 +234,6 @@ void MultigridDriver::PrepareForAMR() {
     if (pmy_mesh_->multilevel) {
       mglevels_->UpdateBlockDx();
     }
-    
   }
   needinit_ = false;
 }
@@ -364,34 +368,40 @@ void MultigridDriver::InitializeOctets() {
             if (nloc.lx1 < 0) {
               if (mg_mesh_bcs_[BoundaryFace::inner_x1] == BoundaryFlag::periodic)
                 nloc.lx1 = maxlx1 - 1;
-              else outside = true;
+              else
+                outside = true;
             }
             if (nloc.lx1 >= maxlx1) {
               if (mg_mesh_bcs_[BoundaryFace::outer_x1] == BoundaryFlag::periodic)
                 nloc.lx1 = 0;
-              else outside = true;
+              else
+                outside = true;
             }
             nloc.lx2 = oloc.lx2 + ox2;
             if (nloc.lx2 < 0) {
               if (mg_mesh_bcs_[BoundaryFace::inner_x2] == BoundaryFlag::periodic)
                 nloc.lx2 = maxlx2 - 1;
-              else outside = true;
+              else
+                outside = true;
             }
             if (nloc.lx2 >= maxlx2) {
               if (mg_mesh_bcs_[BoundaryFace::outer_x2] == BoundaryFlag::periodic)
                 nloc.lx2 = 0;
-              else outside = true;
+              else
+                outside = true;
             }
             nloc.lx3 = oloc.lx3 + ox3;
             if (nloc.lx3 < 0) {
               if (mg_mesh_bcs_[BoundaryFace::inner_x3] == BoundaryFlag::periodic)
                 nloc.lx3 = maxlx3 - 1;
-              else outside = true;
+              else
+                outside = true;
             }
             if (nloc.lx3 >= maxlx3) {
               if (mg_mesh_bcs_[BoundaryFace::outer_x3] == BoundaryFlag::periodic)
                 nloc.lx3 = 0;
-              else outside = true;
+              else
+                outside = true;
             }
             if (outside) {
               oct.neighbors[dir] = {-2, -2};
@@ -489,8 +499,11 @@ void MultigridDriver::TransferFromBlocksToRoot(bool initflag) {
 #if MPI_PARALLEL_ENABLED
   int ncomm = initflag ? nv : 2*nv;
   for (int v = 0; v < ncomm; ++v) {
-    MPI_Allgatherv(MPI_IN_PLACE, nblist_[global_variable::my_rank], MPI_ATHENA_REAL,
-                   &rootbuf.h_view(v,0), nblist_, nslist_, MPI_ATHENA_REAL, MPI_COMM_WORLD);
+    MPI_Allgatherv(MPI_IN_PLACE,
+        nblist_[global_variable::my_rank],
+        MPI_ATHENA_REAL, &rootbuf.h_view(v,0),
+        nblist_, nslist_, MPI_ATHENA_REAL,
+        MPI_COMM_WORLD);
   }
 #endif
 
@@ -600,7 +613,7 @@ void MultigridDriver::OneStepToFiner(Driver *pdriver, int nsmooth) {
     int flag = 0;
     // flag = 1: first time on meshblock levels
     if (current_level_ == nrootlevel_ + nreflevel_ - 1) flag = 1;
-    
+
     if (current_level_ == ntotallevel_ - 2) flag = 2;
     SetMGTaskListToFiner(nsmooth, ngh, flag);
     pdriver->ExecuteTaskList(pmy_mesh_, "mg_to_finer", 0);
@@ -693,14 +706,13 @@ void MultigridDriver::OneStepToCoarser(Driver *pdriver, int nsmooth) {
 //! \brief Solve the V-cycle starting from the current level
 
 void MultigridDriver::SolveVCycle(Driver *pdriver, int npresmooth, int npostsmooth) {
-  int startlevel=current_level_;
+  int startlevel = current_level_;
   coffset_ ^= 1;
-  while (current_level_ > 0){
+  while (current_level_ > 0) {
     OneStepToCoarser(pdriver, npresmooth);
   }
   SolveCoarsestGrid();
-  while (current_level_ < startlevel)
-  {
+  while (current_level_ < startlevel) {
     OneStepToFiner(pdriver, npostsmooth);
   }
   return;

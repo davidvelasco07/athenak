@@ -17,6 +17,7 @@ LOG_FILE_PATH = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "test_log.txt")
 )
 
+
 def parse_mg_defects(stdout: str) -> List[float]:
     """Parse MG defect values from stdout.
 
@@ -26,7 +27,8 @@ def parse_mg_defects(stdout: str) -> List[float]:
       MG iteration N: defect = ...
     Returns flat list of defect values in order (initial first, then iterations).
     """
-    pattern = re.compile(r"(?:MG\s+initial\s+defect|MG\s+iteration\s+\d+:\s+defect)\s*=\s*([0-9.eE+\-]+)")
+    pattern = re.compile(
+        r"(?:MG\s+initial\s+defect|MG\s+iteration\s+\d+:\s+defect)\s*=\s*([0-9.eE+\-]+)")
     defects = []
     for match in pattern.finditer(stdout):
         defects.append(float(match.group(1)))
@@ -266,7 +268,6 @@ def assert_solver_convergence(stdout: str, threshold: float,
         pytest.fail(
             f"{label}Worst average convergence ratio {worst_geo_mean:.4f} "
             f"exceeds {max_avg_ratio}")
-    
 
     return max_vcycles, worst_geo_mean, solves
 

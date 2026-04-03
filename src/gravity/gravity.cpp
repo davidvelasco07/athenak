@@ -38,7 +38,6 @@ Gravity::Gravity(MeshBlockPack *pmbp, ParameterInput *pin):
     four_pi_G(-1.0),
     output_defect(false),
     fill_ghost(false) {
-    
     four_pi_G = pin->GetOrAddReal("gravity", "four_pi_G",-1.0);
     output_defect = pin->GetOrAddBoolean("gravity", "output_defect", false);
     fill_ghost = pin->GetOrAddBoolean("gravity", "fill_ghost", true);
@@ -53,7 +52,6 @@ Gravity::Gravity(MeshBlockPack *pmbp, ParameterInput *pin):
     // create multigrid driver/solver
     // The driver allocates multigrid instances for root level and meshblock levels
     pmgd = new MGGravityDriver(pmbp, pin);
-    
 
     // Enroll CellCenteredBoundaryVariable object
     //gbvar.bvar_index = pmb->pbval->bvars.size();

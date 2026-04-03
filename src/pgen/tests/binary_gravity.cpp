@@ -122,8 +122,7 @@ void ProblemGenerator::BinaryGravity(ParameterInput *pin, const bool restart) {
         if (r1 < r + dr) {
           if (r1 < r - dr) {
             rho = den1;
-          } 
-          else {
+          } else {
             int n_in = 0;
             for (int kk = 0; kk < 10; ++kk) {
               Real zz = zf + (kk + 0.5) * dd;
@@ -141,9 +140,8 @@ void ProblemGenerator::BinaryGravity(ParameterInput *pin, const bool restart) {
         }
         if (r2 < r + dr) {
           if (r2 < r - dr) {
-            rho = den2;  // interior of sphere 2 (overwrites if also in sphere 1)
-          } 
-          else {
+            rho = den2;
+          } else {
             int n_in = 0;
             for (int kk = 0; kk < 10; ++kk) {
               Real zz = zf + (kk + 0.5) * dd;
@@ -195,9 +193,13 @@ void ProblemGenerator::BinaryGravity(ParameterInput *pin, const bool restart) {
 #endif
 
   Real fac = (total_mass > 0.0) ? ((m1 + m2) / total_mass) : 1.0;
-  if (global_variable::my_rank == 0 && (total_mass < (m1 + m2) * 0.7 || total_mass > (m1 + m2) * 1.3)) {
-    std::cout << "binary_gravity: total mass " << total_mass << " far from m1+m2=" << (m1 + m2)
-              << "; resolution may be too low." << std::endl;
+  if (global_variable::my_rank == 0
+      && (total_mass < (m1+m2)*0.7
+          || total_mass > (m1+m2)*1.3)) {
+    std::cout << "binary_gravity: total mass "
+              << total_mass << " far from m1+m2="
+              << (m1+m2) << "; resolution may be too low."
+              << std::endl;
   }
 
   par_for(

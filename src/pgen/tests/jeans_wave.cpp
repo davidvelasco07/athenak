@@ -17,11 +17,13 @@
 //  - Jeans (1902) Phil. Trans. R. Soc. Lond. A 199, 1-53
 //  - Stone et al. (2008) ApJS 178, 137-177 (Athena test suite)
 
+#include <algorithm>
 #include <cmath>
 #include <iomanip>
 #include <iostream>
 #include <limits>
 #include <sstream>
+#include <string>
 
 #include "athena.hpp"
 #include "globals.hpp"
@@ -55,7 +57,7 @@ namespace {
   Real jw_sin_a2 = 0.0;
   Real jw_sin_a3 = 0.0;
   Real jw_v0 = 0.0;
-}
+}  // namespace
 
 void JeansWaveRefinement(MeshBlockPack *pmbp);
 void JeansWaveErrors(ParameterInput *pin, Mesh *pm);
@@ -118,7 +120,7 @@ void ProblemGenerator::SelfGravity(ParameterInput *pin, const bool restart) {
   Real ang_2 = std::atan(0.5*(Lx1*cos_a3 + Lx2*sin_a3)/Lx3);
   Real sin_a2 = std::sin(ang_2);
   Real cos_a2 = std::cos(ang_2);
-  
+
   Real x1 = Lx1*cos_a2*cos_a3;
   Real x2 = Lx2*cos_a2*sin_a3;
   Real x3 = Lx3*sin_a2;
@@ -126,9 +128,9 @@ void ProblemGenerator::SelfGravity(ParameterInput *pin, const bool restart) {
   Real lambda = std::min(x1, std::min(x2, x3));
   Real lambda_jeans = lambda/n_jeans;
   // If n_jeans is specified, set effective four_pi_G to enforce k_J = n_jeans * k
-  if (n_jeans > 0.0){
+  if (n_jeans > 0.0) {
     Real G = M_PI * (cs*cs)/(rho0*lambda_jeans*lambda_jeans);
-    four_pi_G = 4 * M_PI * G ;
+    four_pi_G = 4 * M_PI * G;
     pin->SetReal("gravity", "four_pi_G", four_pi_G);
     if (pmy_mesh_->pmb_pack->pgrav != nullptr) {
       pmy_mesh_->pmb_pack->pgrav->four_pi_G = four_pi_G;
@@ -341,7 +343,8 @@ void JeansWaveRefinement(MeshBlockPack *pmbp) {
 
 //----------------------------------------------------------------------------------------
 //! \fn void JeansWaveErrors()
-//! \brief Measures the Jeans wave growth rate (unstable) or oscillation frequency (stable)
+//! \brief Measures the Jeans wave growth rate (unstable) or oscillation
+//!        frequency (stable)
 //!        by Fourier-projecting the density perturbation onto the initial sin(k*x) mode.
 //!
 //! Computes A_sin = (2/V) * integral[ (rho/rho0 - 1) * sin(k*x) dV ], then:

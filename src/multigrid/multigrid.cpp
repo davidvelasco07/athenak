@@ -36,8 +36,8 @@
 Multigrid::Multigrid(MultigridDriver *pmd, MeshBlockPack *pmbp, int nghost,
                      bool on_host):
   pmy_driver_(pmd), pmy_pack_(pmbp), pmy_mesh_(pmd->pmy_mesh_), ngh_(nghost),
-  nvar_(pmd->nvar_), defscale_(1.0), on_host_(on_host)  {
-  if(pmy_pack_ != nullptr) {
+  nvar_(pmd->nvar_), defscale_(1.0), on_host_(on_host) {
+  if (pmy_pack_ != nullptr) {
     //Meshblock levels
     indcs_ = pmy_mesh_->mb_indcs;
     nmmb_  = pmy_pack_->nmb_thispack;
@@ -45,8 +45,8 @@ Multigrid::Multigrid(MultigridDriver *pmd, MeshBlockPack *pmbp, int nghost,
     nmmbx2_ = pmy_mesh_->nmb_rootx2;
     nmmbx3_ = pmy_mesh_->nmb_rootx3;
     if (global_variable::my_rank == 0) {
-      std::cout<< "Number of MeshBlocks in the pack: " << nmmb_ << std::endl;
-      std::cout<< "MeshBlock size: "
+      std::cout << "Number of MeshBlocks in the pack: " << nmmb_ << std::endl;
+      std::cout << "MeshBlock size: "
                << indcs_.nx1 << " x " << indcs_.nx2 << " x " << indcs_.nx3 << std::endl;
     }
     if (indcs_.nx1 != indcs_.nx2 || indcs_.nx1 != indcs_.nx3) {
@@ -55,8 +55,9 @@ Multigrid::Multigrid(MultigridDriver *pmd, MeshBlockPack *pmbp, int nghost,
       std::exit(EXIT_FAILURE);
       return;
      }
-    
-     // initialize loc/size from the first meshblock in the pack (needs to be addpated for AMR)
+
+     // initialize loc/size from the first meshblock
+     // in the pack (needs to be adapted for AMR)
     loc_ = pmy_pack_->pmesh->lloc_eachmb[0];
     size_ = pmy_pack_->pmb->mb_size.h_view(0);
   } else {
@@ -96,7 +97,7 @@ Multigrid::Multigrid(MultigridDriver *pmd, MeshBlockPack *pmbp, int nghost,
   }
 
   nlevel_ = 0;
-  if (pmy_pack_ == nullptr) { 
+  if (pmy_pack_ == nullptr) {
     // Root grid levels
     int nbx = 0, nby = 0, nbz = 0;
     for (int l = 0; l < 20; l++) {
@@ -107,7 +108,7 @@ Multigrid::Multigrid(MultigridDriver *pmd, MeshBlockPack *pmbp, int nghost,
     }
     int nmaxr = std::max(nbx, std::max(nby, nbz));
     if (global_variable::my_rank == 0) {
-      std::cout<< "Multigrid root grid levels: " << nlevel_ << std::endl;
+      std::cout << "Multigrid root grid levels: " << nlevel_ << std::endl;
     }
     // int nminr=std::min(nbx, std::min(nby, nbz)); // unused variable
     if (nmaxr != 1 && global_variable::my_rank == 0) {
@@ -121,7 +122,8 @@ Multigrid::Multigrid(MultigridDriver *pmd, MeshBlockPack *pmbp, int nghost,
     if (nbx*nby*nbz>100 && global_variable::my_rank==0) {
       std::cout << "### Warning in Multigrid::Multigrid" << std::endl
                 << "The degrees of freedom on the coarsest level is very large: "
-                << nbx << " x " << nby << " x " << nbz << " = " << nbx*nby*nbz<< std::endl
+                << nbx << " x " << nby << " x " << nbz
+                << " = " << nbx*nby*nbz << std::endl
                 << "Multigrid should still work, but this is not efficient configuration "
                 << "as the coarsest level solver costs considerably." << std::endl
                 << "We recommend to reconsider grid configuration." << std::endl;
@@ -167,9 +169,7 @@ Multigrid::Multigrid(MultigridDriver *pmd, MeshBlockPack *pmbp, int nghost,
     ncx=(indcs_.nx1>>(ll+1))+2*ngh_;
     ncy=(indcs_.nx2>>(ll+1))+2*ngh_;
     ncz=(indcs_.nx3>>(ll+1))+2*ngh_;
-
   }
-
 }
 
 
@@ -187,7 +187,6 @@ Multigrid::~Multigrid() {
   delete [] coord_;
   delete [] ccoord_;
 }
-
 
 
 //----------------------------------------------------------------------------------------
@@ -253,7 +252,6 @@ void Multigrid::ReallocateForAMR() {
     if (l != nlevel_ - 1)
       Kokkos::realloc(uold_[l], nmmb_, nvar_, ncz, ncy, ncx);
   }
-
 }
 
 
@@ -330,7 +328,9 @@ void Multigrid::LoadCoefficients(const DvceArray5D<Real> &coeff, int ngh) {
   auto &cm = coeff_[nlevel_-1].d_view;
   int is, ie, js, je, ks, ke;
   is = js = ks = 0;
-  ie = indcs_.nx1 + 2*ngh_ - 1; je = indcs_.nx2 + 2*ngh_ - 1; ke = indcs_.nx3 + 2*ngh_ - 1;
+  ie = indcs_.nx1 + 2*ngh_ - 1;
+  je = indcs_.nx2 + 2*ngh_ - 1;
+  ke = indcs_.nx3 + 2*ngh_ - 1;
 
   // copy locals for device lambda capture
   const int coeff_off = ngh - ngh_;
@@ -351,7 +351,6 @@ void Multigrid::LoadCoefficients(const DvceArray5D<Real> &coeff, int ngh) {
 
   return;
 }
-
 
 
 //----------------------------------------------------------------------------------------
@@ -874,12 +873,11 @@ void Multigrid::StoreOldData() {
 template <typename ViewType>
 void Multigrid::Restrict(ViewType &dst, const ViewType &src,
                 int nvar, int i0, int i1, int j0, int j1, int k0, int k1, bool th) {
-
   using ExeSpace = typename ViewType::execution_space;
   const int m0 = 0, m1 = nmmb_ - 1;
   const int v0 = 0, v1 = nvar - 1;
   const int ngh = ngh_;
-                
+
   par_for("Multigrid::Restrict", ExeSpace(),
           m0, m1, v0, v1, k0, k1, j0, j1, i0, i1,
   KOKKOS_LAMBDA(const int m, const int v, const int k, const int j, const int i) {
@@ -903,9 +901,9 @@ void Multigrid::ComputeCorrection() {
   const int m0 = 0, m1 = nmmb_ - 1;
   const int v0 = 0, v1 = nvar_ - 1;
   int ll = nlevel_ - 1 - current_level_;
-  int is = 0, ie = is + (indcs_.nx1 >> ll) + 2*ngh_ -1;
-  int js = 0, je = js + (indcs_.nx2 >> ll) + 2*ngh_ -1;
-  int ks = 0, ke = ks + (indcs_.nx3 >> ll) + 2*ngh_ -1;
+  int is = 0, ie = is + (indcs_.nx1 >> ll) + 2*ngh_ - 1;
+  int js = 0, je = js + (indcs_.nx2 >> ll) + 2*ngh_ - 1;
+  int ks = 0, ke = ks + (indcs_.nx3 >> ll) + 2*ngh_ - 1;
 
   if (on_host_) {
     auto u = u_[current_level_].h_view;
@@ -933,7 +931,6 @@ void Multigrid::ComputeCorrection() {
 template <typename ViewType>
 void Multigrid::ProlongateAndCorrect(ViewType &dst, const ViewType &src,
      int il, int iu, int jl, int ju, int kl, int ku, int fil, int fjl, int fkl, bool th) {
-
   using ExeSpace = typename ViewType::execution_space;
   const int m0 = 0, m1 = nmmb_ - 1;
   const int v0 = 0, v1 = nvar_ - 1;
@@ -957,100 +954,100 @@ void Multigrid::ProlongateAndCorrect(ViewType &dst, const ViewType &src,
       // For brevity: local references to src entries
       // compute and add to 8 target cells as in original implementation
       dst_(m,v,fk  ,fj  ,fi  ) += (
-        + 125.*src_(m,v,k-1,j-1,i-1)+  750.*src_(m,v,k-1,j-1,i  )-  75.*src_(m,v,k-1,j-1,i+1)
-        + 750.*src_(m,v,k-1,j,  i-1)+ 4500.*src_(m,v,k-1,j,  i  )- 450.*src_(m,v,k-1,j,  i+1)
-        -  75.*src_(m,v,k-1,j+1,i-1)-  450.*src_(m,v,k-1,j+1,i  )+  45.*src_(m,v,k-1,j+1,i+1)
-        + 750.*src_(m,v,k,  j-1,i-1)+ 4500.*src_(m,v,k,  j-1,i  )- 450.*src_(m,v,k,  j-1,i+1)
-        +4500.*src_(m,v,k,  j,  i-1)+27000.*src_(m,v,k,  j,  i  )-2700.*src_(m,v,k,  j,  i+1)
-        - 450.*src_(m,v,k,  j+1,i-1)- 2700.*src_(m,v,k,  j+1,i  )+ 270.*src_(m,v,k,  j+1,i+1)
-        -  75.*src_(m,v,k+1,j-1,i-1)-  450.*src_(m,v,k+1,j-1,i  )+  45.*src_(m,v,k+1,j-1,i+1)
-        - 450.*src_(m,v,k+1,j,  i-1)- 2700.*src_(m,v,k+1,j,  i  )+ 270.*src_(m,v,k+1,j,  i+1)
-        +  45.*src_(m,v,k+1,j+1,i-1)+  270.*src_(m,v,k+1,j+1,i  )-  27.*src_(m,v,k+1,j+1,i+1)
+      +125.*src_(m,v,k-1,j-1,i-1)+750.*src_(m,v,k-1,j-1,i)-75.*src_(m,v,k-1,j-1,i+1)
+      +750.*src_(m,v,k-1,j,i-1)+4500.*src_(m,v,k-1,j,i)-450.*src_(m,v,k-1,j,i+1)
+      -75.*src_(m,v,k-1,j+1,i-1)-450.*src_(m,v,k-1,j+1,i)+45.*src_(m,v,k-1,j+1,i+1)
+      +750.*src_(m,v,k,j-1,i-1)+4500.*src_(m,v,k,j-1,i)-450.*src_(m,v,k,j-1,i+1)
+      +4500.*src_(m,v,k,j,i-1)+27000.*src_(m,v,k,j,i)-2700.*src_(m,v,k,j,i+1)
+      -450.*src_(m,v,k,j+1,i-1)-2700.*src_(m,v,k,j+1,i)+270.*src_(m,v,k,j+1,i+1)
+      -75.*src_(m,v,k+1,j-1,i-1)-450.*src_(m,v,k+1,j-1,i)+45.*src_(m,v,k+1,j-1,i+1)
+      -450.*src_(m,v,k+1,j,i-1)-2700.*src_(m,v,k+1,j,i)+270.*src_(m,v,k+1,j,i+1)
+      +45.*src_(m,v,k+1,j+1,i-1)+270.*src_(m,v,k+1,j+1,i)-27.*src_(m,v,k+1,j+1,i+1)
       ) / 32768.0;
 
       dst_(m,v,fk,  fj,  fi+1) += (
-        -  75.*src_(m,v,k-1,j-1,i-1)+  750.*src_(m,v,k-1,j-1,i  )+ 125.*src_(m,v,k-1,j-1,i+1)
-        - 450.*src_(m,v,k-1,j,  i-1)+ 4500.*src_(m,v,k-1,j,  i  )+ 750.*src_(m,v,k-1,j,  i+1)
-        +  45.*src_(m,v,k-1,j+1,i-1)-  450.*src_(m,v,k-1,j+1,i  )-  75.*src_(m,v,k-1,j+1,i+1)
-        - 450.*src_(m,v,k,  j-1,i-1)+ 4500.*src_(m,v,k,  j-1,i  )+ 750.*src_(m,v,k,  j-1,i+1)
-        -2700.*src_(m,v,k,  j,  i-1)+27000.*src_(m,v,k,  j,  i  )+4500.*src_(m,v,k,  j,  i+1)
-        + 270.*src_(m,v,k,  j+1,i-1)- 2700.*src_(m,v,k,  j+1,i  )- 450.*src_(m,v,k,  j+1,i+1)
-        +  45.*src_(m,v,k+1,j-1,i-1)-  450.*src_(m,v,k+1,j-1,i  )-  75.*src_(m,v,k+1,j-1,i+1)
-        + 270.*src_(m,v,k+1,j,  i-1)- 2700.*src_(m,v,k+1,j,  i  )- 450.*src_(m,v,k+1,j,  i+1)
-        -  27.*src_(m,v,k+1,j+1,i-1)+  270.*src_(m,v,k+1,j+1,i  )+  45.*src_(m,v,k+1,j+1,i+1)
+      -75.*src_(m,v,k-1,j-1,i-1)+750.*src_(m,v,k-1,j-1,i)+125.*src_(m,v,k-1,j-1,i+1)
+      -450.*src_(m,v,k-1,j,i-1)+4500.*src_(m,v,k-1,j,i)+750.*src_(m,v,k-1,j,i+1)
+      +45.*src_(m,v,k-1,j+1,i-1)-450.*src_(m,v,k-1,j+1,i)-75.*src_(m,v,k-1,j+1,i+1)
+      -450.*src_(m,v,k,j-1,i-1)+4500.*src_(m,v,k,j-1,i)+750.*src_(m,v,k,j-1,i+1)
+      -2700.*src_(m,v,k,j,i-1)+27000.*src_(m,v,k,j,i)+4500.*src_(m,v,k,j,i+1)
+      +270.*src_(m,v,k,j+1,i-1)-2700.*src_(m,v,k,j+1,i)-450.*src_(m,v,k,j+1,i+1)
+      +45.*src_(m,v,k+1,j-1,i-1)-450.*src_(m,v,k+1,j-1,i)-75.*src_(m,v,k+1,j-1,i+1)
+      +270.*src_(m,v,k+1,j,i-1)-2700.*src_(m,v,k+1,j,i)-450.*src_(m,v,k+1,j,i+1)
+      -27.*src_(m,v,k+1,j+1,i-1)+270.*src_(m,v,k+1,j+1,i)+45.*src_(m,v,k+1,j+1,i+1)
       ) / 32768.0;
 
       dst_(m,v,fk  ,fj+1,fi  ) += (
-        -  75.*src_(m,v,k-1,j-1,i-1)-  450.*src_(m,v,k-1,j-1,i  )+  45.*src_(m,v,k-1,j-1,i+1)
-        + 750.*src_(m,v,k-1,j,  i-1)+ 4500.*src_(m,v,k-1,j,  i  )- 450.*src_(m,v,k-1,j,  i+1)
-        + 125.*src_(m,v,k-1,j+1,i-1)+  750.*src_(m,v,k-1,j+1,i  )-  75.*src_(m,v,k-1,j+1,i+1)
-        - 450.*src_(m,v,k,  j-1,i-1)- 2700.*src_(m,v,k,  j-1,i  )+ 270.*src_(m,v,k,  j-1,i+1)
-        +4500.*src_(m,v,k,  j,  i-1)+27000.*src_(m,v,k,  j,  i  )-2700.*src_(m,v,k,  j,  i+1)
-        + 750.*src_(m,v,k,  j+1,i-1)+ 4500.*src_(m,v,k,  j+1,i  )- 450.*src_(m,v,k,  j+1,i+1)
-        +  45.*src_(m,v,k+1,j-1,i-1)+  270.*src_(m,v,k+1,j-1,i  )-  27.*src_(m,v,k+1,j-1,i+1)
-        - 450.*src_(m,v,k+1,j,  i-1)- 2700.*src_(m,v,k+1,j,  i  )+ 270.*src_(m,v,k+1,j,  i+1)
-        -  75.*src_(m,v,k+1,j+1,i-1)-  450.*src_(m,v,k+1,j+1,i  )+  45.*src_(m,v,k+1,j+1,i+1)
+      -75.*src_(m,v,k-1,j-1,i-1)-450.*src_(m,v,k-1,j-1,i)+45.*src_(m,v,k-1,j-1,i+1)
+      +750.*src_(m,v,k-1,j,i-1)+4500.*src_(m,v,k-1,j,i)-450.*src_(m,v,k-1,j,i+1)
+      +125.*src_(m,v,k-1,j+1,i-1)+750.*src_(m,v,k-1,j+1,i)-75.*src_(m,v,k-1,j+1,i+1)
+      -450.*src_(m,v,k,j-1,i-1)-2700.*src_(m,v,k,j-1,i)+270.*src_(m,v,k,j-1,i+1)
+      +4500.*src_(m,v,k,j,i-1)+27000.*src_(m,v,k,j,i)-2700.*src_(m,v,k,j,i+1)
+      +750.*src_(m,v,k,j+1,i-1)+4500.*src_(m,v,k,j+1,i)-450.*src_(m,v,k,j+1,i+1)
+      +45.*src_(m,v,k+1,j-1,i-1)+270.*src_(m,v,k+1,j-1,i)-27.*src_(m,v,k+1,j-1,i+1)
+      -450.*src_(m,v,k+1,j,i-1)-2700.*src_(m,v,k+1,j,i)+270.*src_(m,v,k+1,j,i+1)
+      -75.*src_(m,v,k+1,j+1,i-1)-450.*src_(m,v,k+1,j+1,i)+45.*src_(m,v,k+1,j+1,i+1)
       ) / 32768.0;
 
       dst_(m,v,fk,  fj+1,fi+1) += (
-        +  45.*src_(m,v,k-1,j-1,i-1)-  450.*src_(m,v,k-1,j-1,i  )-  75.*src_(m,v,k-1,j-1,i+1)
-        - 450.*src_(m,v,k-1,j,  i-1)+ 4500.*src_(m,v,k-1,j,  i  )+ 750.*src_(m,v,k-1,j,  i+1)
-        -  75.*src_(m,v,k-1,j+1,i-1)+  750.*src_(m,v,k-1,j+1,i  )+ 125.*src_(m,v,k-1,j+1,i+1)
-        + 270.*src_(m,v,k,  j-1,i-1)- 2700.*src_(m,v,k,  j-1,i  )- 450.*src_(m,v,k,  j-1,i+1)
-        -2700.*src_(m,v,k,  j,  i-1)+27000.*src_(m,v,k,  j,  i  )+4500.*src_(m,v,k,  j,  i+1)
-        - 450.*src_(m,v,k,  j+1,i-1)+ 4500.*src_(m,v,k,  j+1,i  )+ 750.*src_(m,v,k,  j+1,i+1)
-        -  27.*src_(m,v,k+1,j-1,i-1)+  270.*src_(m,v,k+1,j-1,i  )+  45.*src_(m,v,k+1,j-1,i+1)
-        + 270.*src_(m,v,k+1,j,  i-1)- 2700.*src_(m,v,k+1,j,  i  )- 450.*src_(m,v,k+1,j,  i+1)
-        +  45.*src_(m,v,k+1,j+1,i-1)-  450.*src_(m,v,k+1,j+1,i  )-  75.*src_(m,v,k+1,j+1,i+1)
+      +45.*src_(m,v,k-1,j-1,i-1)-450.*src_(m,v,k-1,j-1,i)-75.*src_(m,v,k-1,j-1,i+1)
+      -450.*src_(m,v,k-1,j,i-1)+4500.*src_(m,v,k-1,j,i)+750.*src_(m,v,k-1,j,i+1)
+      -75.*src_(m,v,k-1,j+1,i-1)+750.*src_(m,v,k-1,j+1,i)+125.*src_(m,v,k-1,j+1,i+1)
+      +270.*src_(m,v,k,j-1,i-1)-2700.*src_(m,v,k,j-1,i)-450.*src_(m,v,k,j-1,i+1)
+      -2700.*src_(m,v,k,j,i-1)+27000.*src_(m,v,k,j,i)+4500.*src_(m,v,k,j,i+1)
+      -450.*src_(m,v,k,j+1,i-1)+4500.*src_(m,v,k,j+1,i)+750.*src_(m,v,k,j+1,i+1)
+      -27.*src_(m,v,k+1,j-1,i-1)+270.*src_(m,v,k+1,j-1,i)+45.*src_(m,v,k+1,j-1,i+1)
+      +270.*src_(m,v,k+1,j,i-1)-2700.*src_(m,v,k+1,j,i)-450.*src_(m,v,k+1,j,i+1)
+      +45.*src_(m,v,k+1,j+1,i-1)-450.*src_(m,v,k+1,j+1,i)-75.*src_(m,v,k+1,j+1,i+1)
       ) / 32768.0;
 
       dst_(m,v,fk+1,fj,  fi  ) += (
-        -  75.*src_(m,v,k-1,j-1,i-1)-  450.*src_(m,v,k-1,j-1,i  )+  45.*src_(m,v,k-1,j-1,i+1)
-        - 450.*src_(m,v,k-1,j,  i-1)- 2700.*src_(m,v,k-1,j,  i  )+ 270.*src_(m,v,k-1,j,  i+1)
-        +  45.*src_(m,v,k-1,j+1,i-1)+  270.*src_(m,v,k-1,j+1,i  )-  27.*src_(m,v,k-1,j+1,i+1)
-        + 750.*src_(m,v,k,  j-1,i-1)+ 4500.*src_(m,v,k,  j-1,i  )- 450.*src_(m,v,k,  j-1,i+1)
-        +4500.*src_(m,v,k,  j,  i-1)+27000.*src_(m,v,k,  j,  i  )-2700.*src_(m,v,k,  j,  i+1)
-        - 450.*src_(m,v,k,  j+1,i-1)- 2700.*src_(m,v,k,  j+1,i  )+ 270.*src_(m,v,k,  j+1,i+1)
-        + 125.*src_(m,v,k+1,j-1,i-1)+  750.*src_(m,v,k+1,j-1,i  )-  75.*src_(m,v,k+1,j-1,i+1)
-        + 750.*src_(m,v,k+1,j,  i-1)+ 4500.*src_(m,v,k+1,j,  i  )- 450.*src_(m,v,k+1,j,  i+1)
-        -  75.*src_(m,v,k+1,j+1,i-1)-  450.*src_(m,v,k+1,j+1,i  )+  45.*src_(m,v,k+1,j+1,i+1)
+      -75.*src_(m,v,k-1,j-1,i-1)-450.*src_(m,v,k-1,j-1,i)+45.*src_(m,v,k-1,j-1,i+1)
+      -450.*src_(m,v,k-1,j,i-1)-2700.*src_(m,v,k-1,j,i)+270.*src_(m,v,k-1,j,i+1)
+      +45.*src_(m,v,k-1,j+1,i-1)+270.*src_(m,v,k-1,j+1,i)-27.*src_(m,v,k-1,j+1,i+1)
+      +750.*src_(m,v,k,j-1,i-1)+4500.*src_(m,v,k,j-1,i)-450.*src_(m,v,k,j-1,i+1)
+      +4500.*src_(m,v,k,j,i-1)+27000.*src_(m,v,k,j,i)-2700.*src_(m,v,k,j,i+1)
+      -450.*src_(m,v,k,j+1,i-1)-2700.*src_(m,v,k,j+1,i)+270.*src_(m,v,k,j+1,i+1)
+      +125.*src_(m,v,k+1,j-1,i-1)+750.*src_(m,v,k+1,j-1,i)-75.*src_(m,v,k+1,j-1,i+1)
+      +750.*src_(m,v,k+1,j,i-1)+4500.*src_(m,v,k+1,j,i)-450.*src_(m,v,k+1,j,i+1)
+      -75.*src_(m,v,k+1,j+1,i-1)-450.*src_(m,v,k+1,j+1,i)+45.*src_(m,v,k+1,j+1,i+1)
       ) / 32768.0;
 
       dst_(m,v,fk+1,fj,  fi+1) += (
-        +  45.*src_(m,v,k-1,j-1,i-1)-  450.*src_(m,v,k-1,j-1,i  )-  75.*src_(m,v,k-1,j-1,i+1)
-        + 270.*src_(m,v,k-1,j,  i-1)- 2700.*src_(m,v,k-1,j,  i  )- 450.*src_(m,v,k-1,j,  i+1)
-        -  27.*src_(m,v,k-1,j+1,i-1)+  270.*src_(m,v,k-1,j+1,i  )+  45.*src_(m,v,k-1,j+1,i+1)
-        - 450.*src_(m,v,k,  j-1,i-1)+ 4500.*src_(m,v,k,  j-1,i  )+ 750.*src_(m,v,k,  j-1,i+1)
-        -2700.*src_(m,v,k,  j,  i-1)+27000.*src_(m,v,k,  j,  i  )+4500.*src_(m,v,k,  j,  i+1)
-        + 270.*src_(m,v,k,  j+1,i-1)- 2700.*src_(m,v,k,  j+1,i  )- 450.*src_(m,v,k,  j+1,i+1)
-        -  75.*src_(m,v,k+1,j-1,i-1)+  750.*src_(m,v,k+1,j-1,i  )+ 125.*src_(m,v,k+1,j-1,i+1)
-        - 450.*src_(m,v,k+1,j,  i-1)+ 4500.*src_(m,v,k+1,j,  i  )+ 750.*src_(m,v,k+1,j,  i+1)
-        +  45.*src_(m,v,k+1,j+1,i-1)-  450.*src_(m,v,k+1,j+1,i  )-  75.*src_(m,v,k+1,j+1,i+1)
+      +45.*src_(m,v,k-1,j-1,i-1)-450.*src_(m,v,k-1,j-1,i)-75.*src_(m,v,k-1,j-1,i+1)
+      +270.*src_(m,v,k-1,j,i-1)-2700.*src_(m,v,k-1,j,i)-450.*src_(m,v,k-1,j,i+1)
+      -27.*src_(m,v,k-1,j+1,i-1)+270.*src_(m,v,k-1,j+1,i)+45.*src_(m,v,k-1,j+1,i+1)
+      -450.*src_(m,v,k,j-1,i-1)+4500.*src_(m,v,k,j-1,i)+750.*src_(m,v,k,j-1,i+1)
+      -2700.*src_(m,v,k,j,i-1)+27000.*src_(m,v,k,j,i)+4500.*src_(m,v,k,j,i+1)
+      +270.*src_(m,v,k,j+1,i-1)-2700.*src_(m,v,k,j+1,i)-450.*src_(m,v,k,j+1,i+1)
+      -75.*src_(m,v,k+1,j-1,i-1)+750.*src_(m,v,k+1,j-1,i)+125.*src_(m,v,k+1,j-1,i+1)
+      -450.*src_(m,v,k+1,j,i-1)+4500.*src_(m,v,k+1,j,i)+750.*src_(m,v,k+1,j,i+1)
+      +45.*src_(m,v,k+1,j+1,i-1)-450.*src_(m,v,k+1,j+1,i)-75.*src_(m,v,k+1,j+1,i+1)
       ) / 32768.0;
 
       dst_(m,v,fk+1,fj+1,fi  ) += (
-        +  45.*src_(m,v,k-1,j-1,i-1)+  270.*src_(m,v,k-1,j-1,i  )-  27.*src_(m,v,k-1,j-1,i+1)
-        - 450.*src_(m,v,k-1,j,  i-1)- 2700.*src_(m,v,k-1,j,  i  )+ 270.*src_(m,v,k-1,j,  i+1)
-        -  75.*src_(m,v,k-1,j+1,i-1)-  450.*src_(m,v,k-1,j+1,i  )+  45.*src_(m,v,k-1,j+1,i+1)
-        - 450.*src_(m,v,k,  j-1,i-1)- 2700.*src_(m,v,k,  j-1,i  )+ 270.*src_(m,v,k,  j-1,i+1)
-        +4500.*src_(m,v,k,  j,  i-1)+27000.*src_(m,v,k,  j,  i  )-2700.*src_(m,v,k,  j,  i+1)
-        + 750.*src_(m,v,k,  j+1,i-1)+ 4500.*src_(m,v,k,  j+1,i  )- 450.*src_(m,v,k,  j+1,i+1)
-        -  75.*src_(m,v,k+1,j-1,i-1)-  450.*src_(m,v,k+1,j-1,i  )+  45.*src_(m,v,k+1,j-1,i+1)
-        + 750.*src_(m,v,k+1,j,  i-1)+ 4500.*src_(m,v,k+1,j,  i  )- 450.*src_(m,v,k+1,j,  i+1)
-        + 125.*src_(m,v,k+1,j+1,i-1)+  750.*src_(m,v,k+1,j+1,i  )-  75.*src_(m,v,k+1,j+1,i+1)
+      +45.*src_(m,v,k-1,j-1,i-1)+270.*src_(m,v,k-1,j-1,i)-27.*src_(m,v,k-1,j-1,i+1)
+      -450.*src_(m,v,k-1,j,i-1)-2700.*src_(m,v,k-1,j,i)+270.*src_(m,v,k-1,j,i+1)
+      -75.*src_(m,v,k-1,j+1,i-1)-450.*src_(m,v,k-1,j+1,i)+45.*src_(m,v,k-1,j+1,i+1)
+      -450.*src_(m,v,k,j-1,i-1)-2700.*src_(m,v,k,j-1,i)+270.*src_(m,v,k,j-1,i+1)
+      +4500.*src_(m,v,k,j,i-1)+27000.*src_(m,v,k,j,i)-2700.*src_(m,v,k,j,i+1)
+      +750.*src_(m,v,k,j+1,i-1)+4500.*src_(m,v,k,j+1,i)-450.*src_(m,v,k,j+1,i+1)
+      -75.*src_(m,v,k+1,j-1,i-1)-450.*src_(m,v,k+1,j-1,i)+45.*src_(m,v,k+1,j-1,i+1)
+      +750.*src_(m,v,k+1,j,i-1)+4500.*src_(m,v,k+1,j,i)-450.*src_(m,v,k+1,j,i+1)
+      +125.*src_(m,v,k+1,j+1,i-1)+750.*src_(m,v,k+1,j+1,i)-75.*src_(m,v,k+1,j+1,i+1)
       ) / 32768.0;
 
       dst_(m,v,fk+1,fj+1,fi+1) += (
-        -  27.*src_(m,v,k-1,j-1,i-1)+  270.*src_(m,v,k-1,j-1,i  )+  45.*src_(m,v,k-1,j-1,i+1)
-        + 270.*src_(m,v,k-1,j,  i-1)- 2700.*src_(m,v,k-1,j,  i  )- 450.*src_(m,v,k-1,j,  i+1)
-        +  45.*src_(m,v,k-1,j+1,i-1)-  450.*src_(m,v,k-1,j+1,i  )-  75.*src_(m,v,k-1,j+1,i+1)
-        + 270.*src_(m,v,k,  j-1,i-1)- 2700.*src_(m,v,k,  j-1,i  )- 450.*src_(m,v,k,  j-1,i+1)
-        -2700.*src_(m,v,k,  j,  i-1)+27000.*src_(m,v,k,  j,  i  )+4500.*src_(m,v,k,  j,  i+1)
-        - 450.*src_(m,v,k,  j+1,i-1)+ 4500.*src_(m,v,k,  j+1,i  )+ 750.*src_(m,v,k,  j+1,i+1)
-        +  45.*src_(m,v,k+1,j-1,i-1)-  450.*src_(m,v,k+1,j-1,i  )-  75.*src_(m,v,k+1,j-1,i+1)
-        - 450.*src_(m,v,k+1,j,  i-1)+ 4500.*src_(m,v,k+1,j,  i  )+ 750.*src_(m,v,k+1,j,  i+1)
-        -  75.*src_(m,v,k+1,j+1,i-1)+  750.*src_(m,v,k+1,j+1,i  )+ 125.*src_(m,v,k+1,j+1,i+1)
-      ) / 32768.0;  
+      -27.*src_(m,v,k-1,j-1,i-1)+270.*src_(m,v,k-1,j-1,i)+45.*src_(m,v,k-1,j-1,i+1)
+      +270.*src_(m,v,k-1,j,i-1)-2700.*src_(m,v,k-1,j,i)-450.*src_(m,v,k-1,j,i+1)
+      +45.*src_(m,v,k-1,j+1,i-1)-450.*src_(m,v,k-1,j+1,i)-75.*src_(m,v,k-1,j+1,i+1)
+      +270.*src_(m,v,k,j-1,i-1)-2700.*src_(m,v,k,j-1,i)-450.*src_(m,v,k,j-1,i+1)
+      -2700.*src_(m,v,k,j,i-1)+27000.*src_(m,v,k,j,i)+4500.*src_(m,v,k,j,i+1)
+      -450.*src_(m,v,k,j+1,i-1)+4500.*src_(m,v,k,j+1,i)+750.*src_(m,v,k,j+1,i+1)
+      +45.*src_(m,v,k+1,j-1,i-1)-450.*src_(m,v,k+1,j-1,i)-75.*src_(m,v,k+1,j-1,i+1)
+      -450.*src_(m,v,k+1,j,i-1)+4500.*src_(m,v,k+1,j,i)+750.*src_(m,v,k+1,j,i+1)
+      -75.*src_(m,v,k+1,j+1,i-1)+750.*src_(m,v,k+1,j+1,i)+125.*src_(m,v,k+1,j+1,i+1)
+      ) / 32768.0;
     });
   } else { // trilinear
     par_for("Multigrid::ProlongateAndCorrect_trilinear", ExeSpace(),
@@ -1106,7 +1103,6 @@ void Multigrid::ProlongateAndCorrect(ViewType &dst, const ViewType &src,
 template <typename ViewType>
 void Multigrid::FMGProlongate(ViewType &dst, const ViewType &src,
      int il, int iu, int jl, int ju, int kl, int ku, int fil, int fjl, int fkl) {
-
   using ExeSpace = typename ViewType::execution_space;
   const int m0 = 0, m1 = nmmb_ - 1;
   const int v0 = 0, v1 = nvar_ - 1;
@@ -1125,99 +1121,99 @@ void Multigrid::FMGProlongate(ViewType &dst, const ViewType &src,
     const int fi = 2*(i-il) + fil;
 
     dst_(m,v,fk  ,fj  ,fi  ) = (
-      + 125.*src_(m,v,k-1,j-1,i-1)+  750.*src_(m,v,k-1,j-1,i  )-  75.*src_(m,v,k-1,j-1,i+1)
-      + 750.*src_(m,v,k-1,j,  i-1)+ 4500.*src_(m,v,k-1,j,  i  )- 450.*src_(m,v,k-1,j,  i+1)
-      -  75.*src_(m,v,k-1,j+1,i-1)-  450.*src_(m,v,k-1,j+1,i  )+  45.*src_(m,v,k-1,j+1,i+1)
-      + 750.*src_(m,v,k,  j-1,i-1)+ 4500.*src_(m,v,k,  j-1,i  )- 450.*src_(m,v,k,  j-1,i+1)
-      +4500.*src_(m,v,k,  j,  i-1)+27000.*src_(m,v,k,  j,  i  )-2700.*src_(m,v,k,  j,  i+1)
-      - 450.*src_(m,v,k,  j+1,i-1)- 2700.*src_(m,v,k,  j+1,i  )+ 270.*src_(m,v,k,  j+1,i+1)
-      -  75.*src_(m,v,k+1,j-1,i-1)-  450.*src_(m,v,k+1,j-1,i  )+  45.*src_(m,v,k+1,j-1,i+1)
-      - 450.*src_(m,v,k+1,j,  i-1)- 2700.*src_(m,v,k+1,j,  i  )+ 270.*src_(m,v,k+1,j,  i+1)
-      +  45.*src_(m,v,k+1,j+1,i-1)+  270.*src_(m,v,k+1,j+1,i  )-  27.*src_(m,v,k+1,j+1,i+1)
+    +125.*src_(m,v,k-1,j-1,i-1)+750.*src_(m,v,k-1,j-1,i)-75.*src_(m,v,k-1,j-1,i+1)
+    +750.*src_(m,v,k-1,j,i-1)+4500.*src_(m,v,k-1,j,i)-450.*src_(m,v,k-1,j,i+1)
+    -75.*src_(m,v,k-1,j+1,i-1)-450.*src_(m,v,k-1,j+1,i)+45.*src_(m,v,k-1,j+1,i+1)
+    +750.*src_(m,v,k,j-1,i-1)+4500.*src_(m,v,k,j-1,i)-450.*src_(m,v,k,j-1,i+1)
+    +4500.*src_(m,v,k,j,i-1)+27000.*src_(m,v,k,j,i)-2700.*src_(m,v,k,j,i+1)
+    -450.*src_(m,v,k,j+1,i-1)-2700.*src_(m,v,k,j+1,i)+270.*src_(m,v,k,j+1,i+1)
+    -75.*src_(m,v,k+1,j-1,i-1)-450.*src_(m,v,k+1,j-1,i)+45.*src_(m,v,k+1,j-1,i+1)
+    -450.*src_(m,v,k+1,j,i-1)-2700.*src_(m,v,k+1,j,i)+270.*src_(m,v,k+1,j,i+1)
+    +45.*src_(m,v,k+1,j+1,i-1)+270.*src_(m,v,k+1,j+1,i)-27.*src_(m,v,k+1,j+1,i+1)
     ) / 32768.0;
 
     dst_(m,v,fk,  fj,  fi+1) = (
-      -  75.*src_(m,v,k-1,j-1,i-1)+  750.*src_(m,v,k-1,j-1,i  )+ 125.*src_(m,v,k-1,j-1,i+1)
-      - 450.*src_(m,v,k-1,j,  i-1)+ 4500.*src_(m,v,k-1,j,  i  )+ 750.*src_(m,v,k-1,j,  i+1)
-      +  45.*src_(m,v,k-1,j+1,i-1)-  450.*src_(m,v,k-1,j+1,i  )-  75.*src_(m,v,k-1,j+1,i+1)
-      - 450.*src_(m,v,k,  j-1,i-1)+ 4500.*src_(m,v,k,  j-1,i  )+ 750.*src_(m,v,k,  j-1,i+1)
-      -2700.*src_(m,v,k,  j,  i-1)+27000.*src_(m,v,k,  j,  i  )+4500.*src_(m,v,k,  j,  i+1)
-      + 270.*src_(m,v,k,  j+1,i-1)- 2700.*src_(m,v,k,  j+1,i  )- 450.*src_(m,v,k,  j+1,i+1)
-      +  45.*src_(m,v,k+1,j-1,i-1)-  450.*src_(m,v,k+1,j-1,i  )-  75.*src_(m,v,k+1,j-1,i+1)
-      + 270.*src_(m,v,k+1,j,  i-1)- 2700.*src_(m,v,k+1,j,  i  )- 450.*src_(m,v,k+1,j,  i+1)
-      -  27.*src_(m,v,k+1,j+1,i-1)+  270.*src_(m,v,k+1,j+1,i  )+  45.*src_(m,v,k+1,j+1,i+1)
+    -75.*src_(m,v,k-1,j-1,i-1)+750.*src_(m,v,k-1,j-1,i)+125.*src_(m,v,k-1,j-1,i+1)
+    -450.*src_(m,v,k-1,j,i-1)+4500.*src_(m,v,k-1,j,i)+750.*src_(m,v,k-1,j,i+1)
+    +45.*src_(m,v,k-1,j+1,i-1)-450.*src_(m,v,k-1,j+1,i)-75.*src_(m,v,k-1,j+1,i+1)
+    -450.*src_(m,v,k,j-1,i-1)+4500.*src_(m,v,k,j-1,i)+750.*src_(m,v,k,j-1,i+1)
+    -2700.*src_(m,v,k,j,i-1)+27000.*src_(m,v,k,j,i)+4500.*src_(m,v,k,j,i+1)
+    +270.*src_(m,v,k,j+1,i-1)-2700.*src_(m,v,k,j+1,i)-450.*src_(m,v,k,j+1,i+1)
+    +45.*src_(m,v,k+1,j-1,i-1)-450.*src_(m,v,k+1,j-1,i)-75.*src_(m,v,k+1,j-1,i+1)
+    +270.*src_(m,v,k+1,j,i-1)-2700.*src_(m,v,k+1,j,i)-450.*src_(m,v,k+1,j,i+1)
+    -27.*src_(m,v,k+1,j+1,i-1)+270.*src_(m,v,k+1,j+1,i)+45.*src_(m,v,k+1,j+1,i+1)
     ) / 32768.0;
 
     dst_(m,v,fk  ,fj+1,fi  ) = (
-      -  75.*src_(m,v,k-1,j-1,i-1)-  450.*src_(m,v,k-1,j-1,i  )+  45.*src_(m,v,k-1,j-1,i+1)
-      + 750.*src_(m,v,k-1,j,  i-1)+ 4500.*src_(m,v,k-1,j,  i  )- 450.*src_(m,v,k-1,j,  i+1)
-      + 125.*src_(m,v,k-1,j+1,i-1)+  750.*src_(m,v,k-1,j+1,i  )-  75.*src_(m,v,k-1,j+1,i+1)
-      - 450.*src_(m,v,k,  j-1,i-1)- 2700.*src_(m,v,k,  j-1,i  )+ 270.*src_(m,v,k,  j-1,i+1)
-      +4500.*src_(m,v,k,  j,  i-1)+27000.*src_(m,v,k,  j,  i  )-2700.*src_(m,v,k,  j,  i+1)
-      + 750.*src_(m,v,k,  j+1,i-1)+ 4500.*src_(m,v,k,  j+1,i  )- 450.*src_(m,v,k,  j+1,i+1)
-      +  45.*src_(m,v,k+1,j-1,i-1)+  270.*src_(m,v,k+1,j-1,i  )-  27.*src_(m,v,k+1,j-1,i+1)
-      - 450.*src_(m,v,k+1,j,  i-1)- 2700.*src_(m,v,k+1,j,  i  )+ 270.*src_(m,v,k+1,j,  i+1)
-      -  75.*src_(m,v,k+1,j+1,i-1)-  450.*src_(m,v,k+1,j+1,i  )+  45.*src_(m,v,k+1,j+1,i+1)
+    -75.*src_(m,v,k-1,j-1,i-1)-450.*src_(m,v,k-1,j-1,i)+45.*src_(m,v,k-1,j-1,i+1)
+    +750.*src_(m,v,k-1,j,i-1)+4500.*src_(m,v,k-1,j,i)-450.*src_(m,v,k-1,j,i+1)
+    +125.*src_(m,v,k-1,j+1,i-1)+750.*src_(m,v,k-1,j+1,i)-75.*src_(m,v,k-1,j+1,i+1)
+    -450.*src_(m,v,k,j-1,i-1)-2700.*src_(m,v,k,j-1,i)+270.*src_(m,v,k,j-1,i+1)
+    +4500.*src_(m,v,k,j,i-1)+27000.*src_(m,v,k,j,i)-2700.*src_(m,v,k,j,i+1)
+    +750.*src_(m,v,k,j+1,i-1)+4500.*src_(m,v,k,j+1,i)-450.*src_(m,v,k,j+1,i+1)
+    +45.*src_(m,v,k+1,j-1,i-1)+270.*src_(m,v,k+1,j-1,i)-27.*src_(m,v,k+1,j-1,i+1)
+    -450.*src_(m,v,k+1,j,i-1)-2700.*src_(m,v,k+1,j,i)+270.*src_(m,v,k+1,j,i+1)
+    -75.*src_(m,v,k+1,j+1,i-1)-450.*src_(m,v,k+1,j+1,i)+45.*src_(m,v,k+1,j+1,i+1)
     ) / 32768.0;
 
     dst_(m,v,fk,  fj+1,fi+1) = (
-      +  45.*src_(m,v,k-1,j-1,i-1)-  450.*src_(m,v,k-1,j-1,i  )-  75.*src_(m,v,k-1,j-1,i+1)
-      - 450.*src_(m,v,k-1,j,  i-1)+ 4500.*src_(m,v,k-1,j,  i  )+ 750.*src_(m,v,k-1,j,  i+1)
-      -  75.*src_(m,v,k-1,j+1,i-1)+  750.*src_(m,v,k-1,j+1,i  )+ 125.*src_(m,v,k-1,j+1,i+1)
-      + 270.*src_(m,v,k,  j-1,i-1)- 2700.*src_(m,v,k,  j-1,i  )- 450.*src_(m,v,k,  j-1,i+1)
-      -2700.*src_(m,v,k,  j,  i-1)+27000.*src_(m,v,k,  j,  i  )+4500.*src_(m,v,k,  j,  i+1)
-      - 450.*src_(m,v,k,  j+1,i-1)+ 4500.*src_(m,v,k,  j+1,i  )+ 750.*src_(m,v,k,  j+1,i+1)
-      -  27.*src_(m,v,k+1,j-1,i-1)+  270.*src_(m,v,k+1,j-1,i  )+  45.*src_(m,v,k+1,j-1,i+1)
-      + 270.*src_(m,v,k+1,j,  i-1)- 2700.*src_(m,v,k+1,j,  i  )- 450.*src_(m,v,k+1,j,  i+1)
-      +  45.*src_(m,v,k+1,j+1,i-1)-  450.*src_(m,v,k+1,j+1,i  )-  75.*src_(m,v,k+1,j+1,i+1)
+    +45.*src_(m,v,k-1,j-1,i-1)-450.*src_(m,v,k-1,j-1,i)-75.*src_(m,v,k-1,j-1,i+1)
+    -450.*src_(m,v,k-1,j,i-1)+4500.*src_(m,v,k-1,j,i)+750.*src_(m,v,k-1,j,i+1)
+    -75.*src_(m,v,k-1,j+1,i-1)+750.*src_(m,v,k-1,j+1,i)+125.*src_(m,v,k-1,j+1,i+1)
+    +270.*src_(m,v,k,j-1,i-1)-2700.*src_(m,v,k,j-1,i)-450.*src_(m,v,k,j-1,i+1)
+    -2700.*src_(m,v,k,j,i-1)+27000.*src_(m,v,k,j,i)+4500.*src_(m,v,k,j,i+1)
+    -450.*src_(m,v,k,j+1,i-1)+4500.*src_(m,v,k,j+1,i)+750.*src_(m,v,k,j+1,i+1)
+    -27.*src_(m,v,k+1,j-1,i-1)+270.*src_(m,v,k+1,j-1,i)+45.*src_(m,v,k+1,j-1,i+1)
+    +270.*src_(m,v,k+1,j,i-1)-2700.*src_(m,v,k+1,j,i)-450.*src_(m,v,k+1,j,i+1)
+    +45.*src_(m,v,k+1,j+1,i-1)-450.*src_(m,v,k+1,j+1,i)-75.*src_(m,v,k+1,j+1,i+1)
     ) / 32768.0;
 
     dst_(m,v,fk+1,fj,  fi  ) = (
-      -  75.*src_(m,v,k-1,j-1,i-1)-  450.*src_(m,v,k-1,j-1,i  )+  45.*src_(m,v,k-1,j-1,i+1)
-      - 450.*src_(m,v,k-1,j,  i-1)- 2700.*src_(m,v,k-1,j,  i  )+ 270.*src_(m,v,k-1,j,  i+1)
-      +  45.*src_(m,v,k-1,j+1,i-1)+  270.*src_(m,v,k-1,j+1,i  )-  27.*src_(m,v,k-1,j+1,i+1)
-      + 750.*src_(m,v,k,  j-1,i-1)+ 4500.*src_(m,v,k,  j-1,i  )- 450.*src_(m,v,k,  j-1,i+1)
-      +4500.*src_(m,v,k,  j,  i-1)+27000.*src_(m,v,k,  j,  i  )-2700.*src_(m,v,k,  j,  i+1)
-      - 450.*src_(m,v,k,  j+1,i-1)- 2700.*src_(m,v,k,  j+1,i  )+ 270.*src_(m,v,k,  j+1,i+1)
-      + 125.*src_(m,v,k+1,j-1,i-1)+  750.*src_(m,v,k+1,j-1,i  )-  75.*src_(m,v,k+1,j-1,i+1)
-      + 750.*src_(m,v,k+1,j,  i-1)+ 4500.*src_(m,v,k+1,j,  i  )- 450.*src_(m,v,k+1,j,  i+1)
-      -  75.*src_(m,v,k+1,j+1,i-1)-  450.*src_(m,v,k+1,j+1,i  )+  45.*src_(m,v,k+1,j+1,i+1)
+    -75.*src_(m,v,k-1,j-1,i-1)-450.*src_(m,v,k-1,j-1,i)+45.*src_(m,v,k-1,j-1,i+1)
+    -450.*src_(m,v,k-1,j,i-1)-2700.*src_(m,v,k-1,j,i)+270.*src_(m,v,k-1,j,i+1)
+    +45.*src_(m,v,k-1,j+1,i-1)+270.*src_(m,v,k-1,j+1,i)-27.*src_(m,v,k-1,j+1,i+1)
+    +750.*src_(m,v,k,j-1,i-1)+4500.*src_(m,v,k,j-1,i)-450.*src_(m,v,k,j-1,i+1)
+    +4500.*src_(m,v,k,j,i-1)+27000.*src_(m,v,k,j,i)-2700.*src_(m,v,k,j,i+1)
+    -450.*src_(m,v,k,j+1,i-1)-2700.*src_(m,v,k,j+1,i)+270.*src_(m,v,k,j+1,i+1)
+    +125.*src_(m,v,k+1,j-1,i-1)+750.*src_(m,v,k+1,j-1,i)-75.*src_(m,v,k+1,j-1,i+1)
+    +750.*src_(m,v,k+1,j,i-1)+4500.*src_(m,v,k+1,j,i)-450.*src_(m,v,k+1,j,i+1)
+    -75.*src_(m,v,k+1,j+1,i-1)-450.*src_(m,v,k+1,j+1,i)+45.*src_(m,v,k+1,j+1,i+1)
     ) / 32768.0;
 
     dst_(m,v,fk+1,fj,  fi+1) = (
-      +  45.*src_(m,v,k-1,j-1,i-1)-  450.*src_(m,v,k-1,j-1,i  )-  75.*src_(m,v,k-1,j-1,i+1)
-      + 270.*src_(m,v,k-1,j,  i-1)- 2700.*src_(m,v,k-1,j,  i  )- 450.*src_(m,v,k-1,j,  i+1)
-      -  27.*src_(m,v,k-1,j+1,i-1)+  270.*src_(m,v,k-1,j+1,i  )+  45.*src_(m,v,k-1,j+1,i+1)
-      - 450.*src_(m,v,k,  j-1,i-1)+ 4500.*src_(m,v,k,  j-1,i  )+ 750.*src_(m,v,k,  j-1,i+1)
-      -2700.*src_(m,v,k,  j,  i-1)+27000.*src_(m,v,k,  j,  i  )+4500.*src_(m,v,k,  j,  i+1)
-      + 270.*src_(m,v,k,  j+1,i-1)- 2700.*src_(m,v,k,  j+1,i  )- 450.*src_(m,v,k,  j+1,i+1)
-      -  75.*src_(m,v,k+1,j-1,i-1)+  750.*src_(m,v,k+1,j-1,i  )+ 125.*src_(m,v,k+1,j-1,i+1)
-      - 450.*src_(m,v,k+1,j,  i-1)+ 4500.*src_(m,v,k+1,j,  i  )+ 750.*src_(m,v,k+1,j,  i+1)
-      +  45.*src_(m,v,k+1,j+1,i-1)-  450.*src_(m,v,k+1,j+1,i  )-  75.*src_(m,v,k+1,j+1,i+1)
+    +45.*src_(m,v,k-1,j-1,i-1)-450.*src_(m,v,k-1,j-1,i)-75.*src_(m,v,k-1,j-1,i+1)
+    +270.*src_(m,v,k-1,j,i-1)-2700.*src_(m,v,k-1,j,i)-450.*src_(m,v,k-1,j,i+1)
+    -27.*src_(m,v,k-1,j+1,i-1)+270.*src_(m,v,k-1,j+1,i)+45.*src_(m,v,k-1,j+1,i+1)
+    -450.*src_(m,v,k,j-1,i-1)+4500.*src_(m,v,k,j-1,i)+750.*src_(m,v,k,j-1,i+1)
+    -2700.*src_(m,v,k,j,i-1)+27000.*src_(m,v,k,j,i)+4500.*src_(m,v,k,j,i+1)
+    +270.*src_(m,v,k,j+1,i-1)-2700.*src_(m,v,k,j+1,i)-450.*src_(m,v,k,j+1,i+1)
+    -75.*src_(m,v,k+1,j-1,i-1)+750.*src_(m,v,k+1,j-1,i)+125.*src_(m,v,k+1,j-1,i+1)
+    -450.*src_(m,v,k+1,j,i-1)+4500.*src_(m,v,k+1,j,i)+750.*src_(m,v,k+1,j,i+1)
+    +45.*src_(m,v,k+1,j+1,i-1)-450.*src_(m,v,k+1,j+1,i)-75.*src_(m,v,k+1,j+1,i+1)
     ) / 32768.0;
 
     dst_(m,v,fk+1,fj+1,fi  ) = (
-      +  45.*src_(m,v,k-1,j-1,i-1)+  270.*src_(m,v,k-1,j-1,i  )-  27.*src_(m,v,k-1,j-1,i+1)
-      - 450.*src_(m,v,k-1,j,  i-1)- 2700.*src_(m,v,k-1,j,  i  )+ 270.*src_(m,v,k-1,j,  i+1)
-      -  75.*src_(m,v,k-1,j+1,i-1)-  450.*src_(m,v,k-1,j+1,i  )+  45.*src_(m,v,k-1,j+1,i+1)
-      - 450.*src_(m,v,k,  j-1,i-1)- 2700.*src_(m,v,k,  j-1,i  )+ 270.*src_(m,v,k,  j-1,i+1)
-      +4500.*src_(m,v,k,  j,  i-1)+27000.*src_(m,v,k,  j,  i  )-2700.*src_(m,v,k,  j,  i+1)
-      + 750.*src_(m,v,k,  j+1,i-1)+ 4500.*src_(m,v,k,  j+1,i  )- 450.*src_(m,v,k,  j+1,i+1)
-      -  75.*src_(m,v,k+1,j-1,i-1)-  450.*src_(m,v,k+1,j-1,i  )+  45.*src_(m,v,k+1,j-1,i+1)
-      + 750.*src_(m,v,k+1,j,  i-1)+ 4500.*src_(m,v,k+1,j,  i  )- 450.*src_(m,v,k+1,j,  i+1)
-      + 125.*src_(m,v,k+1,j+1,i-1)+  750.*src_(m,v,k+1,j+1,i  )-  75.*src_(m,v,k+1,j+1,i+1)
+    +45.*src_(m,v,k-1,j-1,i-1)+270.*src_(m,v,k-1,j-1,i)-27.*src_(m,v,k-1,j-1,i+1)
+    -450.*src_(m,v,k-1,j,i-1)-2700.*src_(m,v,k-1,j,i)+270.*src_(m,v,k-1,j,i+1)
+    -75.*src_(m,v,k-1,j+1,i-1)-450.*src_(m,v,k-1,j+1,i)+45.*src_(m,v,k-1,j+1,i+1)
+    -450.*src_(m,v,k,j-1,i-1)-2700.*src_(m,v,k,j-1,i)+270.*src_(m,v,k,j-1,i+1)
+    +4500.*src_(m,v,k,j,i-1)+27000.*src_(m,v,k,j,i)-2700.*src_(m,v,k,j,i+1)
+    +750.*src_(m,v,k,j+1,i-1)+4500.*src_(m,v,k,j+1,i)-450.*src_(m,v,k,j+1,i+1)
+    -75.*src_(m,v,k+1,j-1,i-1)-450.*src_(m,v,k+1,j-1,i)+45.*src_(m,v,k+1,j-1,i+1)
+    +750.*src_(m,v,k+1,j,i-1)+4500.*src_(m,v,k+1,j,i)-450.*src_(m,v,k+1,j,i+1)
+    +125.*src_(m,v,k+1,j+1,i-1)+750.*src_(m,v,k+1,j+1,i)-75.*src_(m,v,k+1,j+1,i+1)
     ) / 32768.0;
 
     dst_(m,v,fk+1,fj+1,fi+1) = (
-      -  27.*src_(m,v,k-1,j-1,i-1)+  270.*src_(m,v,k-1,j-1,i  )+  45.*src_(m,v,k-1,j-1,i+1)
-      + 270.*src_(m,v,k-1,j,  i-1)- 2700.*src_(m,v,k-1,j,  i  )- 450.*src_(m,v,k-1,j,  i+1)
-      +  45.*src_(m,v,k-1,j+1,i-1)-  450.*src_(m,v,k-1,j+1,i  )-  75.*src_(m,v,k-1,j+1,i+1)
-      + 270.*src_(m,v,k,  j-1,i-1)- 2700.*src_(m,v,k,  j-1,i  )- 450.*src_(m,v,k,  j-1,i+1)
-      -2700.*src_(m,v,k,  j,  i-1)+27000.*src_(m,v,k,  j,  i  )+4500.*src_(m,v,k,  j,  i+1)
-      - 450.*src_(m,v,k,  j+1,i-1)+ 4500.*src_(m,v,k,  j+1,i  )+ 750.*src_(m,v,k,  j+1,i+1)
-      +  45.*src_(m,v,k+1,j-1,i-1)-  450.*src_(m,v,k+1,j-1,i  )-  75.*src_(m,v,k+1,j-1,i+1)
-      - 450.*src_(m,v,k+1,j,  i-1)+ 4500.*src_(m,v,k+1,j,  i  )+ 750.*src_(m,v,k+1,j,  i+1)
-      -  75.*src_(m,v,k+1,j+1,i-1)+  750.*src_(m,v,k+1,j+1,i  )+ 125.*src_(m,v,k+1,j+1,i+1)
+    -27.*src_(m,v,k-1,j-1,i-1)+270.*src_(m,v,k-1,j-1,i)+45.*src_(m,v,k-1,j-1,i+1)
+    +270.*src_(m,v,k-1,j,i-1)-2700.*src_(m,v,k-1,j,i)-450.*src_(m,v,k-1,j,i+1)
+    +45.*src_(m,v,k-1,j+1,i-1)-450.*src_(m,v,k-1,j+1,i)-75.*src_(m,v,k-1,j+1,i+1)
+    +270.*src_(m,v,k,j-1,i-1)-2700.*src_(m,v,k,j-1,i)-450.*src_(m,v,k,j-1,i+1)
+    -2700.*src_(m,v,k,j,i-1)+27000.*src_(m,v,k,j,i)+4500.*src_(m,v,k,j,i+1)
+    -450.*src_(m,v,k,j+1,i-1)+4500.*src_(m,v,k,j+1,i)+750.*src_(m,v,k,j+1,i+1)
+    +45.*src_(m,v,k+1,j-1,i-1)-450.*src_(m,v,k+1,j-1,i)-75.*src_(m,v,k+1,j-1,i+1)
+    -450.*src_(m,v,k+1,j,i-1)+4500.*src_(m,v,k+1,j,i)+750.*src_(m,v,k+1,j,i+1)
+    -75.*src_(m,v,k+1,j+1,i-1)+750.*src_(m,v,k+1,j+1,i)+125.*src_(m,v,k+1,j+1,i+1)
     ) / 32768.0;
   });
   return;

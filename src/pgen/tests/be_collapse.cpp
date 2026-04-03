@@ -350,9 +350,11 @@ void ProblemGenerator::BECollapse(ParameterInput *pin, const bool restart) {
 
 //----------------------------------------------------------------------------------------
 //! \fn void BarotropicCooling()
-//! \brief User source term: enforces barotropic relation and resets velocity outside cloud.
+//! \brief User source term: enforces barotropic relation
+//!        and resets velocity outside cloud.
 //!
-//! Internal energy is set to: e_int = rho / (gamma-1) * sqrt(1 + (rho/rhocrit)^(2*(gamma-1)))
+//! Internal energy is set to:
+//!   e_int = rho/(gamma-1) * sqrt(1 + (rho/rhocrit)^(2*(gamma-1)))
 //! This is isothermal (cs=1) at low density and adiabatic above rhocrit.
 //! Momentum is zeroed outside the initial cloud radius.
 

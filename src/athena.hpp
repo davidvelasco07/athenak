@@ -9,7 +9,7 @@
 //  \brief contains Athena++ general purpose types, structures, enums, etc.
 
 #include <string>
-#include <cstdint> 
+#include <cstdint>
 
 #include <Kokkos_Core.hpp>
 #include <Kokkos_DualView.hpp>
