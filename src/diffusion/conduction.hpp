@@ -30,6 +30,8 @@ class Conduction {
   Real kappa_ceiling; // ceiling of thermal conductivity
   bool sat_hflux;     // saturtion of heat flux
   bool use_ho;        // flag for 4th-order diffusive operators
+  //! Matches <hydro|mhd>/mignone; with use_ho, pass w0_c and point stencils, else w0.
+  bool mignone_ {false};
 
   // functions to add heat fluxes to Hydro and/or MHD fluxes
   void AddHeatFlux(const DvceArray5D<Real> &w, const EOS_Data &eos,

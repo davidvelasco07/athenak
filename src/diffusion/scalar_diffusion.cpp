@@ -22,6 +22,7 @@
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
 #include "scalar_diffusion.hpp"
+#include "ho_diffusion_stencil.hpp"
 
 //----------------------------------------------------------------------------------------
 //! \brief ScalarDiffusion constructor
@@ -31,6 +32,7 @@ ScalarDiffusion::ScalarDiffusion(std::string block, MeshBlockPack *pp,
   pmy_pack(pp) {
   nu_scalar = pin->GetReal(block, "nu_scalar");
   use_ho = pin->GetOrAddBoolean(block, "fourth_order_diff", false);
+  mignone_ = pin->GetOrAddBoolean(block, "mignone", false);
 
   // Requires phydro/pmhd on the pack — construct ScalarDiffusion only after those
   // pointers are assigned (see MeshBlockPack::AddPhysics).  Use `block` so ion-neutral
@@ -145,10 +147,11 @@ void ScalarDiffusion::IsotropicScalarDiffusiveFlux(const DvceArray5D<Real> &w,
 //----------------------------------------------------------------------------------------
 //! \fn void ScalarDiffusion::FourthOrderIsotropicScalarDiffusiveFlux()
 //! \brief Adds 4th-order isotropic scalar diffusion flux to face-centered fluxes.
-//! Uses 4-point stencil: (15*(C_i - C_{i-1}) - (C_{i+1} - C_{i-2})) / (12*dx)
+//! dC/dn via HoGrad (point vs average from mignone_); rho_face via HoFaceValue.
 
 void ScalarDiffusion::FourthOrderIsotropicScalarDiffusiveFlux(const DvceArray5D<Real> &w,
   DvceFaceFld5D<Real> &flx) {
+  const bool use_pt = mignone_;
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   int is = indcs.is, ie = indcs.ie;
   int js = indcs.js, je = indcs.je;
@@ -165,11 +168,13 @@ void ScalarDiffusion::FourthOrderIsotropicScalarDiffusiveFlux(const DvceArray5D<
   auto &flx1 = flx.x1f;
   par_for("scaldiff4_1", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie+1,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-    Real rho_face = 0.5*(w(m,IDN,k,j,i) + w(m,IDN,k,j,i-1));
-    Real idx1 = 1.0/(12.0*size.d_view(m).dx1);
+    Real rho_face = HoFaceValue(w(m,IDN,k,j,i-2), w(m,IDN,k,j,i-1),
+                                      w(m,IDN,k,j,i), w(m,IDN,k,j,i+1));
+    Real inv_dx = 1.0/size.d_view(m).dx1;
     for (int n = 0; n < nscal; ++n) {
-      Real dCdx = (15.0*(w(m,nhyd+n,k,j,i  ) - w(m,nhyd+n,k,j,i-1)) -
-                        (w(m,nhyd+n,k,j,i+1) - w(m,nhyd+n,k,j,i-2))) * idx1;
+      Real dCdx = HoGrad(use_pt,
+          w(m,nhyd+n,k,j,i-2), w(m,nhyd+n,k,j,i-1),
+          w(m,nhyd+n,k,j,i), w(m,nhyd+n,k,j,i+1), inv_dx);
       flx1(m, nhyd+n, k, j, i) -= rho_face * nu * dCdx;
     }
   });
@@ -181,11 +186,13 @@ void ScalarDiffusion::FourthOrderIsotropicScalarDiffusiveFlux(const DvceArray5D<
   auto &flx2 = flx.x2f;
   par_for("scaldiff4_2", DevExeSpace(), 0, nmb1, ks, ke, js, je+1, is, ie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-    Real rho_face = 0.5*(w(m,IDN,k,j,i) + w(m,IDN,k,j-1,i));
-    Real idx2 = 1.0/(12.0*size.d_view(m).dx2);
+    Real rho_face = HoFaceValue(w(m,IDN,k,j-2,i), w(m,IDN,k,j-1,i),
+                                      w(m,IDN,k,j,i), w(m,IDN,k,j+1,i));
+    Real inv_dy = 1.0/size.d_view(m).dx2;
     for (int n = 0; n < nscal; ++n) {
-      Real dCdy = (15.0*(w(m,nhyd+n,k,j  ,i) - w(m,nhyd+n,k,j-1,i)) -
-                        (w(m,nhyd+n,k,j+1,i) - w(m,nhyd+n,k,j-2,i))) * idx2;
+      Real dCdy = HoGrad(use_pt,
+          w(m,nhyd+n,k,j-2,i), w(m,nhyd+n,k,j-1,i),
+          w(m,nhyd+n,k,j,i), w(m,nhyd+n,k,j+1,i), inv_dy);
       flx2(m, nhyd+n, k, j, i) -= rho_face * nu * dCdy;
     }
   });
@@ -197,11 +204,13 @@ void ScalarDiffusion::FourthOrderIsotropicScalarDiffusiveFlux(const DvceArray5D<
   auto &flx3 = flx.x3f;
   par_for("scaldiff4_3", DevExeSpace(), 0, nmb1, ks, ke+1, js, je, is, ie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-    Real rho_face = 0.5*(w(m,IDN,k,j,i) + w(m,IDN,k-1,j,i));
-    Real idx3 = 1.0/(12.0*size.d_view(m).dx3);
+    Real rho_face = HoFaceValue(w(m,IDN,k-2,j,i), w(m,IDN,k-1,j,i),
+                                      w(m,IDN,k,j,i), w(m,IDN,k+1,j,i));
+    Real inv_dz = 1.0/size.d_view(m).dx3;
     for (int n = 0; n < nscal; ++n) {
-      Real dCdz = (15.0*(w(m,nhyd+n,k  ,j,i) - w(m,nhyd+n,k-1,j,i)) -
-                        (w(m,nhyd+n,k+1,j,i) - w(m,nhyd+n,k-2,j,i))) * idx3;
+      Real dCdz = HoGrad(use_pt,
+          w(m,nhyd+n,k-2,j,i), w(m,nhyd+n,k-1,j,i),
+          w(m,nhyd+n,k,j,i), w(m,nhyd+n,k+1,j,i), inv_dz);
       flx3(m, nhyd+n, k, j, i) -= rho_face * nu * dCdz;
     }
   });

@@ -27,6 +27,8 @@ class ScalarDiffusion {
   // data
   Real nu_scalar;   // scalar diffusion coefficient
   bool use_ho;      // flag for 4th-order diffusive operators
+  //! Matches <hydro|mhd>/mignone; with use_ho, pass w0_c and point stencils, else w0.
+  bool mignone_ {false};
   int nhydro;       // number of hydro/mhd variables (offset to first scalar in arrays)
   int nscalars;     // number of passive scalars
 

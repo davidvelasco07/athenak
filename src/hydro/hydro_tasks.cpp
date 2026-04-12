@@ -183,13 +183,16 @@ TaskStatus Hydro::Fluxes(Driver *pdrive, int stage) {
 
   // Add viscous, heat-flux, etc fluxes
   if (pvisc != nullptr) {
-    pvisc->IsotropicViscousFlux(w0, pvisc->nu_iso, peos->eos_data, uflx);
+    const auto &w = (pvisc->use_ho && use_mignone) ? w0_c : w0;
+    pvisc->IsotropicViscousFlux(w, pvisc->nu_iso, peos->eos_data, uflx);
   }
   if (pcond != nullptr) {
-    pcond->AddHeatFlux(w0, peos->eos_data, uflx);
+    const auto &w_cond = (pcond->use_ho && use_mignone) ? w0_c : w0;
+    pcond->AddHeatFlux(w_cond, peos->eos_data, uflx);
   }
   if (pscalardiff != nullptr) {
-    pscalardiff->IsotropicScalarDiffusiveFlux(w0, uflx);
+    const auto &w_sd = (pscalardiff->use_ho && use_mignone) ? w0_c : w0;
+    pscalardiff->IsotropicScalarDiffusiveFlux(w_sd, uflx);
   }
 
   // call FOFC if necessary

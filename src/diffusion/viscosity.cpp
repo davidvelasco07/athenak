@@ -19,6 +19,7 @@
 #include "mesh/mesh.hpp"
 #include "eos/eos.hpp"
 #include "viscosity.hpp"
+#include "ho_diffusion_stencil.hpp"
 
 //----------------------------------------------------------------------------------------
 // ctor:
@@ -28,12 +29,25 @@
 
 Viscosity::Viscosity(std::string block, MeshBlockPack *pp,
                      ParameterInput *pin) :
-  pmy_pack(pp) {
+  pmy_pack(pp),
+  ho_face_vel_("visc_ho_face_vel", 1, 4, 1, 1, 1),
+  mignone_(pin->GetOrAddBoolean(block, "mignone", false)) {
   // Read coefficient of isotropic kinematic shear viscosity (must be present)
   nu_iso = pin->GetReal(block,"viscosity");
 
   // flag for 4th-order diffusive operators
   use_ho = pin->GetOrAddBoolean(block, "fourth_order_diff", false);
+
+  if (use_ho) {
+    int nmb = std::max((pp->nmb_thispack), (pp->pmesh->nmb_maxperrank));
+    auto &indcs = pp->pmesh->mb_indcs;
+    int ncells1 = indcs.nx1 + 2*(indcs.ng);
+    int ncells2 = (indcs.nx2 > 1)? (indcs.nx2 + 2*(indcs.ng)) : 1;
+    int ncells3 = (indcs.nx3 > 1)? (indcs.nx3 + 2*(indcs.ng)) : 1;
+    Kokkos::realloc(ho_face_vel_.x1f, nmb, 4, ncells3, ncells2, ncells1);
+    Kokkos::realloc(ho_face_vel_.x2f, nmb, 4, ncells3, ncells2, ncells1);
+    Kokkos::realloc(ho_face_vel_.x3f, nmb, 4, ncells3, ncells2, ncells1);
+  }
 
   // viscous timestep on MeshBlock(s) in this pack
   dtnew = std::numeric_limits<float>::max();
@@ -65,7 +79,10 @@ Viscosity::~Viscosity() {
 
 void Viscosity::IsotropicViscousFlux(const DvceArray5D<Real> &w0, const Real nu_iso,
   const EOS_Data &eos, DvceFaceFld5D<Real> &flx) {
-  if (use_ho) { FourthOrderIsotropicViscousFlux(w0, nu_iso, eos, flx); return; }
+  if (use_ho) {
+    FourthOrderIsotropicViscousFlux(w0, nu_iso, eos, flx);
+    return;
+  }
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   int is = indcs.is, ie = indcs.ie;
   int js = indcs.js, je = indcs.je;
@@ -222,14 +239,70 @@ void Viscosity::IsotropicViscousFlux(const DvceArray5D<Real> &w0, const Real nu_
 }
 
 //----------------------------------------------------------------------------------------
+//! \fn void Viscosity::FillHoViscFaceVelocity
+//  \brief Store (Vx,Vy,Vz) at each face using HoFaceValue along the face normal
+//  (four nearest cell-centered samples). Transverse viscous terms use HoGrad
+//  on these values along transverse directions.
+
+void Viscosity::FillHoViscFaceVelocity(const DvceArray5D<Real> &w) {
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  int is = indcs.is, ie = indcs.ie;
+  int js = indcs.js, je = indcs.je;
+  int ks = indcs.ks, ke = indcs.ke;
+  int nmb1 = pmy_pack->nmb_thispack - 1;
+  bool &multi_d = pmy_pack->pmesh->multi_d;
+  bool &three_d = pmy_pack->pmesh->three_d;
+  auto vx1 = ho_face_vel_.x1f;
+  auto vx2 = ho_face_vel_.x2f;
+  auto vx3 = ho_face_vel_.x3f;
+
+  // x1-face velocities: needed for x1 flux (including 1D ideal-gas energy term)
+  // Extend into ghost zones (±2) in transverse directions so that HoGradT
+  // can access face values at j±2 and k±2 for interior flux faces.
+  int jl1 = multi_d ? js-2 : js, ju1 = multi_d ? je+2 : je;
+  int kl1 = three_d ? ks-2 : ks, ku1 = three_d ? ke+2 : ke;
+  par_for("visc4_fill_vx1", DevExeSpace(), 0, nmb1, kl1, ku1, jl1, ju1, is, ie+1,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    for(int var=0; var<4; var++){
+      vx1(m, var, k, j, i) = HoFaceValue(w(m, var, k, j, i-2), w(m, var, k, j, i-1),
+          w(m, var, k, j, i), w(m, var, k, j, i+1));
+    }
+  });
+
+  if (multi_d) {
+    // Extend ±2 in x1 (transverse) and x3 (transverse) for HoGradT access
+    int kl2 = three_d ? ks-2 : ks, ku2 = three_d ? ke+2 : ke;
+    par_for("visc4_fill_vx2", DevExeSpace(), 0, nmb1, kl2, ku2, js, je+1, is-2, ie+2,
+    KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      for(int var=0; var<4; var++){
+        vx2(m, var, k, j, i) = HoFaceValue(w(m, var, k, j-2, i), w(m, var, k, j-1, i),
+          w(m, var, k, j, i), w(m, var, k, j+1, i));
+      }
+    });
+  }
+
+  if (three_d) {
+    // Extend ±2 in x1 and x2 (both transverse) for HoGradT access
+    par_for("visc4_fill_vx3", DevExeSpace(), 0, nmb1, ks, ke+1, js-2, je+2, is-2, ie+2,
+    KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      for(int var=0; var<4; var++){
+        vx3(m, var, k, j, i) = HoFaceValue(w(m, var, k-2, j, i), w(m, var, k-1, j, i),
+          w(m, var, k, j, i), w(m, var, k+1, j, i));
+      }
+    });
+  }
+}
+
+//----------------------------------------------------------------------------------------
 //! \fn void FourthOrderIsotropicViscousFlux
 //  \brief Adds 4th-order viscous fluxes to face-centered fluxes of conserved variables.
-//  Uses 4-point stencils for all derivatives:
-//    normal:     (15(q_i - q_{i-1}) - (q_{i+1} - q_{i-2})) / (12*dx)
-//    transverse: (-q_{j+2} + 8q_{j+1} - 8q_{j-1} + q_{j-2}) / (12*dy),  averaged at face
+//  Normal derivatives use HoNormDir* on w; transverse terms use HoGrad on vx1/2/3.
 
-void Viscosity::FourthOrderIsotropicViscousFlux(const DvceArray5D<Real> &w0,
+void Viscosity::FourthOrderIsotropicViscousFlux(const DvceArray5D<Real> &w,
   const Real nu_iso, const EOS_Data &eos, DvceFaceFld5D<Real> &flx) {
+  FillHoViscFaceVelocity(w);
+  const bool use_pt = mignone_;
+
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   int is = indcs.is, ie = indcs.ie;
   int js = indcs.js, je = indcs.je;
@@ -239,6 +312,9 @@ void Viscosity::FourthOrderIsotropicViscousFlux(const DvceArray5D<Real> &w0,
   auto size = pmy_pack->pmb->mb_size;
   bool &multi_d = pmy_pack->pmesh->multi_d;
   bool &three_d = pmy_pack->pmesh->three_d;
+  auto vx1 = ho_face_vel_.x1f;
+  auto vx2 = ho_face_vel_.x2f;
+  auto vx3 = ho_face_vel_.x3f;
 
   //--------------------------------------------------------------------------------------
   // fluxes in x1-direction
@@ -253,72 +329,55 @@ void Viscosity::FourthOrderIsotropicViscousFlux(const DvceArray5D<Real> &w0,
     ScrArray1D<Real> fvy(member.team_scratch(scr_level), ncells1);
     ScrArray1D<Real> fvz(member.team_scratch(scr_level), ncells1);
 
-    // 4th-order normal derivatives [4/3 dVx/dx, dVy/dx, dVz/dx]
+    // Normal derivatives [4/3 dVx/dx, dVy/dx, dVz/dx] — point or average stencil
     par_for_inner(member, is, ie+1, [&](const int i) {
       Real idx1 = 1.0/size.d_view(m).dx1;
-      fvx(i) = 4.0/3.0*(15.0*(w0(m,IVX,k,j,i) - w0(m,IVX,k,j,i-1))
-                           - (w0(m,IVX,k,j,i+1) - w0(m,IVX,k,j,i-2)))*(idx1/12.0);
-      fvy(i) =          (15.0*(w0(m,IVY,k,j,i) - w0(m,IVY,k,j,i-1))
-                            - (w0(m,IVY,k,j,i+1) - w0(m,IVY,k,j,i-2)))*(idx1/12.0);
-      fvz(i) =          (15.0*(w0(m,IVZ,k,j,i) - w0(m,IVZ,k,j,i-1))
-                            - (w0(m,IVZ,k,j,i+1) - w0(m,IVZ,k,j,i-2)))*(idx1/12.0);
+      fvx(i) = 4.0/3.0*HoGradDir1(use_pt, w, m, IVX, k, j, i, idx1);
+      fvy(i) =         HoGradDir1(use_pt, w, m, IVY, k, j, i, idx1);
+      fvz(i) =         HoGradDir1(use_pt, w, m, IVZ, k, j, i, idx1);
     });
 
-    // In 2D/3D: 4th-order transverse derivatives, averaged at face
-    // fvx -= (2/3) dVy/dy;   fvy += dVx/dy
+    // Transverse: HoGradT on vx1 along y / z
     if (multi_d) {
       par_for_inner(member, is, ie+1, [&](const int i) {
         Real idy2 = 1.0/size.d_view(m).dx2;
-        // dVy/dy at (i) and (i-1), 4-point stencil, then face-average
-        Real dyVy_i   = (-w0(m,IVY,k,j+2,i  ) + 8.0*w0(m,IVY,k,j+1,i  )
-                         -8.0*w0(m,IVY,k,j-1,i  ) +     w0(m,IVY,k,j-2,i  ))*(idy2/12.0);
-        Real dyVy_im1 = (-w0(m,IVY,k,j+2,i-1) + 8.0*w0(m,IVY,k,j+1,i-1)
-                         -8.0*w0(m,IVY,k,j-1,i-1) +     w0(m,IVY,k,j-2,i-1))*(idy2/12.0);
-        fvx(i) -= (2.0/3.0)*0.5*(dyVy_i + dyVy_im1);
-
-        // dVx/dy at (i) and (i-1), 4-point stencil, then face-average
-        Real dyVx_i   = (-w0(m,IVX,k,j+2,i  ) + 8.0*w0(m,IVX,k,j+1,i  )
-                         -8.0*w0(m,IVX,k,j-1,i  ) +     w0(m,IVX,k,j-2,i  ))*(idy2/12.0);
-        Real dyVx_im1 = (-w0(m,IVX,k,j+2,i-1) + 8.0*w0(m,IVX,k,j+1,i-1)
-                         -8.0*w0(m,IVX,k,j-1,i-1) +     w0(m,IVX,k,j-2,i-1))*(idy2/12.0);
-        fvy(i) += 0.5*(dyVx_i + dyVx_im1);
+        Real dyVy = HoGradT(use_pt,
+            vx1(m, IVY, k, j-2, i), vx1(m, IVY, k, j-1, i),
+            vx1(m, IVY, k, j+1, i), vx1(m, IVY, k, j+2, i), idy2);
+        Real dyVx = HoGradT(use_pt,
+            vx1(m, IVX, k, j-2, i), vx1(m, IVX, k, j-1, i),
+            vx1(m, IVX, k, j+1, i), vx1(m, IVX, k, j+2, i), idy2);
+        fvx(i) -= (2.0/3.0)*dyVy;
+        fvy(i) += dyVx;
       });
     }
 
-    // In 3D: fvx -= (2/3) dVz/dz;   fvz += dVx/dz
     if (three_d) {
       par_for_inner(member, is, ie+1, [&](const int i) {
         Real idz3 = 1.0/size.d_view(m).dx3;
-        Real dzVz_i   = (-w0(m,IVZ,k+2,j,i  ) + 8.0*w0(m,IVZ,k+1,j,i  )
-                         -8.0*w0(m,IVZ,k-1,j,i  ) +     w0(m,IVZ,k-2,j,i  ))*(idz3/12.0);
-        Real dzVz_im1 = (-w0(m,IVZ,k+2,j,i-1) + 8.0*w0(m,IVZ,k+1,j,i-1)
-                         -8.0*w0(m,IVZ,k-1,j,i-1) +     w0(m,IVZ,k-2,j,i-1))*(idz3/12.0);
-        fvx(i) -= (2.0/3.0)*0.5*(dzVz_i + dzVz_im1);
-
-        Real dzVx_i   = (-w0(m,IVX,k+2,j,i  ) + 8.0*w0(m,IVX,k+1,j,i  )
-                         -8.0*w0(m,IVX,k-1,j,i  ) +     w0(m,IVX,k-2,j,i  ))*(idz3/12.0);
-        Real dzVx_im1 = (-w0(m,IVX,k+2,j,i-1) + 8.0*w0(m,IVX,k+1,j,i-1)
-                         -8.0*w0(m,IVX,k-1,j,i-1) +     w0(m,IVX,k-2,j,i-1))*(idz3/12.0);
-        fvz(i) += 0.5*(dzVx_i + dzVx_im1);
+        Real dzVz = HoGradT(use_pt,
+            vx1(m, IVZ, k-2, j, i), vx1(m, IVZ, k-1, j, i),
+            vx1(m, IVZ, k+1, j, i), vx1(m, IVZ, k+2, j, i), idz3);
+        Real dzVx = HoGradT(use_pt,
+            vx1(m, IVX, k-2, j, i), vx1(m, IVX, k-1, j, i),
+            vx1(m, IVX, k+1, j, i), vx1(m, IVX, k+2, j, i), idz3);
+        fvx(i) -= (2.0/3.0)*dzVz;
+        fvz(i) += dzVx;
       });
     }
 
     // Sum viscous fluxes into fluxes of conserved variables; including energy fluxes
     par_for_inner(member, is, ie+1, [&](const int i) {
-      // 4th-order face density and velocity
-      Real rho_f = (7.0/12.0)*(w0(m,IDN,k,j,i) + w0(m,IDN,k,j,i-1))
-                 - (1.0/12.0)*(w0(m,IDN,k,j,i+1) + w0(m,IDN,k,j,i-2));
+      // 4th-order face density and velocity (w0 or w0_c per caller)
+      Real rho_f =  vx1(m, IDN, k, j, i);
       Real nud = nu_iso*rho_f;
       flx1(m,IVX,k,j,i) -= nud*fvx(i);
       flx1(m,IVY,k,j,i) -= nud*fvy(i);
       flx1(m,IVZ,k,j,i) -= nud*fvz(i);
       if (eos.is_ideal) {
-        Real vx_f = (7.0/12.0)*(w0(m,IVX,k,j,i) + w0(m,IVX,k,j,i-1))
-                  - (1.0/12.0)*(w0(m,IVX,k,j,i+1) + w0(m,IVX,k,j,i-2));
-        Real vy_f = (7.0/12.0)*(w0(m,IVY,k,j,i) + w0(m,IVY,k,j,i-1))
-                  - (1.0/12.0)*(w0(m,IVY,k,j,i+1) + w0(m,IVY,k,j,i-2));
-        Real vz_f = (7.0/12.0)*(w0(m,IVZ,k,j,i) + w0(m,IVZ,k,j,i-1))
-                  - (1.0/12.0)*(w0(m,IVZ,k,j,i+1) + w0(m,IVZ,k,j,i-2));
+        Real vx_f = vx1(m, IVX, k, j, i);
+        Real vy_f = vx1(m, IVY, k, j, i);
+        Real vz_f = vx1(m, IVZ, k, j, i);
         flx1(m,IEN,k,j,i) -= nud*(vx_f*fvx(i) + vy_f*fvy(i) + vz_f*fvz(i));
       }
     });
@@ -336,66 +395,50 @@ void Viscosity::FourthOrderIsotropicViscousFlux(const DvceArray5D<Real> &w0,
     ScrArray1D<Real> fvy(member.team_scratch(scr_level), ncells1);
     ScrArray1D<Real> fvz(member.team_scratch(scr_level), ncells1);
 
-    // 4th-order normal derivatives [(dVx/dy+dVy/dx), 4/3 dVy/dy, dVz/dy]
+    // Normal derivatives [(dVx/dy+dVy/dx), 4/3 dVy/dy, dVz/dy]
     par_for_inner(member, is, ie, [&](const int i) {
       Real idy2 = 1.0/size.d_view(m).dx2;
-      // normal: 4th-order difference in y
-      Real dVx = (15.0*(w0(m,IVX,k,j,i) - w0(m,IVX,k,j-1,i))
-                    - (w0(m,IVX,k,j+1,i) - w0(m,IVX,k,j-2,i)))*(idy2/12.0);
-      Real dVy = (15.0*(w0(m,IVY,k,j,i) - w0(m,IVY,k,j-1,i))
-                    - (w0(m,IVY,k,j+1,i) - w0(m,IVY,k,j-2,i)))*(idy2/12.0);
-      Real dVz = (15.0*(w0(m,IVZ,k,j,i) - w0(m,IVZ,k,j-1,i))
-                    - (w0(m,IVZ,k,j+1,i) - w0(m,IVZ,k,j-2,i)))*(idy2/12.0);
-
-      // transverse: dVy/dx (divergence, -2/3) and dVx/dx (divergence, -2/3)
       Real idx1 = 1.0/size.d_view(m).dx1;
-      Real dxVy_j   = (-w0(m,IVY,k,j  ,i+2) + 8.0*w0(m,IVY,k,j  ,i+1)
-                       -8.0*w0(m,IVY,k,j  ,i-1) +     w0(m,IVY,k,j  ,i-2))*(idx1/12.0);
-      Real dxVy_jm1 = (-w0(m,IVY,k,j-1,i+2) + 8.0*w0(m,IVY,k,j-1,i+1)
-                       -8.0*w0(m,IVY,k,j-1,i-1) +     w0(m,IVY,k,j-1,i-2))*(idx1/12.0);
-      Real dxVx_j   = (-w0(m,IVX,k,j  ,i+2) + 8.0*w0(m,IVX,k,j  ,i+1)
-                       -8.0*w0(m,IVX,k,j  ,i-1) +     w0(m,IVX,k,j  ,i-2))*(idx1/12.0);
-      Real dxVx_jm1 = (-w0(m,IVX,k,j-1,i+2) + 8.0*w0(m,IVX,k,j-1,i+1)
-                       -8.0*w0(m,IVX,k,j-1,i-1) +     w0(m,IVX,k,j-1,i-2))*(idx1/12.0);
+      Real dVx = HoGradDir2(use_pt, w, m, IVX, k, j, i, idy2);
+      Real dVy = HoGradDir2(use_pt, w, m, IVY, k, j, i, idy2);
+      Real dVz = HoGradDir2(use_pt, w, m, IVZ, k, j, i, idy2);
 
-      fvx(i) = dVx + 0.5*(dxVy_j + dxVy_jm1);
-      fvy(i) = 4.0/3.0*dVy - (2.0/3.0)*0.5*(dxVx_j + dxVx_jm1);
+      Real dxVy = HoGradT(use_pt,
+          vx2(m, IVY, k, j, i-2), vx2(m, IVY, k, j, i-1),
+          vx2(m, IVY, k, j, i+1), vx2(m, IVY, k, j, i+2), idx1);
+      Real dxVx = HoGradT(use_pt,
+          vx2(m, IVX, k, j, i-2), vx2(m, IVX, k, j, i-1),
+          vx2(m, IVX, k, j, i+1), vx2(m, IVX, k, j, i+2), idx1);
+      fvx(i) = dVx + dxVy;
+      fvy(i) = 4.0/3.0*dVy - (2.0/3.0)*dxVx;
       fvz(i) = dVz;
     });
 
-    // In 3D: fvy -= (2/3) dVz/dz;   fvz += dVy/dz
     if (three_d) {
       par_for_inner(member, is, ie, [&](const int i) {
         Real idz3 = 1.0/size.d_view(m).dx3;
-        Real dzVz_j   = (-w0(m,IVZ,k+2,j  ,i) + 8.0*w0(m,IVZ,k+1,j  ,i)
-                         -8.0*w0(m,IVZ,k-1,j  ,i) +     w0(m,IVZ,k-2,j  ,i))*(idz3/12.0);
-        Real dzVz_jm1 = (-w0(m,IVZ,k+2,j-1,i) + 8.0*w0(m,IVZ,k+1,j-1,i)
-                         -8.0*w0(m,IVZ,k-1,j-1,i) +     w0(m,IVZ,k-2,j-1,i))*(idz3/12.0);
-        fvy(i) -= (2.0/3.0)*0.5*(dzVz_j + dzVz_jm1);
-
-        Real dzVy_j   = (-w0(m,IVY,k+2,j  ,i) + 8.0*w0(m,IVY,k+1,j  ,i)
-                         -8.0*w0(m,IVY,k-1,j  ,i) +     w0(m,IVY,k-2,j  ,i))*(idz3/12.0);
-        Real dzVy_jm1 = (-w0(m,IVY,k+2,j-1,i) + 8.0*w0(m,IVY,k+1,j-1,i)
-                         -8.0*w0(m,IVY,k-1,j-1,i) +     w0(m,IVY,k-2,j-1,i))*(idz3/12.0);
-        fvz(i) += 0.5*(dzVy_j + dzVy_jm1);
+        Real dzVz = HoGradT(use_pt,
+            vx2(m, IVZ, k-2, j, i), vx2(m, IVZ, k-1, j, i),
+            vx2(m, IVZ, k+1, j, i), vx2(m, IVZ, k+2, j, i), idz3);
+        Real dzVy = HoGradT(use_pt,
+            vx2(m, IVY, k-2, j, i), vx2(m, IVY, k-1, j, i),
+            vx2(m, IVY, k+1, j, i), vx2(m, IVY, k+2, j, i), idz3);
+        fvy(i) -= (2.0/3.0)*dzVz;
+        fvz(i) += dzVy;
       });
     }
 
     // Sum viscous fluxes into fluxes of conserved variables; including energy fluxes
     par_for_inner(member, is, ie, [&](const int i) {
-      Real rho_f = (7.0/12.0)*(w0(m,IDN,k,j,i) + w0(m,IDN,k,j-1,i))
-                 - (1.0/12.0)*(w0(m,IDN,k,j+1,i) + w0(m,IDN,k,j-2,i));
+      Real rho_f = vx2(m, IDN, k, j, i);
       Real nud = nu_iso*rho_f;
       flx2(m,IVX,k,j,i) -= nud*fvx(i);
       flx2(m,IVY,k,j,i) -= nud*fvy(i);
       flx2(m,IVZ,k,j,i) -= nud*fvz(i);
       if (eos.is_ideal) {
-        Real vx_f = (7.0/12.0)*(w0(m,IVX,k,j,i) + w0(m,IVX,k,j-1,i))
-                  - (1.0/12.0)*(w0(m,IVX,k,j+1,i) + w0(m,IVX,k,j-2,i));
-        Real vy_f = (7.0/12.0)*(w0(m,IVY,k,j,i) + w0(m,IVY,k,j-1,i))
-                  - (1.0/12.0)*(w0(m,IVY,k,j+1,i) + w0(m,IVY,k,j-2,i));
-        Real vz_f = (7.0/12.0)*(w0(m,IVZ,k,j,i) + w0(m,IVZ,k,j-1,i))
-                  - (1.0/12.0)*(w0(m,IVZ,k,j+1,i) + w0(m,IVZ,k,j-2,i));
+        Real vx_f = vx2(m, IVX, k, j, i);
+        Real vy_f = vx2(m, IVY, k, j, i);
+        Real vz_f = vx2(m, IVZ, k, j, i);
         flx2(m,IEN,k,j,i) -= nud*(vx_f*fvx(i) + vy_f*fvy(i) + vz_f*fvz(i));
       }
     });
@@ -413,58 +456,44 @@ void Viscosity::FourthOrderIsotropicViscousFlux(const DvceArray5D<Real> &w0,
     ScrArray1D<Real> fvy(member.team_scratch(scr_level), ncells1);
     ScrArray1D<Real> fvz(member.team_scratch(scr_level), ncells1);
 
-    // 4th-order normal derivatives [(dVx/dz+dVz/dx), (dVy/dz+dVz/dy), 4/3 dVz/dz]
+    // Normal derivatives [(dVx/dz+dVz/dx), (dVy/dz+dVz/dy), 4/3 dVz/dz]
     par_for_inner(member, is, ie, [&](const int i) {
       Real idz3 = 1.0/size.d_view(m).dx3;
-      Real dVx = (15.0*(w0(m,IVX,k,j,i) - w0(m,IVX,k-1,j,i))
-                    - (w0(m,IVX,k+1,j,i) - w0(m,IVX,k-2,j,i)))*(idz3/12.0);
-      Real dVy = (15.0*(w0(m,IVY,k,j,i) - w0(m,IVY,k-1,j,i))
-                    - (w0(m,IVY,k+1,j,i) - w0(m,IVY,k-2,j,i)))*(idz3/12.0);
-      Real dVz = (15.0*(w0(m,IVZ,k,j,i) - w0(m,IVZ,k-1,j,i))
-                    - (w0(m,IVZ,k+1,j,i) - w0(m,IVZ,k-2,j,i)))*(idz3/12.0);
-
       Real idx1 = 1.0/size.d_view(m).dx1;
-      Real dxVz_k   = (-w0(m,IVZ,k  ,j,i+2) + 8.0*w0(m,IVZ,k  ,j,i+1)
-                       -8.0*w0(m,IVZ,k  ,j,i-1) +     w0(m,IVZ,k  ,j,i-2))*(idx1/12.0);
-      Real dxVz_km1 = (-w0(m,IVZ,k-1,j,i+2) + 8.0*w0(m,IVZ,k-1,j,i+1)
-                       -8.0*w0(m,IVZ,k-1,j,i-1) +     w0(m,IVZ,k-1,j,i-2))*(idx1/12.0);
-      Real dxVx_k   = (-w0(m,IVX,k  ,j,i+2) + 8.0*w0(m,IVX,k  ,j,i+1)
-                       -8.0*w0(m,IVX,k  ,j,i-1) +     w0(m,IVX,k  ,j,i-2))*(idx1/12.0);
-      Real dxVx_km1 = (-w0(m,IVX,k-1,j,i+2) + 8.0*w0(m,IVX,k-1,j,i+1)
-                       -8.0*w0(m,IVX,k-1,j,i-1) +     w0(m,IVX,k-1,j,i-2))*(idx1/12.0);
-
       Real idy2 = 1.0/size.d_view(m).dx2;
-      Real dyVz_k   = (-w0(m,IVZ,k  ,j+2,i) + 8.0*w0(m,IVZ,k  ,j+1,i)
-                       -8.0*w0(m,IVZ,k  ,j-1,i) +     w0(m,IVZ,k  ,j-2,i))*(idy2/12.0);
-      Real dyVz_km1 = (-w0(m,IVZ,k-1,j+2,i) + 8.0*w0(m,IVZ,k-1,j+1,i)
-                       -8.0*w0(m,IVZ,k-1,j-1,i) +     w0(m,IVZ,k-1,j-2,i))*(idy2/12.0);
-      Real dyVy_k   = (-w0(m,IVY,k  ,j+2,i) + 8.0*w0(m,IVY,k  ,j+1,i)
-                       -8.0*w0(m,IVY,k  ,j-1,i) +     w0(m,IVY,k  ,j-2,i))*(idy2/12.0);
-      Real dyVy_km1 = (-w0(m,IVY,k-1,j+2,i) + 8.0*w0(m,IVY,k-1,j+1,i)
-                       -8.0*w0(m,IVY,k-1,j-1,i) +     w0(m,IVY,k-1,j-2,i))*(idy2/12.0);
+      Real dVx = HoGradDir3(use_pt, w, m, IVX, k, j, i, idz3);
+      Real dVy = HoGradDir3(use_pt, w, m, IVY, k, j, i, idz3);
+      Real dVz = HoGradDir3(use_pt, w, m, IVZ, k, j, i, idz3);
 
-      fvx(i) = dVx + 0.5*(dxVz_k + dxVz_km1);
-      fvy(i) = dVy + 0.5*(dyVz_k + dyVz_km1);
-      fvz(i) = 4.0/3.0*dVz
-             - (2.0/3.0)*0.5*(dxVx_k + dxVx_km1)
-             - (2.0/3.0)*0.5*(dyVy_k + dyVy_km1);
+      Real dxVz = HoGradT(use_pt,
+          vx3(m, IVZ, k, j, i-2), vx3(m, IVZ, k, j, i-1),
+          vx3(m, IVZ, k, j, i+1), vx3(m, IVZ, k, j, i+2), idx1);
+      Real dxVx = HoGradT(use_pt,
+          vx3(m, IVX, k, j, i-2), vx3(m, IVX, k, j, i-1),
+          vx3(m, IVX, k, j, i+1), vx3(m, IVX, k, j, i+2), idx1);
+      Real dyVz = HoGradT(use_pt,
+          vx3(m, IVZ, k, j-2, i), vx3(m, IVZ, k, j-1, i),
+          vx3(m, IVZ, k, j+1, i), vx3(m, IVZ, k, j+2, i), idy2);
+      Real dyVy = HoGradT(use_pt,
+          vx3(m, IVY, k, j-2, i), vx3(m, IVY, k, j-1, i),
+          vx3(m, IVY, k, j+1, i), vx3(m, IVY, k, j+2, i), idy2);
+
+      fvx(i) = dVx + dxVz;
+      fvy(i) = dVy + dyVz;
+      fvz(i) = 4.0/3.0*dVz - (2.0/3.0)*dxVx - (2.0/3.0)*dyVy;
     });
 
     // Sum viscous fluxes into fluxes of conserved variables; including energy fluxes
     par_for_inner(member, is, ie, [&](const int i) {
-      Real rho_f = (7.0/12.0)*(w0(m,IDN,k,j,i) + w0(m,IDN,k-1,j,i))
-                 - (1.0/12.0)*(w0(m,IDN,k+1,j,i) + w0(m,IDN,k-2,j,i));
+      Real rho_f = vx3(m, IDN, k, j, i);
       Real nud = nu_iso*rho_f;
       flx3(m,IVX,k,j,i) -= nud*fvx(i);
       flx3(m,IVY,k,j,i) -= nud*fvy(i);
       flx3(m,IVZ,k,j,i) -= nud*fvz(i);
       if (eos.is_ideal) {
-        Real vx_f = (7.0/12.0)*(w0(m,IVX,k,j,i) + w0(m,IVX,k-1,j,i))
-                  - (1.0/12.0)*(w0(m,IVX,k+1,j,i) + w0(m,IVX,k-2,j,i));
-        Real vy_f = (7.0/12.0)*(w0(m,IVY,k,j,i) + w0(m,IVY,k-1,j,i))
-                  - (1.0/12.0)*(w0(m,IVY,k+1,j,i) + w0(m,IVY,k-2,j,i));
-        Real vz_f = (7.0/12.0)*(w0(m,IVZ,k,j,i) + w0(m,IVZ,k-1,j,i))
-                  - (1.0/12.0)*(w0(m,IVZ,k+1,j,i) + w0(m,IVZ,k-2,j,i));
+        Real vx_f = vx3(m, IVX, k, j, i);
+        Real vy_f = vx3(m, IVY, k, j, i);
+        Real vz_f = vx3(m, IVZ, k, j, i);
         flx3(m,IEN,k,j,i) -= nud*(vx_f*fvx(i) + vy_f*fvy(i) + vz_f*fvz(i));
       }
     });

@@ -22,6 +22,7 @@
 #include "mhd/mhd.hpp"
 #include "eos/eos.hpp"
 #include "conduction.hpp"
+#include "ho_diffusion_stencil.hpp"
 #include "units/units.hpp"
 
 KOKKOS_INLINE_FUNCTION
@@ -82,6 +83,7 @@ Conduction::Conduction(std::string block, MeshBlockPack *pp, ParameterInput *pin
                   static_cast<Real>(std::numeric_limits<float>::max()));
   sat_hflux = pin->GetOrAddBoolean(block,"sat_hflux",false);
   use_ho = pin->GetOrAddBoolean(block,"fourth_order_diff",false);
+  mignone_ = pin->GetOrAddBoolean(block, "mignone", false);
 }
 
 //----------------------------------------------------------------------------------------
@@ -99,10 +101,11 @@ void Conduction::AddHeatFlux(const DvceArray5D<Real> &w0, const EOS_Data &eos,
   if (tdep_kappa) {
     TempDependentHeatFlux(w0, eos, flx);
   } else if (kappa > 0.0) {
-    if(use_ho)
-    FourthOrderIsotropicHeatFlux(w0, eos, flx);
-    else
-    IsotropicHeatFlux(w0, eos, flx);
+    if (use_ho) {
+      FourthOrderIsotropicHeatFlux(w0, eos, flx);
+    } else {
+      IsotropicHeatFlux(w0, eos, flx);
+    }
   } else {
     return;
   }
@@ -139,7 +142,8 @@ void Conduction::IsotropicHeatFlux(const DvceArray5D<Real> &w0, const EOS_Data &
     } else {
       dtempdx = (w0(m,ITM,k,j,i) - w0(m,ITM,k,j,i-1)) / size.d_view(m).dx1;
     }
-    flx1(m,IEN,k,j,i) -= kappa_ * dtempdx;
+    Real rho_face = 0.5*(w0(m,IDN,k,j,i) + w0(m,IDN,k,j,i-1));
+    flx1(m,IEN,k,j,i) -= kappa_ * rho_face * dtempdx;
   });
   if (pmy_pack->pmesh->one_d) {return;}
 
@@ -158,7 +162,8 @@ void Conduction::IsotropicHeatFlux(const DvceArray5D<Real> &w0, const EOS_Data &
     } else {
       dtempdx = (w0(m,ITM,k,j,i) - w0(m,ITM,k,j-1,i)) / size.d_view(m).dx2;
     }
-    flx2(m,IEN,k,j,i) -= kappa_ * dtempdx;
+    Real rho_face = 0.5*(w0(m,IDN,k,j,i) + w0(m,IDN,k,j-1,i));
+    flx2(m,IEN,k,j,i) -= kappa_ * rho_face * dtempdx;
   });
   if (pmy_pack->pmesh->two_d) {return;}
 
@@ -177,7 +182,8 @@ void Conduction::IsotropicHeatFlux(const DvceArray5D<Real> &w0, const EOS_Data &
     } else {
       dtempdx = (w0(m,ITM,k,j,i) - w0(m,ITM,k-1,j,i)) / size.d_view(m).dx3;
     }
-    flx3(m,IEN,k,j,i) -= kappa_ * dtempdx;
+    Real rho_face = 0.5*(w0(m,IDN,k,j,i) + w0(m,IDN,k-1,j,i));
+    flx3(m,IEN,k,j,i) -= kappa_ * rho_face * dtempdx;
   });
 
   return;
@@ -186,10 +192,11 @@ void Conduction::IsotropicHeatFlux(const DvceArray5D<Real> &w0, const EOS_Data &
 //----------------------------------------------------------------------------------------
 //! \fn void FourthOrderIsotropicHeatFlux()
 //! \brief Adds 4th-order isotropic heat flux to face-centered fluxes.
-//  Uses 4-point stencil: (15(T_i - T_{i-1}) - (T_{i+1} - T_{i-2})) / (12*dx)
+//  Normal derivative: HoGrad (point vs average coeffs from mignone_).
 
 void Conduction::FourthOrderIsotropicHeatFlux(const DvceArray5D<Real> &w0,
   const EOS_Data &eos, DvceFaceFld5D<Real> &flx) {
+  const bool use_pt = mignone_;
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   int is = indcs.is, ie = indcs.ie;
   int js = indcs.js, je = indcs.je;
@@ -215,8 +222,11 @@ void Conduction::FourthOrderIsotropicHeatFlux(const DvceArray5D<Real> &w0,
       T_i   = w0(m,ITM,k,j,i  );
       T_ip1 = w0(m,ITM,k,j,i+1);
     }
-    Real dTdx = (15.0*(T_i - T_im1) - (T_ip1 - T_im2)) / (12.0*size.d_view(m).dx1);
-    flx1(m,IEN,k,j,i) -= kappa_ * dTdx;
+    Real inv_dx = 1.0/size.d_view(m).dx1;
+    Real dTdx = HoGrad(use_pt, T_im2, T_im1, T_i, T_ip1, inv_dx);
+    Real rho_face = HoFaceValue(w0(m,IDN,k,j,i-2), w0(m,IDN,k,j,i-1),
+                                w0(m,IDN,k,j,i  ), w0(m,IDN,k,j,i+1));
+    flx1(m,IEN,k,j,i) -= kappa_ * rho_face * dTdx;
   });
   if (pmy_pack->pmesh->one_d) {return;}
 
@@ -235,8 +245,11 @@ void Conduction::FourthOrderIsotropicHeatFlux(const DvceArray5D<Real> &w0,
       T_j   = w0(m,ITM,k,j  ,i);
       T_jp1 = w0(m,ITM,k,j+1,i);
     }
-    Real dTdy = (15.0*(T_j - T_jm1) - (T_jp1 - T_jm2)) / (12.0*size.d_view(m).dx2);
-    flx2(m,IEN,k,j,i) -= kappa_ * dTdy;
+    Real inv_dy = 1.0/size.d_view(m).dx2;
+    Real dTdy = HoGrad(use_pt, T_jm2, T_jm1, T_j, T_jp1, inv_dy);
+    Real rho_face = HoFaceValue(w0(m,IDN,k,j-2,i), w0(m,IDN,k,j-1,i),
+                                w0(m,IDN,k,j  ,i), w0(m,IDN,k,j+1,i));
+    flx2(m,IEN,k,j,i) -= kappa_ * rho_face * dTdy;
   });
   if (pmy_pack->pmesh->two_d) {return;}
 
@@ -255,8 +268,11 @@ void Conduction::FourthOrderIsotropicHeatFlux(const DvceArray5D<Real> &w0,
       T_k   = w0(m,ITM,k  ,j,i);
       T_kp1 = w0(m,ITM,k+1,j,i);
     }
-    Real dTdz = (15.0*(T_k - T_km1) - (T_kp1 - T_km2)) / (12.0*size.d_view(m).dx3);
-    flx3(m,IEN,k,j,i) -= kappa_ * dTdz;
+    Real inv_dz = 1.0/size.d_view(m).dx3;
+    Real dTdz = HoGrad(use_pt, T_km2, T_km1, T_k, T_kp1, inv_dz);
+    Real rho_face = HoFaceValue(w0(m,IDN,k-2,j,i), w0(m,IDN,k-1,j,i),
+                                w0(m,IDN,k  ,j,i), w0(m,IDN,k+1,j,i));
+    flx3(m,IEN,k,j,i) -= kappa_ * rho_face * dTdz;
   });
 
   return;
