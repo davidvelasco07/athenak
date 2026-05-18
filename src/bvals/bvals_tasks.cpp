@@ -31,7 +31,7 @@
 
 TaskStatus MeshBoundaryValues::InitRecv(const int nvars) {
 #if MPI_PARALLEL_ENABLED
-  if (rank_packed_bvals_nvars_ != nvars || pmy_pack->pmesh->IsComplete()) {
+  if (rank_packed_bvals_nvars_ != nvars || pmy_pack->pmesh->IsMeshUpdated()) {
     BuildRankPackedVarMetadata(nvars);
   } else {
     std::fill(recv_var_reqs_.begin(), recv_var_reqs_.end(), MPI_REQUEST_NULL);
