@@ -20,10 +20,10 @@
 // forward declarations
 
 // constants that enumerate ParticlesPusher options
-enum class ParticlesPusher {drift, leap_frog, lagrangian_tracer, lagrangian_mc};
+enum class ParticlesPusher {drift, leapfrog, lagrangian_tracer, lagrangian_mc};
 
 // constants that enumerate ParticleTypes
-enum class ParticleType {cosmic_ray};
+enum class ParticleType {cosmic_ray, sink};
 
 //----------------------------------------------------------------------------------------
 //! \struct ParticlesTaskIDs
@@ -55,14 +55,12 @@ class Particles {
   ParticleType particle_type;
   int nprtcl_thispack;             // number of particles this MeshBlockPack
   int nrdata, nidata;
-//  DvceArray1D<int>  prtcl_gid;     // GID of MeshBlock containing each par
-//  DvceArray2D<Real> prtcl_pos;     // positions
-//  DvceArray2D<Real> prtcl_vel;     // velocities
   DvceArray2D<Real> prtcl_rdata;   // real number properties each particle (x,v,etc.)
   DvceArray2D<int>  prtcl_idata;   // integer properties each particle (gid, tag, etc.)
   Real dtnew;
 
   ParticlesPusher pusher;
+  Real point_mass_gm;  // temporary treatment of source term on particle
 
   // Boundary communication buffers and functions for particles
   ParticlesBoundaryValues *pbval_part;
