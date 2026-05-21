@@ -72,6 +72,22 @@ class ParticleMesh {
   // Zero every slot in every cell (called before each deposition pass).
   void Zero();
 
+  // TSC scatter of particle mass into slot 0 of dmesh.
+  //   prtcl_rdata: (nrdata, nprtcl) -- reads IPX/IPY/IPZ and IPM
+  //   prtcl_idata: (nidata, nprtcl) -- reads PGID
+  //   npar:        number of particles to deposit
+  //
+  // Implicitly calls Zero() first. Deposits into both interior and ghost
+  // cells of dmesh; the boundary-sum communication added in Phase 1c will
+  // fold the ghost-cell contributions back into neighbor interiors.
+  //
+  // Each particle contributes to 27 cells in 3D (or 9 in 2D), each via a
+  // Kokkos::atomic_add. No write conflicts; small contention since the
+  // 27-cell footprint is tight.
+  void DepositMass(const DvceArray2D<Real>& prtcl_rdata,
+                   const DvceArray2D<int>&  prtcl_idata,
+                   int npar);
+
  private:
   MeshBlockPack *pmy_pack;
 };
