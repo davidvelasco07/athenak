@@ -42,6 +42,9 @@ struct ParticlesTaskIDs {
 
 namespace particles {
 
+// forward declaration
+class ParticleMesh;
+
 //----------------------------------------------------------------------------------------
 //! \class Particles
 
@@ -61,6 +64,9 @@ class Particles {
 
   ParticlesPusher pusher;
   Real point_mass_gm;  // temporary treatment of source term on particle
+
+  // Particle-mesh coupling layer (allocated for sink type, nullptr for tracers).
+  ParticleMesh *ppm = nullptr;
 
   // Boundary communication buffers and functions for particles
   ParticlesBoundaryValues *pbval_part;

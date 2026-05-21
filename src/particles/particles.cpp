@@ -16,6 +16,7 @@
 #include "mesh/mesh.hpp"
 #include "bvals/bvals.hpp"
 #include "particles.hpp"
+#include "particle_mesh.hpp"
 
 namespace particles {
 //----------------------------------------------------------------------------------------
@@ -105,6 +106,12 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
   Kokkos::realloc(prtcl_rdata, nrdata, nprtcl_thispack);
   Kokkos::realloc(prtcl_idata, nidata, nprtcl_thispack);
 
+  // allocate particle-mesh coupling layer for mass-bearing species
+  if (particle_type == ParticleType::sink) {
+    // 1 slot for ρ_particles; extend (to 4 with momentum) when needed.
+    ppm = new ParticleMesh(ppack, pin, 1);
+  }
+
   // allocate boundary object
   pbval_part = new ParticlesBoundaryValues(this, pin);
 }
@@ -113,6 +120,10 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
 // destructor
 
 Particles::~Particles() {
+  if (ppm != nullptr) {
+    delete ppm;
+    ppm = nullptr;
+  }
 }
 
 //----------------------------------------------------------------------------------------
