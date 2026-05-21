@@ -302,32 +302,13 @@ class Multigrid {
   // The stencil functor must provide:
   //   Real Apply(const ViewType&, const ViewType&, int m, int v, int k, int j, int i)
   //   Real omega_over_diag
+  // Definition is out-of-class (after MultigridDriver is complete) because
+  // the body calls pmy_driver_->GetCoffset(). Clang rejects access through a
+  // forward-declared type even in an unused template body.
   template <typename ViewType, typename StencilOp>
   void Smooth(ViewType &u, const ViewType &src, const ViewType &coeff,
               const ViewType &matrix, const StencilOp &stencil, int rlev,
-              int il, int iu, int jl, int ju, int kl, int ku, int color, bool th) {
-    using ExeSpace = typename ViewType::execution_space;
-    auto brdx = [this]() {
-      if constexpr (std::is_same_v<ExeSpace, HostExeSpace>)
-        return block_rdx_.h_view;
-      else
-        return block_rdx_.d_view;
-    }();
-    int rlev_l = rlev;
-    Real odiag = stencil.omega_over_diag;
-    color ^= pmy_driver_->GetCoffset();
-    par_for("Multigrid::Smooth", ExeSpace(), 0, nmmb_-1, kl, ku, jl, ju,
-    KOKKOS_LAMBDA(const int m, const int k, const int j) {
-      Real dx = (rlev_l <= 0) ? brdx(m) * static_cast<Real>(1<<(-rlev_l))
-                              : brdx(m) / static_cast<Real>(1<<rlev_l);
-      Real dx2 = dx * dx;
-      const int c = (color + k + j) & 1;
-      for (int i = il + c; i <= iu; i += 2) {
-        Real lap = stencil.Apply(u, coeff, m, 0, k, j, i);
-        u(m,0,k,j,i) -= (lap - src(m,0,k,j,i)*dx2) * odiag;
-      }
-    });
-  }
+              int il, int iu, int jl, int ju, int kl, int ku, int color, bool th);
 
   template <typename ViewType, typename StencilOp>
   void CalculateDefect(ViewType &def, const ViewType &u, const ViewType &src,
@@ -746,5 +727,38 @@ Real EvalMultipolePhi(Real x, Real y, Real z,
   return phis;
 }
 
+
+//----------------------------------------------------------------------------------------
+//! \fn Multigrid::Smooth
+//! Out-of-class definition (see in-class declaration above). Placed here so that
+//! MultigridDriver's full definition is visible -- required by Clang.
+
+template <typename ViewType, typename StencilOp>
+void Multigrid::Smooth(ViewType &u, const ViewType &src, const ViewType &coeff,
+                       const ViewType &matrix, const StencilOp &stencil, int rlev,
+                       int il, int iu, int jl, int ju, int kl, int ku,
+                       int color, bool th) {
+  using ExeSpace = typename ViewType::execution_space;
+  auto brdx = [this]() {
+    if constexpr (std::is_same_v<ExeSpace, HostExeSpace>)
+      return block_rdx_.h_view;
+    else
+      return block_rdx_.d_view;
+  }();
+  int rlev_l = rlev;
+  Real odiag = stencil.omega_over_diag;
+  color ^= pmy_driver_->GetCoffset();
+  par_for("Multigrid::Smooth", ExeSpace(), 0, nmmb_-1, kl, ku, jl, ju,
+  KOKKOS_LAMBDA(const int m, const int k, const int j) {
+    Real dx = (rlev_l <= 0) ? brdx(m) * static_cast<Real>(1<<(-rlev_l))
+                            : brdx(m) / static_cast<Real>(1<<rlev_l);
+    Real dx2 = dx * dx;
+    const int c = (color + k + j) & 1;
+    for (int i = il + c; i <= iu; i += 2) {
+      Real lap = stencil.Apply(u, coeff, m, 0, k, j, i);
+      u(m,0,k,j,i) -= (lap - src(m,0,k,j,i)*dx2) * odiag;
+    }
+  });
+}
 
 #endif // MULTIGRID_MULTIGRID_HPP_
