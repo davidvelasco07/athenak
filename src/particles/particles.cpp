@@ -91,10 +91,12 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
       }
     case ParticleType::sink:
       {
-        int ndim=5; // x, y, vx, vy, mass
-        if (pmy_pack->pmesh->three_d) {ndim+=2;} // z, vz
-        nrdata = ndim;
-        nidata = 2; // gid, tag
+        // Layout: IPX,IPVX,IPY,IPVY,IPZ,IPVZ, IPM, IPGX,IPGY,IPGZ (see athena.hpp).
+        // 3D-only layout always; 2D runs leave IPZ/IPVZ/IPGZ at zero. The leapfrog
+        // pusher reads IPZ/IPVZ unconditionally, so a 2D-shortened nrdata would
+        // out-of-bounds. Pay the 24 B/particle to keep the layout uniform.
+        nrdata = NRDATA_SINK;  // = 10
+        nidata = 2;            // PGID, PTAG
         break;
       }
     default:

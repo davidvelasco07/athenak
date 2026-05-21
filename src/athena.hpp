@@ -70,7 +70,22 @@ enum BFieldIndex {IBX=0, IBY=1, IBZ=2, NMAG=3};
 enum MetricIndex {I00=0, I01=1, I02=2, I03=3, I11=4, I12=5, I13=6, I22=7, I23=8, I33=9,
                   NMETRIC=10};
 // array indices for particle arrays
-enum ParticlesIndex {PGID=0, PTAG=1, IPX=0, IPVX=1, IPY=2, IPVY=3, IPZ=4, IPVZ=5};
+// integer columns (prtcl_idata):
+//   PGID -- GID of MeshBlock that owns the particle
+//   PTAG -- unique particle tag (assigned at creation)
+// real columns (prtcl_rdata):
+//   IPX,IPVX,IPY,IPVY,IPZ,IPVZ -- position/velocity interleaved by axis
+//   IPM                        -- mass (sink type only)
+//   IPGX,IPGY,IPGZ             -- gravity force scratch (filled each step by
+//                                 ParticleGravity::InterpolateForceToParticles;
+//                                 not communicated on MB migration)
+//   NRDATA_SINK -- total real columns for sink type (3D layout always; 2D
+//                  runs leave IPZ/IPVZ/IPGZ at zero)
+enum ParticlesIndex {PGID=0, PTAG=1,
+                     IPX=0, IPVX=1, IPY=2, IPVY=3, IPZ=4, IPVZ=5,
+                     IPM=6,
+                     IPGX=7, IPGY=8, IPGZ=9,
+                     NRDATA_SINK=10};
 
 // integer constants to specify spatial reconstruction methods
 enum ReconstructionMethod {dc, plm, ppm4, ppmx, wenoz};
