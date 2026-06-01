@@ -74,6 +74,66 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
     }
   }
 
+  // Tiling along x1 decouples the team scratch-array width from the meshblock x1 size, so
+  // that large meshblocks no longer require oversized per-team scratch (and tiny ones can
+  // be spread across more teams).  This prototype enables tiling only for the
+  // PLM + (LLF|HLLC) combination; every other method combination falls through to the
+  // original full-width path in the else-branch below.
+  constexpr bool rsolver_tileable = (rsolver_method_ == Hydro_RSolver::llf ||
+                                     rsolver_method_ == Hydro_RSolver::hllc);
+  if (rsolver_tileable && recon_method_ == ReconstructionMethod::plm) {
+    constexpr int TILE_NX1 = 64;                     // tile width (compile-time constant)
+    const int nflux  = iu - il + 1;                  // # interfaces in flux range [il,iu]
+    const int ntiles = (nflux + TILE_NX1 - 1)/TILE_NX1;
+    // Scratch spans reconstructed states over [il_t-1, iu_t]; worst-case width TILE_NX1+2.
+    size_t scr_size_t = ScrArray2D<Real>::shmem_size(nvars, TILE_NX1 + 2) * 2;
+
+    // Reuse the 4D par_for_outer overload, mapping its (m,n,k,j) league dims onto our
+    // (m, k, j, tile) decomposition.
+    par_for_outer("hflux_x1_tiled",DevExeSpace(), scr_size_t, scr_level,
+                  0, nmb1, kl, ku, jl, ju, 0, ntiles-1,
+    KOKKOS_LAMBDA(TeamMember_t member, const int m, const int k, const int j,
+                  const int t) {
+      const int il_t = il + t*TILE_NX1;
+      const int iu_t = (il_t + TILE_NX1 - 1 < iu) ? (il_t + TILE_NX1 - 1) : iu;
+      const int i0   = il_t - 1;                     // scratch column = (global i) - i0
+
+      ScrArray2D<Real> wl(member.team_scratch(scr_level), nvars, TILE_NX1 + 2);
+      ScrArray2D<Real> wr(member.team_scratch(scr_level), nvars, TILE_NX1 + 2);
+
+      // Reconstruct over [il_t-1, iu_t] to obtain BOTH L/R states over [il_t, iu_t]
+      PiecewiseLinearX1(member, m, k, j, il_t-1, iu_t, w0_, wl, wr, i0);
+      member.team_barrier();
+
+      // NOTE: Capture variables prior to if constexpr.  Required for cuda 11.6+.
+      auto eos = eos_;
+      auto indcs = indcs_;
+      auto size = size_;
+      auto coord = coord_;
+      auto flx1 = flx1_;
+      if constexpr (rsolver_method_ == Hydro_RSolver::llf) {
+        LLF(member, eos, indcs, size, coord, m, k, j, il_t, iu_t, IVX, wl, wr, flx1, i0);
+      } else if constexpr (rsolver_method_ == Hydro_RSolver::hllc) {
+        HLLC(member, eos, indcs, size, coord, m, k, j, il_t, iu_t, IVX, wl, wr, flx1, i0);
+      }
+      member.team_barrier();
+
+      // calculate fluxes of scalars (if any), restricted to physical range [is,ie+1]
+      if (nvars > nhyd_) {
+        const int sil = (il_t > is)   ? il_t : is;
+        const int siu = (iu_t < ie+1) ? iu_t : ie+1;
+        for (int n=nhyd_; n<nvars; ++n) {
+          par_for_inner(member, sil, siu, [&](const int i) {
+            if (flx1_(m,IDN,k,j,i) >= 0.0) {
+              flx1_(m,n,k,j,i) = flx1_(m,IDN,k,j,i)*wl(n,i-i0);
+            } else {
+              flx1_(m,n,k,j,i) = flx1_(m,IDN,k,j,i)*wr(n,i-i0);
+            }
+          });
+        }
+      }
+    });
+  } else {
   par_for_outer("hflux_x1",DevExeSpace(), scr_size, scr_level, 0, nmb1, kl, ku, jl, ju,
   KOKKOS_LAMBDA(TeamMember_t member, const int m, const int k, const int j) {
     ScrArray2D<Real> wl(member.team_scratch(scr_level), nvars, ncells1);
@@ -143,6 +203,7 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
       }
     }
   });
+  }
 
   //--------------------------------------------------------------------------------------
   // j-direction
@@ -162,6 +223,84 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
       }
     }
 
+    // 2D tiling (i-tile x j-tile) for x2.  The i-tile bounds the scratch width (fixing the
+    // meshblock x1-size constraint), while the j-tile breaks the previously fully-serial
+    // j-walk into many short walks -- lifting the league from nmb*nk to
+    // nmb*nk*ntiles_i*ntiles_j and so fixing the occupancy collapse.  The rolling buffer is
+    // preserved *within* each j-tile (3 small buffers + a 1-slab warmup per tile).  Enabled
+    // only for PLM + (LLF|HLLC); all other combinations use the original path below.
+    if (rsolver_tileable && recon_method_ == ReconstructionMethod::plm) {
+      constexpr int TILE_NX1 = 64;                   // i-tile width (bounds scratch)
+      constexpr int TILE_NX2 = 16;                   // j-tile height (de-serializes walk)
+      const int nif      = iu - il + 1;              // # i-cells in flux range [il,iu]
+      const int ntiles_i = (nif + TILE_NX1 - 1)/TILE_NX1;
+      const int njf      = ju - jl;                  // # j-faces in flux range [jl+1,ju]
+      const int ntiles_j = (njf + TILE_NX2 - 1)/TILE_NX2;
+      // 3 rolling buffers, each only TILE_NX1 wide (was ncells1).
+      size_t scr_size_t = ScrArray2D<Real>::shmem_size(nvars, TILE_NX1) * 3;
+
+      // Reuse the 4D par_for_outer overload, mapping (m,n,k,j) -> (m, k, i-tile, j-tile).
+      par_for_outer("hflux_x2_tiled",DevExeSpace(), scr_size_t, scr_level,
+                    0, nmb1, kl, ku, 0, ntiles_i-1, 0, ntiles_j-1,
+      KOKKOS_LAMBDA(TeamMember_t member, const int m, const int k,
+                    const int ti, const int tj) {
+        const int il_t = il + ti*TILE_NX1;
+        const int iu_t = (il_t + TILE_NX1 - 1 < iu) ? (il_t + TILE_NX1 - 1) : iu;
+        const int i0   = il_t;                       // scratch column = (global i) - i0
+        const int jb_lo = (jl+1) + tj*TILE_NX2;      // first j-face owned by this tile
+        const int jb_hi = (jb_lo + TILE_NX2 - 1 < ju) ? (jb_lo + TILE_NX2 - 1) : ju;
+
+        ScrArray2D<Real> scr1(member.team_scratch(scr_level), nvars, TILE_NX1);
+        ScrArray2D<Real> scr2(member.team_scratch(scr_level), nvars, TILE_NX1);
+        ScrArray2D<Real> scr3(member.team_scratch(scr_level), nvars, TILE_NX1);
+
+        // Serial walk over this tile's j-slabs; j = jb_lo-1 is the warmup slab (no flux).
+        for (int j=jb_lo-1; j<=jb_hi; ++j) {
+          // Permute scratch arrays (parity of the global j keeps the rolling buffer valid).
+          auto wl     = scr1;
+          auto wl_jp1 = scr2;
+          auto wr     = scr3;
+          if ((j%2) == 0) {
+            wl     = scr2;
+            wl_jp1 = scr1;
+          }
+
+          // Reconstruct qR[j] and qL[j+1] over the i-tile
+          PiecewiseLinearX2(member, m, k, j, il_t, iu_t, w0_, wl_jp1, wr, i0);
+          member.team_barrier();
+
+          if (j >= jb_lo) {
+            // NOTE: Capture variables prior to if constexpr.  Required for cuda 11.6+.
+            auto eos = eos_;
+            auto indcs = indcs_;
+            auto size = size_;
+            auto coord = coord_;
+            auto flx2 = flx2_;
+            if constexpr (rsolver_method_ == Hydro_RSolver::llf) {
+              LLF(member, eos, indcs, size, coord, m, k, j, il_t, iu_t, IVY,
+                  wl, wr, flx2, i0);
+            } else if constexpr (rsolver_method_ == Hydro_RSolver::hllc) {
+              HLLC(member, eos, indcs, size, coord, m, k, j, il_t, iu_t, IVY,
+                   wl, wr, flx2, i0);
+            }
+            member.team_barrier();
+
+            // calculate fluxes of scalars (if any)
+            if (nvars > nhyd_) {
+              for (int n=nhyd_; n<nvars; ++n) {
+                par_for_inner(member, il_t, iu_t, [&](const int i) {
+                  if (flx2_(m,IDN,k,j,i) >= 0.0) {
+                    flx2_(m,n,k,j,i) = flx2_(m,IDN,k,j,i)*wl(n,i-i0);
+                  } else {
+                    flx2_(m,n,k,j,i) = flx2_(m,IDN,k,j,i)*wr(n,i-i0);
+                  }
+                });
+              }
+            }
+          }
+        } // end serial j-walk within tile
+      });
+    } else {
     par_for_outer("hflux_x2",DevExeSpace(), scr_size, scr_level, 0, nmb1, kl, ku,
     KOKKOS_LAMBDA(TeamMember_t member, const int m, const int k) {
       ScrArray2D<Real> scr1(member.team_scratch(scr_level), nvars, ncells1);
@@ -244,6 +383,7 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
         }
       } // end of loop over j
     });
+    }
   }
 
   //--------------------------------------------------------------------------------------

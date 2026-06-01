@@ -40,15 +40,20 @@ void PLM(const Real &q_im1, const Real &q_i, const Real &q_ip1,
 //! \fn PiecewiseLinearX1()
 //! \brief Wrapper function for PLM reconstruction in x1-direction.
 //! This function should be called over [is-1,ie+1] to get BOTH L/R states over [is,ie]
+//!
+//! The optional i0 argument shifts the scratch-array (ql/qr) column index by -i0 so the
+//! reconstructed states for a tile of cells can be stored in a scratch buffer that is
+//! narrower than the full meshblock. The mesh array q is always indexed by the global i;
+//! only the scratch writes are offset. With the default i0=0 the behavior is unchanged.
 
 KOKKOS_INLINE_FUNCTION
 void PiecewiseLinearX1(TeamMember_t const &member, const int m, const int k, const int j,
      const int il, const int iu, const DvceArray5D<Real> &q,
-     ScrArray2D<Real> &ql, ScrArray2D<Real> &qr) {
+     ScrArray2D<Real> &ql, ScrArray2D<Real> &qr, const int i0=0) {
   int nvar = q.extent_int(1);
   for (int n=0; n<nvar; ++n) {
     par_for_inner(member, il, iu, [&](const int i) {
-      PLM(q(m,n,k,j,i-1), q(m,n,k,j,i), q(m,n,k,j,i+1), ql(n,i+1), qr(n,i));
+      PLM(q(m,n,k,j,i-1), q(m,n,k,j,i), q(m,n,k,j,i+1), ql(n,i+1-i0), qr(n,i-i0));
     });
   }
   return;
@@ -58,15 +63,20 @@ void PiecewiseLinearX1(TeamMember_t const &member, const int m, const int k, con
 //! \fn PiecewiseLinearX2()
 //! \brief Wrapper function for PLM reconstruction in x2-direction.
 //! This function should be called over [js-1,je+1] to get BOTH L/R states over [js,je]
+//!
+//! The optional i0 argument shifts the scratch-array (ql_jp1/qr_j) column index by -i0 so
+//! a tile of cells in x1 narrower than the full meshblock can be stored in a small scratch
+//! buffer. The mesh array q is always indexed by the global i; only the scratch writes are
+//! offset. With the default i0=0 the behavior is unchanged.
 
 KOKKOS_INLINE_FUNCTION
 void PiecewiseLinearX2(TeamMember_t const &member, const int m, const int k, const int j,
      const int il, const int iu, const DvceArray5D<Real> &q,
-     ScrArray2D<Real> &ql_jp1, ScrArray2D<Real> &qr_j) {
+     ScrArray2D<Real> &ql_jp1, ScrArray2D<Real> &qr_j, const int i0=0) {
   int nvar = q.extent_int(1);
   for (int n=0; n<nvar; ++n) {
     par_for_inner(member, il, iu, [&](const int i) {
-      PLM(q(m,n,k,j-1,i), q(m,n,k,j,i), q(m,n,k,j+1,i), ql_jp1(n,i), qr_j(n,i));
+      PLM(q(m,n,k,j-1,i), q(m,n,k,j,i), q(m,n,k,j+1,i), ql_jp1(n,i-i0), qr_j(n,i-i0));
     });
   }
   return;
