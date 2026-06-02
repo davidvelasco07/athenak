@@ -22,7 +22,8 @@ void HLLE_SR(TeamMember_t const &member, const EOS_Data &eos,
      const int m, const int k, const int j, const int il, const int iu, const int ivx,
      const ScrArray2D<Real> &wl, const ScrArray2D<Real> &wr,
      const ScrArray2D<Real> &bl, const ScrArray2D<Real> &br, const DvceArray4D<Real> &bx,
-     DvceArray5D<Real> flx, DvceArray4D<Real> ey, DvceArray4D<Real> ez) {
+     DvceArray5D<Real> flx, DvceArray4D<Real> ey, DvceArray4D<Real> ez,
+     const int i0=0) {
   int ivy = IVX + ((ivx-IVX) + 1)%3;
   int ivz = IVX + ((ivx-IVX) + 2)%3;
   int iby = ((ivx-IVX) + 1)%3;
@@ -31,35 +32,36 @@ void HLLE_SR(TeamMember_t const &member, const EOS_Data &eos,
   const Real gamma_prime = eos.gamma/gm1;
 
   par_for_inner(member, il, iu, [&](const int i) {
+    const int si = i - i0;  // column index into the (possibly tiled) scratch arrays
     // Extract left primitives
-    Real rho_l = wl(IDN,i);
-    Real ux_l = wl(ivx,i);
-    Real uy_l = wl(ivy,i);
-    Real uz_l = wl(ivz,i);
+    Real rho_l = wl(IDN,si);
+    Real ux_l = wl(ivx,si);
+    Real uy_l = wl(ivy,si);
+    Real uz_l = wl(ivz,si);
     Real u_l[4];
     u_l[0] = std::sqrt(1.0 + SQR(ux_l) + SQR(uy_l) + SQR(uz_l));
     u_l[1] = ux_l;
     u_l[2] = uy_l;
     u_l[3] = uz_l;
-    Real bb2_l = bl(iby,i);
-    Real bb3_l = bl(ibz,i);
+    Real bb2_l = bl(iby,si);
+    Real bb3_l = bl(ibz,si);
 
     // Extract right primitives
-    Real rho_r = wr(IDN,i);
-    Real ux_r = wr(ivx,i);
-    Real uy_r = wr(ivy,i);
-    Real uz_r = wr(ivz,i);
+    Real rho_r = wr(IDN,si);
+    Real ux_r = wr(ivx,si);
+    Real uy_r = wr(ivy,si);
+    Real uz_r = wr(ivz,si);
     Real u_r[4];
     u_r[0] = std::sqrt(1.0 + SQR(ux_r) + SQR(uy_r) + SQR(uz_r));
     u_r[1] = ux_r;
     u_r[2] = uy_r;
     u_r[3] = uz_r;
-    Real bb2_r = br(iby,i);
-    Real bb3_r = br(ibz,i);
+    Real bb2_r = br(iby,si);
+    Real bb3_r = br(ibz,si);
 
     Real pgas_l, pgas_r;
-    pgas_l = eos.IdealGasPressure(wl(IEN,i));
-    pgas_r = eos.IdealGasPressure(wr(IEN,i));
+    pgas_l = eos.IdealGasPressure(wl(IEN,si));
+    pgas_r = eos.IdealGasPressure(wr(IEN,si));
 
     // Extract normal magnetic field
     Real bb1 = bx(m,k,j,i);

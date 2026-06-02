@@ -27,7 +27,8 @@ void HLLE_GR(TeamMember_t const &member, const EOS_Data &eos,
      const int m, const int k, const int j, const int il, const int iu, const int ivx,
      const ScrArray2D<Real> &wl, const ScrArray2D<Real> &wr,
      const ScrArray2D<Real> &bl, const ScrArray2D<Real> &br, const DvceArray4D<Real> &bx,
-     DvceArray5D<Real> flx, DvceArray4D<Real> ey, DvceArray4D<Real> ez) {
+     DvceArray5D<Real> flx, DvceArray4D<Real> ey, DvceArray4D<Real> ez,
+     const int i0=0) {
   // Cyclic permutation of array indices corresponding to velocity/b_field components
   int ivy = IVX + ((ivx-IVX)+1)%3;
   int ivz = IVX + ((ivx-IVX)+2)%3;
@@ -43,25 +44,26 @@ void HLLE_GR(TeamMember_t const &member, const EOS_Data &eos,
   int js = indcs.js;
   int ks = indcs.ks;
   par_for_inner(member, il, iu, [&](const int i) {
+    const int si = i - i0;  // column index into the (possibly tiled) scratch arrays
     // References to left primitives
-    Real &wl_idn=wl(IDN,i);
-    Real &wl_ivx=wl(ivx,i);
-    Real &wl_ivy=wl(ivy,i);
-    Real &wl_ivz=wl(ivz,i);
-    Real &wl_iby=bl(iby,i);
-    Real &wl_ibz=bl(ibz,i);
+    Real &wl_idn=wl(IDN,si);
+    Real &wl_ivx=wl(ivx,si);
+    Real &wl_ivy=wl(ivy,si);
+    Real &wl_ivz=wl(ivz,si);
+    Real &wl_iby=bl(iby,si);
+    Real &wl_ibz=bl(ibz,si);
 
     // References to right primitives
-    Real &wr_idn=wr(IDN,i);
-    Real &wr_ivx=wr(ivx,i);
-    Real &wr_ivy=wr(ivy,i);
-    Real &wr_ivz=wr(ivz,i);
-    Real &wr_iby=br(iby,i);
-    Real &wr_ibz=br(ibz,i);
+    Real &wr_idn=wr(IDN,si);
+    Real &wr_ivx=wr(ivx,si);
+    Real &wr_ivy=wr(ivy,si);
+    Real &wr_ivz=wr(ivz,si);
+    Real &wr_iby=br(iby,si);
+    Real &wr_ibz=br(ibz,si);
 
     Real wl_ipr, wr_ipr;
-    wl_ipr = eos.IdealGasPressure(wl(IEN,i));
-    wr_ipr = eos.IdealGasPressure(wr(IEN,i));
+    wl_ipr = eos.IdealGasPressure(wl(IEN,si));
+    wr_ipr = eos.IdealGasPressure(wr(IEN,si));
 
     // reference to longitudinal field
     Real &bxi = bx(m,k,j,i);

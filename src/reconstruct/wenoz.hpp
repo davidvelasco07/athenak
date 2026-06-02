@@ -87,11 +87,17 @@ void WENOZ(const Real &q_im2, const Real &q_im1, const Real &q_i, const Real &q_
 //! \fn WENOZ
 //! \brief Wrapper function for WENOZ reconstruction in x1-direction.
 //! This function should be called over [is-1,ie+1] to get BOTH L/R states over [is,ie]
+//!
+//! The optional i0 argument shifts the scratch-array (ql/qr) column index by -i0 so the
+//! reconstructed states for a tile of cells can be stored in a scratch buffer narrower
+//! than the full meshblock. The mesh array q is always indexed by the global i; only the
+//! scratch writes are offset. With the default i0=0 the behavior is unchanged.
 
 KOKKOS_INLINE_FUNCTION
 void WENOZX1(TeamMember_t const &member, const EOS_Data &eos, const bool apply_floors,
      const int m, const int k, const int j, const int il, const int iu,
-     const DvceArray5D<Real> &q, ScrArray2D<Real> &ql, ScrArray2D<Real> &qr) {
+     const DvceArray5D<Real> &q, ScrArray2D<Real> &ql, ScrArray2D<Real> &qr,
+     const int i0=0) {
   int nvar = q.extent_int(1);
   const Real &dfloor_ = eos.dfloor;
   // TODO(jmstone): ideal gas only for now
@@ -103,15 +109,15 @@ void WENOZX1(TeamMember_t const &member, const EOS_Data &eos, const bool apply_f
       Real &qi   = q(m,n,k,j,i  );
       Real &qip1 = q(m,n,k,j,i+1);
       Real &qip2 = q(m,n,k,j,i+2);
-      WENOZ(qim2, qim1, qi, qip1, qip2, ql(n,i+1), qr(n,i));
+      WENOZ(qim2, qim1, qi, qip1, qip2, ql(n,i+1-i0), qr(n,i-i0));
       if (apply_floors) {
         if (n==IDN) {
-          ql(IDN,i+1) = fmax(ql(IDN,i+1), dfloor_);
-          qr(IDN,i  ) = fmax(qr(IDN,i  ), dfloor_);
+          ql(IDN,i+1-i0) = fmax(ql(IDN,i+1-i0), dfloor_);
+          qr(IDN,i  -i0) = fmax(qr(IDN,i  -i0), dfloor_);
         }
         if (n==IEN) {
-          ql(IEN,i+1) = fmax(ql(IEN,i+1), efloor_);
-          qr(IEN,i  ) = fmax(qr(IEN,i  ), efloor_);
+          ql(IEN,i+1-i0) = fmax(ql(IEN,i+1-i0), efloor_);
+          qr(IEN,i  -i0) = fmax(qr(IEN,i  -i0), efloor_);
         }
       }
     });
@@ -123,11 +129,14 @@ void WENOZX1(TeamMember_t const &member, const EOS_Data &eos, const bool apply_f
 //! \fn WENOZX2
 //! \brief Wrapper function for WENOZ reconstruction in x1-direction.
 //! This function should be called over [js-1,je+1] to get BOTH L/R states over [js,je]
+//!
+//! The optional i0 argument shifts the scratch-array column index by -i0 (see WENOZX1).
 
 KOKKOS_INLINE_FUNCTION
 void WENOZX2(TeamMember_t const &member, const EOS_Data &eos, const bool apply_floors,
      const int m, const int k, const int j, const int il, const int iu,
-     const DvceArray5D<Real> &q, ScrArray2D<Real> &ql_jp1, ScrArray2D<Real> &qr_j) {
+     const DvceArray5D<Real> &q, ScrArray2D<Real> &ql_jp1, ScrArray2D<Real> &qr_j,
+     const int i0=0) {
   int nvar = q.extent_int(1);
   const Real &dfloor_ = eos.dfloor;
   // TODO(jmstone): ideal gas only for now
@@ -139,15 +148,15 @@ void WENOZX2(TeamMember_t const &member, const EOS_Data &eos, const bool apply_f
       Real &qj   = q(m,n,k,j  ,i);
       Real &qjp1 = q(m,n,k,j+1,i);
       Real &qjp2 = q(m,n,k,j+2,i);
-      WENOZ(qjm2, qjm1, qj, qjp1, qjp2, ql_jp1(n,i), qr_j(n,i));
+      WENOZ(qjm2, qjm1, qj, qjp1, qjp2, ql_jp1(n,i-i0), qr_j(n,i-i0));
       if (apply_floors) {
         if (n==IDN) {
-          ql_jp1(IDN,i) = fmax(ql_jp1(IDN,i), dfloor_);
-          qr_j  (IDN,i) = fmax(qr_j  (IDN,i), dfloor_);
+          ql_jp1(IDN,i-i0) = fmax(ql_jp1(IDN,i-i0), dfloor_);
+          qr_j  (IDN,i-i0) = fmax(qr_j  (IDN,i-i0), dfloor_);
         }
         if (n==IEN) {
-          ql_jp1(IEN,i) = fmax(ql_jp1(IEN,i), efloor_);
-          qr_j  (IEN,i) = fmax(qr_j  (IEN,i), efloor_);
+          ql_jp1(IEN,i-i0) = fmax(ql_jp1(IEN,i-i0), efloor_);
+          qr_j  (IEN,i-i0) = fmax(qr_j  (IEN,i-i0), efloor_);
         }
       }
     });
@@ -159,11 +168,14 @@ void WENOZX2(TeamMember_t const &member, const EOS_Data &eos, const bool apply_f
 //! \fn WENOZX3
 //! \brief Wrapper function for WENOZ reconstruction in x1-direction.
 //! This function should be called over [ks-1,ke+1] to get BOTH L/R states over [ks,ke]
+//!
+//! The optional i0 argument shifts the scratch-array column index by -i0 (see WENOZX1).
 
 KOKKOS_INLINE_FUNCTION
 void WENOZX3(TeamMember_t const &member, const EOS_Data &eos, const bool apply_floors,
      const int m, const int k, const int j, const int il, const int iu,
-     const DvceArray5D<Real> &q, ScrArray2D<Real> &ql_kp1, ScrArray2D<Real> &qr_k) {
+     const DvceArray5D<Real> &q, ScrArray2D<Real> &ql_kp1, ScrArray2D<Real> &qr_k,
+     const int i0=0) {
   int nvar = q.extent_int(1);
   const Real &dfloor_ = eos.dfloor;
   // TODO(jmstone): ideal gas only for now
@@ -175,15 +187,15 @@ void WENOZX3(TeamMember_t const &member, const EOS_Data &eos, const bool apply_f
       Real &qk   = q(m,n,k  ,j,i);
       Real &qkp1 = q(m,n,k+1,j,i);
       Real &qkp2 = q(m,n,k+2,j,i);
-      WENOZ(qkm2, qkm1, qk, qkp1, qkp2, ql_kp1(n,i), qr_k(n,i));
+      WENOZ(qkm2, qkm1, qk, qkp1, qkp2, ql_kp1(n,i-i0), qr_k(n,i-i0));
       if (apply_floors) {
         if (n==IDN) {
-          ql_kp1(IDN,i) = fmax(ql_kp1(IDN,i), dfloor_);
-          qr_k  (IDN,i) = fmax(qr_k  (IDN,i), dfloor_);
+          ql_kp1(IDN,i-i0) = fmax(ql_kp1(IDN,i-i0), dfloor_);
+          qr_k  (IDN,i-i0) = fmax(qr_k  (IDN,i-i0), dfloor_);
         }
         if (n==IEN) {
-          ql_kp1(IEN,i) = fmax(ql_kp1(IEN,i), efloor_);
-          qr_k  (IEN,i) = fmax(qr_k  (IEN,i), efloor_);
+          ql_kp1(IEN,i-i0) = fmax(ql_kp1(IEN,i-i0), efloor_);
+          qr_k  (IEN,i-i0) = fmax(qr_k  (IEN,i-i0), efloor_);
         }
       }
     });

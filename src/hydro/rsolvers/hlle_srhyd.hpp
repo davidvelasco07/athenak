@@ -25,35 +25,42 @@ namespace hydro {
 //! \brief HLLE implementation for SR. Based on HLLETransforming() function in Athena++
 
 KOKKOS_INLINE_FUNCTION
+//! The optional i0 argument shifts the scratch-array (wl/wr) column index by -i0 so a tile
+//! of interfaces narrower than the full meshblock can be solved from a small scratch
+//! buffer. The output flux array flx is always indexed by the global i; only the scratch
+//! reads are offset. With the default i0=0 the behavior is unchanged.
+
 void HLLE_SR(TeamMember_t const &member, const EOS_Data &eos,
      const RegionIndcs &indcs,const DualArray1D<RegionSize> &size,const CoordData &coord,
      const int m, const int k, const int j, const int il, const int iu, const int ivx,
-     const ScrArray2D<Real> &wl, const ScrArray2D<Real> &wr, DvceArray5D<Real> flx) {
+     const ScrArray2D<Real> &wl, const ScrArray2D<Real> &wr, DvceArray5D<Real> flx,
+     const int i0=0) {
   int ivy = IVX + ((ivx-IVX)+1)%3;
   int ivz = IVX + ((ivx-IVX)+2)%3;
   const Real gm1 = (eos.gamma - 1.0);
   const Real gamma_prime = eos.gamma/gm1;
 
   par_for_inner(member, il, iu, [&](const int i) {
+    const int si = i - i0;  // column index into the (possibly tiled) scratch arrays
     // References to left primitives
     // Recall in SR the primitive variables are (\rho, u^i, P_g), where
     //   \rho is the mass density in the comoving/fluid frame,
     //   u^i = \gamma v^i are the spatial components of the 4-velocity (v^i is the 3-vel),
     //   P_g is the pressure.
-    Real &wl_idn=wl(IDN,i);
-    Real &wl_ivx=wl(ivx,i);
-    Real &wl_ivy=wl(ivy,i);
-    Real &wl_ivz=wl(ivz,i);
+    Real &wl_idn=wl(IDN,si);
+    Real &wl_ivx=wl(ivx,si);
+    Real &wl_ivy=wl(ivy,si);
+    Real &wl_ivz=wl(ivz,si);
 
     // References to right primitives
-    Real &wr_idn=wr(IDN,i);
-    Real &wr_ivx=wr(ivx,i);
-    Real &wr_ivy=wr(ivy,i);
-    Real &wr_ivz=wr(ivz,i);
+    Real &wr_idn=wr(IDN,si);
+    Real &wr_ivx=wr(ivx,si);
+    Real &wr_ivy=wr(ivy,si);
+    Real &wr_ivz=wr(ivz,si);
 
     Real wl_ipr, wr_ipr;
-    wl_ipr = eos.IdealGasPressure(wl(IEN,i));
-    wr_ipr = eos.IdealGasPressure(wr(IEN,i));
+    wl_ipr = eos.IdealGasPressure(wl(IEN,si));
+    wr_ipr = eos.IdealGasPressure(wr(IEN,si));
 
     Real u2l = SQR(wl_ivz) + SQR(wl_ivy) + SQR(wl_ivx);
     Real u2r = SQR(wr_ivz) + SQR(wr_ivy) + SQR(wr_ivx);

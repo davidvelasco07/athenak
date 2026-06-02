@@ -38,11 +38,17 @@ void RoeFluxIso(const Real wroe[], const Real du[], const Real wli[],
 //! \fn void Roe
 //! \brief The Roe Riemann solver for hydrodynamics (both ideal gas and isothermal)
 
+//! The optional i0 argument shifts the scratch-array (wl/wr) column index by -i0 so a tile
+//! of interfaces narrower than the full meshblock can be solved from a small scratch
+//! buffer. The output flux array flx is always indexed by the global i; only the scratch
+//! reads are offset. With the default i0=0 the behavior is unchanged.
+
 KOKKOS_INLINE_FUNCTION
 void Roe(TeamMember_t const &member, const EOS_Data &eos,
      const RegionIndcs &indcs,const DualArray1D<RegionSize> &size,const CoordData &coord,
      const int m, const int k, const int j, const int il, const int iu, const int ivx,
-     const ScrArray2D<Real> &wl, const ScrArray2D<Real> &wr, DvceArray5D<Real> flx) {
+     const ScrArray2D<Real> &wl, const ScrArray2D<Real> &wr, DvceArray5D<Real> flx,
+     const int i0=0) {
   int ivy = IVX + ((ivx-IVX)+1)%3;
   int ivz = IVX + ((ivx-IVX)+2)%3;
   Real wli[5],wri[5],wroe[5];
@@ -52,21 +58,22 @@ void Roe(TeamMember_t const &member, const EOS_Data &eos,
   Real iso_cs = eos.iso_cs;
 
   par_for_inner(member, il, iu, [&](const int i) {
+    const int si = i - i0;  // column index into the (possibly tiled) scratch arrays
     //--- Step 1.  Load L/R states into local variables
-    wli[IDN]=wl(IDN,i);
-    wli[IVX]=wl(ivx,i);
-    wli[IVY]=wl(ivy,i);
-    wli[IVZ]=wl(ivz,i);
+    wli[IDN]=wl(IDN,si);
+    wli[IVX]=wl(ivx,si);
+    wli[IVY]=wl(ivy,si);
+    wli[IVZ]=wl(ivz,si);
 
-    wri[IDN]=wr(IDN,i);
-    wri[IVX]=wr(ivx,i);
-    wri[IVY]=wr(ivy,i);
-    wri[IVZ]=wr(ivz,i);
+    wri[IDN]=wr(IDN,si);
+    wri[IVX]=wr(ivx,si);
+    wri[IVY]=wr(ivy,si);
+    wri[IVZ]=wr(ivz,si);
 
     // store pressure in L/R primitives
     if (eos.is_ideal) {
-      wli[IEN] = eos.IdealGasPressure(wl(IEN,i));
-      wri[IEN] = eos.IdealGasPressure(wr(IEN,i));
+      wli[IEN] = eos.IdealGasPressure(wl(IEN,si));
+      wri[IEN] = eos.IdealGasPressure(wr(IEN,si));
     }
 
     //--- Step 2.  Compute Roe-averaged data from left- and right-states

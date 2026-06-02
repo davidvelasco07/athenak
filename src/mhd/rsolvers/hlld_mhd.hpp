@@ -25,7 +25,8 @@ void HLLD(TeamMember_t const &member, const EOS_Data &eos,
      const int m, const int k, const int j, const int il, const int iu, const int ivx,
      const ScrArray2D<Real> &wl, const ScrArray2D<Real> &wr,
      const ScrArray2D<Real> &bl, const ScrArray2D<Real> &br, const DvceArray4D<Real> &bx,
-     DvceArray5D<Real> flx, DvceArray4D<Real> ey, DvceArray4D<Real> ez) {
+     DvceArray5D<Real> flx, DvceArray4D<Real> ey, DvceArray4D<Real> ez,
+     const int i0=0) {
   int ivy = IVX + ((ivx-IVX)+1)%3;
   int ivz = IVX + ((ivx-IVX)+2)%3;
   int iby = ((ivx-IVX) + 1)%3;
@@ -37,25 +38,26 @@ void HLLD(TeamMember_t const &member, const EOS_Data &eos,
     Real gm1 = eos.gamma - 1.0;
     Real igm1 = 1.0/gm1;
     par_for_inner(member, il, iu, [&](const int i) {
+      const int si = i - i0;  // column index into the (possibly tiled) scratch arrays
       //--- Step 1.  Create local references for L/R states (helps compiler vectorize)
 
-      Real &wl_idn=wl(IDN,i);
-      Real &wl_ivx=wl(ivx,i);
-      Real &wl_ivy=wl(ivy,i);
-      Real &wl_ivz=wl(ivz,i);
-      Real &wl_iby=bl(iby,i);
-      Real &wl_ibz=bl(ibz,i);
+      Real &wl_idn=wl(IDN,si);
+      Real &wl_ivx=wl(ivx,si);
+      Real &wl_ivy=wl(ivy,si);
+      Real &wl_ivz=wl(ivz,si);
+      Real &wl_iby=bl(iby,si);
+      Real &wl_ibz=bl(ibz,si);
 
-      Real &wr_idn=wr(IDN,i);
-      Real &wr_ivx=wr(ivx,i);
-      Real &wr_ivy=wr(ivy,i);
-      Real &wr_ivz=wr(ivz,i);
-      Real &wr_iby=br(iby,i);
-      Real &wr_ibz=br(ibz,i);
+      Real &wr_idn=wr(IDN,si);
+      Real &wr_ivx=wr(ivx,si);
+      Real &wr_ivy=wr(ivy,si);
+      Real &wr_ivz=wr(ivz,si);
+      Real &wr_iby=br(iby,si);
+      Real &wr_ibz=br(ibz,si);
 
       Real wl_ipr, wr_ipr;
-      wl_ipr = eos.IdealGasPressure(wl(IEN,i));
-      wr_ipr = eos.IdealGasPressure(wr(IEN,i));
+      wl_ipr = eos.IdealGasPressure(wl(IEN,si));
+      wr_ipr = eos.IdealGasPressure(wr(IEN,si));
 
       Real &bxi = bx(m,k,j,i);
 
@@ -359,21 +361,22 @@ void HLLD(TeamMember_t const &member, const EOS_Data &eos,
     auto &dfloor_ = eos.dfloor;
     Real iso_cs = eos.iso_cs;
     par_for_inner(member, il, iu, [&](const int i) {
+      const int si = i - i0;  // column index into the (possibly tiled) scratch arrays
       //--- Step 1.  Load L/R states into local variables
 
-      Real &wl_idn=wl(IDN,i);
-      Real &wl_ivx=wl(ivx,i);
-      Real &wl_ivy=wl(ivy,i);
-      Real &wl_ivz=wl(ivz,i);
-      Real &wl_iby=bl(iby,i);
-      Real &wl_ibz=bl(ibz,i);
+      Real &wl_idn=wl(IDN,si);
+      Real &wl_ivx=wl(ivx,si);
+      Real &wl_ivy=wl(ivy,si);
+      Real &wl_ivz=wl(ivz,si);
+      Real &wl_iby=bl(iby,si);
+      Real &wl_ibz=bl(ibz,si);
 
-      Real &wr_idn=wr(IDN,i);
-      Real &wr_ivx=wr(ivx,i);
-      Real &wr_ivy=wr(ivy,i);
-      Real &wr_ivz=wr(ivz,i);
-      Real &wr_iby=br(iby,i);
-      Real &wr_ibz=br(ibz,i);
+      Real &wr_idn=wr(IDN,si);
+      Real &wr_ivx=wr(ivx,si);
+      Real &wr_ivy=wr(ivy,si);
+      Real &wr_ivz=wr(ivz,si);
+      Real &wr_iby=br(iby,si);
+      Real &wr_ibz=br(ibz,si);
 
       Real &bxi = bx(m,k,j,i);
 

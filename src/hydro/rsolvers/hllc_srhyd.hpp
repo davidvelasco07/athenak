@@ -24,23 +24,30 @@ namespace hydro {
 //! function in Athena++ (C++ version)
 
 KOKKOS_INLINE_FUNCTION
+//! The optional i0 argument shifts the scratch-array (wl/wr) column index by -i0 so a tile
+//! of interfaces narrower than the full meshblock can be solved from a small scratch
+//! buffer. The output flux array flx is always indexed by the global i; only the scratch
+//! reads are offset. With the default i0=0 the behavior is unchanged.
+
 void HLLC_SR(TeamMember_t const &member, const EOS_Data &eos,
      const RegionIndcs &indcs,const DualArray1D<RegionSize> &size,const CoordData &coord,
      const int m, const int k, const int j, const int il, const int iu, const int ivx,
-     const ScrArray2D<Real> &wl, const ScrArray2D<Real> &wr, DvceArray5D<Real> flx) {
+     const ScrArray2D<Real> &wl, const ScrArray2D<Real> &wr, DvceArray5D<Real> flx,
+     const int i0=0) {
   int ivy = IVX + ((ivx-IVX)+1)%3;
   int ivz = IVX + ((ivx-IVX)+2)%3;
   const Real gamma_prime = eos.gamma/(eos.gamma - 1.0);
 
   par_for_inner(member, il, iu, [&](const int i) {
+    const int si = i - i0;  // column index into the (possibly tiled) scratch arrays
     // Create local references for L/R states (helps compiler vectorize)
     // Recall in SR the primitive variables are (\rho, u^i, P_gas), where \rho is the
     // mass density in the comoving/fluid frame, u^i = \gamma v^i are the spatial
     // components of the 4-velocity (v^i is the 3-velocity), and P_gas is the pressure.
-    Real &rho_l  = wl(IDN,i);
-    Real &ux_l   = wl(ivx,i);
-    Real &uy_l   = wl(ivy,i);
-    Real &uz_l   = wl(ivz,i);
+    Real &rho_l  = wl(IDN,si);
+    Real &ux_l   = wl(ivx,si);
+    Real &uy_l   = wl(ivy,si);
+    Real &uz_l   = wl(ivz,si);
     Real u_l[4];
     u_l[0] = sqrt(1.0 + SQR(ux_l) + SQR(uy_l) + SQR(uz_l));  // Lorentz factor in L-state
     u_l[1] = ux_l;
@@ -48,10 +55,10 @@ void HLLC_SR(TeamMember_t const &member, const EOS_Data &eos,
     u_l[3] = uz_l;
 
     // Extract right primitives
-    Real &rho_r  = wr(IDN,i);
-    Real &ux_r   = wr(ivx,i);
-    Real &uy_r   = wr(ivy,i);
-    Real &uz_r   = wr(ivz,i);
+    Real &rho_r  = wr(IDN,si);
+    Real &ux_r   = wr(ivx,si);
+    Real &uy_r   = wr(ivy,si);
+    Real &uz_r   = wr(ivz,si);
     Real u_r[4];
     u_r[0] = sqrt(1.0 + SQR(ux_r) + SQR(uy_r) + SQR(uz_r));  // Lorentz factor in R-state
     u_r[1] = ux_r;
@@ -59,8 +66,8 @@ void HLLC_SR(TeamMember_t const &member, const EOS_Data &eos,
     u_r[3] = uz_r;
 
     Real pgas_l, pgas_r;
-    pgas_l = eos.IdealGasPressure(wl(IEN,i));
-    pgas_r = eos.IdealGasPressure(wr(IEN,i));
+    pgas_l = eos.IdealGasPressure(wl(IEN,si));
+    pgas_r = eos.IdealGasPressure(wr(IEN,si));
 
     Real wgas_l = rho_l + gamma_prime * pgas_l;  // total enthalpy in L-state
     Real wgas_r = rho_r + gamma_prime * pgas_r;  // total enthalpy in R-state

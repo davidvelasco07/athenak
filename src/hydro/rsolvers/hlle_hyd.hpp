@@ -36,11 +36,17 @@ namespace hydro {
 //! \fn void HLLE
 //! \brief The HLLE Riemann solver for hydrodynamics (both ideal gas and isothermal)
 
+//! The optional i0 argument shifts the scratch-array (wl/wr) column index by -i0 so a tile
+//! of interfaces narrower than the full meshblock can be solved from a small scratch
+//! buffer. The output flux array flx is always indexed by the global i; only the scratch
+//! reads are offset. With the default i0=0 the behavior is unchanged.
+
 KOKKOS_INLINE_FUNCTION
 void HLLE(TeamMember_t const &member, const EOS_Data &eos,
      const RegionIndcs &indcs,const DualArray1D<RegionSize> &size,const CoordData &coord,
      const int m, const int k, const int j, const int il, const int iu, const int ivx,
-     const ScrArray2D<Real> &wl, const ScrArray2D<Real> &wr, DvceArray5D<Real> flx) {
+     const ScrArray2D<Real> &wl, const ScrArray2D<Real> &wr, DvceArray5D<Real> flx,
+     const int i0=0) {
   int ivy = IVX + ((ivx-IVX)+1)%3;
   int ivz = IVX + ((ivx-IVX)+2)%3;
   Real gm1 = eos.gamma - 1.0;
@@ -48,22 +54,23 @@ void HLLE(TeamMember_t const &member, const EOS_Data &eos,
   Real iso_cs = eos.iso_cs;
 
   par_for_inner(member, il, iu, [&](const int i) {
+    const int si = i - i0;  // column index into the (possibly tiled) scratch arrays
     //--- Step 1.  Create local references for L/R states (helps compiler vectorize)
 
-    Real &wl_idn = wl(IDN,i);
-    Real &wl_ivx = wl(ivx,i);
-    Real &wl_ivy = wl(ivy,i);
-    Real &wl_ivz = wl(ivz,i);
+    Real &wl_idn = wl(IDN,si);
+    Real &wl_ivx = wl(ivx,si);
+    Real &wl_ivy = wl(ivy,si);
+    Real &wl_ivz = wl(ivz,si);
 
-    Real &wr_idn = wr(IDN,i);
-    Real &wr_ivx = wr(ivx,i);
-    Real &wr_ivy = wr(ivy,i);
-    Real &wr_ivz = wr(ivz,i);
+    Real &wr_idn = wr(IDN,si);
+    Real &wr_ivx = wr(ivx,si);
+    Real &wr_ivy = wr(ivy,si);
+    Real &wr_ivz = wr(ivz,si);
 
     Real wl_ipr, wr_ipr;
     if (eos.is_ideal) {
-      wl_ipr = eos.IdealGasPressure(wl(IEN,i));
-      wr_ipr = eos.IdealGasPressure(wr(IEN,i));
+      wl_ipr = eos.IdealGasPressure(wl(IEN,si));
+      wr_ipr = eos.IdealGasPressure(wr(IEN,si));
     }
 
     //--- Step 2.  Compute Roe-averaged state

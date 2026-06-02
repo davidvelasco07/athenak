@@ -34,6 +34,12 @@ namespace dyngr {
 //! \fn  void Hydro::CalcFluxes
 //! \brief Calls reconstruction and Riemann solver functions to compute hydro fluxes
 //! Note this function is templated over RS for better performance on GPUs.
+//!
+//! All three directions use a tiled team decomposition (see hydro_fluxes.cpp for the
+//! rationale).  The scratch-column offset i0 maps the global index i onto the narrow
+//! tile-local buffer for both the hydro state (wl/wr) and the cell-centered field (bl/br);
+//! the longitudinal field bx, the ADM metric, and the output flux/EMF arrays are always
+//! indexed by the global i.
 
 template<class EOSPolicy, class ErrorPolicy> template <DynGRMHD_RSolver rsolver_method_>
 TaskStatus DynGRMHDPS<EOSPolicy, ErrorPolicy>::CalcFluxes(Driver *pdriver, int stage) {
@@ -41,7 +47,6 @@ TaskStatus DynGRMHDPS<EOSPolicy, ErrorPolicy>::CalcFluxes(Driver *pdriver, int s
   int is = indcs_.is, ie = indcs_.ie;
   int js = indcs_.js, je = indcs_.je;
   int ks = indcs_.ks, ke = indcs_.ke;
-  int ncells1 = indcs_.nx1 + 2*(indcs_.ng);
 
   int nhyd = pmy_pack->pmhd->nmhd;
   int nvars = pmy_pack->pmhd->nmhd + pmy_pack->pmhd->nscalars;
@@ -64,12 +69,11 @@ TaskStatus DynGRMHDPS<EOSPolicy, ErrorPolicy>::CalcFluxes(Driver *pdriver, int s
     return TaskStatus::complete;
   }
 
+  int scr_level = scratch_level;
+
   //--------------------------------------------------------------------------------------
   // i-direction
 
-  size_t scr_size = ScrArray2D<Real>::shmem_size(nvars, ncells1) * 2 +
-                    ScrArray2D<Real>::shmem_size(3, ncells1) * 2;
-  int scr_level = scratch_level;
   auto flx1_ = pmy_pack->pmhd->uflx.x1f;
   auto &e31_ = pmy_pack->pmhd->e3x1;
   auto &e21_ = pmy_pack->pmhd->e2x1;
@@ -87,86 +91,95 @@ TaskStatus DynGRMHDPS<EOSPolicy, ErrorPolicy>::CalcFluxes(Driver *pdriver, int s
   int il = is, iu = ie+1;
   if (use_fofc) { il = is-1, iu = ie+2; }
 
-  par_for_outer("dyngrflux_x1",DevExeSpace(), scr_size, scr_level,
-      0, nmb1, kl, ku, jl, ju,
-  KOKKOS_LAMBDA(TeamMember_t member, const int m, const int k, const int j) {
-    ScrArray2D<Real> wl(member.team_scratch(scr_level), nvars, ncells1);
-    ScrArray2D<Real> wr(member.team_scratch(scr_level), nvars, ncells1);
-    ScrArray2D<Real> bl(member.team_scratch(scr_level), 3, ncells1);
-    ScrArray2D<Real> br(member.team_scratch(scr_level), 3, ncells1);
+  {
+    constexpr int TILE_NX1 = 64;                     // i-tile width (bounds scratch)
+    const int nflux  = iu - il + 1;                  // # interfaces in flux range [il,iu]
+    const int ntiles = (nflux + TILE_NX1 - 1)/TILE_NX1;
+    size_t scr_size_t = (ScrArray2D<Real>::shmem_size(nvars, TILE_NX1 + 2) +
+                         ScrArray2D<Real>::shmem_size(3, TILE_NX1 + 2)) * 2;
 
-    // Reconstruct qR[i] and qL[i+1]
-    switch (recon_method_) {
-      case ReconstructionMethod::dc:
-        DonorCellX1(member, m, k, j, il-1, iu, w0_, wl, wr);
-        DonorCellX1(member, m, k, j, il-1, iu, b0_, bl, br);
-        break;
-      case ReconstructionMethod::plm:
-        PiecewiseLinearX1(member, m, k, j, il-1, iu, w0_, wl, wr);
-        PiecewiseLinearX1(member, m, k, j, il-1, iu, b0_, bl, br);
-        break;
-      // JF: These higher-order reconstruction methods all need EOS_Data to calculate a
-      // floor. However, it isn't used by DynGRMHD at all.
-      case ReconstructionMethod::ppm4:
-      case ReconstructionMethod::ppmx:
-        PiecewiseParabolicX1(member,eos_,extrema,false, m, k, j, il-1, iu, w0_, wl, wr);
-        PiecewiseParabolicX1(member,eos_,extrema,false, m, k, j, il-1, iu, b0_, bl, br);
-        break;
-      case ReconstructionMethod::wenoz:
-        WENOZX1(member, eos_, false, m, k, j, il-1, iu, w0_, wl, wr);
-        WENOZX1(member, eos_, false, m, k, j, il-1, iu, b0_, bl, br);
-        break;
-      default:
-        break;
-    }
-    // Sync all threads in the team so that scratch memory is consistent
-    member.team_barrier();
+    par_for_outer("dyngrflux_x1",DevExeSpace(), scr_size_t, scr_level,
+                  0, nmb1, kl, ku, jl, ju, 0, ntiles-1,
+    KOKKOS_LAMBDA(TeamMember_t member, const int m, const int k, const int j,
+                  const int t) {
+      const int il_t = il + t*TILE_NX1;
+      const int iu_t = (il_t + TILE_NX1 - 1 < iu) ? (il_t + TILE_NX1 - 1) : iu;
+      const int i0   = il_t - 1;                     // scratch column = (global i) - i0
 
-    // compute fluxes over [is,ie+1]
-    auto &dyn_eos = dyn_eos_;
-    auto &indcs = indcs_;
-    auto &size = size_;
-    auto &coord = coord_;
-    auto &flx1 = flx1_;
-    auto &bx = bx_;
-    auto &e31 = e31_;
-    auto &e21 = e21_;
-    auto &nhyd_ = nhyd;
-    auto nscal_ = nvars - nhyd;
-    auto &adm_ = adm;
-    //int il = is; int iu = ie+1;
-    if constexpr (rsolver_method_ == DynGRMHD_RSolver::llf_dyngr) {
-      LLF_DYNGR<IVX>(member, dyn_eos, indcs, size, coord, m, k, j, il, iu,
-                wl, wr, bl, br, bx, nhyd_, nscal_, adm_,
-                flx1, e31, e21);
-    } else if constexpr (rsolver_method_ == DynGRMHD_RSolver::hlle_dyngr) {
-      HLLE_DYNGR<IVX>(member, dyn_eos, indcs, size, coord, m, k, j, il, iu,
-                wl, wr, bl, br, bx, nhyd_, nscal_, adm_,
-                flx1, e31, e21);
-    }
-    member.team_barrier();
+      ScrArray2D<Real> wl(member.team_scratch(scr_level), nvars, TILE_NX1 + 2);
+      ScrArray2D<Real> wr(member.team_scratch(scr_level), nvars, TILE_NX1 + 2);
+      ScrArray2D<Real> bl(member.team_scratch(scr_level), 3, TILE_NX1 + 2);
+      ScrArray2D<Real> br(member.team_scratch(scr_level), 3, TILE_NX1 + 2);
 
-    // Calculate fluxes of scalars (if any)
-    if (nvars > nhyd) {
-      for (int n=nhyd; n<nvars; ++n) {
-        par_for_inner(member, il, iu, [&](const int i) {
-          if (flx1(m,IDN,k,j,i) >= 0.0) {
-            flx1(m,n,k,j,i) = flx1(m,IDN,k,j,i)*wl(n,i);
-          } else {
-            flx1(m,n,k,j,i) = flx1(m,IDN,k,j,i)*wr(n,i);
-          }
-        });
+      // Reconstruct qR[i] and qL[i+1], for both W and Bcc
+      switch (recon_method_) {
+        case ReconstructionMethod::dc:
+          DonorCellX1(member, m, k, j, il_t-1, iu_t, w0_, wl, wr, i0);
+          DonorCellX1(member, m, k, j, il_t-1, iu_t, b0_, bl, br, i0);
+          break;
+        case ReconstructionMethod::plm:
+          PiecewiseLinearX1(member, m, k, j, il_t-1, iu_t, w0_, wl, wr, i0);
+          PiecewiseLinearX1(member, m, k, j, il_t-1, iu_t, b0_, bl, br, i0);
+          break;
+        // JF: These higher-order reconstruction methods all need EOS_Data to calculate a
+        // floor. However, it isn't used by DynGRMHD at all.
+        case ReconstructionMethod::ppm4:
+        case ReconstructionMethod::ppmx:
+          PiecewiseParabolicX1(member,eos_,extrema,false, m, k, j, il_t-1, iu_t,
+                               w0_, wl, wr, i0);
+          PiecewiseParabolicX1(member,eos_,extrema,false, m, k, j, il_t-1, iu_t,
+                               b0_, bl, br, i0);
+          break;
+        case ReconstructionMethod::wenoz:
+          WENOZX1(member, eos_, false, m, k, j, il_t-1, iu_t, w0_, wl, wr, i0);
+          WENOZX1(member, eos_, false, m, k, j, il_t-1, iu_t, b0_, bl, br, i0);
+          break;
+        default:
+          break;
       }
-    }
-    member.team_barrier();
-  });
+      member.team_barrier();
+
+      // compute fluxes over [il_t,iu_t]
+      auto &dyn_eos = dyn_eos_;
+      auto &indcs = indcs_;
+      auto &size = size_;
+      auto &coord = coord_;
+      auto &flx1 = flx1_;
+      auto &bx = bx_;
+      auto &e31 = e31_;
+      auto &e21 = e21_;
+      auto &nhyd_ = nhyd;
+      auto nscal_ = nvars - nhyd;
+      auto &adm_ = adm;
+      if constexpr (rsolver_method_ == DynGRMHD_RSolver::llf_dyngr) {
+        LLF_DYNGR<IVX>(member, dyn_eos, indcs, size, coord, m, k, j, il_t, iu_t,
+                  wl, wr, bl, br, bx, nhyd_, nscal_, adm_, flx1, e31, e21, i0);
+      } else if constexpr (rsolver_method_ == DynGRMHD_RSolver::hlle_dyngr) {
+        HLLE_DYNGR<IVX>(member, dyn_eos, indcs, size, coord, m, k, j, il_t, iu_t,
+                  wl, wr, bl, br, bx, nhyd_, nscal_, adm_, flx1, e31, e21, i0);
+      }
+      member.team_barrier();
+
+      // Calculate fluxes of scalars (if any)
+      if (nvars > nhyd) {
+        for (int n=nhyd; n<nvars; ++n) {
+          par_for_inner(member, il_t, iu_t, [&](const int i) {
+            if (flx1(m,IDN,k,j,i) >= 0.0) {
+              flx1(m,n,k,j,i) = flx1(m,IDN,k,j,i)*wl(n,i-i0);
+            } else {
+              flx1(m,n,k,j,i) = flx1(m,IDN,k,j,i)*wr(n,i-i0);
+            }
+          });
+        }
+      }
+      member.team_barrier();
+    });
+  }
 
   //--------------------------------------------------------------------------------------
   // j-direction
 
   if (pmy_pack->pmesh->multi_d) {
-    scr_size = ScrArray2D<Real>::shmem_size(nvars, ncells1) * 3
-             + ScrArray2D<Real>::shmem_size(3, ncells1) * 3;
     auto flx2_ = pmy_pack->pmhd->uflx.x2f;
     auto &by_ = pmy_pack->pmhd->b0.x2f;
     auto &e12_ = pmy_pack->pmhd->e1x2;
@@ -180,107 +193,124 @@ TaskStatus DynGRMHDPS<EOSPolicy, ErrorPolicy>::CalcFluxes(Driver *pdriver, int s
     }
     jl = js-1, ju = je+1;
     if (use_fofc) { jl = js-2, ju = je+2; }
+    // DynGRMHD computes the x2 fluxes/EMFs over the i-range [is-1, ie+1].
+    const int ilo = is-1, ihi = ie+1;
 
-    par_for_outer("dyngrflux_x2",DevExeSpace(), scr_size, scr_level, 0, nmb1, kl, ku,
-    KOKKOS_LAMBDA(TeamMember_t member, const int m, const int k) {
-      ScrArray2D<Real> scr1(member.team_scratch(scr_level), nvars, ncells1);
-      ScrArray2D<Real> scr2(member.team_scratch(scr_level), nvars, ncells1);
-      ScrArray2D<Real> scr3(member.team_scratch(scr_level), nvars, ncells1);
-      ScrArray2D<Real> scr4(member.team_scratch(scr_level), 3, ncells1);
-      ScrArray2D<Real> scr5(member.team_scratch(scr_level), 3, ncells1);
-      ScrArray2D<Real> scr6(member.team_scratch(scr_level), 3, ncells1);
+    {
+      constexpr int TILE_NX1 = 64;                   // i-tile width (bounds scratch)
+      constexpr int TILE_NX2 = 16;                   // j-tile height (de-serializes walk)
+      const int nif      = ihi - ilo + 1;            // # i-cells in flux range [ilo,ihi]
+      const int ntiles_i = (nif + TILE_NX1 - 1)/TILE_NX1;
+      const int njf      = ju - jl;                  // # j-faces in flux range [jl+1,ju]
+      const int ntiles_j = (njf + TILE_NX2 - 1)/TILE_NX2;
+      size_t scr_size_t = (ScrArray2D<Real>::shmem_size(nvars, TILE_NX1) +
+                           ScrArray2D<Real>::shmem_size(3, TILE_NX1)) * 3;
 
-      for (int j=jl; j<=ju; ++j) {
-        // Permute scratch arrays.
-        auto wl     = scr1;
-        auto wl_jp1 = scr2;
-        auto wr     = scr3;
-        auto bl     = scr4;
-        auto bl_jp1 = scr5;
-        auto br     = scr6;
-        if ((j%2) == 0) {
-          wl     = scr2;
-          wl_jp1 = scr1;
-          bl     = scr5;
-          bl_jp1 = scr4;
-        }
+      par_for_outer("dyngrflux_x2",DevExeSpace(), scr_size_t, scr_level,
+                    0, nmb1, kl, ku, 0, ntiles_i-1, 0, ntiles_j-1,
+      KOKKOS_LAMBDA(TeamMember_t member, const int m, const int k,
+                    const int ti, const int tj) {
+        const int il_t = ilo + ti*TILE_NX1;
+        const int iu_t = (il_t + TILE_NX1 - 1 < ihi) ? (il_t + TILE_NX1 - 1) : ihi;
+        const int i0   = il_t;                       // scratch column = (global i) - i0
+        const int jb_lo = (jl+1) + tj*TILE_NX2;      // first j-face owned by this tile
+        const int jb_hi = (jb_lo + TILE_NX2 - 1 < ju) ? (jb_lo + TILE_NX2 - 1) : ju;
 
-        // Reconstruct qR[j] and qL[j+1]
-        switch (recon_method_) {
-          case ReconstructionMethod::dc:
-            DonorCellX2(member, m, k, j, is-1, ie+1, w0_, wl_jp1, wr);
-            DonorCellX2(member, m, k, j, is-1, ie+1, b0_, bl_jp1, br);
-            break;
-          case ReconstructionMethod::plm:
-            PiecewiseLinearX2(member, m, k, j, is-1, ie+1, w0_, wl_jp1, wr);
-            PiecewiseLinearX2(member, m, k, j, is-1, ie+1, b0_, bl_jp1, br);
-            break;
-          // JF: These higher-order reconstruction methods all need EOS_Data to calculate
-          // a floor. However, it isn't used by DynGRMHD.
-          case ReconstructionMethod::ppm4:
-          case ReconstructionMethod::ppmx:
-            PiecewiseParabolicX2(member,eos_,extrema,false, m, k, j, is-1, ie+1,
-                                 w0_, wl_jp1, wr);
-            PiecewiseParabolicX2(member,eos_,extrema,false, m, k, j, is-1, ie+1,
-                                 b0_, bl_jp1, br);
-            break;
-          case ReconstructionMethod::wenoz:
-            WENOZX2(member, eos_, false, m, k, j, is-1, ie+1, w0_, wl_jp1, wr);
-            WENOZX2(member, eos_, false, m, k, j, is-1, ie+1, b0_, bl_jp1, br);
-            break;
-          default:
-            break;
-        }
-        // Sync all threads in the team so that scratch memory is consistent
-        member.team_barrier();
+        ScrArray2D<Real> scr1(member.team_scratch(scr_level), nvars, TILE_NX1);
+        ScrArray2D<Real> scr2(member.team_scratch(scr_level), nvars, TILE_NX1);
+        ScrArray2D<Real> scr3(member.team_scratch(scr_level), nvars, TILE_NX1);
+        ScrArray2D<Real> scr4(member.team_scratch(scr_level), 3, TILE_NX1);
+        ScrArray2D<Real> scr5(member.team_scratch(scr_level), 3, TILE_NX1);
+        ScrArray2D<Real> scr6(member.team_scratch(scr_level), 3, TILE_NX1);
 
-        // compute fluxes over [js,je+1]
-        auto &dyn_eos = dyn_eos_;
-        auto &indcs = indcs_;
-        auto &size = size_;
-        auto &coord = coord_;
-        auto &flx2 = flx2_;
-        auto &by   = by_;
-        auto &e12  = e12_;
-        auto &e32  = e32_;
-        auto &nhyd_ = nhyd;
-        auto nscal_ = nvars - nhyd;
-        auto &adm_ = adm;
-        //int il = is; int iu = ie;
-        if (j>(jl)) {
-          if constexpr (rsolver_method_ == DynGRMHD_RSolver::llf_dyngr) {
-            LLF_DYNGR<IVY>(member, dyn_eos, indcs, size, coord, m, k, j, is-1, ie+1,
-                      wl, wr, bl, br, by, nhyd_, nscal_, adm_, flx2, e12, e32);
-          } else if constexpr (rsolver_method_ == DynGRMHD_RSolver::hlle_dyngr) {
-            HLLE_DYNGR<IVY>(member, dyn_eos, indcs, size, coord, m, k, j, is-1, ie+1,
-                      wl, wr, bl, br, by, nhyd_, nscal_, adm_, flx2, e12, e32);
+        // Serial walk over this tile's j-slabs; j = jb_lo-1 is the warmup slab (no flux).
+        for (int j=jb_lo-1; j<=jb_hi; ++j) {
+          // Permute scratch arrays (parity of the global j keeps the rolling buffer valid).
+          auto wl     = scr1;
+          auto wl_jp1 = scr2;
+          auto wr     = scr3;
+          auto bl     = scr4;
+          auto bl_jp1 = scr5;
+          auto br     = scr6;
+          if ((j%2) == 0) {
+            wl     = scr2;
+            wl_jp1 = scr1;
+            bl     = scr5;
+            bl_jp1 = scr4;
           }
-        }
-        member.team_barrier();
 
-        // Calculate fluxes of scalars (if any)
-        if (nvars > nhyd) {
-          for (int n=nhyd; n<nvars; ++n) {
-            par_for_inner(member, is-1, ie+1, [&](const int i) {
-              if (flx2(m,IDN,k,j,i) >= 0.0) {
-                flx2(m,n,k,j,i) = flx2(m,IDN,k,j,i)*wl(n,i);
-              } else {
-                flx2(m,n,k,j,i) = flx2(m,IDN,k,j,i)*wr(n,i);
+          // Reconstruct qR[j] and qL[j+1], for both W and Bcc, over the i-tile
+          switch (recon_method_) {
+            case ReconstructionMethod::dc:
+              DonorCellX2(member, m, k, j, il_t, iu_t, w0_, wl_jp1, wr, i0);
+              DonorCellX2(member, m, k, j, il_t, iu_t, b0_, bl_jp1, br, i0);
+              break;
+            case ReconstructionMethod::plm:
+              PiecewiseLinearX2(member, m, k, j, il_t, iu_t, w0_, wl_jp1, wr, i0);
+              PiecewiseLinearX2(member, m, k, j, il_t, iu_t, b0_, bl_jp1, br, i0);
+              break;
+            // JF: These higher-order reconstruction methods all need EOS_Data to calculate
+            // a floor. However, it isn't used by DynGRMHD.
+            case ReconstructionMethod::ppm4:
+            case ReconstructionMethod::ppmx:
+              PiecewiseParabolicX2(member,eos_,extrema,false, m, k, j, il_t, iu_t,
+                                   w0_, wl_jp1, wr, i0);
+              PiecewiseParabolicX2(member,eos_,extrema,false, m, k, j, il_t, iu_t,
+                                   b0_, bl_jp1, br, i0);
+              break;
+            case ReconstructionMethod::wenoz:
+              WENOZX2(member, eos_, false, m, k, j, il_t, iu_t, w0_, wl_jp1, wr, i0);
+              WENOZX2(member, eos_, false, m, k, j, il_t, iu_t, b0_, bl_jp1, br, i0);
+              break;
+            default:
+              break;
+          }
+          member.team_barrier();
+
+          // compute fluxes over [js,je+1]
+          if (j >= jb_lo) {
+            auto &dyn_eos = dyn_eos_;
+            auto &indcs = indcs_;
+            auto &size = size_;
+            auto &coord = coord_;
+            auto &flx2 = flx2_;
+            auto &by   = by_;
+            auto &e12  = e12_;
+            auto &e32  = e32_;
+            auto &nhyd_ = nhyd;
+            auto nscal_ = nvars - nhyd;
+            auto &adm_ = adm;
+            if constexpr (rsolver_method_ == DynGRMHD_RSolver::llf_dyngr) {
+              LLF_DYNGR<IVY>(member, dyn_eos, indcs, size, coord, m, k, j, il_t, iu_t,
+                        wl, wr, bl, br, by, nhyd_, nscal_, adm_, flx2, e12, e32, i0);
+            } else if constexpr (rsolver_method_ == DynGRMHD_RSolver::hlle_dyngr) {
+              HLLE_DYNGR<IVY>(member, dyn_eos, indcs, size, coord, m, k, j, il_t, iu_t,
+                        wl, wr, bl, br, by, nhyd_, nscal_, adm_, flx2, e12, e32, i0);
+            }
+            member.team_barrier();
+
+            // Calculate fluxes of scalars (if any)
+            if (nvars > nhyd) {
+              for (int n=nhyd; n<nvars; ++n) {
+                par_for_inner(member, il_t, iu_t, [&](const int i) {
+                  if (flx2(m,IDN,k,j,i) >= 0.0) {
+                    flx2(m,n,k,j,i) = flx2(m,IDN,k,j,i)*wl(n,i-i0);
+                  } else {
+                    flx2(m,n,k,j,i) = flx2(m,IDN,k,j,i)*wr(n,i-i0);
+                  }
+                });
               }
-            });
+            }
           }
-        }
-      } // end of loop over j
-      member.team_barrier();
-    });
+        } // end serial j-walk within tile
+      });
+    }
   }
 
   //--------------------------------------------------------------------------------------
   // k-direction. Note order of k,j loops switched
 
   if (pmy_pack->pmesh->three_d) {
-    scr_size = ScrArray2D<Real>::shmem_size(nvars, ncells1) * 3
-             + ScrArray2D<Real>::shmem_size(3, ncells1) * 3;
     auto &flx3_ = pmy_pack->pmhd->uflx.x3f;
     auto &bz_   = pmy_pack->pmhd->b0.x3f;
     auto &e23_  = pmy_pack->pmhd->e2x3;
@@ -288,99 +318,119 @@ TaskStatus DynGRMHDPS<EOSPolicy, ErrorPolicy>::CalcFluxes(Driver *pdriver, int s
 
     kl = ks-1, ku = ke+1;
     if (use_fofc) { kl = ks-2, ku = ke+2; }
+    jl = js-1, ju = je+1;
+    // DynGRMHD computes the x3 fluxes/EMFs over the i-range [is-1, ie+1].
+    const int ilo = is-1, ihi = ie+1;
 
-    par_for_outer("dyngrflux_x3",DevExeSpace(), scr_size, scr_level, 0, nmb1, js-1, je+1,
-    KOKKOS_LAMBDA(TeamMember_t member, const int m, const int j) {
-      ScrArray2D<Real> scr1(member.team_scratch(scr_level), nvars, ncells1);
-      ScrArray2D<Real> scr2(member.team_scratch(scr_level), nvars, ncells1);
-      ScrArray2D<Real> scr3(member.team_scratch(scr_level), nvars, ncells1);
-      ScrArray2D<Real> scr4(member.team_scratch(scr_level), 3, ncells1);
-      ScrArray2D<Real> scr5(member.team_scratch(scr_level), 3, ncells1);
-      ScrArray2D<Real> scr6(member.team_scratch(scr_level), 3, ncells1);
+    {
+      constexpr int TILE_NX1 = 64;                   // i-tile width (bounds scratch)
+      constexpr int TILE_NX3 = 16;                   // k-tile depth (de-serializes walk)
+      const int nif      = ihi - ilo + 1;            // # i-cells in flux range [ilo,ihi]
+      const int ntiles_i = (nif + TILE_NX1 - 1)/TILE_NX1;
+      const int nkf      = ku - kl;                  // # k-faces in flux range [kl+1,ku]
+      const int ntiles_k = (nkf + TILE_NX3 - 1)/TILE_NX3;
+      size_t scr_size_t = (ScrArray2D<Real>::shmem_size(nvars, TILE_NX1) +
+                           ScrArray2D<Real>::shmem_size(3, TILE_NX1)) * 3;
 
-      for (int k=kl; k<=ku; ++k) {
-        // Permute scratch arrays.
-        auto wl     = scr1;
-        auto wl_kp1 = scr2;
-        auto wr     = scr3;
-        auto bl     = scr4;
-        auto bl_kp1 = scr5;
-        auto br     = scr6;
-        if ((k%2) == 0) {
-          wl     = scr2;
-          wl_kp1 = scr1;
-          bl     = scr5;
-          bl_kp1 = scr4;
-        }
+      par_for_outer("dyngrflux_x3",DevExeSpace(), scr_size_t, scr_level,
+                    0, nmb1, jl, ju, 0, ntiles_i-1, 0, ntiles_k-1,
+      KOKKOS_LAMBDA(TeamMember_t member, const int m, const int j,
+                    const int ti, const int tk) {
+        const int il_t = ilo + ti*TILE_NX1;
+        const int iu_t = (il_t + TILE_NX1 - 1 < ihi) ? (il_t + TILE_NX1 - 1) : ihi;
+        const int i0   = il_t;                       // scratch column = (global i) - i0
+        const int kb_lo = (kl+1) + tk*TILE_NX3;      // first k-face owned by this tile
+        const int kb_hi = (kb_lo + TILE_NX3 - 1 < ku) ? (kb_lo + TILE_NX3 - 1) : ku;
 
-        // Reconstruct qR[j] and qL[j+1]
-        switch (recon_method_) {
-          case ReconstructionMethod::dc:
-            DonorCellX3(member, m, k, j, is-1, ie+1, w0_, wl_kp1, wr);
-            DonorCellX3(member, m, k, j, is-1, ie+1, b0_, bl_kp1, br);
-            break;
-          case ReconstructionMethod::plm:
-            PiecewiseLinearX3(member, m, k, j, is-1, ie+1, w0_, wl_kp1, wr);
-            PiecewiseLinearX3(member, m, k, j, is-1, ie+1, b0_, bl_kp1, br);
-            break;
-          // JF: These higher-order reconstruction methods all need EOS_Data to calculate
-          // a floor. However, it isn't used by DynGRMHD.
-          case ReconstructionMethod::ppm4:
-          case ReconstructionMethod::ppmx:
-            PiecewiseParabolicX3(member,eos_,extrema,false, m, k, j, is-1, ie+1,
-                                 w0_, wl_kp1, wr);
-            PiecewiseParabolicX3(member,eos_,extrema,false, m, k, j, is-1, ie+1,
-                                 b0_, bl_kp1, br);
-            break;
-          case ReconstructionMethod::wenoz:
-            WENOZX3(member, eos_, false, m, k, j, is-1, ie+1, w0_, wl_kp1, wr);
-            WENOZX3(member, eos_, false, m, k, j, is-1, ie+1, b0_, bl_kp1, br);
-            break;
-          default:
-            break;
-        }
-        // Sync all threads in the team so that scratch memory is consistent
-        member.team_barrier();
+        ScrArray2D<Real> scr1(member.team_scratch(scr_level), nvars, TILE_NX1);
+        ScrArray2D<Real> scr2(member.team_scratch(scr_level), nvars, TILE_NX1);
+        ScrArray2D<Real> scr3(member.team_scratch(scr_level), nvars, TILE_NX1);
+        ScrArray2D<Real> scr4(member.team_scratch(scr_level), 3, TILE_NX1);
+        ScrArray2D<Real> scr5(member.team_scratch(scr_level), 3, TILE_NX1);
+        ScrArray2D<Real> scr6(member.team_scratch(scr_level), 3, TILE_NX1);
 
-        // compute fluxes over [ks,ke+1]
-        auto &dyn_eos = dyn_eos_;
-        auto &indcs = indcs_;
-        auto &size = size_;
-        auto &coord = coord_;
-        auto &flx3 = flx3_;
-        auto &bz   = bz_;
-        auto &e23  = e23_;
-        auto &e13  = e13_;
-        auto &adm_ = adm;
-        auto &nhyd_ = nhyd;
-        auto nscal_ = nvars - nhyd;
-        //int il = is; int iu = ie;
-        if (k>(kl)) {
-          if constexpr (rsolver_method_ == DynGRMHD_RSolver::llf_dyngr) {
-            LLF_DYNGR<IVZ>(member, dyn_eos, indcs, size, coord, m, k, j, is-1, ie+1,
-                      wl, wr, bl, br, bz, nhyd_, nscal_, adm_, flx3, e23, e13);
-          } else if constexpr (rsolver_method_ == DynGRMHD_RSolver::hlle_dyngr) {
-            HLLE_DYNGR<IVZ>(member, dyn_eos, indcs, size, coord, m, k, j, is-1, ie+1,
-                      wl, wr, bl, br, bz, nhyd_, nscal_, adm_, flx3, e23, e13);
+        // Serial walk over this tile's k-slabs; k = kb_lo-1 is the warmup slab (no flux).
+        for (int k=kb_lo-1; k<=kb_hi; ++k) {
+          // Permute scratch arrays (parity of the global k keeps the rolling buffer valid).
+          auto wl     = scr1;
+          auto wl_kp1 = scr2;
+          auto wr     = scr3;
+          auto bl     = scr4;
+          auto bl_kp1 = scr5;
+          auto br     = scr6;
+          if ((k%2) == 0) {
+            wl     = scr2;
+            wl_kp1 = scr1;
+            bl     = scr5;
+            bl_kp1 = scr4;
           }
-        }
-        member.team_barrier();
 
-        // Calculate fluxes of scalars (if any)
-        if (nvars > nhyd) {
-          for (int n=nhyd; n<nvars; ++n) {
-            par_for_inner(member, is-1, ie+1, [&](const int i) {
-              if (flx3(m,IDN,k,j,i) >= 0.0) {
-                flx3(m,n,k,j,i) = flx3(m,IDN,k,j,i)*wl(n,i);
-              } else {
-                flx3(m,n,k,j,i) = flx3(m,IDN,k,j,i)*wr(n,i);
+          // Reconstruct qR[k] and qL[k+1], for both W and Bcc, over the i-tile
+          switch (recon_method_) {
+            case ReconstructionMethod::dc:
+              DonorCellX3(member, m, k, j, il_t, iu_t, w0_, wl_kp1, wr, i0);
+              DonorCellX3(member, m, k, j, il_t, iu_t, b0_, bl_kp1, br, i0);
+              break;
+            case ReconstructionMethod::plm:
+              PiecewiseLinearX3(member, m, k, j, il_t, iu_t, w0_, wl_kp1, wr, i0);
+              PiecewiseLinearX3(member, m, k, j, il_t, iu_t, b0_, bl_kp1, br, i0);
+              break;
+            // JF: These higher-order reconstruction methods all need EOS_Data to calculate
+            // a floor. However, it isn't used by DynGRMHD.
+            case ReconstructionMethod::ppm4:
+            case ReconstructionMethod::ppmx:
+              PiecewiseParabolicX3(member,eos_,extrema,false, m, k, j, il_t, iu_t,
+                                   w0_, wl_kp1, wr, i0);
+              PiecewiseParabolicX3(member,eos_,extrema,false, m, k, j, il_t, iu_t,
+                                   b0_, bl_kp1, br, i0);
+              break;
+            case ReconstructionMethod::wenoz:
+              WENOZX3(member, eos_, false, m, k, j, il_t, iu_t, w0_, wl_kp1, wr, i0);
+              WENOZX3(member, eos_, false, m, k, j, il_t, iu_t, b0_, bl_kp1, br, i0);
+              break;
+            default:
+              break;
+          }
+          member.team_barrier();
+
+          // compute fluxes over [ks,ke+1]
+          if (k >= kb_lo) {
+            auto &dyn_eos = dyn_eos_;
+            auto &indcs = indcs_;
+            auto &size = size_;
+            auto &coord = coord_;
+            auto &flx3 = flx3_;
+            auto &bz   = bz_;
+            auto &e23  = e23_;
+            auto &e13  = e13_;
+            auto &adm_ = adm;
+            auto &nhyd_ = nhyd;
+            auto nscal_ = nvars - nhyd;
+            if constexpr (rsolver_method_ == DynGRMHD_RSolver::llf_dyngr) {
+              LLF_DYNGR<IVZ>(member, dyn_eos, indcs, size, coord, m, k, j, il_t, iu_t,
+                        wl, wr, bl, br, bz, nhyd_, nscal_, adm_, flx3, e23, e13, i0);
+            } else if constexpr (rsolver_method_ == DynGRMHD_RSolver::hlle_dyngr) {
+              HLLE_DYNGR<IVZ>(member, dyn_eos, indcs, size, coord, m, k, j, il_t, iu_t,
+                        wl, wr, bl, br, bz, nhyd_, nscal_, adm_, flx3, e23, e13, i0);
+            }
+            member.team_barrier();
+
+            // Calculate fluxes of scalars (if any)
+            if (nvars > nhyd) {
+              for (int n=nhyd; n<nvars; ++n) {
+                par_for_inner(member, il_t, iu_t, [&](const int i) {
+                  if (flx3(m,IDN,k,j,i) >= 0.0) {
+                    flx3(m,n,k,j,i) = flx3(m,IDN,k,j,i)*wl(n,i-i0);
+                  } else {
+                    flx3(m,n,k,j,i) = flx3(m,IDN,k,j,i)*wr(n,i-i0);
+                  }
+                });
               }
-            });
+            }
           }
-        }
-      } // end of loop over j
-      member.team_barrier();
-    });
+        } // end serial k-walk within tile
+      });
+    }
   }
 
   // Call FOFC if necessary

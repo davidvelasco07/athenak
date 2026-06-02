@@ -130,8 +130,10 @@ void HLLE_DYNGR(TeamMember_t const &member,
      const ScrArray2D<Real> &bl, const ScrArray2D<Real> &br, const DvceArray4D<Real> &bx,
      const int& nhyd, const int& nscal,
      const adm::ADM::ADM_vars& adm,
-     DvceArray5D<Real> flx, DvceArray4D<Real> ey, DvceArray4D<Real> ez) {
+     DvceArray5D<Real> flx, DvceArray4D<Real> ey, DvceArray4D<Real> ez,
+     const int i0=0) {
   par_for_inner(member, il, iu, [&](const int i) {
+    const int si = i - i0;  // column index into the (possibly tiled) scratch arrays
     constexpr int ibx = ivx - IVX;
     constexpr int iby = ((ivx - IVX) + 1)%3;
     constexpr int ibz = ((ivx - IVX) + 2)%3;
@@ -163,37 +165,37 @@ void HLLE_DYNGR(TeamMember_t const &member,
     Real Bu_l[NMAG], Bu_r[NMAG];
     Real mb = eos.ps.GetEOS().GetBaryonMass();
 
-    prim_l[PRH] = wl(IDN, i)/mb;
-    prim_l[PVX] = wl(IVX, i);
-    prim_l[PVY] = wl(IVY, i);
-    prim_l[PVZ] = wl(IVZ, i);
+    prim_l[PRH] = wl(IDN, si)/mb;
+    prim_l[PVX] = wl(IVX, si);
+    prim_l[PVY] = wl(IVY, si);
+    prim_l[PVZ] = wl(IVZ, si);
     for (int n = 0; n < nscal; n++) {
-      prim_l[PYF + n] = wl(nhyd + n, i);
+      prim_l[PYF + n] = wl(nhyd + n, si);
     }
     eos.ps.GetEOS().ApplyDensityLimits(prim_l[PRH]);
     eos.ps.GetEOS().ApplySpeciesLimits(&prim_l[PYF]);
-    prim_l[PPR] = wl(IPR, i);
+    prim_l[PPR] = wl(IPR, si);
     prim_l[PTM] = eos.ps.GetEOS().GetTemperatureFromP(
                   prim_l[PRH], prim_l[PPR], &prim_l[PYF]);
     Bu_l[ibx] = bx(m, k, j, i)*isdetg;
-    Bu_l[iby] = bl(iby, i)*isdetg;
-    Bu_l[ibz] = bl(ibz, i)*isdetg;
+    Bu_l[iby] = bl(iby, si)*isdetg;
+    Bu_l[ibz] = bl(ibz, si)*isdetg;
 
-    prim_r[PRH] = wr(IDN, i)/mb;
-    prim_r[PVX] = wr(IVX, i);
-    prim_r[PVY] = wr(IVY, i);
-    prim_r[PVZ] = wr(IVZ, i);
+    prim_r[PRH] = wr(IDN, si)/mb;
+    prim_r[PVX] = wr(IVX, si);
+    prim_r[PVY] = wr(IVY, si);
+    prim_r[PVZ] = wr(IVZ, si);
     for (int n = 0; n < nscal; n++) {
-      prim_r[PYF + n] = wr(nhyd + n, i);
+      prim_r[PYF + n] = wr(nhyd + n, si);
     }
     eos.ps.GetEOS().ApplyDensityLimits(prim_r[PRH]);
     eos.ps.GetEOS().ApplySpeciesLimits(&prim_r[PYF]);
-    prim_r[PPR] = wr(IPR, i);
+    prim_r[PPR] = wr(IPR, si);
     prim_r[PTM] = eos.ps.GetEOS().GetTemperatureFromP(
                   prim_r[PRH], prim_r[PPR], &prim_r[PYF]);
     Bu_r[ibx] = bx(m, k, j, i)*isdetg;
-    Bu_r[iby] = br(iby, i)*isdetg;
-    Bu_r[ibz] = br(ibz, i)*isdetg;
+    Bu_r[iby] = br(iby, si)*isdetg;
+    Bu_r[ibz] = br(ibz, si)*isdetg;
 
     // Apply floors to make sure these values are physical.
     eos.ps.GetEOS().ApplyPrimitiveFloor(prim_l[PRH], &prim_l[PVX], prim_l[PPR],

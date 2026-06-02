@@ -22,7 +22,8 @@ void LLF_GR(TeamMember_t const &member, const EOS_Data &eos,
      const int m, const int k, const int j, const int il, const int iu, const int ivx,
      const ScrArray2D<Real> &wl, const ScrArray2D<Real> &wr,
      const ScrArray2D<Real> &bl, const ScrArray2D<Real> &br, const DvceArray4D<Real> &bx,
-     DvceArray5D<Real> flx, DvceArray4D<Real> ey, DvceArray4D<Real> ez) {
+     DvceArray5D<Real> flx, DvceArray4D<Real> ey, DvceArray4D<Real> ez,
+     const int i0=0) {
   // Cyclic permutation of array indices
   int ivy = IVX + ((ivx-IVX)+1)%3;
   int ivz = IVX + ((ivx-IVX)+2)%3;
@@ -33,6 +34,7 @@ void LLF_GR(TeamMember_t const &member, const EOS_Data &eos,
   int js = indcs.js;
   int ks = indcs.ks;
   par_for_inner(member, il, iu, [&](const int i) {
+    const int si = i - i0;  // column index into the (possibly tiled) scratch arrays
     // Extract position of interface
     Real &x1min = size.d_view(m).x1min;
     Real &x1max = size.d_view(m).x1max;
@@ -57,22 +59,22 @@ void LLF_GR(TeamMember_t const &member, const EOS_Data &eos,
 
     // Extract left/right primitives.  Note 1/2/3 always refers to x1/2/3 dirs
     MHDPrim1D wli,wri;
-    wli.d  = wl(IDN,i);
-    wli.vx = wl(ivx,i);
-    wli.vy = wl(ivy,i);
-    wli.vz = wl(ivz,i);
-    wli.by = bl(iby,i);
-    wli.bz = bl(ibz,i);
+    wli.d  = wl(IDN,si);
+    wli.vx = wl(ivx,si);
+    wli.vy = wl(ivy,si);
+    wli.vz = wl(ivz,si);
+    wli.by = bl(iby,si);
+    wli.bz = bl(ibz,si);
 
-    wri.d  = wr(IDN,i);
-    wri.vx = wr(ivx,i);
-    wri.vy = wr(ivy,i);
-    wri.vz = wr(ivz,i);
-    wri.by = br(iby,i);
-    wri.bz = br(ibz,i);
+    wri.d  = wr(IDN,si);
+    wri.vx = wr(ivx,si);
+    wri.vy = wr(ivy,si);
+    wri.vz = wr(ivz,si);
+    wri.by = br(iby,si);
+    wri.bz = br(ibz,si);
 
-    wli.e = wl(IEN,i);
-    wri.e = wr(IEN,i);
+    wli.e = wl(IEN,si);
+    wri.e = wr(IEN,si);
 
     // Extract normal magnetic field
     Real &bxi = bx(m,k,j,i);

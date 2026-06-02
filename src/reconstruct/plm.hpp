@@ -86,15 +86,20 @@ void PiecewiseLinearX2(TeamMember_t const &member, const int m, const int k, con
 //! \fn PiecewiseLinearX3()
 //! \brief Wrapper function for PLM reconstruction in x3-direction.
 //! This function should be called over [ks-1,ke+1] to get BOTH L/R states over [ks,ke]
+//!
+//! The optional i0 argument shifts the scratch-array (ql_kp1/qr_k) column index by -i0 so
+//! a tile of cells in x1 narrower than the full meshblock can be stored in a small scratch
+//! buffer. The mesh array q is always indexed by the global i; only the scratch writes are
+//! offset. With the default i0=0 the behavior is unchanged.
 
 KOKKOS_INLINE_FUNCTION
 void PiecewiseLinearX3(TeamMember_t const &member, const int m, const int k, const int j,
      const int il, const int iu, const DvceArray5D<Real> &q,
-     ScrArray2D<Real> &ql_kp1, ScrArray2D<Real> &qr_k) {
+     ScrArray2D<Real> &ql_kp1, ScrArray2D<Real> &qr_k, const int i0=0) {
   int nvar = q.extent_int(1);
   for (int n=0; n<nvar; ++n) {
     par_for_inner(member, il, iu, [&](const int i) {
-      PLM(q(m,n,k-1,j,i), q(m,n,k,j,i), q(m,n,k+1,j,i), ql_kp1(n,i), qr_k(n,i));
+      PLM(q(m,n,k-1,j,i), q(m,n,k,j,i), q(m,n,k+1,j,i), ql_kp1(n,i-i0), qr_k(n,i-i0));
     });
   }
   return;

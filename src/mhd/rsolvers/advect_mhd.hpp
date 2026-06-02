@@ -20,28 +20,30 @@ void Advect(TeamMember_t const &member, const EOS_Data &eos,
      const int m, const int k, const int j, const int il, const int iu, const int ivx,
      const ScrArray2D<Real> &wl, const ScrArray2D<Real> &wr,
      const ScrArray2D<Real> &bl, const ScrArray2D<Real> &br, const DvceArray4D<Real> &bx,
-     DvceArray5D<Real> flx, DvceArray4D<Real> ey, DvceArray4D<Real> ez) {
+     DvceArray5D<Real> flx, DvceArray4D<Real> ey, DvceArray4D<Real> ez,
+     const int i0=0) {
   int ivy = IVX + ((ivx-IVX) + 1)%3;
   int ivz = IVX + ((ivx-IVX) + 2)%3;
   int iby = ((ivx-IVX) + 1)%3;
   int ibz = ((ivx-IVX) + 2)%3;
 
   par_for_inner(member, il, iu, [&](const int i) {
+    const int si = i - i0;  // column index into the (possibly tiled) scratch arrays
     //  Compute upwind fluxes
-    if (wl(ivx,i) >= 0.0) {
-      flx(m,IDN,k,j,i) = wl(IDN,i)*wl(ivx,i);
-      flx(m,ivx,k,j,i) = wl(IDN,i)*wl(ivx,i)*wl(ivx,i);
+    if (wl(ivx,si) >= 0.0) {
+      flx(m,IDN,k,j,i) = wl(IDN,si)*wl(ivx,si);
+      flx(m,ivx,k,j,i) = wl(IDN,si)*wl(ivx,si)*wl(ivx,si);
       flx(m,ivy,k,j,i) = 0.0;
       flx(m,ivz,k,j,i) = 0.0;
-      ey(m,k,j,i) = -bl(iby,i)*wl(ivx,i) + bx(m,k,j,i)*wl(ivy,i);
-      ez(m,k,j,i) =  bl(ibz,i)*wl(ivx,i) - bx(m,k,j,i)*wl(ivz,i);
+      ey(m,k,j,i) = -bl(iby,si)*wl(ivx,si) + bx(m,k,j,i)*wl(ivy,si);
+      ez(m,k,j,i) =  bl(ibz,si)*wl(ivx,si) - bx(m,k,j,i)*wl(ivz,si);
     } else {
-      flx(m,IDN,k,j,i) = wr(IDN,i)*wr(ivx,i);
-      flx(m,ivx,k,j,i) = wr(IDN,i)*wr(ivx,i)*wr(ivx,i);
+      flx(m,IDN,k,j,i) = wr(IDN,si)*wr(ivx,si);
+      flx(m,ivx,k,j,i) = wr(IDN,si)*wr(ivx,si)*wr(ivx,si);
       flx(m,ivy,k,j,i) = 0.0;
       flx(m,ivz,k,j,i) = 0.0;
-      ey(m,k,j,i) = -br(iby,i)*wr(ivx,i) + bx(m,k,j,i)*wr(ivy,i);
-      ez(m,k,j,i) =  br(ibz,i)*wr(ivx,i) - bx(m,k,j,i)*wr(ivz,i);
+      ey(m,k,j,i) = -br(iby,si)*wr(ivx,si) + bx(m,k,j,i)*wr(ivy,si);
+      ez(m,k,j,i) =  br(ibz,si)*wr(ivx,si) - bx(m,k,j,i)*wr(ivz,si);
     }
   });
 

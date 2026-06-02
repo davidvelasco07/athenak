@@ -100,6 +100,14 @@ using ScratchMemSpace = DevExeSpace::scratch_memory_space;
 using LayoutWrapper = Kokkos::LayoutRight;                // increments last index fastest
 using TeamMember_t = Kokkos::TeamPolicy<>::member_type;   // for Kokkos thread teams
 
+// Kokkos::AUTO team sizing can return no valid config on GH200/Hopper for nested
+// TeamPolicy functors (e.g. boundary buffers). Use a fixed size for CUDA builds.
+#if defined(KOKKOS_ENABLE_CUDA)
+constexpr int ATHENA_TEAM_SIZE = 32;
+#else
+constexpr auto ATHENA_TEAM_SIZE = Kokkos::AUTO;
+#endif
+
 //----------------------------------------------------------------------------------------
 // alias template declarations for various array types (formerly AthenaArrays)
 // mostly used to store cell-centered variables (volume averaged)
@@ -350,7 +358,7 @@ inline void par_for_outer(const std::string &name, DevExeSpace exec_space,
                           size_t scr_size, const int scr_level,
                           const int kl, const int ku, const Function &function) {
   const int nk = ku - kl + 1;
-  Kokkos::TeamPolicy<> policy(exec_space, nk, Kokkos::AUTO);
+  Kokkos::TeamPolicy<> policy(exec_space, nk, ATHENA_TEAM_SIZE);
   Kokkos::parallel_for(name, policy.set_scratch_size(scr_level,Kokkos::PerTeam(scr_size)),
   KOKKOS_LAMBDA(TeamMember_t tmember) {
     const int k = tmember.league_rank() + kl;
@@ -368,7 +376,7 @@ inline void par_for_outer(const std::string &name, DevExeSpace exec_space,
   const int nk = ku - kl + 1;
   const int nj = ju - jl + 1;
   const int nkj = nk*nj;
-  Kokkos::TeamPolicy<> policy(exec_space, nkj, Kokkos::AUTO);
+  Kokkos::TeamPolicy<> policy(exec_space, nkj, ATHENA_TEAM_SIZE);
   Kokkos::parallel_for(name, policy.set_scratch_size(scr_level,Kokkos::PerTeam(scr_size)),
   KOKKOS_LAMBDA(TeamMember_t tmember) {
     const int k = tmember.league_rank()/nj + kl;
@@ -389,7 +397,7 @@ inline void par_for_outer(const std::string &name, DevExeSpace exec_space,
   const int nj = ju - jl + 1;
   const int nkj  = nk*nj;
   const int nnkj = nn*nk*nj;
-  Kokkos::TeamPolicy<> policy(exec_space, nnkj, Kokkos::AUTO);
+  Kokkos::TeamPolicy<> policy(exec_space, nnkj, ATHENA_TEAM_SIZE);
   Kokkos::parallel_for(name, policy.set_scratch_size(scr_level,Kokkos::PerTeam(scr_size)),
   KOKKOS_LAMBDA(TeamMember_t tmember) {
     int n = (tmember.league_rank())/nkj;
@@ -416,7 +424,7 @@ inline void par_for_outer(const std::string &name, DevExeSpace exec_space,
   const int nkj   = nk*nj;
   const int nnkj  = nn*nk*nj;
   const int nmnkj = nm*nn*nk*nj;
-  Kokkos::TeamPolicy<> policy(exec_space, nmnkj, Kokkos::AUTO);
+  Kokkos::TeamPolicy<> policy(exec_space, nmnkj, ATHENA_TEAM_SIZE);
   Kokkos::parallel_for(name, policy.set_scratch_size(scr_level,Kokkos::PerTeam(scr_size)),
   KOKKOS_LAMBDA(TeamMember_t tmember) {
     int m = (tmember.league_rank())/nnkj;

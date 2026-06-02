@@ -17,10 +17,17 @@ namespace hydro {
 //! \brief The LLF Riemann solver for GR hydrodynamics
 
 KOKKOS_INLINE_FUNCTION
+//! The optional i0 argument shifts the scratch-array (wl/wr) column index by -i0 so a tile
+//! of interfaces narrower than the full meshblock can be solved from a small scratch
+//! buffer. The output flux array flx (and the interface geometry, which depends on the
+//! global i) are always indexed by the global i; only the scratch reads are offset. With
+//! the default i0=0 the behavior is unchanged.
+
 void LLF_GR(TeamMember_t const &member, const EOS_Data &eos,
      const RegionIndcs &indcs,const DualArray1D<RegionSize> &size,const CoordData &coord,
      const int m, const int k, const int j, const int il, const int iu, const int ivx,
-     const ScrArray2D<Real> &wl, const ScrArray2D<Real> &wr, DvceArray5D<Real> flx) {
+     const ScrArray2D<Real> &wl, const ScrArray2D<Real> &wr, DvceArray5D<Real> flx,
+     const int i0=0) {
   // Cyclic permutation of array indices
   int ivy = IVX + ((ivx-IVX)+1)%3;
   int ivz = IVX + ((ivx-IVX)+2)%3;
@@ -29,6 +36,7 @@ void LLF_GR(TeamMember_t const &member, const EOS_Data &eos,
   int js = indcs.js;
   int ks = indcs.ks;
   par_for_inner(member, il, iu, [&](const int i) {
+    const int si = i - i0;  // column index into the (possibly tiled) scratch arrays
     // Extract position of interface
     Real &x1min = size.d_view(m).x1min;
     Real &x1max = size.d_view(m).x1max;
@@ -53,17 +61,17 @@ void LLF_GR(TeamMember_t const &member, const EOS_Data &eos,
 
     // Extract left/right primitives.
     HydPrim1D wli,wri;
-    wli.d  = wl(IDN,i);
-    wli.vx = wl(ivx,i);
-    wli.vy = wl(ivy,i);
-    wli.vz = wl(ivz,i);
-    wli.e  = wl(IEN,i);
+    wli.d  = wl(IDN,si);
+    wli.vx = wl(ivx,si);
+    wli.vy = wl(ivy,si);
+    wli.vz = wl(ivz,si);
+    wli.e  = wl(IEN,si);
 
-    wri.d  = wr(IDN,i);
-    wri.vx = wr(ivx,i);
-    wri.vy = wr(ivy,i);
-    wri.vz = wr(ivz,i);
-    wri.e  = wr(IEN,i);
+    wri.d  = wr(IDN,si);
+    wri.vx = wr(ivx,si);
+    wri.vy = wr(ivy,si);
+    wri.vz = wr(ivz,si);
+    wri.e  = wr(IEN,si);
 
     // Call LLF solver on single interface state
     HydCons1D flux;
