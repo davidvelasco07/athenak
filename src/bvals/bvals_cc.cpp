@@ -53,107 +53,83 @@ TaskStatus MeshBoundaryValuesCC::PackAndSendCC(DvceArray5D<Real> &a,
   auto &rbuf = recvbuf;
   auto &is_z4c = is_z4c_;
   auto &multilevel = pmy_pack->pmesh->multilevel;
-  // Outer loop over (# of MeshBlocks)*(# of buffers)*(# of variables)
-  int nmnv = nmb*nnghbr*nvar;
-  Kokkos::TeamPolicy<> policy(DevExeSpace(), nmnv, Kokkos::AUTO);
+  // Opt-B: one team packs one (m,n) buffer, flattening ALL (var,k,j,i) elements across
+  // the team's threads.  Dropping the per-variable league factor and the old
+  // nkj x i loop split means corner/edge buffers no longer each occupy a whole team for a
+  // handful of elements; every team gets its buffer's full element count to spread over.
+  int nmn = nmb*nnghbr;
+  Kokkos::TeamPolicy<> policy(DevExeSpace(), nmn, Kokkos::AUTO);
   Kokkos::parallel_for("SendBuff", policy, KOKKOS_LAMBDA(TeamMember_t tmember) {
-    const int m = (tmember.league_rank())/(nnghbr*nvar);
-    const int n = (tmember.league_rank() - m*(nnghbr*nvar))/nvar;
-    const int v = (tmember.league_rank() - m*(nnghbr*nvar) - n*nvar);
+    const int m = (tmember.league_rank())/nnghbr;
+    const int n = (tmember.league_rank() - m*nnghbr);
 
     // only load buffers when neighbor exists
     if (nghbr.d_view(m,n).gid >= 0) {
-      // if neighbor is at coarser level, use coar indices to pack buffer
+      const int lev  = nghbr.d_view(m,n).lev;
+      const int mlev = mblev.d_view(m);
       int il, iu, jl, ju, kl, ku;
-      if (nghbr.d_view(m,n).lev < mblev.d_view(m)) {
-        il = sbuf[n].icoar[0].bis;
-        iu = sbuf[n].icoar[0].bie;
-        jl = sbuf[n].icoar[0].bjs;
-        ju = sbuf[n].icoar[0].bje;
-        kl = sbuf[n].icoar[0].bks;
-        ku = sbuf[n].icoar[0].bke;
-      // if neighbor is at same level, use same indices to pack buffer
-      } else if (nghbr.d_view(m,n).lev == mblev.d_view(m)) {
-        il = sbuf[n].isame[0].bis;
-        iu = sbuf[n].isame[0].bie;
-        jl = sbuf[n].isame[0].bjs;
-        ju = sbuf[n].isame[0].bje;
-        kl = sbuf[n].isame[0].bks;
-        ku = sbuf[n].isame[0].bke;
-      // if neighbor is at finer level, use fine indices to pack buffer
-      } else {
-        il = sbuf[n].ifine[0].bis;
-        iu = sbuf[n].ifine[0].bie;
-        jl = sbuf[n].ifine[0].bjs;
-        ju = sbuf[n].ifine[0].bje;
-        kl = sbuf[n].ifine[0].bks;
-        ku = sbuf[n].ifine[0].bke;
+      if (lev < mlev) {            // neighbor coarser: pack coarse-grid indices
+        il = sbuf[n].icoar[0].bis; iu = sbuf[n].icoar[0].bie;
+        jl = sbuf[n].icoar[0].bjs; ju = sbuf[n].icoar[0].bje;
+        kl = sbuf[n].icoar[0].bks; ku = sbuf[n].icoar[0].bke;
+      } else if (lev == mlev) {    // neighbor same level
+        il = sbuf[n].isame[0].bis; iu = sbuf[n].isame[0].bie;
+        jl = sbuf[n].isame[0].bjs; ju = sbuf[n].isame[0].bje;
+        kl = sbuf[n].isame[0].bks; ku = sbuf[n].isame[0].bke;
+      } else {                     // neighbor finer
+        il = sbuf[n].ifine[0].bis; iu = sbuf[n].ifine[0].bie;
+        jl = sbuf[n].ifine[0].bjs; ju = sbuf[n].ifine[0].bje;
+        kl = sbuf[n].ifine[0].bks; ku = sbuf[n].ifine[0].bke;
       }
-      int ni = iu - il + 1;
-      int nj = ju - jl + 1;
-      int nk = ku - kl + 1;
-      int nkj  = nk*nj;
+      const int ni = iu - il + 1;
+      const int nj = ju - jl + 1;
+      const int nk = ku - kl + 1;
+      const int ncells = ni*nj*nk;
+      const int ntot = nvar*ncells;   // all (var,k,j,i) elements for this buffer
 
       // indices of recv'ing (destination) MB and buffer: MB IDs are stored sequentially
       // in MeshBlockPacks, so array index equals (target_id - first_id)
-      int dm = nghbr.d_view(m,n).gid - mbgid.d_view(0);
-      int dn = nghbr.d_view(m,n).dest;
+      const int dm = nghbr.d_view(m,n).gid - mbgid.d_view(0);
+      const int dn = nghbr.d_view(m,n).dest;
+      const bool same_rank = (nghbr.d_view(m,n).rank == my_rank);
 
-      // Middle loop over k,j
-      Kokkos::parallel_for(Kokkos::TeamThreadRange<>(tmember, nkj), [&](const int idx) {
-        int k = idx / nj;
-        int j = (idx - k * nj) + jl;
-        k += kl;
-
-        // Inner (vector) loop over i
-        // copy directly into recv buffer if MeshBlocks on same rank
-
-        if (nghbr.d_view(m,n).rank == my_rank) {
-          // SAME-RANK, SAME-LEVEL: copy directly u0(src interior) -> u0(dest ghosts),
-          // skipping the buffer entirely.  The destination ghost-cell ranges are the
-          // recv "isame" indices of the destination buffer slot dn; source and dest
-          // regions have identical extents, so cells map by local offset (k-kl,j-jl,i-il).
-          // (The matching unpack kernel skips same-rank same-level neighbors.)
-          if (nghbr.d_view(m,n).lev == mblev.d_view(m)) {
-            const int dil = rbuf[dn].isame[0].bis;
-            const int djl = rbuf[dn].isame[0].bjs;
-            const int dkl = rbuf[dn].isame[0].bks;
-            Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember,il,iu+1),
-            [&](const int i) {
-              a(dm, v, dkl+(k-kl), djl+(j-jl), dil+(i-il)) = a(m,v,k,j,i);
-            });
-          // same-rank FINER neighbor: still stage in buffer (receiver prolongates)
-          } else if (nghbr.d_view(m,n).lev > mblev.d_view(m)) {
-            Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember,il,iu+1),
-            [&](const int i) {
-              rbuf[dn].vars(dm, (i-il + ni*(j-jl + nj*(k-kl + nk*v))) ) = a(m,v,k,j,i);
-            });
-          // same-rank COARSER neighbor: still stage coarse_u0 in buffer
+      // The flat element index `idx` in [0,ntot) decodes to (v,k,j,i) AND equals the
+      // buffer linear index (i-il + ni*(j-jl + nj*(k-kl + nk*v))).
+      if (same_rank && lev == mlev) {
+        // SAME-RANK, SAME-LEVEL: copy directly u0(src interior) -> u0(dest ghosts),
+        // skipping the buffer (matching unpack skips these).  Dest ghost base = recv
+        // "isame" indices of the destination slot dn; regions have identical extents.
+        const int dil = rbuf[dn].isame[0].bis;
+        const int djl = rbuf[dn].isame[0].bjs;
+        const int dkl = rbuf[dn].isame[0].bks;
+        Kokkos::parallel_for(Kokkos::TeamVectorRange(tmember, ntot), [&](const int idx) {
+          const int v  = idx / ncells;
+          const int r  = idx - v*ncells;
+          const int kk = r / (ni*nj);
+          const int r2 = r - kk*(ni*nj);
+          const int jj = r2 / ni;
+          const int ii = r2 - jj*ni;
+          a(dm, v, dkl+kk, djl+jj, dil+ii) = a(m, v, kl+kk, jl+jj, il+ii);
+        });
+      } else {
+        // Staged in buffer: same-rank finer/coarser -> rbuf[dn](dm); cross-rank -> sbuf[n](m).
+        // Source is coarse_u0 when neighbor is coarser, else u0.
+        Kokkos::parallel_for(Kokkos::TeamVectorRange(tmember, ntot), [&](const int idx) {
+          const int v  = idx / ncells;
+          const int r  = idx - v*ncells;
+          const int kk = r / (ni*nj);
+          const int r2 = r - kk*(ni*nj);
+          const int jj = r2 / ni;
+          const int ii = r2 - jj*ni;
+          const Real val = (lev < mlev) ? ca(m, v, kl+kk, jl+jj, il+ii)
+                                        : a (m, v, kl+kk, jl+jj, il+ii);
+          if (same_rank) {
+            rbuf[dn].vars(dm, idx) = val;
           } else {
-            Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember,il,iu+1),
-            [&](const int i) {
-              rbuf[dn].vars(dm, (i-il + ni*(j-jl + nj*(k-kl + nk*v))) ) = ca(m,v,k,j,i);
-            });
+            sbuf[n].vars(m, idx) = val;
           }
-
-        // else copy into send buffer for MPI communication below
-
-        } else {
-          // if neighbor is at same or finer level, load data from u0
-          if (nghbr.d_view(m,n).lev >= mblev.d_view(m)) {
-            Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember,il,iu+1),
-            [&](const int i) {
-              sbuf[n].vars(m, (i-il + ni*(j-jl + nj*(k-kl + nk*v))) ) = a(m,v,k,j,i);
-            });
-          // if neighbor is at coarser level, load data from coarse_u0
-          } else {
-            Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember,il,iu+1),
-            [&](const int i) {
-              sbuf[n].vars(m, (i-il + ni*(j-jl + nj*(k-kl + nk*v))) ) = ca(m,v,k,j,i);
-            });
-          }
-        }
-      });
+        });
+      }
     } // end if-neighbor-exists block
     tmember.team_barrier();
   }); // end par_for_outer
@@ -315,72 +291,58 @@ TaskStatus MeshBoundaryValuesCC::RecvAndUnpackCC(DvceArray5D<Real> &a,
   auto &mblev = pmy_pack->pmb->mb_lev;
   int my_rank = global_variable::my_rank;
 
-  // Outer loop over (# of MeshBlocks)*(# of buffers)*(# of variables)
-  Kokkos::TeamPolicy<> policy(DevExeSpace(), (nmb*nnghbr*nvar), Kokkos::AUTO);
+  // Opt-B: one team unpacks one (m,n) buffer, flattening all (var,k,j,i) elements across
+  // the team's threads (drops the per-variable league factor and the nkj x i loop split).
+  int nmn = nmb*nnghbr;
+  Kokkos::TeamPolicy<> policy(DevExeSpace(), nmn, Kokkos::AUTO);
   Kokkos::parallel_for("RecvBuff", policy, KOKKOS_LAMBDA(TeamMember_t tmember) {
-    const int m = (tmember.league_rank())/(nnghbr*nvar);
-    const int n = (tmember.league_rank() - m*(nnghbr*nvar))/nvar;
-    const int v = (tmember.league_rank() - m*(nnghbr*nvar) - n*nvar);
+    const int m = (tmember.league_rank())/nnghbr;
+    const int n = (tmember.league_rank() - m*nnghbr);
 
     // only unpack buffers when neighbor exists
     if (nghbr.d_view(m,n).gid >= 0) {
+      const int lev  = nghbr.d_view(m,n).lev;
+      const int mlev = mblev.d_view(m);
       // SAME-RANK, SAME-LEVEL neighbors were written directly u0->u0 in the pack kernel
-      // (no buffer staged), so skip them here.
-      if (nghbr.d_view(m,n).rank == my_rank &&
-          nghbr.d_view(m,n).lev == mblev.d_view(m)) {
+      // (no buffer staged), so skip them here.  Condition is team-uniform.
+      if (nghbr.d_view(m,n).rank == my_rank && lev == mlev) {
         tmember.team_barrier();
         return;
       }
       int il, iu, jl, ju, kl, ku;
-      // if neighbor is at coarser level, use coar indices to unpack buffer
-      if (nghbr.d_view(m,n).lev < mblev.d_view(m)) {
-        il = rbuf[n].icoar[0].bis;
-        iu = rbuf[n].icoar[0].bie;
-        jl = rbuf[n].icoar[0].bjs;
-        ju = rbuf[n].icoar[0].bje;
-        kl = rbuf[n].icoar[0].bks;
-        ku = rbuf[n].icoar[0].bke;
-      // if neighbor is at same level, use same indices to unpack buffer
-      } else if (nghbr.d_view(m,n).lev == mblev.d_view(m)) {
-        il = rbuf[n].isame[0].bis;
-        iu = rbuf[n].isame[0].bie;
-        jl = rbuf[n].isame[0].bjs;
-        ju = rbuf[n].isame[0].bje;
-        kl = rbuf[n].isame[0].bks;
-        ku = rbuf[n].isame[0].bke;
-      // if neighbor is at finer level, use fine indices to unpack buffer
-      } else {
-        il = rbuf[n].ifine[0].bis;
-        iu = rbuf[n].ifine[0].bie;
-        jl = rbuf[n].ifine[0].bjs;
-        ju = rbuf[n].ifine[0].bje;
-        kl = rbuf[n].ifine[0].bks;
-        ku = rbuf[n].ifine[0].bke;
+      if (lev < mlev) {            // neighbor coarser
+        il = rbuf[n].icoar[0].bis; iu = rbuf[n].icoar[0].bie;
+        jl = rbuf[n].icoar[0].bjs; ju = rbuf[n].icoar[0].bje;
+        kl = rbuf[n].icoar[0].bks; ku = rbuf[n].icoar[0].bke;
+      } else if (lev == mlev) {    // neighbor same level (cross-rank only; same-rank skipped)
+        il = rbuf[n].isame[0].bis; iu = rbuf[n].isame[0].bie;
+        jl = rbuf[n].isame[0].bjs; ju = rbuf[n].isame[0].bje;
+        kl = rbuf[n].isame[0].bks; ku = rbuf[n].isame[0].bke;
+      } else {                     // neighbor finer
+        il = rbuf[n].ifine[0].bis; iu = rbuf[n].ifine[0].bie;
+        jl = rbuf[n].ifine[0].bjs; ju = rbuf[n].ifine[0].bje;
+        kl = rbuf[n].ifine[0].bks; ku = rbuf[n].ifine[0].bke;
       }
-      int ni = iu - il + 1;
-      int nj = ju - jl + 1;
-      int nk = ku - kl + 1;
-      int nkj  = nk*nj;
+      const int ni = iu - il + 1;
+      const int nj = ju - jl + 1;
+      const int nk = ku - kl + 1;
+      const int ncells = ni*nj*nk;
+      const int ntot = nvar*ncells;
+      const bool coarser = (lev < mlev);
 
-      // Middle loop over k,j
-      Kokkos::parallel_for(Kokkos::TeamThreadRange<>(tmember, nkj), [&](const int idx) {
-        int k = idx / nj;
-        int j = (idx - k * nj) + jl;
-        k += kl;
-
-        // if neighbor is at same or finer level, load data directly into u0
-        if (nghbr.d_view(m,n).lev >= mblev.d_view(m)) {
-          Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember,il,iu+1),
-          [&](const int i) {
-            a(m,v,k,j,i) = rbuf[n].vars(m, (i-il + ni*(j-jl + nj*(k-kl + nk*v))) );
-          });
-
-        // if neighbor is at coarser level, load data into coarse_u0
+      // flat idx in [0,ntot) decodes to (v,k,j,i) and equals the buffer linear index.
+      Kokkos::parallel_for(Kokkos::TeamVectorRange(tmember, ntot), [&](const int idx) {
+        const int v  = idx / ncells;
+        const int r  = idx - v*ncells;
+        const int kk = r / (ni*nj);
+        const int r2 = r - kk*(ni*nj);
+        const int jj = r2 / ni;
+        const int ii = r2 - jj*ni;
+        const Real val = rbuf[n].vars(m, idx);
+        if (coarser) {
+          ca(m, v, kl+kk, jl+jj, il+ii) = val;   // neighbor coarser -> coarse_u0
         } else {
-          Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember,il,iu+1),
-          [&](const int i) {
-            ca(m,v,k,j,i) = rbuf[n].vars(m, (i-il + ni*(j-jl + nj*(k-kl + nk*v))) );
-          });
+          a (m, v, kl+kk, jl+jj, il+ii) = val;    // same/finer -> u0
         }
       });
     }  // end if-neighbor-exists block
