@@ -109,13 +109,26 @@ TaskStatus MeshBoundaryValuesCC::PackAndSendCC(DvceArray5D<Real> &a,
         // copy directly into recv buffer if MeshBlocks on same rank
 
         if (nghbr.d_view(m,n).rank == my_rank) {
-          // if neighbor is at same or finer level, load data from u0
-          if (nghbr.d_view(m,n).lev >= mblev.d_view(m)) {
+          // SAME-RANK, SAME-LEVEL: copy directly u0(src interior) -> u0(dest ghosts),
+          // skipping the buffer entirely.  The destination ghost-cell ranges are the
+          // recv "isame" indices of the destination buffer slot dn; source and dest
+          // regions have identical extents, so cells map by local offset (k-kl,j-jl,i-il).
+          // (The matching unpack kernel skips same-rank same-level neighbors.)
+          if (nghbr.d_view(m,n).lev == mblev.d_view(m)) {
+            const int dil = rbuf[dn].isame[0].bis;
+            const int djl = rbuf[dn].isame[0].bjs;
+            const int dkl = rbuf[dn].isame[0].bks;
+            Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember,il,iu+1),
+            [&](const int i) {
+              a(dm, v, dkl+(k-kl), djl+(j-jl), dil+(i-il)) = a(m,v,k,j,i);
+            });
+          // same-rank FINER neighbor: still stage in buffer (receiver prolongates)
+          } else if (nghbr.d_view(m,n).lev > mblev.d_view(m)) {
             Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember,il,iu+1),
             [&](const int i) {
               rbuf[dn].vars(dm, (i-il + ni*(j-jl + nj*(k-kl + nk*v))) ) = a(m,v,k,j,i);
             });
-          // if neighbor is at coarser level, load data from coarse_u0
+          // same-rank COARSER neighbor: still stage coarse_u0 in buffer
           } else {
             Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember,il,iu+1),
             [&](const int i) {
@@ -300,6 +313,7 @@ TaskStatus MeshBoundaryValuesCC::RecvAndUnpackCC(DvceArray5D<Real> &a,
 
   int nvar = a.extent_int(1);  // TODO(@user): 2nd index from L of in array must be NVAR
   auto &mblev = pmy_pack->pmb->mb_lev;
+  int my_rank = global_variable::my_rank;
 
   // Outer loop over (# of MeshBlocks)*(# of buffers)*(# of variables)
   Kokkos::TeamPolicy<> policy(DevExeSpace(), (nmb*nnghbr*nvar), Kokkos::AUTO);
@@ -310,6 +324,13 @@ TaskStatus MeshBoundaryValuesCC::RecvAndUnpackCC(DvceArray5D<Real> &a,
 
     // only unpack buffers when neighbor exists
     if (nghbr.d_view(m,n).gid >= 0) {
+      // SAME-RANK, SAME-LEVEL neighbors were written directly u0->u0 in the pack kernel
+      // (no buffer staged), so skip them here.
+      if (nghbr.d_view(m,n).rank == my_rank &&
+          nghbr.d_view(m,n).lev == mblev.d_view(m)) {
+        tmember.team_barrier();
+        return;
+      }
       int il, iu, jl, ju, kl, ku;
       // if neighbor is at coarser level, use coar indices to unpack buffer
       if (nghbr.d_view(m,n).lev < mblev.d_view(m)) {
