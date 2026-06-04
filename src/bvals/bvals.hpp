@@ -158,7 +158,7 @@ class MeshBoundaryValues {
   std::vector<MPI_Request> send_var_reqs_, recv_var_reqs_;
   std::vector<MPI_Request> send_var_hdr_reqs_, recv_var_hdr_reqs_;
   DvceArray1D<Real> rank_sendbuf_vars_, rank_recvbuf_vars_;
-  DvceArray1D<int> rank_sendhdr_vars_, rank_recvhdr_vars_;
+  HostArray1D<int> rank_sendhdr_vars_, rank_recvhdr_vars_;
   void InvalidateRankPackedVarMetadata() { rank_packed_bvals_nvars_ = -1; }
 #endif
 
