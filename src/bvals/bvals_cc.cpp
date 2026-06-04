@@ -10,6 +10,7 @@
 
 #include <cstdlib>
 #include <iostream>
+#include <algorithm>
 #include <utility>
 
 #include "athena.hpp"
@@ -206,42 +207,41 @@ TaskStatus MeshBoundaryValuesCC::PackAndSendCC(DvceArray5D<Real> &a,
 #if MPI_PARALLEL_ENABLED
   // Send boundary buffer to neighboring MeshBlocks using MPI
   Kokkos::fence();
-  auto &is_z4c = is_z4c_;
-  int my_rank = global_variable::my_rank;
-  auto &nghbr = pmy_pack->pmb->nghbr;
-  bool no_errors=true;
-  for (int m=0; m<nmb; ++m) {
-    for (int n=0; n<nnghbr; ++n) {
-      if (nghbr.h_view(m,n).gid >= 0) {  // neighbor exists and not a physical boundary
-        // index and rank of destination Neighbor
-        int dn = nghbr.h_view(m,n).dest;
-        int drank = nghbr.h_view(m,n).rank;
-        if (drank != my_rank) {
-          // create tag using local ID and buffer index of *receiving* MeshBlock
-          int lid = nghbr.h_view(m,n).gid - pmy_pack->pmesh->gids_eachrank[drank];
-          int tag = CreateBvals_MPI_Tag(lid, dn);
+  bool no_errors = true;
+  if (rank_packed_bvals_nvars_ != nvar) {
+    BuildRankPackedVarMetadata(nvar);
+  }
+  std::fill(send_var_reqs_.begin(), send_var_reqs_.end(), MPI_REQUEST_NULL);
+  std::fill(send_var_hdr_reqs_.begin(), send_var_hdr_reqs_.end(), MPI_REQUEST_NULL);
 
-          // get ptr to send buffer when neighbor is at coarser/same/fine level
-          int data_size = nvar;
-          if ( nghbr.h_view(m,n).lev < pmy_pack->pmb->mb_lev.h_view(m) ) {
-            data_size *= sendbuf[n].icoar_ndat;
-          } else if ( nghbr.h_view(m,n).lev == pmy_pack->pmb->mb_lev.h_view(m) ) {
-            if (is_z4c) {
-              data_size *= sendbuf[n].isame_z4c_ndat;
-            } else {
-              data_size *= sendbuf[n].isame_ndat;
-            }
-          } else {
-            data_size *= sendbuf[n].ifine_ndat;
-          }
-          auto send_ptr = Kokkos::subview(sendbuf[n].vars, m, Kokkos::ALL);
-
-          int ierr = MPI_Isend(send_ptr.data(), data_size, MPI_ATHENA_REAL, drank, tag,
-                               comm_vars, &(sendbuf[n].vars_req[m]));
-          if (ierr != MPI_SUCCESS) {no_errors=false;}
-        }
-      }
+  for (const auto &msg : send_var_msgs_) {
+    for (int e = 0; e < msg.nentries; ++e) {
+      const auto &entry = send_var_entries_[msg.entry_offset + e];
+      int hidx = msg.hdr_offset + 3*e;
+      rank_sendhdr_vars_(hidx    ) = entry.lid;
+      rank_sendhdr_vars_(hidx + 1) = entry.dn;
+      rank_sendhdr_vars_(hidx + 2) = entry.data_size;
     }
+  }
+
+  for (const auto &entry : send_var_entries_) {
+    auto src = Kokkos::subview(sendbuf[entry.n].vars, entry.m,
+                               std::make_pair(0, entry.data_size));
+    auto dst = Kokkos::subview(rank_sendbuf_vars_,
+                               std::make_pair(entry.offset, entry.offset + entry.data_size));
+    Kokkos::deep_copy(dst, src);
+  }
+  Kokkos::fence();
+
+  for (std::size_t i = 0; i < send_var_msgs_.size(); ++i) {
+    const auto &msg = send_var_msgs_[i];
+    int hdr_size = 3*msg.nentries;
+    int ierr = MPI_Isend(rank_sendhdr_vars_.data() + msg.hdr_offset, hdr_size,
+                         MPI_INT, msg.rank, 0, comm_vars, &send_var_hdr_reqs_[i]);
+    if (ierr != MPI_SUCCESS) no_errors = false;
+    ierr = MPI_Isend(rank_sendbuf_vars_.data() + msg.offset, msg.data_size,
+                     MPI_ATHENA_REAL, msg.rank, 1, comm_vars, &send_var_reqs_[i]);
+    if (ierr != MPI_SUCCESS) no_errors = false;
   }
   // Quit if MPI error detected
   if (!(no_errors)) {
@@ -271,18 +271,17 @@ TaskStatus MeshBoundaryValuesCC::RecvAndUnpackCC(DvceArray5D<Real> &a,
 
   bool bflag = false;
   bool no_errors=true;
-  for (int m=0; m<nmb; ++m) {
-    for (int n=0; n<nnghbr; ++n) {
-      if (nghbr.h_view(m,n).gid >= 0) { // neighbor exists and not a physical boundary
-        if (nghbr.h_view(m,n).rank != global_variable::my_rank) {
-          int test;
-          int ierr = MPI_Test(&(rbuf[n].vars_req[m]), &test, MPI_STATUS_IGNORE);
-          if (ierr != MPI_SUCCESS) {no_errors=false;}
-          if (!(static_cast<bool>(test))) {
-            bflag = true;
-          }
-        }
-      }
+  for (std::size_t i = 0; i < recv_var_reqs_.size(); ++i) {
+    int test;
+    int ierr = MPI_Test(&recv_var_hdr_reqs_[i], &test, MPI_STATUS_IGNORE);
+    if (ierr != MPI_SUCCESS) {no_errors=false;}
+    if (!(static_cast<bool>(test))) {
+      bflag = true;
+    }
+    ierr = MPI_Test(&recv_var_reqs_[i], &test, MPI_STATUS_IGNORE);
+    if (ierr != MPI_SUCCESS) {no_errors=false;}
+    if (!(static_cast<bool>(test))) {
+      bflag = true;
     }
   }
   // Quit if MPI error detected
@@ -294,6 +293,29 @@ TaskStatus MeshBoundaryValuesCC::RecvAndUnpackCC(DvceArray5D<Real> &a,
   }
   // exit if recv boundary buffer communications have not completed
   if (bflag) {return TaskStatus::incomplete;}
+
+  int nmb_max = std::max(pmy_pack->nmb_thispack, pmy_pack->pmesh->nmb_maxperrank);
+  for (const auto &msg : recv_var_msgs_) {
+    int data_offset = msg.offset;
+    for (int e = 0; e < msg.nentries; ++e) {
+      int hidx = msg.hdr_offset + 3*e;
+      int lid = rank_recvhdr_vars_(hidx);
+      int dn = rank_recvhdr_vars_(hidx + 1);
+      int dsize = rank_recvhdr_vars_(hidx + 2);
+      if ((lid < 0) || (lid >= nmb_max) || (dn < 0) || (dn >= nnghbr) || (dsize < 0)) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Invalid rank-packed recv header in hydro CC"
+                  << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      auto src = Kokkos::subview(rank_recvbuf_vars_,
+                                 std::make_pair(data_offset, data_offset + dsize));
+      auto dst = Kokkos::subview(recvbuf[dn].vars, lid, std::make_pair(0, dsize));
+      Kokkos::deep_copy(dst, src);
+      data_offset += dsize;
+    }
+  }
+  Kokkos::fence();
 #endif
 
   //----- STEP 2: buffers have all completed, so unpack

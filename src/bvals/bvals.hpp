@@ -99,6 +99,32 @@ struct MeshBoundaryBuffer {
   }
 };
 
+//----------------------------------------------------------------------------------------
+//! \struct RankPackedVarEntry
+//! \brief metadata for one (MeshBlock,neighbor) var-payload in a rank-packed message
+
+struct RankPackedVarEntry {
+  int m;
+  int n;
+  int lid;
+  int dn;
+  int data_size;
+  int offset;
+};
+
+//----------------------------------------------------------------------------------------
+//! \struct RankPackedVarMessage
+//! \brief metadata for one aggregated MPI vars message between ranks
+
+struct RankPackedVarMessage {
+  int rank;
+  int nentries;
+  int entry_offset;
+  int hdr_offset;
+  int offset;
+  int data_size;
+};
+
 // Forward declarations
 class MeshBlockPack;
 
@@ -122,6 +148,18 @@ class MeshBoundaryValues {
 #if MPI_PARALLEL_ENABLED
   // unique MPI communicators for each case (variables/fluxes)
   MPI_Comm comm_vars, comm_flux;
+
+  // rank-packed vars communication path
+  bool show_rank_packed_bvals_stats_;
+  int rank_packed_bvals_nvars_;
+  int rank_packed_mesh_seq_;
+  std::vector<RankPackedVarEntry> send_var_entries_, recv_var_entries_;
+  std::vector<RankPackedVarMessage> send_var_msgs_, recv_var_msgs_;
+  std::vector<MPI_Request> send_var_reqs_, recv_var_reqs_;
+  std::vector<MPI_Request> send_var_hdr_reqs_, recv_var_hdr_reqs_;
+  DvceArray1D<Real> rank_sendbuf_vars_, rank_recvbuf_vars_;
+  DvceArray1D<int> rank_sendhdr_vars_, rank_recvhdr_vars_;
+  void InvalidateRankPackedVarMetadata() { rank_packed_bvals_nvars_ = -1; }
 #endif
 
   //functions
@@ -148,6 +186,11 @@ class MeshBoundaryValues {
   // many types (Hydro, MHD, Radiation, Z4c, etc.)
   MeshBlockPack* pmy_pack;
   bool is_z4c_;   // flag to denote if this BoundaryValues is for Z4c module
+
+#if MPI_PARALLEL_ENABLED
+  int GetVarDataSize(const MeshBoundaryBuffer &buf, int m, int n, int nvars) const;
+  void BuildRankPackedVarMetadata(const int nvars);
+#endif
 };
 
 //----------------------------------------------------------------------------------------
