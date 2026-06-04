@@ -38,7 +38,9 @@ MeshBoundaryValues::MeshBoundaryValues(MeshBlockPack *pp, ParameterInput *pin, b
   rank_sendbuf_vars_("rank_sendbuf_vars",1),
   rank_recvbuf_vars_("rank_recvbuf_vars",1),
   rank_sendhdr_vars_("rank_sendhdr_vars",1),
-  rank_recvhdr_vars_("rank_recvhdr_vars",1)
+  rank_recvhdr_vars_("rank_recvhdr_vars",1),
+  send_var_entries_d_("send_var_entries_d",1),
+  recv_var_entries_d_("recv_var_entries_d",1)
 #endif
 {
   // allocate vector of status flags and MPI requests (if needed)
@@ -224,6 +226,23 @@ void MeshBoundaryValues::BuildRankPackedVarMetadata(const int nvars) {
   Kokkos::realloc(rank_recvbuf_vars_, std::max(1, recv_total));
   Kokkos::realloc(rank_sendhdr_vars_, std::max(1, send_hdr_total));
   Kokkos::realloc(rank_recvhdr_vars_, std::max(1, recv_hdr_total));
+
+  // Mirror the entry tables to device for the fused pack/unpack kernels.
+  {
+    const std::size_t nsend = send_var_entries_.size();
+    const std::size_t nrecv = recv_var_entries_.size();
+    send_var_entries_d_ =
+        DvceArray1D<RankPackedVarEntry>("send_var_entries_d", std::max<std::size_t>(1,nsend));
+    recv_var_entries_d_ =
+        DvceArray1D<RankPackedVarEntry>("recv_var_entries_d", std::max<std::size_t>(1,nrecv));
+    auto h_send = Kokkos::create_mirror_view(send_var_entries_d_);
+    auto h_recv = Kokkos::create_mirror_view(recv_var_entries_d_);
+    for (std::size_t i = 0; i < nsend; ++i) h_send(i) = send_var_entries_[i];
+    for (std::size_t i = 0; i < nrecv; ++i) h_recv(i) = recv_var_entries_[i];
+    Kokkos::deep_copy(send_var_entries_d_, h_send);
+    Kokkos::deep_copy(recv_var_entries_d_, h_recv);
+  }
+
   send_var_reqs_.assign(send_var_msgs_.size(), MPI_REQUEST_NULL);
   recv_var_reqs_.assign(recv_var_msgs_.size(), MPI_REQUEST_NULL);
   send_var_hdr_reqs_.assign(send_var_msgs_.size(), MPI_REQUEST_NULL);

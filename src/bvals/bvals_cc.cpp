@@ -224,12 +224,26 @@ TaskStatus MeshBoundaryValuesCC::PackAndSendCC(DvceArray5D<Real> &a,
     }
   }
 
-  for (const auto &entry : send_var_entries_) {
-    auto src = Kokkos::subview(sendbuf[entry.n].vars, entry.m,
-                               std::make_pair(0, entry.data_size));
-    auto dst = Kokkos::subview(rank_sendbuf_vars_,
-                               std::make_pair(entry.offset, entry.offset + entry.data_size));
-    Kokkos::deep_copy(dst, src);
+  // Fused device-side aggregate: one TeamPolicy kernel copies every entry from
+  // its per-neighbour pack buffer into the rank-packed aggregate buffer. Replaces
+  // an O(n_entries) sequence of Kokkos::deep_copy calls (each a separate kernel
+  // launch) with a single launch, which is the dominant cost at high meshblock
+  // counts.
+  const int n_send_entries = static_cast<int>(send_var_entries_.size());
+  if (n_send_entries > 0) {
+    auto entries = send_var_entries_d_;
+    auto aggbuf = rank_sendbuf_vars_;
+    auto &sbuf_d = sendbuf;
+    Kokkos::TeamPolicy<> agg_policy(DevExeSpace(), n_send_entries, Kokkos::AUTO);
+    Kokkos::parallel_for("RankPackAggCC", agg_policy,
+      KOKKOS_LAMBDA(TeamMember_t tm) {
+        const int e = tm.league_rank();
+        const auto entry = entries(e);
+        Kokkos::parallel_for(Kokkos::TeamVectorRange(tm, entry.data_size),
+          [&](const int k) {
+            aggbuf(entry.offset + k) = sbuf_d[entry.n].vars(entry.m, k);
+          });
+      });
   }
   Kokkos::fence();
 
@@ -294,28 +308,59 @@ TaskStatus MeshBoundaryValuesCC::RecvAndUnpackCC(DvceArray5D<Real> &a,
   // exit if recv boundary buffer communications have not completed
   if (bflag) {return TaskStatus::incomplete;}
 
+  // Fused device-side scatter: build a per-entry task table on host from the
+  // received header, deep_copy it once, then run one parallel_for that
+  // distributes every entry from the rank-packed recv buffer into the
+  // per-neighbour recv buffers. Replaces O(n_entries) Kokkos::deep_copy
+  // launches with a single launch.
   int nmb_max = std::max(pmy_pack->nmb_thispack, pmy_pack->pmesh->nmb_maxperrank);
-  for (const auto &msg : recv_var_msgs_) {
-    int data_offset = msg.offset;
-    for (int e = 0; e < msg.nentries; ++e) {
-      int hidx = msg.hdr_offset + 3*e;
-      int lid = rank_recvhdr_vars_(hidx);
-      int dn = rank_recvhdr_vars_(hidx + 1);
-      int dsize = rank_recvhdr_vars_(hidx + 2);
-      if ((lid < 0) || (lid >= nmb_max) || (dn < 0) || (dn >= nnghbr) || (dsize < 0)) {
-        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                  << std::endl << "Invalid rank-packed recv header in hydro CC"
-                  << std::endl;
-        std::exit(EXIT_FAILURE);
+  const int n_recv_entries = static_cast<int>(recv_var_entries_.size());
+  if (n_recv_entries > 0) {
+    auto unpack_tasks_d =
+        DvceArray1D<RankPackedVarEntry>("unpack_tasks_cc", n_recv_entries);
+    auto unpack_tasks_h = Kokkos::create_mirror_view(unpack_tasks_d);
+    int t = 0;
+    for (const auto &msg : recv_var_msgs_) {
+      int off = msg.offset;
+      for (int e = 0; e < msg.nentries; ++e) {
+        const int hidx = msg.hdr_offset + 3*e;
+        const int lid = rank_recvhdr_vars_(hidx);
+        const int dn = rank_recvhdr_vars_(hidx + 1);
+        const int dsize = rank_recvhdr_vars_(hidx + 2);
+        if ((lid < 0) || (lid >= nmb_max) || (dn < 0) || (dn >= nnghbr) || (dsize < 0)) {
+          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                    << std::endl << "Invalid rank-packed recv header in hydro CC"
+                    << std::endl;
+          std::exit(EXIT_FAILURE);
+        }
+        // Repurpose RankPackedVarEntry fields: lid/dn for destination,
+        // offset for source-aggregate offset, data_size for payload length.
+        unpack_tasks_h(t).m = 0;
+        unpack_tasks_h(t).n = 0;
+        unpack_tasks_h(t).lid = lid;
+        unpack_tasks_h(t).dn = dn;
+        unpack_tasks_h(t).data_size = dsize;
+        unpack_tasks_h(t).offset = off;
+        ++t;
+        off += dsize;
       }
-      auto src = Kokkos::subview(rank_recvbuf_vars_,
-                                 std::make_pair(data_offset, data_offset + dsize));
-      auto dst = Kokkos::subview(recvbuf[dn].vars, lid, std::make_pair(0, dsize));
-      Kokkos::deep_copy(dst, src);
-      data_offset += dsize;
     }
+    Kokkos::deep_copy(unpack_tasks_d, unpack_tasks_h);
+
+    auto aggbuf = rank_recvbuf_vars_;
+    auto &rbuf_d = recvbuf;
+    Kokkos::TeamPolicy<> sc_policy(DevExeSpace(), n_recv_entries, Kokkos::AUTO);
+    Kokkos::parallel_for("RankUnpackScatterCC", sc_policy,
+      KOKKOS_LAMBDA(TeamMember_t tm) {
+        const int e = tm.league_rank();
+        const auto task = unpack_tasks_d(e);
+        Kokkos::parallel_for(Kokkos::TeamVectorRange(tm, task.data_size),
+          [&](const int k) {
+            rbuf_d[task.dn].vars(task.lid, k) = aggbuf(task.offset + k);
+          });
+      });
+    Kokkos::fence();
   }
-  Kokkos::fence();
 #endif
 
   //----- STEP 2: buffers have all completed, so unpack

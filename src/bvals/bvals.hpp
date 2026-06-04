@@ -159,6 +159,10 @@ class MeshBoundaryValues {
   std::vector<MPI_Request> send_var_hdr_reqs_, recv_var_hdr_reqs_;
   DvceArray1D<Real> rank_sendbuf_vars_, rank_recvbuf_vars_;
   HostArray1D<int> rank_sendhdr_vars_, rank_recvhdr_vars_;
+  // Device-resident mirrors of the entry tables, used by fused pack/unpack kernels
+  // to avoid issuing one Kokkos::deep_copy per entry. Rebuilt alongside the buffer
+  // allocations in BuildRankPackedVarMetadata.
+  DvceArray1D<RankPackedVarEntry> send_var_entries_d_, recv_var_entries_d_;
   void InvalidateRankPackedVarMetadata() { rank_packed_bvals_nvars_ = -1; }
 #endif
 
