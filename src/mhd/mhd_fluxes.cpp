@@ -126,15 +126,12 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
     if (pmy_pack->pmesh->multi_d) { jl = js-1; ju = je+1; }
     if (pmy_pack->pmesh->three_d) { kl = ks-1; ku = ke+1; }
 
-    // Reconstruct W and Bcc over cells i in [il1-1, iu1]
-    par_for("mflux_x1_recon", DevExeSpace(),
-      0, nmb1, kl, ku, jl, ju, il1-1, iu1,
-      KOKKOS_LAMBDA(int m, int k, int j, int i) {
-        ReconCell<IVX>(recon_method_, eos_, true,  m, k, j, i, is, js, ks, ie, je, ke,
-                       nvars, w0_, wl_, wr_);
-        ReconCell<IVX>(recon_method_, eos_, false, m, k, j, i, is, js, ks, ie, je, ke,
-                       3, bcc0_, bl_, br_);
-      });
+    // Reconstruct W over cells i in [il1-1, iu1], variables n in [0, nvars-1]
+    ReconDispatch<IVX>(recon_method_, "mflux_x1_recon_w", nmb1,
+        kl, ku, jl, ju, il1-1, iu1, eos_, true,  nvars, w0_, wl_, wr_);
+    // Reconstruct Bcc over cells i in [il1-1, iu1], components n in [0, 2]
+    ReconDispatch<IVX>(recon_method_, "mflux_x1_recon_b", nmb1,
+        kl, ku, jl, ju, il1-1, iu1, eos_, false, 3,     bcc0_, bl_, br_);
 
     // Riemann solve over faces i in [il1, iu1]
     par_for("mflux_x1_rsolve", DevExeSpace(),
@@ -179,15 +176,12 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
     int kl = ks, ku = ke;
     if (pmy_pack->pmesh->three_d) { kl = ks-1; ku = ke+1; }
 
-    // Reconstruct W and Bcc over cells j in [jl2-1, ju2], i in [is-1, ie+1]
-    par_for("mflux_x2_recon", DevExeSpace(),
-      0, nmb1, kl, ku, jl2-1, ju2, is-1, ie+1,
-      KOKKOS_LAMBDA(int m, int k, int j, int i) {
-        ReconCell<IVY>(recon_method_, eos_, true,  m, k, j, i, is, js, ks, ie, je, ke,
-                       nvars, w0_, wl_, wr_);
-        ReconCell<IVY>(recon_method_, eos_, false, m, k, j, i, is, js, ks, ie, je, ke,
-                       3, bcc0_, bl_, br_);
-      });
+    // Reconstruct W over cells j in [jl2-1, ju2], i in [is-1, ie+1], n in [0, nvars-1]
+    ReconDispatch<IVY>(recon_method_, "mflux_x2_recon_w", nmb1,
+        kl, ku, jl2-1, ju2, is-1, ie+1, eos_, true,  nvars, w0_, wl_, wr_);
+    // Reconstruct Bcc over cells j in [jl2-1, ju2], i in [is-1, ie+1], n in [0, 2]
+    ReconDispatch<IVY>(recon_method_, "mflux_x2_recon_b", nmb1,
+        kl, ku, jl2-1, ju2, is-1, ie+1, eos_, false, 3,     bcc0_, bl_, br_);
 
     // Riemann solve over faces j in [jl2, ju2], i in [is-1, ie+1]
     par_for("mflux_x2_rsolve", DevExeSpace(),
@@ -228,15 +222,13 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
     auto &e23 = e2x3;
     auto &e13 = e1x3;
 
-    // Reconstruct W and Bcc over cells k in [kl3-1, ku3], j in [js-1, je+1], i in [is-1, ie+1]
-    par_for("mflux_x3_recon", DevExeSpace(),
-      0, nmb1, kl3-1, ku3, js-1, je+1, is-1, ie+1,
-      KOKKOS_LAMBDA(int m, int k, int j, int i) {
-        ReconCell<IVZ>(recon_method_, eos_, true,  m, k, j, i, is, js, ks, ie, je, ke,
-                       nvars, w0_, wl_, wr_);
-        ReconCell<IVZ>(recon_method_, eos_, false, m, k, j, i, is, js, ks, ie, je, ke,
-                       3, bcc0_, bl_, br_);
-      });
+    // Reconstruct W over cells k in [kl3-1, ku3], j in [js-1, je+1], i in [is-1, ie+1],
+    // variables n in [0, nvars-1]
+    ReconDispatch<IVZ>(recon_method_, "mflux_x3_recon_w", nmb1,
+        kl3-1, ku3, js-1, je+1, is-1, ie+1, eos_, true,  nvars, w0_, wl_, wr_);
+    // Reconstruct Bcc over the same cells, components n in [0, 2]
+    ReconDispatch<IVZ>(recon_method_, "mflux_x3_recon_b", nmb1,
+        kl3-1, ku3, js-1, je+1, is-1, ie+1, eos_, false, 3,     bcc0_, bl_, br_);
 
     // Riemann solve over faces k in [kl3, ku3], j in [js-1, je+1], i in [is-1, ie+1]
     par_for("mflux_x3_rsolve", DevExeSpace(),

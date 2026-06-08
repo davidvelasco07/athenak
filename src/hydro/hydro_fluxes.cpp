@@ -112,12 +112,8 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
   {
     auto &flx1 = uflx.x1f;
     // Reconstruction over cells i in [il1-1, iu1], j in [jtl, jtu], k in [ktl, ktu]
-    par_for("hflux_x1_recon", DevExeSpace(),
-      0, nmb1, ktl, ktu, jtl, jtu, il1-1, iu1,
-      KOKKOS_LAMBDA(int m, int k, int j, int i) {
-        ReconCell<IVX>(recon_method_, eos_, true, m, k, j, i, is, js, ks, ie, je, ke,
-                       nvars, w0_, wl_, wr_);
-      });
+    ReconDispatch<IVX>(recon_method_, "hflux_x1_recon", nmb1,
+        ktl, ktu, jtl, jtu, il1-1, iu1, eos_, true, nvars, w0_, wl_, wr_);
 
     // Riemann solve over faces i in [il1, iu1]
     par_for("hflux_x1_rsolve", DevExeSpace(),
@@ -156,12 +152,8 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
   if (pmy_pack->pmesh->multi_d) {
     auto &flx2 = uflx.x2f;
     // Reconstruction over cells j in [jl2-1, ju2], i in [itl, itu], k in [ktl, ktu]
-    par_for("hflux_x2_recon", DevExeSpace(),
-      0, nmb1, ktl, ktu, jl2-1, ju2, itl, itu,
-      KOKKOS_LAMBDA(int m, int k, int j, int i) {
-        ReconCell<IVY>(recon_method_, eos_, true, m, k, j, i, is, js, ks, ie, je, ke,
-                       nvars, w0_, wl_, wr_);
-      });
+    ReconDispatch<IVY>(recon_method_, "hflux_x2_recon", nmb1,
+        ktl, ktu, jl2-1, ju2, itl, itu, eos_, true, nvars, w0_, wl_, wr_);
 
     // Riemann solve over faces j in [jl2, ju2]
     par_for("hflux_x2_rsolve", DevExeSpace(),
@@ -199,12 +191,8 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
   if (pmy_pack->pmesh->three_d) {
     auto &flx3 = uflx.x3f;
     // Reconstruction over cells k in [kl3-1, ku3], j in [jtl, jtu], i in [itl, itu]
-    par_for("hflux_x3_recon", DevExeSpace(),
-      0, nmb1, kl3-1, ku3, jtl, jtu, itl, itu,
-      KOKKOS_LAMBDA(int m, int k, int j, int i) {
-        ReconCell<IVZ>(recon_method_, eos_, true, m, k, j, i, is, js, ks, ie, je, ke,
-                       nvars, w0_, wl_, wr_);
-      });
+    ReconDispatch<IVZ>(recon_method_, "hflux_x3_recon", nmb1,
+        kl3-1, ku3, jtl, jtu, itl, itu, eos_, true, nvars, w0_, wl_, wr_);
 
     // Riemann solve over faces k in [kl3, ku3]
     par_for("hflux_x3_rsolve", DevExeSpace(),

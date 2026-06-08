@@ -114,15 +114,12 @@ TaskStatus DynGRMHDPS<EOSPolicy, ErrorPolicy>::CalcFluxes(Driver *pdriver, int s
     int il = is, iu = ie+1;
     if (use_fofc) { il = is-1; iu = ie+2; }
 
-    // Reconstruct W and Bcc over cells i in [il-1, iu]
-    par_for("dyngrflux_x1_recon", DevExeSpace(),
-      0, nmb1, kl, ku, jl, ju, il-1, iu,
-      KOKKOS_LAMBDA(int m, int k, int j, int i) {
-        ReconCell<IVX>(recon_method_, eos_, false, m, k, j, i, is, js, ks, ie, je, ke,
-                       nvars, w0_, wl_, wr_);
-        ReconCell<IVX>(recon_method_, eos_, false, m, k, j, i, is, js, ks, ie, je, ke,
-                       3, bcc0_, bl_, br_);
-      });
+    // Reconstruct W over cells i in [il-1, iu], variables n in [0, nvars-1]
+    ReconDispatch<IVX>(recon_method_, "dyngrflux_x1_recon_w", nmb1,
+        kl, ku, jl, ju, il-1, iu, eos_, false, nvars, w0_, wl_, wr_);
+    // Reconstruct Bcc over cells i in [il-1, iu], components n in [0, 2]
+    ReconDispatch<IVX>(recon_method_, "dyngrflux_x1_recon_b", nmb1,
+        kl, ku, jl, ju, il-1, iu, eos_, false, 3,     bcc0_, bl_, br_);
 
     // Riemann solve over faces i in [il, iu]
     par_for("dyngrflux_x1_rsolve", DevExeSpace(),
@@ -169,15 +166,12 @@ TaskStatus DynGRMHDPS<EOSPolicy, ErrorPolicy>::CalcFluxes(Driver *pdriver, int s
     int jl = js, ju = je+1;
     if (use_fofc) { jl = js-1; ju = je+2; }
 
-    // Reconstruct W and Bcc over cells j in [jl-1, ju], i in [is-1, ie+1]
-    par_for("dyngrflux_x2_recon", DevExeSpace(),
-      0, nmb1, kl, ku, jl-1, ju, is-1, ie+1,
-      KOKKOS_LAMBDA(int m, int k, int j, int i) {
-        ReconCell<IVY>(recon_method_, eos_, false, m, k, j, i, is, js, ks, ie, je, ke,
-                       nvars, w0_, wl_, wr_);
-        ReconCell<IVY>(recon_method_, eos_, false, m, k, j, i, is, js, ks, ie, je, ke,
-                       3, bcc0_, bl_, br_);
-      });
+    // Reconstruct W over cells j in [jl-1, ju], i in [is-1, ie+1], n in [0, nvars-1]
+    ReconDispatch<IVY>(recon_method_, "dyngrflux_x2_recon_w", nmb1,
+        kl, ku, jl-1, ju, is-1, ie+1, eos_, false, nvars, w0_, wl_, wr_);
+    // Reconstruct Bcc over cells j in [jl-1, ju], i in [is-1, ie+1], n in [0, 2]
+    ReconDispatch<IVY>(recon_method_, "dyngrflux_x2_recon_b", nmb1,
+        kl, ku, jl-1, ju, is-1, ie+1, eos_, false, 3,     bcc0_, bl_, br_);
 
     // Riemann solve over faces j in [jl, ju], i in [is-1, ie+1]
     par_for("dyngrflux_x2_rsolve", DevExeSpace(),
@@ -220,15 +214,13 @@ TaskStatus DynGRMHDPS<EOSPolicy, ErrorPolicy>::CalcFluxes(Driver *pdriver, int s
     int kl = ks, ku = ke+1;
     if (use_fofc) { kl = ks-1; ku = ke+2; }
 
-    // Reconstruct W and Bcc over cells k in [kl-1, ku], j in [js-1, je+1], i in [is-1, ie+1]
-    par_for("dyngrflux_x3_recon", DevExeSpace(),
-      0, nmb1, kl-1, ku, js-1, je+1, is-1, ie+1,
-      KOKKOS_LAMBDA(int m, int k, int j, int i) {
-        ReconCell<IVZ>(recon_method_, eos_, false, m, k, j, i, is, js, ks, ie, je, ke,
-                       nvars, w0_, wl_, wr_);
-        ReconCell<IVZ>(recon_method_, eos_, false, m, k, j, i, is, js, ks, ie, je, ke,
-                       3, bcc0_, bl_, br_);
-      });
+    // Reconstruct W over cells k in [kl-1, ku], j in [js-1, je+1], i in [is-1, ie+1],
+    // variables n in [0, nvars-1]
+    ReconDispatch<IVZ>(recon_method_, "dyngrflux_x3_recon_w", nmb1,
+        kl-1, ku, js-1, je+1, is-1, ie+1, eos_, false, nvars, w0_, wl_, wr_);
+    // Reconstruct Bcc over the same cells, components n in [0, 2]
+    ReconDispatch<IVZ>(recon_method_, "dyngrflux_x3_recon_b", nmb1,
+        kl-1, ku, js-1, je+1, is-1, ie+1, eos_, false, 3,     bcc0_, bl_, br_);
 
     // Riemann solve over faces k in [kl, ku], j in [js-1, je+1], i in [is-1, ie+1]
     par_for("dyngrflux_x3_rsolve", DevExeSpace(),
