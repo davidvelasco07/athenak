@@ -40,7 +40,10 @@ MeshBoundaryValues::MeshBoundaryValues(MeshBlockPack *pp, ParameterInput *pin, b
   rank_sendhdr_vars_("rank_sendhdr_vars",1),
   rank_recvhdr_vars_("rank_recvhdr_vars",1),
   send_var_entries_d_("send_var_entries_d",1),
-  recv_var_entries_d_("recv_var_entries_d",1)
+  recv_var_entries_d_("recv_var_entries_d",1),
+  unpack_tasks_d_("unpack_tasks_d",1),
+  send_agg_offset_("send_agg_offset",1),
+  recv_agg_offset_("recv_agg_offset",1)
 #endif
 {
   // allocate vector of status flags and MPI requests (if needed)
@@ -245,8 +248,109 @@ void MeshBoundaryValues::BuildRankPackedVarMetadata(const int nvars) {
 
   send_var_reqs_.assign(send_var_msgs_.size(), MPI_REQUEST_NULL);
   recv_var_reqs_.assign(recv_var_msgs_.size(), MPI_REQUEST_NULL);
-  send_var_hdr_reqs_.assign(send_var_msgs_.size(), MPI_REQUEST_NULL);
-  recv_var_hdr_reqs_.assign(recv_var_msgs_.size(), MPI_REQUEST_NULL);
+
+  // Populate the send-side header buffer once. Each (lid,dn,data_size) triple
+  // tells the receiver where the i-th entry in our payload should land on its
+  // side. The send-side fields (entry.lid, entry.dn, entry.data_size) are
+  // derived from this rank's nghbr/mbgid metadata and remain valid until the
+  // next BuildRankPackedVarMetadata.
+  for (const auto &msg : send_var_msgs_) {
+    for (int e = 0; e < msg.nentries; ++e) {
+      const auto &entry = send_var_entries_[msg.entry_offset + e];
+      const int hidx = msg.hdr_offset + 3*e;
+      rank_sendhdr_vars_(hidx    ) = entry.lid;
+      rank_sendhdr_vars_(hidx + 1) = entry.dn;
+      rank_sendhdr_vars_(hidx + 2) = entry.data_size;
+    }
+  }
+
+  // One-shot peer-to-peer header exchange: learn the order in which each peer
+  // packs entries destined for this rank. The received header tells us
+  // (lid_on_us, dn_on_us, data_size) for each incoming entry, in the sender's
+  // pack order. We use it to build the cached unpack-task table, then drop the
+  // header from the per-step path. Uses tag=2 to avoid colliding with the
+  // payload tag=1 used by per-step PackAndSend.
+  {
+    const int meta_tag = 2;
+    std::vector<MPI_Request> exch_reqs(
+        send_var_msgs_.size() + recv_var_msgs_.size(), MPI_REQUEST_NULL);
+    std::size_t r = 0;
+    for (const auto &msg : recv_var_msgs_) {
+      const int hdr_size = 3*msg.nentries;
+      MPI_Irecv(rank_recvhdr_vars_.data() + msg.hdr_offset, hdr_size, MPI_INT,
+                msg.rank, meta_tag, comm_vars, &exch_reqs[r++]);
+    }
+    for (const auto &msg : send_var_msgs_) {
+      const int hdr_size = 3*msg.nentries;
+      MPI_Isend(rank_sendhdr_vars_.data() + msg.hdr_offset, hdr_size, MPI_INT,
+                msg.rank, meta_tag, comm_vars, &exch_reqs[r++]);
+    }
+    if (!exch_reqs.empty()) {
+      MPI_Waitall(static_cast<int>(exch_reqs.size()), exch_reqs.data(),
+                  MPI_STATUSES_IGNORE);
+    }
+  }
+
+  // Build the cached unpack-task table from the received headers. Each entry
+  // says: take task.data_size reals starting at rank_recvbuf_vars_(task.offset)
+  // and scatter them into recvbuf[task.dn].vars(task.lid, 0..task.data_size-1).
+  // The cumulative offsets are computed once and never change until the next
+  // metadata rebuild.
+  {
+    const int nmb_max =
+        std::max(pmy_pack->nmb_thispack, pmy_pack->pmesh->nmb_maxperrank);
+    const int n_recv_entries = static_cast<int>(recv_var_entries_.size());
+    unpack_tasks_d_ = DvceArray1D<RankPackedVarEntry>(
+        "unpack_tasks_d", std::max(1, n_recv_entries));
+    auto unpack_tasks_h = Kokkos::create_mirror_view(unpack_tasks_d_);
+
+    // Per-(m,n) base offsets into the aggregate buffers. -1 == on-rank or no
+    // neighbour. The pack/unpack kernels use these to read/write the aggregate
+    // buffer directly, so SendBuff/RecvBuff need no companion gather/scatter.
+    const int map_len = nmb*nnghbr;
+    recv_agg_offset_ = DvceArray1D<int>("recv_agg_offset", std::max(1, map_len));
+    send_agg_offset_ = DvceArray1D<int>("send_agg_offset", std::max(1, map_len));
+    auto recv_off_h = Kokkos::create_mirror_view(recv_agg_offset_);
+    auto send_off_h = Kokkos::create_mirror_view(send_agg_offset_);
+    for (int i = 0; i < map_len; ++i) { recv_off_h(i) = -1; send_off_h(i) = -1; }
+
+    int t = 0;
+    for (const auto &msg : recv_var_msgs_) {
+      int off = msg.offset;
+      for (int e = 0; e < msg.nentries; ++e) {
+        const int hidx = msg.hdr_offset + 3*e;
+        const int lid = rank_recvhdr_vars_(hidx);
+        const int dn = rank_recvhdr_vars_(hidx + 1);
+        const int dsize = rank_recvhdr_vars_(hidx + 2);
+        if ((lid < 0) || (lid >= nmb_max) || (dn < 0) || (dn >= nnghbr) ||
+            (dsize < 0)) {
+          std::cout << "### FATAL ERROR in " << __FILE__ << " at line "
+                    << __LINE__ << std::endl
+                    << "Invalid rank-packed recv header from peer "
+                    << msg.rank << std::endl;
+          std::exit(EXIT_FAILURE);
+        }
+        unpack_tasks_h(t).m = 0;
+        unpack_tasks_h(t).n = 0;
+        unpack_tasks_h(t).lid = lid;
+        unpack_tasks_h(t).dn = dn;
+        unpack_tasks_h(t).data_size = dsize;
+        unpack_tasks_h(t).offset = off;
+        // lid is this rank's MeshBlock index (< nmb), dn its neighbour slot.
+        if (lid < nmb) recv_off_h(lid*nnghbr + dn) = off;
+        ++t;
+        off += dsize;
+      }
+    }
+    Kokkos::deep_copy(unpack_tasks_d_, unpack_tasks_h);
+
+    // Send-side map keyed by this rank's own (m,n).
+    for (const auto &entry : send_var_entries_) {
+      send_off_h(entry.m*nnghbr + entry.n) = entry.offset;
+    }
+    Kokkos::deep_copy(recv_agg_offset_, recv_off_h);
+    Kokkos::deep_copy(send_agg_offset_, send_off_h);
+  }
 
   if (show_rank_packed_bvals_stats_) {
     std::cout << "[rank " << global_variable::my_rank << "] rank-packed bvals vars: "
