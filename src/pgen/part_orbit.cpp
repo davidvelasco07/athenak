@@ -147,6 +147,8 @@ void OrbitFinalize(ParameterInput *pin, Mesh *pm) {
     Real vx = pr_h(IPVX, p), vy = pr_h(IPVY, p), vz = pr_h(IPVZ, p);
     std::printf("  p%d: x=(% .6e,% .6e,% .6e) v=(% .6e,% .6e,% .6e) m=%.3e\n",
                 p, x, y, z, vx, vy, vz, m);
+    std::printf("       g=(% .6e,% .6e,% .6e)\n",
+                pr_h(IPGX, p), pr_h(IPGY, p), pr_h(IPGZ, p));
     Mtot += m;
     comx += m*x; comy += m*y; comz += m*z;
     px += m*vx; py += m*vy; pz += m*vz;

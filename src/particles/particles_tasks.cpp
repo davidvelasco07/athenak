@@ -17,6 +17,7 @@
 #include "tasklist/task_list.hpp"
 #include "mesh/mesh.hpp"
 #include "bvals/bvals.hpp"
+#include "gravity/gravity.hpp"
 #include "particles.hpp"
 #include "particle_mesh.hpp"
 
@@ -42,7 +43,11 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
     id.deposit = tl["before_stagen"]->AddTask(&Particles::Deposit, this, none);
     id.flush   = tl["before_stagen"]->AddTask(&Particles::FlushDeposit, this, id.deposit);
 
-    id.push   = tl["stagen"]->AddTask(&Particles::Push, this, none);
+    // Fill phi ghost cells (>=2 layers) from neighbour interiors before the gather, which
+    // reads phi two cells deep near MeshBlock boundaries (the multigrid only keeps
+    // mg_nghost valid layers). Runs in "stagen", after the Driver's per-stage solve.
+    id.xphi   = tl["stagen"]->AddTask(&Particles::ExchangePhi, this, none);
+    id.push   = tl["stagen"]->AddTask(&Particles::Push, this, id.xphi);
     id.newgid = tl["stagen"]->AddTask(&Particles::NewGID, this, id.push);
     id.count  = tl["stagen"]->AddTask(&Particles::SendCnt, this, id.newgid);
     id.irecv  = tl["stagen"]->AddTask(&Particles::InitRecv, this, id.count);
@@ -89,6 +94,28 @@ TaskStatus Particles::FlushDeposit(Driver *pdrive, int stage) {
   if (ppm != nullptr) {
     ppm->FlushDepositBoundaries();
   }
+  return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn TaskStatus Particles::ExchangePhi
+//! \brief Fill the gravitational potential's ghost cells from neighbouring MeshBlock
+//! interiors so GatherGravity can read phi two cells deep near MeshBlock boundaries.
+//! Reuses the particle-mesh boundary-values object (1 variable) for a standard cell-
+//! centered halo exchange. Synchronous: correct for serial / on-rank; the MPI path
+//! completes here by draining the receives (a later pass can split this across tasks
+//! to overlap communication).
+
+TaskStatus Particles::ExchangePhi(Driver *pdrive, int stage) {
+  if (ppm == nullptr || pmy_pack->pgrav == nullptr) return TaskStatus::complete;
+  auto pb = ppm->pmbval;
+  auto &phi  = pmy_pack->pgrav->phi;
+  auto &cphi = pmy_pack->pgrav->coarse_phi;
+  pb->InitRecv(1);
+  pb->PackAndSendCC(phi, cphi);
+  while (pb->RecvAndUnpackCC(phi, cphi) != TaskStatus::complete) {}
+  pb->ClearSend();
+  pb->ClearRecv();
   return TaskStatus::complete;
 }
 

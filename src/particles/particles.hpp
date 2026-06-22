@@ -32,6 +32,7 @@ enum class ParticleType {cosmic_ray, sink};
 struct ParticlesTaskIDs {
   TaskID deposit;
   TaskID flush;
+  TaskID xphi;
   TaskID push;
   TaskID newgid;
   TaskID count;
@@ -81,6 +82,7 @@ class Particles {
   void AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> tl);
   TaskStatus Deposit(Driver *pdriver, int stage);
   TaskStatus FlushDeposit(Driver *pdriver, int stage);
+  TaskStatus ExchangePhi(Driver *pdriver, int stage);
   TaskStatus Push(Driver *pdriver, int stage);
   TaskStatus NewGID(Driver *pdriver, int stage);
   TaskStatus SendCnt(Driver *pdriver, int stage);
