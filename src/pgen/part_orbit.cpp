@@ -28,6 +28,7 @@
 #include "mesh/mesh.hpp"
 #include "hydro/hydro.hpp"
 #include "particles/particles.hpp"
+#include "particles/particle_mesh.hpp"
 #include "gravity/gravity.hpp"
 
 namespace {
@@ -97,13 +98,16 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   auto &pi = pmbp->ppart->prtcl_idata;
   int npart = pmbp->ppart->nprtcl_thispack;
   auto gids = pmbp->gids;
+  auto &mbsz = pmbp->pmb->mb_size;
   par_for("orbit_parts", DevExeSpace(), 0, npart-1,
   KOKKOS_LAMBDA(int p) {
     Real sgn = (p == 0) ? -1.0 : 1.0;
-    pi(PGID, p) = gids;
-    pr(IPX, p) = cx + sgn*0.5*dsep;
-    pr(IPY, p) = cy;
-    pr(IPZ, p) = cz;
+    Real px = cx + sgn*0.5*dsep;
+    Real py = cy;
+    Real pz = cz;
+    pr(IPX, p) = px;
+    pr(IPY, p) = py;
+    pr(IPZ, p) = pz;
     pr(IPVX, p) = 0.0;
     pr(IPVY, p) = sgn*vorb;
     pr(IPVZ, p) = 0.0;
@@ -111,6 +115,17 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     pr(IPGX, p) = 0.0;
     pr(IPGY, p) = 0.0;
     pr(IPGZ, p) = 0.0;
+    // assign the MeshBlock that actually contains this particle (lower-inclusive),
+    // not just gids -- required when the mesh is decomposed into multiple blocks
+    int mown = 0;
+    for (int mm = 0; mm < nmb; ++mm) {
+      if (px >= mbsz.d_view(mm).x1min && px < mbsz.d_view(mm).x1max &&
+          py >= mbsz.d_view(mm).x2min && py < mbsz.d_view(mm).x2max &&
+          pz >= mbsz.d_view(mm).x3min && pz < mbsz.d_view(mm).x3max) {
+        mown = mm;
+      }
+    }
+    pi(PGID, p) = gids + mown;
   });
 
   // constant particle timestep: keep sub-cell motion per step
@@ -118,6 +133,39 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   Real dxmin = std::min({mbsize.h_view(0).dx1, mbsize.h_view(0).dx2, mbsize.h_view(0).dx3});
   Real &dtnew_ = pmbp->ppart->dtnew;
   dtnew_ = 0.25*dxmin/std::max(vorb, 1.0e-30);
+
+  // optional flush diagnostic: deposit + flush at the (symmetric) IC and report mass
+  // conservation and mirror symmetry of the particle-mesh density across each split plane.
+  if (pin->GetOrAddBoolean("problem", "diag_flush", false)) {
+    auto *ppm = pmbp->ppart->ppm;
+    ppm->DepositMass(pr, pi, npart);
+    ppm->FlushDepositBoundaries();
+    auto dmv = ppm->dmesh;
+    auto &ix = pmbp->pmesh->mb_indcs;
+    int is2 = ix.is, ie2 = ix.ie, js2 = ix.js, je2 = ix.je, ks2 = ix.ks, ke2 = ix.ke;
+    Real Mtot = 0.0, Mxn = 0.0, Myn = 0.0, Mzn = 0.0;
+    Kokkos::parallel_reduce("flushdiag",
+      Kokkos::MDRangePolicy<Kokkos::Rank<4>>({0, ks2, js2, is2}, {nmb, ke2+1, je2+1, ie2+1}),
+      KOKKOS_LAMBDA(int m, int k, int j, int i, Real &tt, Real &xx, Real &yy, Real &zz) {
+        Real dV = mbsz.d_view(m).dx1*mbsz.d_view(m).dx2*mbsz.d_view(m).dx3;
+        Real mass = dmv(m, 0, k, j, i)*dV;
+        Real xcc = mbsz.d_view(m).x1min + (i - is2 + 0.5)*mbsz.d_view(m).dx1;
+        Real ycc = mbsz.d_view(m).x2min + (j - js2 + 0.5)*mbsz.d_view(m).dx2;
+        Real zcc = mbsz.d_view(m).x3min + (k - ks2 + 0.5)*mbsz.d_view(m).dx3;
+        tt += mass;
+        if (xcc < 0.0) xx += mass;
+        if (ycc < 0.0) yy += mass;
+        if (zcc < 0.0) zz += mass;
+      }, Mtot, Mxn, Myn, Mzn);
+    if (global_variable::my_rank == 0) {
+      std::printf("=== flush diagnostic (deposit+flush at IC) ===\n");
+      std::printf("  total deposited mass = %.10e   (expect %.10e)\n",
+                  Mtot, static_cast<Real>(npart)*mpar);
+      std::printf("  mass x<0 = %.8e   x>0 = %.8e\n", Mxn, Mtot - Mxn);
+      std::printf("  mass y<0 = %.8e   y>0 = %.8e\n", Myn, Mtot - Myn);
+      std::printf("  mass z<0 = %.8e   z>0 = %.8e\n", Mzn, Mtot - Mzn);
+    }
+  }
 
   return;
 }
