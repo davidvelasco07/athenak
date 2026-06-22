@@ -9,7 +9,9 @@
 #include "athena.hpp"
 #include "mesh/mesh.hpp"
 #include "driver/driver.hpp"
+#include "gravity/gravity.hpp"
 #include "particles.hpp"
+#include "particle_mesh.hpp"
 
 namespace particles {
 //----------------------------------------------------------------------------------------
@@ -29,7 +31,6 @@ TaskStatus Particles::Push(Driver *pdriver, int stage) {
   auto dt_ = (pmy_pack->pmesh->dt);
   auto hdt_ = 0.5*dt_;
   auto gids = pmy_pack->gids;
-  auto &gm_ = point_mass_gm;
 
   switch (pusher) {
     case ParticlesPusher::drift:
@@ -48,39 +49,34 @@ TaskStatus Particles::Push(Driver *pdriver, int stage) {
         }
       });
       break;
-    case ParticlesPusher::leapfrog:
-      // TODO(SMOON) currently, particle integration is done before main time integrator.
-      // Therefore, Particle task list is executed just once (see driver.cpp).
-      // In the future, we need to integrate particles within time integrator, such that
-      // total gas + particle momentum is conserved.
-      // Before that, let's simply not distinguish stage 1 and 2 here.
-//      if (stage == 1) {
-        par_for("part_update",DevExeSpace(),0,(nprtcl_thispack-1),
-        KOKKOS_LAMBDA(const int p) {
-          // Step 1. Opening kick from v^n to v^(n+1/2)
-          Real r3 = pow(SQR(pr(IPX,p)) + SQR(pr(IPY,p)) + SQR(pr(IPZ,p)), 1.5);
-          Real src = -hdt_*gm_/r3;
-          pr(IPVX,p) += src*pr(IPX,p);
-          pr(IPVY,p) += src*pr(IPY,p);
-          pr(IPVZ,p) += src*pr(IPZ,p);
-
-          // Step 2. Drift from x^n to x^(n+1)
+    case ParticlesPusher::leapfrog: {
+      // Gather the gravitational acceleration -grad(phi) from the multigrid
+      // potential onto each particle (writes IPGX/IPGY/IPGZ). phi already
+      // includes the particle's own deposited density (folded into the Poisson
+      // RHS), so on a uniform grid the symmetric TSC self-force cancels.
+      if (ppm != nullptr && pmy_pack->pgrav != nullptr) {
+        ppm->GatherGravity(pmy_pack->pgrav->phi, prtcl_rdata, prtcl_idata,
+                           nprtcl_thispack);
+      }
+      // RK2-KDK leapfrog, stage-synchronized with the per-stage gravity solve:
+      //   stage 1: half-kick v^n -> v^(n+1/2) using a(x^n); drift x^n -> x^(n+1)
+      //   stage 2: half-kick v^(n+1/2) -> v^(n+1) using a(x^(n+1))
+      const bool do_drift = (stage == 1);
+      par_for("part_kdk",DevExeSpace(),0,(nprtcl_thispack-1),
+      KOKKOS_LAMBDA(const int p) {
+        // Half-kick using the gathered acceleration.
+        pr(IPVX,p) += hdt_*pr(IPGX,p);
+        pr(IPVY,p) += hdt_*pr(IPGY,p);
+        pr(IPVZ,p) += hdt_*pr(IPGZ,p);
+        // Full drift (stage 1 only).
+        if (do_drift) {
           pr(IPX,p) += dt_*pr(IPVX,p);
           pr(IPY,p) += dt_*pr(IPVY,p);
           pr(IPZ,p) += dt_*pr(IPVZ,p);
-        });
-//      } else if (stage == 2) {
-        par_for("part_update",DevExeSpace(),0,(nprtcl_thispack-1),
-        KOKKOS_LAMBDA(const int p) {
-          // Step 3. Closing kick from v^(n+1/2) to v^(n+1)
-          Real r3 = pow(SQR(pr(IPX,p)) + SQR(pr(IPY,p)) + SQR(pr(IPZ,p)), 1.5);
-          Real src = -hdt_*gm_/r3;
-          pr(IPVX,p) += src*pr(IPX,p);
-          pr(IPVY,p) += src*pr(IPY,p);
-          pr(IPVZ,p) += src*pr(IPZ,p);
-        });
-//      }
+        }
+      });
       break;
+    }
   default:
     break;
   }

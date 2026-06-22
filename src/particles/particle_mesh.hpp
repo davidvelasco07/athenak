@@ -22,6 +22,7 @@
 #include "parameter_input.hpp"
 
 class MeshBlockPack;
+class MeshBoundaryValuesCC;
 
 namespace particles {
 
@@ -87,6 +88,41 @@ class ParticleMesh {
   void DepositMass(const DvceArray2D<Real>& prtcl_rdata,
                    const DvceArray2D<int>&  prtcl_idata,
                    int npar);
+
+  // TSC gather of the gravitational acceleration (-grad phi) from the mesh
+  // onto each particle, written into prtcl_rdata slots IPGX/IPGY/IPGZ.
+  //   phi:         (nmb, 1, ncells3, ncells2, ncells1) potential from the
+  //                multigrid Poisson solve (pgrav->phi).
+  //   prtcl_rdata: (nrdata, nprtcl) -- reads IPX/IPY/IPZ, writes IPGX/IPGY/IPGZ
+  //   prtcl_idata: (nidata, nprtcl) -- reads PGID
+  //   npar:        number of particles to gather onto.
+  //
+  // The cell-centered acceleration is the same central-difference stencil used
+  // by srcterms SelfGravity, a*(phi[m-1]-phi[m+1]) with a = 0.5/dx, TSC-weighted
+  // over the same 27-cell (3D) / 9-cell (2D) cloud as DepositMass. This is the
+  // AthenaK port of Athena++ ParticleGravity::{FindGravitationalForce,
+  // InterpolateGravitationalForce}. Requires valid phi ghost cells two layers
+  // deep for particles within two cells of a MeshBlock boundary (see Phase 1c).
+  void GatherGravity(const DvceArray5D<Real>& phi,
+                     DvceArray2D<Real>&       prtcl_rdata,
+                     const DvceArray2D<int>&  prtcl_idata,
+                     int npar);
+
+  // Boundary "sum-flush" for the deposit (Phase 1c). DepositMass writes TSC tails
+  // into the ghost cells of the depositing MeshBlock; those contributions physically
+  // belong to the neighbour's interior. FlushDepositBoundaries() adds each
+  // MeshBlock's ghost-zone deposit into the matching interior cells of its neighbours
+  // and then zeroes the ghost spill, so dmesh holds the complete per-cell density.
+  // Currently handles same-level, on-rank neighbours (uniform grid, serial or shared
+  // rank); off-rank (MPI) and fine/coarse (AMR) neighbours are not yet folded and are
+  // warned about once. Owns a MeshBoundaryValuesCC purely for its buffer index tables
+  // (and, in a later pass, the MPI path).
+  void FlushDepositBoundaries();
+
+  // Boundary-value helper for dmesh: provides the per-neighbour pack/unpack index
+  // tables (sendbuf/recvbuf .isame) reused by the flush, and the buffers/MPI machinery
+  // for the future cross-rank path.
+  MeshBoundaryValuesCC *pmbval = nullptr;
 
  private:
   MeshBlockPack *pmy_pack;

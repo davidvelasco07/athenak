@@ -29,6 +29,7 @@
 #include "radiation/radiation.hpp"
 #include "srcterms/turb_driver.hpp"
 #include "particles/particles.hpp"
+#include "particles/particle_mesh.hpp"
 #include "units/units.hpp"
 #include "meshblock_pack.hpp"
 #include "gravity/gravity.hpp"
@@ -246,6 +247,18 @@ void MeshBlockPack::AddPhysics(ParameterInput *pin) {
     // Gravity module uses Multigrid module
     pgrav = new gravity::Gravity(this, pin);
     //pgrav->AssembleTasks(tl_map);
+    // Push the gravitating mass-density contributions into the gravity source
+    // registry. The solver consumes only the assembled pgrav->rho, so it stays
+    // agnostic about what gravitates (gas, particles, ...). Done here -- after all
+    // physics modules exist -- to avoid construction-order coupling.
+    if (pmhd != nullptr) {
+      pgrav->RegisterSourceDensity(&(pmhd->u0), IDN, 1.0);
+    } else if (phydro != nullptr) {
+      pgrav->RegisterSourceDensity(&(phydro->u0), IDN, 1.0);
+    }
+    if (ppart != nullptr && ppart->ppm != nullptr) {
+      pgrav->RegisterSourceDensity(&(ppart->ppm->dmesh), 0, 1.0);
+    }
     nphysics++;
   } else {
     pgrav = nullptr;

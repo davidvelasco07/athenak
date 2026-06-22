@@ -12,6 +12,9 @@
 
 // C++ headers
 
+// C++ headers
+#include <vector>
+
 // Athena++ headers
 #include "../athena.hpp"
 #include "../mesh/meshblock_pack.hpp"
@@ -25,6 +28,20 @@ class ParameterInput;
 class Coordinates;
 class Multigrid;
 namespace gravity {
+
+//----------------------------------------------------------------------------------------
+//! \struct GravSourceDensity
+//! \brief one registered contribution to the gravitating mass density. `parr` points at
+//! a source array member (e.g. hydro u0, particle-mesh dmesh) and is dereferenced at
+//! assembly time so it survives reallocation (AMR); `comp` selects the component; the
+//! contribution is `fac * (*parr)(m, comp, k, j, i)`.
+
+struct GravSourceDensity {
+  DvceArray5D<Real> *parr;
+  int comp;
+  Real fac;
+};
+
 class Gravity {
  public:
   Gravity(MeshBlockPack *pmbp, ParameterInput *pin);
@@ -33,6 +50,12 @@ class Gravity {
   MeshBlockPack* pmy_pack;
   DvceArray5D<Real> phi, coarse_phi;
   DvceArray5D<Real> def;
+  // Assembled total gravitating mass density (the Poisson source). Filled by
+  // AssembleSource() from the registered contributions; consumed by whichever
+  // solver (multigrid now, FFT/FMM in future) computes phi. Keeping the source
+  // here -- rather than letting the solver reach into hydro/particles -- keeps
+  // the solver agnostic about what gravitates.
+  DvceArray5D<Real> rho;
   Real four_pi_G;
   bool output_defect;
   bool fill_ghost;
@@ -41,10 +64,16 @@ class Gravity {
   void SaveFaceBoundaries();
   void RestoreFaceBoundaries();
 
+  // Push model: a gravitating module registers its density contribution once at
+  // setup; AssembleSource() then sums all contributions into `rho` before each solve.
+  void RegisterSourceDensity(DvceArray5D<Real> *parr, int comp, Real fac = 1.0);
+  void AssembleSource();
+
   friend class MGGravityDriver;
 
  private:
   DvceArray5D<Real> fbuf_[6];
+  std::vector<GravSourceDensity> source_terms_;
 };
 }  // namespace gravity
 #endif // GRAVITY_GRAVITY_HPP_

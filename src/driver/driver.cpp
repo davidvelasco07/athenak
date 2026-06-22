@@ -401,9 +401,13 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
       for (int stage=1; stage<=(nexp_stages); ++stage) {
         ExecuteTaskList(pmesh, "before_stagen", stage);
         // solve gravity at each RK stage so the potential is consistent
-        // with the current density (required for 2nd-order accuracy)
-        if (pmesh->pmb_pack->pgrav != nullptr)
-            {pmesh->pmb_pack->pgrav->pmgd->Solve(this, stage);}
+        // with the current density (required for 2nd-order accuracy).
+        // AssembleSource() sums the registered contributions (gas, particles, ...)
+        // into pgrav->rho first, so the solver only consumes that field.
+        if (pmesh->pmb_pack->pgrav != nullptr) {
+          pmesh->pmb_pack->pgrav->AssembleSource();
+          pmesh->pmb_pack->pgrav->pmgd->Solve(this, stage);
+        }
         ExecuteTaskList(pmesh, "stagen", stage);
         ExecuteTaskList(pmesh, "after_stagen", stage);
       }

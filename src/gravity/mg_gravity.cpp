@@ -194,9 +194,10 @@ void MGGravityDriver::Solve(Driver *pdriver, int stage, Real dt) {
   // convention: Laplacian(u) = 6u - neighbors = -dx²∇²u).  To obtain the
   // standard Poisson equation ∇²φ = 4πGρ we must load the source with a
   // negative sign so that -∇²φ = -4πGρ, i.e. ∇²φ = +4πGρ.
-  auto &u0 = (pmy_pack_->pmhd != nullptr) ? pmy_pack_->pmhd->u0
-                                            : pmy_pack_->phydro->u0;
-  mglevels_->LoadSource(u0, IDN, indcs_.ng, -four_pi_G_);
+  // Consume the assembled total gravitating mass density (gas + particles + ...),
+  // built by Gravity::AssembleSource() ahead of this solve. The solver is agnostic
+  // about what contributed to the source.
+  mglevels_->LoadSource(pmy_pack_->pgrav->rho, 0, indcs_.ng, -four_pi_G_);
 
   // Apply source mask (zero source outside mask_radius_)
   mglevels_->ApplyMask();
