@@ -34,6 +34,7 @@ struct ParticlesTaskIDs {
   TaskID flush;
   TaskID xphi;
   TaskID push;
+  TaskID accrete;
   TaskID newgid;
   TaskID count;
   TaskID irecv;
@@ -84,6 +85,7 @@ class Particles {
   TaskStatus FlushDeposit(Driver *pdriver, int stage);
   TaskStatus ExchangePhi(Driver *pdriver, int stage);
   TaskStatus Push(Driver *pdriver, int stage);
+  TaskStatus AccreteMass(Driver *pdriver, int stage);
   TaskStatus NewGID(Driver *pdriver, int stage);
   TaskStatus SendCnt(Driver *pdriver, int stage);
   TaskStatus InitRecv(Driver *pdriver, int stage);

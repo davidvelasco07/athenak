@@ -55,6 +55,9 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
     id.recvp  = tl["stagen"]->AddTask(&Particles::RecvP, this, id.sendp);
     id.crecv  = tl["stagen"]->AddTask(&Particles::ClearRecv, this, id.recvp);
     id.csend  = tl["stagen"]->AddTask(&Particles::ClearSend, this, id.crecv);
+
+    // operator-split accretion: gas in the control volume -> sink, at the last RK stage
+    id.accrete = tl["after_stagen"]->AddTask(&Particles::AccreteMass, this, none);
   } else {
     // Tracer / cosmic-ray (drift) particles: integrated once per cycle in the
     // "before_timeintegrator" task list (no gravity coupling).
