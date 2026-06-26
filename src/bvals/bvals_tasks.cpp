@@ -36,18 +36,15 @@ TaskStatus MeshBoundaryValues::InitRecv(const int nvars) {
   } else {
     std::fill(recv_var_reqs_.begin(), recv_var_reqs_.end(), MPI_REQUEST_NULL);
     std::fill(send_var_reqs_.begin(), send_var_reqs_.end(), MPI_REQUEST_NULL);
-    std::fill(recv_var_hdr_reqs_.begin(), recv_var_hdr_reqs_.end(), MPI_REQUEST_NULL);
-    std::fill(send_var_hdr_reqs_.begin(), send_var_hdr_reqs_.end(), MPI_REQUEST_NULL);
   }
 
+  // Payload-only Irecv: the (lid,dn,data_size) layout of each peer's payload
+  // is already known from the one-shot header exchange done during
+  // BuildRankPackedVarMetadata, so no per-step header receive is posted.
   bool no_errors = true;
   for (std::size_t i = 0; i < recv_var_msgs_.size(); ++i) {
     auto &msg = recv_var_msgs_[i];
-    int hdr_size = 3*msg.nentries;
-    int ierr = MPI_Irecv(rank_recvhdr_vars_.data() + msg.hdr_offset, hdr_size,
-                         MPI_INT, msg.rank, 0, comm_vars, &recv_var_hdr_reqs_[i]);
-    if (ierr != MPI_SUCCESS) no_errors = false;
-    ierr = MPI_Irecv(rank_recvbuf_vars_.data() + msg.offset, msg.data_size,
+    int ierr = MPI_Irecv(rank_recvbuf_vars_.data() + msg.offset, msg.data_size,
                      MPI_ATHENA_REAL, msg.rank, 1, comm_vars, &recv_var_reqs_[i]);
     if (ierr != MPI_SUCCESS) no_errors = false;
   }
@@ -69,9 +66,7 @@ TaskStatus MeshBoundaryValues::ClearRecv() {
 #if MPI_PARALLEL_ENABLED
   bool no_errors = true;
   for (std::size_t i = 0; i < recv_var_reqs_.size(); ++i) {
-    int ierr = MPI_Wait(&recv_var_hdr_reqs_[i], MPI_STATUS_IGNORE);
-    if (ierr != MPI_SUCCESS) no_errors = false;
-    ierr = MPI_Wait(&recv_var_reqs_[i], MPI_STATUS_IGNORE);
+    int ierr = MPI_Wait(&recv_var_reqs_[i], MPI_STATUS_IGNORE);
     if (ierr != MPI_SUCCESS) no_errors = false;
   }
   if (!(no_errors)) {
@@ -92,9 +87,7 @@ TaskStatus MeshBoundaryValues::ClearSend() {
 #if MPI_PARALLEL_ENABLED
   bool no_errors = true;
   for (std::size_t i = 0; i < send_var_reqs_.size(); ++i) {
-    int ierr = MPI_Wait(&send_var_hdr_reqs_[i], MPI_STATUS_IGNORE);
-    if (ierr != MPI_SUCCESS) no_errors = false;
-    ierr = MPI_Wait(&send_var_reqs_[i], MPI_STATUS_IGNORE);
+    int ierr = MPI_Wait(&send_var_reqs_[i], MPI_STATUS_IGNORE);
     if (ierr != MPI_SUCCESS) no_errors = false;
   }
   if (!(no_errors)) {
