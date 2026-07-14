@@ -35,7 +35,7 @@ logging.basicConfig(
 )
 
 
-def run_command(command: List[str], text: bool = False, **kwargs) -> bool:
+def run_command(command: List[str], text: bool = False) -> bool:
     """
     Executes a shell command and captures its output and errors.
 
@@ -57,11 +57,10 @@ def run_command(command: List[str], text: bool = False, **kwargs) -> bool:
 
     if process.returncode != 0:
         logging.error(f"Command failed with return code {process.returncode}")
-    result = process.returncode == 0
-    return [result, output]
+    return process.returncode == 0
 
 
-def cmake(flags: List[str] = [], **kwargs) -> bool:
+def cmake(flags: List[str] = None, **kwargs) -> bool:
     """
     Runs the CMake command to configure the build system.
 
@@ -75,13 +74,16 @@ def cmake(flags: List[str] = [], **kwargs) -> bool:
     Raises:
         RuntimeError: If the CMake command fails.
     """
+    if flags is None:
+        flags = []
+
     original_dir = os.getcwd()
     try:
         os.chdir(ATHENAK_PATH)
         logging.info(f"Configuring CMake in {os.getcwd()}")
 
         command = ["cmake"] + flags + ["-B", "tst/build"]
-        if not run_command(command, **kwargs)[0]:
+        if not run_command(command, **kwargs):
             raise RuntimeError("CMake configuration failed")
     finally:
         os.chdir(original_dir)
@@ -105,7 +107,7 @@ def make(threads: int = os.cpu_count(), **kwargs) -> bool:
     os.chdir(ATHENAK_BUILD)
     command = ["make", "-j", f"{threads}"]
     start_time = time.time()
-    status, _ = run_command(command, **kwargs)
+    status = run_command(command, **kwargs)
     end_time = time.time()
     elapsed_time = end_time - start_time  # Calculate elapsed time
     logging.info(f"make completed in {elapsed_time:.2f} seconds")
@@ -114,7 +116,7 @@ def make(threads: int = os.cpu_count(), **kwargs) -> bool:
     return True
 
 
-def run(inputfile: str, flags=[], **kwargs) -> bool:
+def run(inputfile: str, flags=None, **kwargs) -> bool:
     """
     Executes a test case using the AthenaK binary.
 
@@ -129,16 +131,18 @@ def run(inputfile: str, flags=[], **kwargs) -> bool:
     Raises:
         AssertionError: If the test case execution fails.
     """
+    if flags is None:
+        flags = []
+
     command = ["./athena", "-i", inputfile] + flags
-    results = run_command(command, **kwargs)
-    if not results[0]:
+    if not run_command(command, **kwargs):
         logging.error(f"Failed to execute {inputfile} with flags {flags}")
         raise RuntimeError(f"Failed to execute {inputfile} with flags {flags}")
-    return results
+    return True
 
 
 def mpi_run(
-    inputfile: str, flags=[], threads: int = min(16, os.cpu_count()), **kwargs
+    inputfile: str, flags=None, threads: int = min(16, os.cpu_count()), **kwargs
 ) -> bool:
     """
     Executes a test case using the AthenaK binary with MPI support.
@@ -146,7 +150,8 @@ def mpi_run(
     Args:
         inputfile (str): The path to the test case input file.
         flags (list): Additional flags to pass to the AthenaK binary.
-        threads (int): Number of threads to use for MPI execution (default: num of cores).
+        threads (int): Number of threads to use for MPI execution (default: smallest
+            of (16) or (num of cores)).
         **kwargs: Additional keyword arguments for `run_command`.
 
     Returns:
@@ -155,23 +160,21 @@ def mpi_run(
     Raises:
         AssertionError: If the test case execution fails.
     """
+
+    if flags is None:
+        flags = []
+
     command = ["mpirun", "-np", str(threads), "./athena", "-i", inputfile] + flags
-    results = run_command(command, **kwargs)
-    if not results[0]:
+    if not run_command(command, **kwargs):
         logging.error(
-            f"Failed to execute {inputfile} with flags {flags} using MPI "
-            f"and {threads}-threads"
+           f"Failed to execute {inputfile} with flags {flags} using MPI "
+           f"and {threads}-threads"
         )
         raise RuntimeError(
             f"Failed to execute {inputfile} with flags {flags} using MPI "
             f"and {threads}-threads"
         )
-    return results
-
-
-def run_athenak(inputfile: str, flags=[], mpi=False, **kwargs):
-    RUN = mpi_run if mpi else run
-    return RUN(inputfile, flags, **kwargs)
+    return True
 
 
 def cleanup(text=False) -> None:
@@ -256,11 +259,14 @@ def test_error_convergence(
     right_wave="0",
     mpi=False,
 ):
+    RUN = mpi_run if mpi else run
+    l1_rms_l = 0.0
+    l1_rms_r = 0.0
     for wv in _wave:
         try:
             for res in _res:
-                results, _ = run_athenak(
-                    input_file, arguments(iv, rv, fv, wv, res, soe, test_name), mpi=mpi
+                results = RUN(
+                    input_file, arguments(iv, rv, fv, wv, res, soe, test_name)
                 )
                 assert results, f"Run failed for {soe}+{iv}+{res}+{fv}+{rv}+{wv}."
             maxerror, maxerrorratio = errors[(soe, iv, rv, wv)]

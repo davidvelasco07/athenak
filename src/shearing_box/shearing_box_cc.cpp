@@ -107,7 +107,7 @@ TaskStatus ShearingBoxCC::PackAndSendCC(DvceArray5D<Real> &a, ReconstructionMeth
       }
       member.team_barrier();
 
-      // update data in send buffer with fracational shift
+      // update data in send buffer with fractional shift
       par_for_inner(member, js, je, [&](const int j) {
         sbuf[n].vars(m,j,v,k,i) = a_(j) - (flx(j+1) - flx(j));
       });
@@ -256,6 +256,7 @@ TaskStatus ShearingBoxCC::PackAndSendCC(DvceArray5D<Real> &a, ReconstructionMeth
             int data_size = send_ptr.size();
             int ierr = MPI_Isend(send_ptr.data(), data_size, MPI_ATHENA_REAL, trank, tag,
                                  comm_sbox, &(sendbuf[n].vars_req[3*m + l]));
+            if (ierr != MPI_SUCCESS) {no_errors=false;}
 #endif
           }
         }

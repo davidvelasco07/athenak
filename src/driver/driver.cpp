@@ -57,15 +57,15 @@
 // "timestep" = "cycle" in explicit, multistage methods.
 
 Driver::Driver(ParameterInput *pin, Mesh *pmesh, Real wtlim, Kokkos::Timer* ptimer) :
+  impl_src("ru",1,1,1,1,1,1),
   tlim(-1.0),
   nlim(-1),
   ndiag(1),
-  nmb_updated_(0),
-  npart_updated_(0),
-  lb_efficiency_(0),
   pwall_clock_(ptimer),
   wall_time(wtlim),
-  impl_src("ru",1,1,1,1,1,1) {
+  nmb_updated_(0),
+  npart_updated_(0),
+  lb_efficiency_(0) {
   // set time-evolution option (no default)
   {
     std::string evolution_t = pin->GetString("time","evolution");
@@ -235,8 +235,8 @@ Driver::Driver(ParameterInput *pin, Mesh *pmesh, Real wtlim, Kokkos::Timer* ptim
       nimp_stages = 4;
       nexp_stages = 3;
       cfl_limit = 1.0;
-      gam0[0] = 0.0;
-      gam1[0] = 1.0;
+      gam0[0] = 1.0;
+      gam1[0] = 0.0;
       beta[0] = 1.0;
 
       gam0[1] = 0.25;
@@ -354,7 +354,7 @@ void Driver::Initialize(Mesh *pmesh, ParameterInput *pin, Outputs *pout, bool re
   if (pionn != nullptr) {
     if (nimp_stages == 0) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-          << std::endl << "IonNetral MHD can only be run with ImEx integrators."
+          << std::endl << "IonNeutral MHD can only be run with ImEx integrators."
           << std::endl;
       std::exit(EXIT_FAILURE);
     }
@@ -553,7 +553,7 @@ void Driver::OutputCycleDiagnostics(Mesh *pm) {
 //! slightly below the wall clock time while others determine that it's time to quit.
 
 Real Driver::UpdateWallClock() {
-  Real tnow;
+  Real tnow = 0.0;
   if (global_variable::my_rank == 0) {
     tnow = pwall_clock_->seconds();
   }

@@ -100,9 +100,6 @@ full_multigrid = true
 show_defect = 2
 mg_nghost = 1
 root_on_host = false
-fc_use_packsend = 1
-use_rank_packed_mg_bvals = false
-show_rank_packed_mg_bvals_stats = false
 
 <hydro_srcterms>
 self_gravity = true

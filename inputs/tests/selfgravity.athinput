@@ -54,8 +54,6 @@ npresmooth = 1
 npostsmooth = 1
 full_multigrid = true
 fmg_ncycle = 1
-use_rank_packed_mg_bvals = false
-show_rank_packed_mg_bvals_stats = false
 
 <hydro_srcterms>
 self_gravity = true

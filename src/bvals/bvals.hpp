@@ -10,7 +10,7 @@
 //! types of Mesh variables. For Mesh variables, methods for cell-centered and
 //! face-centered fields are currently implemented, based on derived classes from the
 //! generic MeshBoundaryValue class.  A separate ParticlesBoundaryValues class is
-//! implemented for partciles.
+//! implemented for particles.
 
 // identifiers for all 6 faces of a MeshBlock
 enum BoundaryFace {undef=-1, inner_x1, outer_x1, inner_x2, outer_x2, inner_x3, outer_x3};
@@ -42,7 +42,7 @@ class Particles;
 //! \brief calculate an MPI tag for boundary buffer communications.  Note maximum size of
 //! lid that can be encoded is set by (NUM_BITS_LID) macro defined in athena.hpp.
 //! The convention in AthenaK is lid and bufid are both for the *receiving* process.
-static int CreateBvals_MPI_Tag(int lid, int bufid) {
+inline int CreateBvals_MPI_Tag(int lid, int bufid) {
   return (bufid << (NUM_BITS_LID)) | lid;
 }
 
@@ -140,7 +140,7 @@ class MeshBlockPack;
 class MeshBoundaryValues {
  public:
   MeshBoundaryValues(MeshBlockPack *ppack, ParameterInput *pin, bool z4c);
-  ~MeshBoundaryValues();
+  virtual ~MeshBoundaryValues();
 
   // data for all 56 buffers in most general 3D case. Not all elements used in most cases.
   // However each MeshBoundaryBuffer is lightweight, so the convenience of fixed array
@@ -155,7 +155,6 @@ class MeshBoundaryValues {
   MPI_Comm comm_vars, comm_flux;
 
   // rank-packed vars communication path
-  bool show_rank_packed_bvals_stats_;
   int rank_packed_bvals_nvars_;
   // AMR/load-balance sequence (Mesh::GetAMRLoadBalanceUpdateSeq) the rank-packed
   // metadata was last built against. Trigger sites rebuild when this differs from
@@ -273,20 +272,6 @@ class MeshBoundaryValuesFC : public MeshBoundaryValues {
                          DvceArray2D<int> &nflx);
   void ZeroFluxesAtBoundaryWithFiner(DvceEdgeFld4D<Real> &flx, DvceArray2D<int> &nflx);
   void AverageBoundaryFluxes(DvceEdgeFld4D<Real> &flx, DvceArray2D<int> &nflx);
-};
-
-template <int n = 56>
-struct BoundaryData { // aggregate and POD (even when MPI_PARALLEL is defined)
-  static constexpr int kMaxNeighbor = n;
-  // KGF: "nbmax" only used in bvals_var.cpp, Init/DestroyBoundaryData()
-  int nbmax;  //!> actual maximum number of neighboring MeshBlocks
-  // currently, sflag[] is only used by Multgrid (send buffers are reused each stage in
-  // red-black comm. pattern; need to check if they are available) and shearing box
-  BoundaryStatus flag[kMaxNeighbor], sflag[kMaxNeighbor];
-  Real *send[kMaxNeighbor], *recv[kMaxNeighbor];
-#ifdef MPI_PARALLEL
-  MPI_Request req_send[kMaxNeighbor], req_recv[kMaxNeighbor];
-#endif
 };
 
 //----------------------------------------------------------------------------------------

@@ -34,11 +34,17 @@ MultigridBoundaryValues::MultigridBoundaryValues(
     MeshBlockPack *pmbp, ParameterInput *pin,
     bool coarse, Multigrid *pmg)
   : MeshBoundaryValuesCC(pmbp, pin, coarse), pmy_mg(pmg) {
-  // Keep MG transport switch independent from hydro's always-on rank-packed vars path.
-  use_rank_packed_mg_bvals_ =
-      pin->GetOrAddBoolean("gravity", "use_rank_packed_mg_bvals", false);
-  show_rank_packed_mg_bvals_stats_ =
-      pin->GetOrAddBoolean("gravity", "show_rank_packed_mg_bvals_stats", false);
+  // Multigrid boundary communications always use the rank-packed scheme; there is
+  // no runtime switch to select a different communication path.
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn MultigridBoundaryValues::~MultigridBoundaryValues()
+//! \brief Destructor for multigrid boundary values object. Provides the out-of-line
+//! anchor (key function) so the vtable is emitted now that the base MeshBoundaryValues
+//! destructor is virtual.
+
+MultigridBoundaryValues::~MultigridBoundaryValues() {
 }
 
 #if MPI_PARALLEL_ENABLED
@@ -191,7 +197,10 @@ void MultigridBoundaryValues::BuildRankPackedMGMetadata(const int nvars, const i
     mg_recv_agg_offset_ = DvceArray1D<int>("mg_recv_agg_offset", std::max(1, map_len));
     auto send_off_h = Kokkos::create_mirror_view(mg_send_agg_offset_);
     auto recv_off_h = Kokkos::create_mirror_view(mg_recv_agg_offset_);
-    for (int i = 0; i < std::max(1, map_len); ++i) { send_off_h(i) = -1; recv_off_h(i) = -1; }
+    for (int i = 0; i < std::max(1, map_len); ++i) {
+      send_off_h(i) = -1;
+      recv_off_h(i) = -1;
+    }
     for (const auto &e : mg_send_var_entries_) {
       send_off_h(e.m*nnghbr + e.n) = e.offset;
     }
@@ -206,14 +215,6 @@ void MultigridBoundaryValues::BuildRankPackedMGMetadata(const int nvars, const i
   mg_recv_var_reqs_.assign(mg_recv_var_msgs_.size(), MPI_REQUEST_NULL);
   mg_send_var_hdr_reqs_.assign(mg_send_var_msgs_.size(), MPI_REQUEST_NULL);
   mg_recv_var_hdr_reqs_.assign(mg_recv_var_msgs_.size(), MPI_REQUEST_NULL);
-
-  if (show_rank_packed_mg_bvals_stats_ && global_variable::my_rank == 0) {
-    std::cout << "[MG rankpack] level=" << lev
-              << " send_msgs=" << mg_send_var_msgs_.size()
-              << " recv_msgs=" << mg_recv_var_msgs_.size()
-              << " send_entries=" << mg_send_var_entries_.size()
-              << " recv_entries=" << mg_recv_var_entries_.size() << std::endl;
-  }
 }
 #endif
 
@@ -1225,9 +1226,9 @@ TaskStatus MultigridBoundaryValues::ProlongateFCMG(DvceArray5D<Real> &u) {
                           int fk = ngh_l + 2*(sk - sk0);
                           Real cc = cbuf(m,v,sk,sj,si);
                           int sjm = (sj > ngh_l) ? sj-1 : sj;
-                          int sjp = (sj < ngh_l+half) ? sj+1 : sj;
+                          int sjp = (sj < ngh_l+half-1) ? sj+1 : sj;
                           int skm = (sk > ngh_l) ? sk-1 : sk;
-                          int skp = (sk < ngh_l+half) ? sk+1 : sk;
+                          int skp = (sk < ngh_l+half-1) ? sk+1 : sk;
                           Real gy = 0.125*(cbuf(m,v,sk,sjp,si)-cbuf(m,v,sk,sjm,si));
                           Real gz = 0.125*(cbuf(m,v,skp,sj,si)-cbuf(m,v,skm,sj,si));
                           u(m,v,fk  ,fj  ,fig)=ot*(2.0*(cc-gy-gz)+u(m,v,fk  ,fj  ,fi));
@@ -1250,9 +1251,9 @@ TaskStatus MultigridBoundaryValues::ProlongateFCMG(DvceArray5D<Real> &u) {
                           int fk = ngh_l + 2*(sk - sk0);
                           Real cc = cbuf(m,v,sk,sj,si);
                           int sim = (si > ngh_l) ? si-1 : si;
-                          int sip = (si < ngh_l+half) ? si+1 : si;
+                          int sip = (si < ngh_l+half-1) ? si+1 : si;
                           int skm = (sk > ngh_l) ? sk-1 : sk;
-                          int skp = (sk < ngh_l+half) ? sk+1 : sk;
+                          int skp = (sk < ngh_l+half-1) ? sk+1 : sk;
                           Real gx = 0.125*(cbuf(m,v,sk,sj,sip)-cbuf(m,v,sk,sj,sim));
                           Real gz = 0.125*(cbuf(m,v,skp,sj,si)-cbuf(m,v,skm,sj,si));
                           u(m,v,fk  ,fjg,fi  )=ot*(2.0*(cc-gx-gz)+u(m,v,fk  ,fj,fi  ));
@@ -1275,9 +1276,9 @@ TaskStatus MultigridBoundaryValues::ProlongateFCMG(DvceArray5D<Real> &u) {
                           int fj = ngh_l + 2*(sj - sj0);
                           Real cc = cbuf(m,v,sk,sj,si);
                           int sim = (si > ngh_l) ? si-1 : si;
-                          int sip = (si < ngh_l+half) ? si+1 : si;
+                          int sip = (si < ngh_l+half-1) ? si+1 : si;
                           int sjm = (sj > ngh_l) ? sj-1 : sj;
-                          int sjp = (sj < ngh_l+half) ? sj+1 : sj;
+                          int sjp = (sj < ngh_l+half-1) ? sj+1 : sj;
                           Real gx = 0.125*(cbuf(m,v,sk,sj,sip)-cbuf(m,v,sk,sj,sim));
                           Real gy = 0.125*(cbuf(m,v,sk,sjp,si)-cbuf(m,v,sk,sjm,si));
                           u(m,v,fkg,fj  ,fi  )=ot*(2.0*(cc-gx-gy)+u(m,v,fk,fj  ,fi  ));
@@ -2205,30 +2206,21 @@ TaskStatus MultigridBoundaryValues::PackAndSendMG(const DvceArray5D<Real> &u) {
   bool skip_fc_this_level = (ncells_ps < 2);
   auto &smgi = send_mg_indcs_;
   auto cbuf = coarse_buf_;
-  // Fused-pack state: when rank-packed, PackMG writes off-rank payloads straight
-  // into the aggregate send buffer at the per-(m,n) base offset.
-  const bool urp = use_rank_packed_mg_bvals_;
+  // Fused-pack state: PackMG writes off-rank payloads straight into the aggregate
+  // send buffer at the per-(m,n) base offset. The aggregate buffers only exist
+  // under MPI; without MPI every neighbour is on-rank and no packing is needed,
+  // which is what `urp` (a compile-time constant) selects inside the kernels.
+#if MPI_PARALLEL_ENABLED
+  const bool urp = true;
+#else
+  const bool urp = false;
+#endif
   auto aggsbuf = mg_rank_sendbuf_vars_;
   auto soff = mg_send_agg_offset_;
 
 #if MPI_PARALLEL_ENABLED
-  if (use_rank_packed_mg_bvals_) {
-    for (std::size_t i = 0; i < mg_send_var_reqs_.size(); ++i) {
-      MPI_Wait(&mg_send_var_reqs_[i], MPI_STATUS_IGNORE);
-    }
-  } else {
-    for (int m=0; m<nmb; ++m) {
-      for (int n=0; n<nnghbr; ++n) {
-        if (nghbr.h_view(m,n).gid >= 0
-            && nghbr.h_view(m,n).rank != my_rank) {
-          int nlev_h = nghbr.h_view(m,n).lev;
-          int mlev_h = mblev.h_view(m);
-          bool is_fc = (nlev_h != mlev_h);
-          if (is_fc && skip_fc_this_level) continue;
-          MPI_Wait(&(sendbuf[n].vars_req[m]), MPI_STATUS_IGNORE);
-        }
-      }
-    }
+  for (std::size_t i = 0; i < mg_send_var_reqs_.size(); ++i) {
+    MPI_Wait(&mg_send_var_reqs_[i], MPI_STATUS_IGNORE);
   }
 #endif
 
@@ -2352,61 +2344,22 @@ TaskStatus MultigridBoundaryValues::PackAndSendMG(const DvceArray5D<Real> &u) {
   if (has_cross_rank) Kokkos::fence();
 
   bool no_errors = true;
-  if (use_rank_packed_mg_bvals_) {
-    // PackMG already wrote every off-rank payload directly into
-    // mg_rank_sendbuf_vars_ at its per-(m,n) base offset, so the only device
-    // work left before MPI is the fence above. No separate aggregate kernel and
-    // no header message: the receiver derives the payload layout from its own
-    // sorted recv entries (see BuildRankPackedMGMetadata).
-    for (std::size_t i = 0; i < mg_send_var_msgs_.size(); ++i) {
-      const auto &msg = mg_send_var_msgs_[i];
-      int ierr_d = MPI_Isend(mg_rank_sendbuf_vars_.data() + msg.offset, msg.data_size,
-                             MPI_ATHENA_REAL, msg.rank, 97, comm_vars, &mg_send_var_reqs_[i]);
-      if (ierr_d != MPI_SUCCESS) {
-        no_errors = false;
-      } else {
-        pmy_mg->pmy_driver_->mg_timers_.msg_count += 1;
-        pmy_mg->pmy_driver_->mg_timers_.bytes_sent +=
-            (msg.data_size * static_cast<int64_t>(sizeof(Real)));
-      }
-    }
-  } else {
-    for (int m=0; m<nmb; ++m) {
-      for (int n=0; n<nnghbr; ++n) {
-        if (nghbr.h_view(m,n).gid < 0) continue;
-        int nlev = nghbr.h_view(m,n).lev;
-        int mlev = pmy_pack->pmb->mb_lev.h_view(m);
-        bool is_fc_mpi = (nlev != mlev);
-        if (is_fc_mpi && skip_fc_this_level) continue;
-        {
-          int dn = nghbr.h_view(m,n).dest;
-          int drank = nghbr.h_view(m,n).rank;
-          if (drank != my_rank) {
-            // create tag using local ID and buffer index of *receiving* MeshBlock
-            int lid = nghbr.h_view(m,n).gid - pmy_pack->pmesh->gids_eachrank[drank];
-            int tag = CreateBvals_MPI_Tag(lid, dn);
-
-            int data_size;
-            if (nlev < mlev) {
-              data_size = nvar * send_mg_indcs_[n][lev_].icoar_ndat;
-            } else if (nlev == mlev) {
-              data_size = nvar * send_mg_indcs_[n][lev_].isame_ndat;
-            } else {
-              data_size = nvar * send_mg_indcs_[n][lev_].ifine_ndat;
-            }
-
-            MPI_Wait(&(sendbuf[n].vars_req[m]), MPI_STATUS_IGNORE);
-
-            auto send_ptr = Kokkos::subview(sendbuf[n].vars, m, Kokkos::ALL);
-            int ierr = MPI_Isend(send_ptr.data(), data_size, MPI_ATHENA_REAL, drank, tag,
-                                 comm_vars, &(sendbuf[n].vars_req[m]));
-            if (ierr != MPI_SUCCESS) {no_errors=false;}
-            pmy_mg->pmy_driver_->mg_timers_.msg_count++;
-            pmy_mg->pmy_driver_->mg_timers_.bytes_sent +=
-                data_size * static_cast<int64_t>(sizeof(Real));
-          }
-        }
-      }
+  // PackMG already wrote every off-rank payload directly into
+  // mg_rank_sendbuf_vars_ at its per-(m,n) base offset, so the only device
+  // work left before MPI is the fence above. No separate aggregate kernel and
+  // no header message: the receiver derives the payload layout from its own
+  // sorted recv entries (see BuildRankPackedMGMetadata).
+  for (std::size_t i = 0; i < mg_send_var_msgs_.size(); ++i) {
+    const auto &msg = mg_send_var_msgs_[i];
+    int ierr_d = MPI_Isend(mg_rank_sendbuf_vars_.data() + msg.offset, msg.data_size,
+                           MPI_ATHENA_REAL, msg.rank, 97, comm_vars,
+                           &mg_send_var_reqs_[i]);
+    if (ierr_d != MPI_SUCCESS) {
+      no_errors = false;
+    } else {
+      pmy_mg->pmy_driver_->mg_timers_.msg_count += 1;
+      pmy_mg->pmy_driver_->mg_timers_.bytes_sent +=
+          (msg.data_size * static_cast<int64_t>(sizeof(Real)));
     }
   }
   // Quit if MPI error detected
@@ -2439,43 +2392,17 @@ TaskStatus MultigridBoundaryValues::RecvAndUnpackMG(DvceArray5D<Real> &u) {
   #if MPI_PARALLEL_ENABLED
   //----- STEP 1: check that recv boundary buffer communications have all completed
   bool bflag = false;
-  if (use_rank_packed_mg_bvals_) {
-    for (std::size_t i = 0; i < mg_recv_var_msgs_.size(); ++i) {
-      int test_d = 0;
-      int ierr_d = MPI_Test(&mg_recv_var_reqs_[i], &test_d, MPI_STATUS_IGNORE);
-      if (ierr_d != MPI_SUCCESS) {
-        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                  << std::endl << "MPI error in testing rank-packed MG receives"
-                  << std::endl;
-        std::exit(EXIT_FAILURE);
-      }
-      if (!(static_cast<bool>(test_d))) {
-        bflag = true;
-      }
+  for (std::size_t i = 0; i < mg_recv_var_msgs_.size(); ++i) {
+    int test_d = 0;
+    int ierr_d = MPI_Test(&mg_recv_var_reqs_[i], &test_d, MPI_STATUS_IGNORE);
+    if (ierr_d != MPI_SUCCESS) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "MPI error in testing rank-packed MG receives"
+                << std::endl;
+      std::exit(EXIT_FAILURE);
     }
-  } else {
-    for (int m=0; m<nmb; ++m) {
-      for (int n=0; n<nnghbr; ++n) {
-        if (nghbr.h_view(m,n).gid >= 0 && nghbr.h_view(m,n).rank != global_variable::my_rank) {
-          int nlev_h = nghbr.h_view(m,n).lev;
-          int mlev_h = mblev.h_view(m);
-          bool is_fc_h = (nlev_h != mlev_h);
-          if (is_fc_h && skip_fc_this_level) continue;
-          {
-            int test;
-            int ierr = MPI_Test(&(rbuf[n].vars_req[m]), &test, MPI_STATUS_IGNORE);
-            if (ierr != MPI_SUCCESS) {
-              std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                        << std::endl << "MPI error in testing non-blocking receives"
-                        << std::endl;
-              std::exit(EXIT_FAILURE);
-            }
-            if (!static_cast<bool>(test)) {
-              bflag = true;
-            }
-          }
-        }
-      }
+    if (!(static_cast<bool>(test_d))) {
+      bflag = true;
     }
   }
   if (bflag) {
@@ -2492,7 +2419,14 @@ TaskStatus MultigridBoundaryValues::RecvAndUnpackMG(DvceArray5D<Real> &u) {
   int lev_ = pmy_mg->GetCurrentLevel();
   auto cbuf = coarse_buf_;
   auto &rmgi = recv_mg_indcs_;
-  const bool urp = use_rank_packed_mg_bvals_;
+  // Off-rank payloads live in the aggregate recv buffer (MPI only); without MPI
+  // every neighbour is on-rank, so `urp` (a compile-time constant) makes the
+  // kernel read from the per-neighbour recv buffers instead.
+#if MPI_PARALLEL_ENABLED
+  const bool urp = true;
+#else
+  const bool urp = false;
+#endif
   auto aggrbuf = mg_rank_recvbuf_vars_;
   auto roff = mg_recv_agg_offset_;
 
@@ -2613,113 +2547,61 @@ void MultigridBoundaryValues::LoadRankPackState(const MGRankPackLevelState &s) {
 
 TaskStatus MultigridBoundaryValues::InitRecvMG(const int nvars) {
 #if MPI_PARALLEL_ENABLED
-  int &nmb = pmy_pack->nmb_thispack;
-  int &nnghbr = pmy_pack->pmb->nnghbr;
-  auto &nghbr = pmy_pack->pmb->nghbr;
-  auto &mblev = pmy_pack->pmb->mb_lev;
   int lev_ = pmy_mg->GetCurrentLevel();
   int shift_ir = pmy_mg->GetNumberOfLevels() - 1 - lev_;
   int ncells_ir = pmy_mg->GetSize() >> shift_ir;
   bool skip_fc_ir = (ncells_ir < 2);
   const int mesh_seq = pmy_pack->pmesh->GetAMRLoadBalanceUpdateSeq();
 
-  if (use_rank_packed_mg_bvals_) {
-    // Per-level metadata cache (see header). The V-cycle revisits each level
-    // ~12x/cycle; building metadata each time meant ~85 rebuilds/cycle, each
-    // doing several device allocations + H2D deep_copies that dominate at small
-    // payloads. Build each level once and persist it; write the active level's
-    // state back before switching so its in-flight requests + buffers stay paired.
-    if (static_cast<int>(mg_rp_cache_.size()) < kMaxMGLevels) {
-      mg_rp_cache_.resize(kMaxMGLevels);
-    }
-    if (mg_rp_cache_seq_ != mesh_seq) {            // AMR/regrid: invalidate all levels
-      for (auto &s : mg_rp_cache_) s = MGRankPackLevelState();
-      mg_rp_cache_seq_ = mesh_seq;
-      mg_rp_active_level_ = -1;
-    }
-    if (lev_ >= 0 && lev_ < kMaxMGLevels) {
-      auto &c = mg_rp_cache_[lev_];
-      const bool key_ok = c.built && c.nvars == nvars && c.skip_fc == skip_fc_ir;
-      if (lev_ != mg_rp_active_level_ || !key_ok) {
-        if (mg_rp_active_level_ >= 0 && mg_rp_active_level_ != lev_) {
-          SaveRankPackState(mg_rp_cache_[mg_rp_active_level_]);
-        }
-        if (!key_ok) {
-          BuildRankPackedMGMetadata(nvars, lev_, skip_fc_ir);
-          SaveRankPackState(c);
-          c.built = true; c.nvars = nvars; c.skip_fc = skip_fc_ir;
-        } else {
-          LoadRankPackState(c);
-        }
-        mg_rp_active_level_ = lev_;
+  // Per-level metadata cache (see header). The V-cycle revisits each level
+  // ~12x/cycle; building metadata each time meant ~85 rebuilds/cycle, each
+  // doing several device allocations + H2D deep_copies that dominate at small
+  // payloads. Build each level once and persist it; write the active level's
+  // state back before switching so its in-flight requests + buffers stay paired.
+  if (static_cast<int>(mg_rp_cache_.size()) < kMaxMGLevels) {
+    mg_rp_cache_.resize(kMaxMGLevels);
+  }
+  if (mg_rp_cache_seq_ != mesh_seq) {            // AMR/regrid: invalidate all levels
+    for (auto &s : mg_rp_cache_) s = MGRankPackLevelState();
+    mg_rp_cache_seq_ = mesh_seq;
+    mg_rp_active_level_ = -1;
+  }
+  if (lev_ >= 0 && lev_ < kMaxMGLevels) {
+    auto &c = mg_rp_cache_[lev_];
+    const bool key_ok = c.built && c.nvars == nvars && c.skip_fc == skip_fc_ir;
+    if (lev_ != mg_rp_active_level_ || !key_ok) {
+      if (mg_rp_active_level_ >= 0 && mg_rp_active_level_ != lev_) {
+        SaveRankPackState(mg_rp_cache_[mg_rp_active_level_]);
       }
-    } else {
-      // out-of-range level (should not happen): rebuild bare each call
-      BuildRankPackedMGMetadata(nvars, lev_, skip_fc_ir);
-      mg_rp_active_level_ = -1;
-    }
-
-    // Payload-only Irecv: the receiver derives the payload layout from its own
-    // sorted recv entries (see BuildRankPackedMGMetadata), so no header is sent.
-    for (std::size_t i = 0; i < mg_recv_var_msgs_.size(); ++i) {
-      auto &msg = mg_recv_var_msgs_[i];
-      MPI_Wait(&mg_recv_var_reqs_[i], MPI_STATUS_IGNORE);
-
-      int ierr_d = MPI_Irecv(mg_rank_recvbuf_vars_.data() + msg.offset, msg.data_size,
-                             MPI_ATHENA_REAL, msg.rank, 97, comm_vars, &mg_recv_var_reqs_[i]);
-      if (ierr_d != MPI_SUCCESS) {
-        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-           << std::endl << "MPI error in posting rank-packed MG receives" << std::endl;
-        std::exit(EXIT_FAILURE);
+      if (!key_ok) {
+        BuildRankPackedMGMetadata(nvars, lev_, skip_fc_ir);
+        SaveRankPackState(c);
+        c.built = true; c.nvars = nvars; c.skip_fc = skip_fc_ir;
+      } else {
+        LoadRankPackState(c);
       }
+      mg_rp_active_level_ = lev_;
     }
-    return TaskStatus::complete;
+  } else {
+    // out-of-range level (should not happen): rebuild bare each call
+    BuildRankPackedMGMetadata(nvars, lev_, skip_fc_ir);
+    mg_rp_active_level_ = -1;
   }
 
-  // Initialize communications of variables
-  bool no_errors=true;
-  for (int m=0; m<nmb; ++m) {
-    for (int n=0; n<nnghbr; ++n) {
-      if (nghbr.h_view(m,n).gid >= 0) {
-        int nlev = nghbr.h_view(m,n).lev;
-        int mlev = mblev.h_view(m);
-        bool is_fc_ir = (nlev != mlev);
-        if (is_fc_ir && skip_fc_ir) continue;
-        int drank = nghbr.h_view(m,n).rank;
+  // Payload-only Irecv: the receiver derives the payload layout from its own
+  // sorted recv entries (see BuildRankPackedMGMetadata), so no header is sent.
+  for (std::size_t i = 0; i < mg_recv_var_msgs_.size(); ++i) {
+    auto &msg = mg_recv_var_msgs_[i];
+    MPI_Wait(&mg_recv_var_reqs_[i], MPI_STATUS_IGNORE);
 
-        // post non-blocking receive if neighboring MeshBlock on a different rank
-        if (drank != global_variable::my_rank) {
-          // create tag using local ID and buffer index of *receiving* MeshBlock
-          int tag = CreateBvals_MPI_Tag(m, n);
-
-          int data_size;
-          if (nlev < mlev) {
-            data_size = nvars * recv_mg_indcs_[n][lev_].icoar_ndat;
-          } else if (nlev == mlev) {
-            data_size = nvars * recv_mg_indcs_[n][lev_].isame_ndat;
-          } else {
-            data_size = nvars * recv_mg_indcs_[n][lev_].ifine_ndat;
-          }
-
-          auto recv_ptr = Kokkos::subview(recvbuf[n].vars, m, Kokkos::ALL);
-
-          MPI_Wait(&(recvbuf[n].vars_req[m]), MPI_STATUS_IGNORE);
-
-          int ierr = MPI_Irecv(recv_ptr.data(), data_size, MPI_ATHENA_REAL, drank, tag,
-                               comm_vars, &(recvbuf[n].vars_req[m]));
-          if (ierr != MPI_SUCCESS) {
-            no_errors = false;
-          }
-        }
-      }
+    int ierr_d = MPI_Irecv(mg_rank_recvbuf_vars_.data() + msg.offset, msg.data_size,
+                           MPI_ATHENA_REAL, msg.rank, 97, comm_vars,
+                           &mg_recv_var_reqs_[i]);
+    if (ierr_d != MPI_SUCCESS) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+         << std::endl << "MPI error in posting rank-packed MG receives" << std::endl;
+      std::exit(EXIT_FAILURE);
     }
-  }
-  if (!(no_errors)) {
-    std::cout << "### FATAL ERROR in " << __FILE__
-       << " at line " << __LINE__ << std::endl
-       << "MPI error in posting non-blocking receives"
-       << std::endl;
-    std::exit(EXIT_FAILURE);
   }
 #endif
   return TaskStatus::complete;
@@ -2732,14 +2614,13 @@ TaskStatus MultigridBoundaryValues::InitRecvMG(const int nvars) {
 
 TaskStatus MultigridBoundaryValues::ClearRecvMG() {
 #if MPI_PARALLEL_ENABLED
-  if (use_rank_packed_mg_bvals_) {
-    for (std::size_t i = 0; i < mg_recv_var_reqs_.size(); ++i) {
-      MPI_Wait(&mg_recv_var_reqs_[i], MPI_STATUS_IGNORE);
-    }
-    return TaskStatus::complete;
+  for (std::size_t i = 0; i < mg_recv_var_reqs_.size(); ++i) {
+    MPI_Wait(&mg_recv_var_reqs_[i], MPI_STATUS_IGNORE);
   }
-#endif
+  return TaskStatus::complete;
+#else
   return ClearRecv();
+#endif
 }
 
 //----------------------------------------------------------------------------------------
@@ -2748,12 +2629,11 @@ TaskStatus MultigridBoundaryValues::ClearRecvMG() {
 
 TaskStatus MultigridBoundaryValues::ClearSendMG() {
 #if MPI_PARALLEL_ENABLED
-  if (use_rank_packed_mg_bvals_) {
-    for (std::size_t i = 0; i < mg_send_var_reqs_.size(); ++i) {
-      MPI_Wait(&mg_send_var_reqs_[i], MPI_STATUS_IGNORE);
-    }
-    return TaskStatus::complete;
+  for (std::size_t i = 0; i < mg_send_var_reqs_.size(); ++i) {
+    MPI_Wait(&mg_send_var_reqs_[i], MPI_STATUS_IGNORE);
   }
-#endif
+  return TaskStatus::complete;
+#else
   return ClearSend();
+#endif
 }

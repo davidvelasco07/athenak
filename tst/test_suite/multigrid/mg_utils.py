@@ -8,14 +8,46 @@ output (defect norms, binary gravity errors, Jeans wave errors).
 import os
 import re
 import math
+import logging
+from subprocess import Popen, PIPE
 from typing import List, Dict, Optional
-from test_suite.testutils import run_athenak, cleanup
+from test_suite.testutils import cleanup
 
 import pytest
 
 LOG_FILE_PATH = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "test_log.txt")
 )
+
+
+def run_athenak(inputfile, flags=None, mpi=False, threads=1):
+    """Run the AthenaK binary and return its success flag together with stdout.
+
+    The multigrid tests parse solver diagnostics (defect norms, Jeans growth
+    rates, per-iteration output) that AthenaK prints to stdout. The shared
+    ``testutils.run``/``testutils.mpi_run`` helpers only return a success bool,
+    so this local runner captures and returns the output as well.
+
+    Args:
+        inputfile (str): Path to the AthenaK input file.
+        flags (list): Additional command-line flags for the AthenaK binary.
+        mpi (bool): Whether to launch the run under mpirun.
+        threads (int): Number of MPI ranks (only used when mpi=True).
+
+    Returns:
+        list: [success (bool), stdout (str)].
+    """
+    if flags is None:
+        flags = []
+    if mpi:
+        command = ["mpirun", "-np", str(threads), "./athena", "-i", inputfile] + flags
+    else:
+        command = ["./athena", "-i", inputfile] + flags
+    process = Popen(command, stdout=PIPE, stderr=PIPE, text=True)
+    output, _errors = process.communicate()
+    if process.returncode != 0:
+        logging.error(f"Command failed with return code {process.returncode}")
+    return [process.returncode == 0, output]
 
 
 def parse_mg_defects(stdout: str) -> List[float]:

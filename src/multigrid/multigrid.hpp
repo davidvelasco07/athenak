@@ -484,7 +484,7 @@ class MultigridDriver {
   TaskStatus ClearRecv(Driver *pdrive, int stag);
   TaskStatus ClearSend(Driver *pdrive, int stag);
   void SetMGTaskListToFiner(int nsmooth, int ngh, int flag=0);
-  void SetMGTaskListFMGProlongate(int ngh);
+  void SetMGTaskListFMGProlongate(int ngh, int flag = 0);
   void SetMGTaskListToCoarser(int nsmooth, int ngh);
   void DoTaskListOneStage();
 
@@ -605,8 +605,6 @@ class MultigridBoundaryValues : public MeshBoundaryValuesCC {
 
  private:
   Multigrid *pmy_mg;
-  bool use_rank_packed_mg_bvals_ = false;
-  bool show_rank_packed_mg_bvals_stats_ = false;
   std::vector<RankPackedVarEntry> mg_send_var_entries_;
   std::vector<RankPackedVarEntry> mg_recv_var_entries_;
   std::vector<RankPackedVarMessage> mg_send_var_msgs_;

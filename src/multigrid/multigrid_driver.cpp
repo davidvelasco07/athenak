@@ -192,8 +192,10 @@ void MultigridDriver::PrepareForAMR() {
     needinit_ = true;
   }
 
-  if (pmy_mesh_->IsMeshUpdated()) {
+  const int mesh_seq = pmy_mesh_->GetAMRLoadBalanceUpdateSeq();
+  if (amr_seq_ != mesh_seq) {
     needinit_ = true;
+    amr_seq_ = mesh_seq;
   }
 
   // Calculate number of refinement levels present in mesh
@@ -567,13 +569,20 @@ void MultigridDriver::TransferFromRootToBlocks(bool folddata) {
 
 void MultigridDriver::FMGProlongate(Driver *pdriver) {
   int ngh = mgroot_->ngh_;
+  int flag = 0;
   if (current_level_ == nrootlevel_ + nreflevel_ - 1) {
     MGRootBoundary();
     TransferFromRootToBlocks(false);
+    // flag = 1: first time on meshblock levels; ghosts (incl. the 1-cell level)
+    // were just filled from root/octets by SetFromRootGrid, so no inter-block
+    // boundary comm here (matches Athena++ SetMGTaskListFMGProlongate flag==1).
+    // The boundary machinery cannot operate at the 1-cell level anyway
+    // (FillCoarseMG/ProlongateFCMG no-op below 2 cells).
+    flag = 1;
   }
   if (current_level_ >= nrootlevel_ + nreflevel_ - 1) { // MeshBlocks
     pmg = mglevels_;
-    SetMGTaskListFMGProlongate(ngh);
+    SetMGTaskListFMGProlongate(ngh, flag);
     pdriver->ExecuteTaskList(pmy_mesh_, "mg_fmg_prolongate", 0);
     current_level_++;
   } else if (current_level_ >= nrootlevel_ - 1) { // octets
@@ -2297,7 +2306,7 @@ void MultigridDriver::CalculateMultipoleCoefficients() {
     }
   }
 
-#ifdef MPI_PARALLEL
+#if MPI_PARALLEL_ENABLED
   MPI_Allreduce(MPI_IN_PLACE, mpcoeff_, nmpcoeff_, MPI_ATHENA_REAL,
                 MPI_SUM, MPI_COMM_WORLD);
 #endif
@@ -2413,7 +2422,7 @@ void MultigridDriver::CalculateCenterOfMass() {
     }
   }
 
-#ifdef MPI_PARALLEL
+#if MPI_PARALLEL_ENABLED
   MPI_Allreduce(MPI_IN_PLACE, totals, 4, MPI_ATHENA_REAL,
                 MPI_SUM, MPI_COMM_WORLD);
 #endif

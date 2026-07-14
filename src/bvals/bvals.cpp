@@ -25,15 +25,11 @@
 // MeshBoundaryValues constructor:
 
 MeshBoundaryValues::MeshBoundaryValues(MeshBlockPack *pp, ParameterInput *pin, bool z4c) :
-  pmy_pack(pp),
-  is_z4c_(z4c),
   u_in("uin",1,1),
   b_in("bin",1,1),
   i_in("iin",1,1)
 #if MPI_PARALLEL_ENABLED
   ,
-  show_rank_packed_bvals_stats_(pin->GetOrAddBoolean("mesh",
-                                    "show_rank_packed_bvals_stats", false)),
   rank_packed_bvals_nvars_(-1),
   rank_packed_mesh_seq_(-1),
   rank_sendbuf_vars_("rank_sendbuf_vars",1),
@@ -46,6 +42,9 @@ MeshBoundaryValues::MeshBoundaryValues(MeshBlockPack *pp, ParameterInput *pin, b
   send_agg_offset_("send_agg_offset",1),
   recv_agg_offset_("recv_agg_offset",1)
 #endif
+  ,
+  pmy_pack(pp),
+  is_z4c_(z4c)
 {
   // allocate vector of status flags and MPI requests (if needed)
   int nnghbr = pmy_pack->pmb->nnghbr;
@@ -347,15 +346,6 @@ void MeshBoundaryValues::BuildRankPackedVarMetadata(const int nvars) {
     Kokkos::deep_copy(recv_agg_offset_, recv_off_h);
     Kokkos::deep_copy(send_agg_offset_, send_off_h);
   }
-
-  if (show_rank_packed_bvals_stats_) {
-    std::cout << "[rank " << global_variable::my_rank << "] rank-packed bvals vars: "
-              << "legacy_send_msgs=" << send_var_entries_.size()
-              << " packed_send_msgs=" << send_var_msgs_.size()
-              << " legacy_recv_msgs=" << recv_var_entries_.size()
-              << " packed_recv_msgs=" << recv_var_msgs_.size()
-              << std::endl;
-  }
 }
 #endif
 
@@ -571,9 +561,6 @@ particles::ParticlesBoundaryValues::ParticlesBoundaryValues(
 #endif
     pmy_part(pp) {
 #if MPI_PARALLEL_ENABLED
-  // Guess that no more than 10% of particles will be communicated to set size of buffer
-  int npart = pmy_part->nprtcl_thispack;
-
   //resize vectors over number of ranks
   nsends_eachrank.resize(global_variable::nranks);
 
