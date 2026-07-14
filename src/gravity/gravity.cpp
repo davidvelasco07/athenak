@@ -65,6 +65,13 @@ Gravity::Gravity(MeshBlockPack *pmbp, ParameterInput *pin):
     int ncells3 = (indcs.nx3 > 1)? (indcs.nx3 + 2*(indcs.ng)) : 1;
     Kokkos::realloc(phi, nmb, 1, ncells3, ncells2, ncells1);
     Kokkos::realloc(rho, nmb, 1, ncells3, ncells2, ncells1);
+    // coarse buffer for phi, used by the cell-centered boundary exchange at coarse-fine
+    // (AMR) boundaries. Must be sized like any coarse CC array (cf. hydro coarse_u0);
+    // leaving it (1,1,1,1,1) causes out-of-bounds access when phi is exchanged under AMR.
+    int n_ccells1 = indcs.cnx1 + 2*(indcs.ng);
+    int n_ccells2 = (indcs.cnx2 > 1)? (indcs.cnx2 + 2*(indcs.ng)) : 1;
+    int n_ccells3 = (indcs.cnx3 > 1)? (indcs.cnx3 + 2*(indcs.ng)) : 1;
+    Kokkos::realloc(coarse_phi, nmb, 1, n_ccells3, n_ccells2, n_ccells1);
 }
 
 //----------------------------------------------------------------------------------------

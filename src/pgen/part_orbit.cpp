@@ -26,6 +26,7 @@
 #include "athena.hpp"
 #include "globals.hpp"
 #include "mesh/mesh.hpp"
+#include "mesh/mesh_refinement.hpp"
 #include "hydro/hydro.hpp"
 #include "particles/particles.hpp"
 #include "particles/particle_mesh.hpp"
@@ -34,6 +35,9 @@
 namespace {
 // post-run diagnostics: final particle state + conserved quantities
 void OrbitFinalize(ParameterInput *pin, Mesh *pm);
+// AMR: refine MeshBlocks that contain (or lie within refine_buf of) a sink particle
+void SinkRefinement(MeshBlockPack *pmbp);
+Real sink_refine_buf_ = 0.05;
 }  // namespace
 
 //----------------------------------------------------------------------------------------
@@ -41,6 +45,8 @@ void OrbitFinalize(ParameterInput *pin, Mesh *pm);
 
 void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   pgen_final_func = &OrbitFinalize;
+  user_ref_func = SinkRefinement;
+  sink_refine_buf_ = pin->GetOrAddReal("problem", "refine_buf", 0.05);
   if (restart) return;
 
   MeshBlockPack *pmbp = pmy_mesh_->pmb_pack;
@@ -211,5 +217,46 @@ void OrbitFinalize(ParameterInput *pin, Mesh *pm) {
     Real dz = pr_h(IPZ, 1) - pr_h(IPZ, 0);
     std::printf("  separation=% .6e\n", std::sqrt(dx*dx + dy*dy + dz*dz));
   }
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void SinkRefinement(MeshBlockPack *pmbp)
+//! \brief AMR criterion: refine a MeshBlock to the next level if any sink particle lies
+//! inside it expanded by refine_buf, derefine otherwise. Refining the sink's block plus a
+//! buffer keeps the sink interior to the fine region (away from coarse-fine boundaries).
+//! Particle-driven (no gas dependence), so it works with inert gas / a clean orbit.
+
+void SinkRefinement(MeshBlockPack *pmbp) {
+  if (pmbp->ppart == nullptr) return;
+  auto refine_flag = pmbp->pmesh->pmr->refine_flag;
+  int nmb = pmbp->nmb_thispack;
+  int mbs = pmbp->pmesh->gids_eachrank[global_variable::my_rank];
+  auto &size = pmbp->pmb->mb_size;
+  auto pr = pmbp->ppart->prtcl_rdata;
+  int npart = pmbp->ppart->nprtcl_thispack;
+  Real rbuf = sink_refine_buf_;
+
+  par_for("SinkAMR", DevExeSpace(), 0, nmb-1, KOKKOS_LAMBDA(int m) {
+    Real x1min = size.d_view(m).x1min, x1max = size.d_view(m).x1max;
+    Real x2min = size.d_view(m).x2min, x2max = size.d_view(m).x2max;
+    Real x3min = size.d_view(m).x3min, x3max = size.d_view(m).x3max;
+    int flag = -1;  // derefine unless a sink is near
+    for (int p = 0; p < npart; ++p) {
+      Real px = pr(IPX, p), py = pr(IPY, p), pz = pr(IPZ, p);
+      if (px > (x1min-rbuf) && px < (x1max+rbuf) &&
+          py > (x2min-rbuf) && py < (x2max+rbuf) &&
+          pz > (x3min-rbuf) && pz < (x3max+rbuf)) {
+        flag = 1;
+      }
+    }
+    refine_flag.d_view(m+mbs) = flag;
+  });
+  // We wrote refine_flag on the device, so mark the device copy modified AND sync it back
+  // to the host: CheckForRefinement() reads refine_flag.h_view after the criteria loop and
+  // then calls modify<HostMemSpace>(). Leaving the device-modified flag pending here would
+  // trip Kokkos' "concurrent modification" abort on GPU (silent on CPU, where host==device).
+  // This matches the contract of the built-in criteria (see refinement_criteria.cpp).
+  refine_flag.template modify<DevExeSpace>();
+  refine_flag.template sync<HostMemSpace>();
 }
 }  // namespace

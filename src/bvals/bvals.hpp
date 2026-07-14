@@ -157,6 +157,11 @@ class MeshBoundaryValues {
   // rank-packed vars communication path
   bool show_rank_packed_bvals_stats_;
   int rank_packed_bvals_nvars_;
+  // AMR/load-balance sequence (Mesh::GetAMRLoadBalanceUpdateSeq) the rank-packed
+  // metadata was last built against. Trigger sites rebuild when this differs from
+  // the mesh's current sequence. The mesh_updated_ FLAG cannot serve here: the
+  // driver clears it at the top of every cycle, before any task list runs, so
+  // IsMeshUpdated() is never true during task execution.
   int rank_packed_mesh_seq_;
   std::vector<RankPackedVarEntry> send_var_entries_, recv_var_entries_;
   std::vector<RankPackedVarMessage> send_var_msgs_, recv_var_msgs_;

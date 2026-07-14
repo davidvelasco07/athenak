@@ -60,8 +60,9 @@ root_on_host   = false
 self_gravity = true
 
 <particles>
-type   = sink
-pusher = leapfrog
+type      = sink
+pusher    = leapfrog
+accretion = true      # this test exercises control-volume accretion
 # 1 / 64^3 = 2^-18 (exact) -> exactly 1 particle
 ppc    = 3.814697265625e-06
 

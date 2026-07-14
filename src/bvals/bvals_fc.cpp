@@ -52,8 +52,10 @@ TaskStatus MeshBoundaryValuesFC::PackAndSendFC(DvceFaceFld4D<Real> &b,
   auto &rbuf = recvbuf;
 #if MPI_PARALLEL_ENABLED
   // Build metadata before packing so off-rank data is written straight into the
-  // rank-packed aggregate buffer (fused pack/aggregate).
-  if (rank_packed_bvals_nvars_ != 3) {
+  // rank-packed aggregate buffer (fused pack/aggregate). Refresh after any AMR
+  // regrid/load balance too (stale tables index out of bounds once the pack grows).
+  if (rank_packed_bvals_nvars_ != 3 ||
+      rank_packed_mesh_seq_ != pmy_pack->pmesh->GetAMRLoadBalanceUpdateSeq()) {
     BuildRankPackedVarMetadata(3);
   }
   auto aggsbuf = rank_sendbuf_vars_;

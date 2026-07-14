@@ -108,24 +108,36 @@ class ParticleMesh {
                      const DvceArray2D<int>&  prtcl_idata,
                      int npar);
 
-  // Boundary "sum-flush" for the deposit (Phase 1c). DepositMass writes TSC tails
-  // into the ghost cells of the depositing MeshBlock; those contributions physically
-  // belong to the neighbour's interior. FlushDepositBoundaries() adds each
+  // Boundary "sum-flush" for the deposit (Phase 1c + AMR). DepositMass writes TSC
+  // tails into the ghost cells of the depositing MeshBlock; those contributions
+  // physically belong to the neighbour's interior. FlushDepositBoundaries() adds each
   // MeshBlock's ghost-zone deposit into the matching interior cells of its neighbours
   // and then zeroes the ghost spill, so dmesh holds the complete per-cell density.
-  // Currently handles same-level, on-rank neighbours (uniform grid, serial or shared
-  // rank); off-rank (MPI) and fine/coarse (AMR) neighbours are not yet folded and are
-  // warned about once. Owns a MeshBoundaryValuesCC purely for its buffer index tables
-  // (and, in a later pass, the MPI path).
+  //
+  // Handles on-rank neighbours at ANY level, mass-conservatively:
+  //   same level   : ghost cell -> the coincident neighbour interior cell (add rho)
+  //   fine->coarse : ghost cell -> the coarse cell containing it (add rho*dV_f/dV_c)
+  //   coarse->fine : ghost cell -> every fine cell it covers   (add rho, uniform split)
+  // Ownership is resolved geometrically: each nonzero ghost cell searches this block's
+  // neighbour list for the (unique) MeshBlock whose bounds contain the cell centre
+  // (with periodic wrapping), so faces/edges/corners and graded octree refinement all
+  // use one code path -- including coarser "interior edge" regions that SetNeighbors
+  // leaves unpopulated because the coarse face neighbour covers them.
+  // Off-rank (MPI) neighbours are not yet folded (warned once).
   void FlushDepositBoundaries();
 
-  // Boundary-value helper for dmesh: provides the per-neighbour pack/unpack index
-  // tables (sendbuf/recvbuf .isame) reused by the flush, and the buffers/MPI machinery
-  // for the future cross-rank path.
+  // Boundary-value helper for dmesh: provides the buffers/MPI machinery for the
+  // future cross-rank flush path, and is reused by Particles::ExchangePhi for the
+  // potential's halo exchange.
   MeshBoundaryValuesCC *pmbval = nullptr;
 
  private:
   MeshBlockPack *pmy_pack;
+  // Device counter of particles skipped by the deposit/gather guards (invalid PGID,
+  // non-finite position, or out-of-range cell index). Checked host-side after each
+  // deposit; a nonzero count triggers a rate-limited warning instead of memory
+  // corruption / SIGBUS.
+  DvceArray1D<int> nbad_;
 };
 
 }  // namespace particles

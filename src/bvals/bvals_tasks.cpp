@@ -31,7 +31,12 @@
 
 TaskStatus MeshBoundaryValues::InitRecv(const int nvars) {
 #if MPI_PARALLEL_ENABLED
-  if (rank_packed_bvals_nvars_ != nvars || pmy_pack->pmesh->IsMeshUpdated()) {
+  // Rebuild the rank-packed metadata when the variable count changes OR the mesh
+  // has been regridded/load-balanced since the last build. The sequence compare
+  // replaces IsMeshUpdated(), which is never true here (the driver clears the
+  // flag at the top of each cycle, before task lists run).
+  if (rank_packed_bvals_nvars_ != nvars ||
+      rank_packed_mesh_seq_ != pmy_pack->pmesh->GetAMRLoadBalanceUpdateSeq()) {
     BuildRankPackedVarMetadata(nvars);
   } else {
     std::fill(recv_var_reqs_.begin(), recv_var_reqs_.end(), MPI_REQUEST_NULL);

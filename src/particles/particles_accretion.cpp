@@ -56,18 +56,31 @@ TaskStatus Particles::AccreteMass(Driver *pdriver, int stage) {
   const int npart = nprtcl_thispack;
   const int rctrl = 1;
 
+  const int nmb_ = pmy_pack->nmb_thispack;
   par_for("sink_accrete", DevExeSpace(), 0, npart-1,
   KOKKOS_LAMBDA(const int p) {
     int m = pi(PGID, p) - gids;
+    // Guard invalid PGID before ANY indexed access (mirrors ParticleMesh::DepositMass):
+    // a corrupt/ejected particle must skip accretion, not fault.
+    if (m < 0 || m >= nmb_) return;
     Real dx1 = mbsize.d_view(m).dx1;
     Real dx2 = mbsize.d_view(m).dx2;
     Real dx3 = mbsize.d_view(m).dx3;
     Real dV = dx1*dx2*dx3;
 
-    // cell containing the sink
-    int ip = static_cast<int>((pr(IPX, p) - mbsize.d_view(m).x1min)/dx1) + is;
-    int jp = static_cast<int>((pr(IPY, p) - mbsize.d_view(m).x2min)/dx2) + js;
-    int kp = static_cast<int>((pr(IPZ, p) - mbsize.d_view(m).x3min)/dx3) + ks;
+    // cell containing the sink -- guard the double->int casts against non-finite or
+    // wildly out-of-block positions (undefined behaviour in the cast otherwise)
+    Real xi1 = (pr(IPX, p) - mbsize.d_view(m).x1min)/dx1;
+    Real xi2 = (pr(IPY, p) - mbsize.d_view(m).x2min)/dx2;
+    Real xi3 = (pr(IPZ, p) - mbsize.d_view(m).x3min)/dx3;
+    if (!(xi1 > -1.0e9 && xi1 < 1.0e9) ||
+        !(xi2 > -1.0e9 && xi2 < 1.0e9) ||
+        !(xi3 > -1.0e9 && xi3 < 1.0e9)) {
+      return;
+    }
+    int ip = static_cast<int>(xi1) + is;
+    int jp = static_cast<int>(xi2) + js;
+    int kp = static_cast<int>(xi3) + ks;
 
     // require the control volume (and its distance-2 reads) to stay in this MeshBlock's
     // active+ghost cells; skip otherwise (interior-sink restriction for now)

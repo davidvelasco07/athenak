@@ -57,7 +57,11 @@ TaskStatus MeshBoundaryValuesCC::PackAndSendCC(DvceArray5D<Real> &a,
 #if MPI_PARALLEL_ENABLED
   // Build (or refresh) the rank-packed metadata BEFORE packing so the kernel can
   // write off-rank data straight into the aggregate buffer (fused pack/aggregate).
-  if (rank_packed_bvals_nvars_ != nvar) {
+  // Must also refresh after any AMR regrid/load balance: the offset maps and entry
+  // tables are dimensioned/derived from the block layout at build time, and stale
+  // tables are indexed out of bounds once the pack grows (GPU: illegal address).
+  if (rank_packed_bvals_nvars_ != nvar ||
+      rank_packed_mesh_seq_ != pmy_pack->pmesh->GetAMRLoadBalanceUpdateSeq()) {
     BuildRankPackedVarMetadata(nvar);
   }
   auto aggsbuf = rank_sendbuf_vars_;

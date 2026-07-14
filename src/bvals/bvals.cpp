@@ -35,6 +35,7 @@ MeshBoundaryValues::MeshBoundaryValues(MeshBlockPack *pp, ParameterInput *pin, b
   show_rank_packed_bvals_stats_(pin->GetOrAddBoolean("mesh",
                                     "show_rank_packed_bvals_stats", false)),
   rank_packed_bvals_nvars_(-1),
+  rank_packed_mesh_seq_(-1),
   rank_sendbuf_vars_("rank_sendbuf_vars",1),
   rank_recvbuf_vars_("rank_recvbuf_vars",1),
   rank_sendhdr_vars_("rank_sendhdr_vars",1),
@@ -136,6 +137,9 @@ int MeshBoundaryValues::GetVarDataSize(const MeshBoundaryBuffer &buf, int m, int
 
 void MeshBoundaryValues::BuildRankPackedVarMetadata(const int nvars) {
   rank_packed_bvals_nvars_ = nvars;
+  // Record the AMR/load-balance sequence this metadata was built against (see the
+  // member comment in bvals.hpp: the mesh_updated_ flag is unusable in task lists).
+  rank_packed_mesh_seq_ = pmy_pack->pmesh->GetAMRLoadBalanceUpdateSeq();
   send_var_entries_.clear();
   recv_var_entries_.clear();
   send_var_msgs_.clear();
@@ -297,7 +301,11 @@ void MeshBoundaryValues::BuildRankPackedVarMetadata(const int nvars) {
         "unpack_tasks_d", std::max(1, n_recv_entries));
     auto unpack_tasks_h = Kokkos::create_mirror_view(unpack_tasks_d_);
 
-    const int map_len = nmb*nnghbr;
+    // Size the (m,n)->aggregate-offset maps for the MAXIMUM MeshBlock count this
+    // rank can hold: the pack/unpack kernels index them with the CURRENT nmb, which
+    // AMR can grow between rebuilds. Entries beyond the built content stay -1
+    // (non-aggregated path), so a not-yet-rebuilt map is safe rather than OOB.
+    const int map_len = nmb_max*nnghbr;
     recv_agg_offset_ = DvceArray1D<int>("recv_agg_offset", std::max(1, map_len));
     send_agg_offset_ = DvceArray1D<int>("send_agg_offset", std::max(1, map_len));
     auto recv_off_h = Kokkos::create_mirror_view(recv_agg_offset_);

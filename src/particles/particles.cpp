@@ -31,6 +31,10 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     std::exit(EXIT_FAILURE);
   }
 
+  // control-volume gas accretion onto sinks: opt-in (accretion tests set it true);
+  // orbit/gravity tests with inert or no gas leave it off so the kernel never runs
+  accretion = pin->GetOrAddBoolean("particles","accretion",false);
+
   // read number of particles per cell, and calculate number of particles this pack
   Real ppc = pin->GetOrAddReal("particles","ppc",1.0);
 

@@ -30,6 +30,7 @@ enum class ParticleType {cosmic_ray, sink};
 //  \brief container to hold TaskIDs of all particles tasks
 
 struct ParticlesTaskIDs {
+  TaskID setgid;
   TaskID deposit;
   TaskID flush;
   TaskID xphi;
@@ -69,6 +70,11 @@ class Particles {
   ParticlesPusher pusher;
   Real point_mass_gm;  // temporary treatment of source term on particle
 
+  // Enable control-volume gas accretion onto sinks (<particles>/accretion, default
+  // false). When false the AccreteMass task is not registered at all, so orbit tests
+  // with inert/no gas never execute the accretion kernel.
+  bool accretion = false;
+
   // Particle-mesh coupling layer (allocated for sink type, nullptr for tracers).
   ParticleMesh *ppm = nullptr;
 
@@ -81,6 +87,7 @@ class Particles {
   // functions...
   void CreateParticleTags(ParameterInput *pin);
   void AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> tl);
+  TaskStatus SetGIDFromPosition(Driver *pdriver, int stage);
   TaskStatus Deposit(Driver *pdriver, int stage);
   TaskStatus FlushDeposit(Driver *pdriver, int stage);
   TaskStatus ExchangePhi(Driver *pdriver, int stage);
