@@ -36,6 +36,7 @@ struct ParticlesTaskIDs {
   TaskID xphi;
   TaskID push;
   TaskID accrete;
+  TaskID newdt;
   TaskID newgid;
   TaskID count;
   TaskID irecv;
@@ -70,6 +71,12 @@ class Particles {
   ParticlesPusher pusher;
   Real point_mass_gm;  // temporary treatment of source term on particle
 
+  // Particle CFL number (<particles>/cfl_par, default 0.5): dtnew = cfl_par*min(dx/|v|)
+  // over particles. Mesh::NewTimeStep applies NO cfl factor to ppart->dtnew and caps
+  // per-cycle dt growth at 2x, so 0.5 guarantees sinks cross at most one cell per step
+  // (required by the control-volume accretion's cell-crossing correction).
+  Real cfl_par;
+
   // Enable control-volume gas accretion onto sinks (<particles>/accretion, default
   // false). When false the AccreteMass task is not registered at all, so orbit tests
   // with inert/no gas never execute the accretion kernel.
@@ -93,6 +100,7 @@ class Particles {
   TaskStatus ExchangePhi(Driver *pdriver, int stage);
   TaskStatus Push(Driver *pdriver, int stage);
   TaskStatus AccreteMass(Driver *pdriver, int stage);
+  TaskStatus NewTimeStep(Driver *pdriver, int stage);
   TaskStatus NewGID(Driver *pdriver, int stage);
   TaskStatus SendCnt(Driver *pdriver, int stage);
   TaskStatus InitRecv(Driver *pdriver, int stage);

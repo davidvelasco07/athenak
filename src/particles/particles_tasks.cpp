@@ -65,6 +65,10 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
     // SetNewPrtclGID, which mis-assigns PGID for particles crossing coarse-fine boundaries
     // under AMR). Serial / on-rank only -- cross-rank particle communication is a TODO.
     id.newgid = tl["stagen"]->AddTask(&Particles::SetGIDFromPosition, this, id.push);
+    // Refresh the particle timestep every cycle from the end-of-cycle velocities
+    // (dtnew was previously seeded once at t=0 by the pgens -- a latent bug once
+    // particle speeds grow, e.g. under accretion).
+    id.newdt  = tl["stagen"]->AddTask(&Particles::NewTimeStep, this, id.newgid);
 
     // operator-split accretion: gas in the control volume -> sink, at the last RK stage.
     // Registered only when <particles>/accretion=true -- orbit/gravity tests with inert
@@ -265,6 +269,46 @@ TaskStatus Particles::ClearRecv(Driver *pdrive, int stage) {
   // check receives of particles complete
   TaskStatus tstat = pbval_part->ClearPrtclRecv();
   return tstat;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn TaskStatus Particles::NewTimeStep
+//! \brief Compute the particle timestep from end-of-cycle velocities: dtnew =
+//! cfl_par * min over particles of 1/sqrt((v1/dx1)^2+(v2/dx2)^2+(v3/dx3)^2), using each
+//! particle's own MeshBlock cell sizes (handles AMR levels automatically). Note
+//! Mesh::NewTimeStep applies NO cfl factor to ppart->dtnew, so the safety factor lives
+//! here; cfl_par=0.5 (default) guarantees at most one cell crossed per step, as the
+//! control-volume accretion's cell-crossing correction assumes.
+
+TaskStatus Particles::NewTimeStep(Driver *pdriver, int stage) {
+  if (stage != pdriver->nexp_stages) return TaskStatus::complete;  // once per cycle
+  if (nprtcl_thispack <= 0) return TaskStatus::complete;
+
+  auto &pr = prtcl_rdata;
+  auto &pi = prtcl_idata;
+  auto &mbsize = pmy_pack->pmb->mb_size;
+  const int gids = pmy_pack->gids;
+  const int nmb_ = pmy_pack->nmb_thispack;
+
+  Real max_vdx = 0.0;   // max over particles of |v|/dx (per-axis)
+  Kokkos::parallel_reduce("part_newdt", Kokkos::RangePolicy<>(DevExeSpace(),
+                          0, nprtcl_thispack),
+  KOKKOS_LAMBDA(const int p, Real &pmax) {
+    const int m = pi(PGID, p) - gids;
+    if (m < 0 || m >= nmb_) return;   // corrupt/unbinned particle: no dt constraint
+    const Real v1 = pr(IPVX, p)/mbsize.d_view(m).dx1;
+    const Real v2 = pr(IPVY, p)/mbsize.d_view(m).dx2;
+    const Real v3 = pr(IPVZ, p)/mbsize.d_view(m).dx3;
+    const Real vdx = sqrt(v1*v1 + v2*v2 + v3*v3);
+    pmax = fmax(pmax, vdx);
+  }, Kokkos::Max<Real>(max_vdx));
+
+  if (max_vdx > 0.0) {
+    dtnew = cfl_par/max_vdx;
+  }
+  // else: all particles at rest -- keep the previous (or pgen-seeded) dtnew
+
+  return TaskStatus::complete;
 }
 
 } // namespace particles

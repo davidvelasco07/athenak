@@ -78,13 +78,18 @@ enum MetricIndex {I00=0, I01=1, I02=2, I03=3, I11=4, I12=5, I13=6, I22=7, I23=8,
 //   IPGX,IPGY,IPGZ             -- gravity force scratch (filled each step by
 //                                 ParticleGravity::InterpolateForceToParticles;
 //                                 not communicated on MB migration)
+//   IPX0,IPY0,IPZ0             -- position at the start of the current step (saved in
+//                                 the stage-1 leapfrog push immediately before the
+//                                 drift); used by AccreteMass to detect sink-cell
+//                                 crossings (old control-volume correction)
 //   NRDATA_SINK -- total real columns for sink type (3D layout always; 2D
 //                  runs leave IPZ/IPVZ/IPGZ at zero)
 enum ParticlesIndex {PGID=0, PTAG=1,
                      IPX=0, IPVX=1, IPY=2, IPVY=3, IPZ=4, IPVZ=5,
                      IPM=6,
                      IPGX=7, IPGY=8, IPGZ=9,
-                     NRDATA_SINK=10};
+                     IPX0=10, IPY0=11, IPZ0=12,
+                     NRDATA_SINK=13};
 
 // integer constants to specify spatial reconstruction methods
 enum ReconstructionMethod {dc, plm, ppm4, ppmx, wenoz};

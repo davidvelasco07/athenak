@@ -69,8 +69,13 @@ TaskStatus Particles::Push(Driver *pdriver, int stage) {
         pr(IPVX,p) += hdt_*pr(IPGX,p);
         pr(IPVY,p) += hdt_*pr(IPGY,p);
         pr(IPVZ,p) += hdt_*pr(IPGZ,p);
-        // Full drift (stage 1 only).
+        // Full drift (stage 1 only). Save the pre-drift (start-of-step) position
+        // first: AccreteMass uses it to detect sink-cell crossings. Unconditional
+        // (once per cycle), so IPX0 is always current when accretion runs.
         if (do_drift) {
+          pr(IPX0,p) = pr(IPX,p);
+          pr(IPY0,p) = pr(IPY,p);
+          pr(IPZ0,p) = pr(IPZ,p);
           pr(IPX,p) += dt_*pr(IPVX,p);
           pr(IPY,p) += dt_*pr(IPVY,p);
           pr(IPZ,p) += dt_*pr(IPVZ,p);

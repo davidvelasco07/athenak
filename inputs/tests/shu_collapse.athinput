@@ -1,0 +1,96 @@
+# Shu (1977) self-similar isothermal collapse onto a sink particle.
+# Validation of control-volume accretion (GO13 sec 3.2): fitted Mdot should match
+# m0*cs^3/G (A=2.0004 -> m0=0.975). Code units: L_J = 1 (box = 4 L_J), c_s = 1
+# (t_J = 1), 4 pi G = 1. IC = similarity solution at t0 = 0.43 t_J.
+#
+# Galilean-invariance variant (GO13 sec 3.3): set problem/vadvx (units of c_s) and
+# switch ALL mesh BCs + gravity to periodic:
+#   athena -i shu_collapse.athinput problem/vadvx=1.5 \
+#     mesh/ix1_bc=periodic mesh/ox1_bc=periodic mesh/ix2_bc=periodic \
+#     mesh/ox2_bc=periodic mesh/ix3_bc=periodic mesh/ox3_bc=periodic \
+#     gravity/mg_bc=periodic
+
+<comment>
+problem   = Shu 1977 collapse onto sink particle
+
+<job>
+basename  = shu
+
+<mesh>
+nghost = 4
+nx1    = 128
+x1min  = -2.0
+x1max  =  2.0
+ix1_bc = outflow
+ox1_bc = outflow
+
+nx2    = 128
+x2min  = -2.0
+x2max  =  2.0
+ix2_bc = outflow
+ox2_bc = outflow
+
+nx3    = 128
+x3min  = -2.0
+x3max  =  2.0
+ix3_bc = outflow
+ox3_bc = outflow
+
+<meshblock>
+nx1 = 128     # single MeshBlock: sink + control volume strictly interior
+nx2 = 128
+nx3 = 128
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.3
+nlim       = -1
+tlim       = 1.0
+ndiag      = 50
+
+<hydro>
+eos             = isothermal
+reconstruct     = plm
+rsolver         = hlle
+iso_sound_speed = 1.0
+
+<gravity>
+four_pi_G      = 1.0
+mg_bc          = multipole      # isolated (vacuum) BC, as in GO13 fixed-frame test
+mporder        = 4
+threshold      = -1
+niteration     = 10
+npresmooth     = 1
+npostsmooth    = 1
+full_multigrid = true
+fmg_ncycle     = 1
+mg_nghost      = 1
+root_on_host   = false
+
+<hydro_srcterms>
+self_gravity = true
+
+<particles>
+type      = sink
+pusher    = leapfrog
+accretion = true
+cfl_par   = 0.5
+ppc       = 4.76837158203125e-07   # = 1/128^3: exactly ONE particle
+
+<problem>
+A         = 2.0004    # overdensity parameter (Shu 1977); m0(2.0004)=0.975
+t0        = 0.43      # start time of the similarity solution [t_J]
+vadvx     = 0.0       # bulk advection [c_s] (Galilean test; use periodic BCs)
+vadvy     = 0.0
+vadvz     = 0.0
+user_hist = true
+
+<output1>
+file_type = hst
+dt        = 0.005
+
+<output2>
+file_type = bin
+variable  = hydro_w
+dt        = 0.1
