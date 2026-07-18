@@ -36,6 +36,7 @@ struct ParticlesTaskIDs {
   TaskID xphi;
   TaskID push;
   TaskID accrete;
+  TaskID create;
   TaskID newdt;
   TaskID newgid;
   TaskID count;
@@ -82,6 +83,13 @@ class Particles {
   // with inert/no gas never execute the accretion kernel.
   bool accretion = false;
 
+  // Enable sink creation (<particles>/creation, default false): cells exceeding the
+  // Larson-Penston density threshold at a local potential minimum spawn a massless
+  // sink that the next AccreteMass reset seeds conservatively (Moon & Ostriker 2025
+  // section 3.4). Requires accretion = true.
+  bool creation = false;
+  int created_total_ = 0;   // running count, for unique tags
+
   // Particle-mesh coupling layer (allocated for sink type, nullptr for tracers).
   ParticleMesh *ppm = nullptr;
 
@@ -100,6 +108,7 @@ class Particles {
   TaskStatus ExchangePhi(Driver *pdriver, int stage);
   TaskStatus Push(Driver *pdriver, int stage);
   TaskStatus AccreteMass(Driver *pdriver, int stage);
+  TaskStatus CreateSinks(Driver *pdriver, int stage);
   TaskStatus NewTimeStep(Driver *pdriver, int stage);
   TaskStatus NewGID(Driver *pdriver, int stage);
   TaskStatus SendCnt(Driver *pdriver, int stage);

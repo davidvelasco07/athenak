@@ -74,7 +74,15 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
     // Registered only when <particles>/accretion=true -- orbit/gravity tests with inert
     // or no gas skip the kernel entirely.
     if (accretion) {
-      id.accrete = tl["after_stagen"]->AddTask(&Particles::AccreteMass, this, none);
+      // creation (opt-in) runs first: new sinks are massless and the AccreteMass
+      // reset that follows seeds them conservatively (Moon & Ostriker 2025 eq. 54)
+      if (creation) {
+        id.create  = tl["after_stagen"]->AddTask(&Particles::CreateSinks, this, none);
+        id.accrete = tl["after_stagen"]->AddTask(&Particles::AccreteMass, this,
+                                                 id.create);
+      } else {
+        id.accrete = tl["after_stagen"]->AddTask(&Particles::AccreteMass, this, none);
+      }
     }
   } else {
     // Tracer / cosmic-ray (drift) particles: integrated once per cycle in the
@@ -122,7 +130,27 @@ TaskStatus Particles::SetGIDFromPosition(Driver *pdrive, int stage) {
   int npart = nprtcl_thispack;
   if (npart <= 0) return TaskStatus::complete;
 
+  // On strictly periodic meshes, wrap particle positions back into the domain when
+  // they exit (e.g. bulk-advection tests). The start-of-step position IPX0 is shifted
+  // by the SAME offset so cell-crossing detection in AccreteMass stays consistent
+  // across the wrap.
+  const bool wrap = pmy_pack->pmesh->strictly_periodic;
+  const bool has_prev = (nrdata > IPX0);   // IPX0.. exist only in the sink layout
+  auto &msz = pmy_pack->pmesh->mesh_size;
+  const Real xmin = msz.x1min, Lx = msz.x1max - msz.x1min;
+  const Real ymin = msz.x2min, Ly = msz.x2max - msz.x2min;
+  const Real zmin = msz.x3min, Lz = msz.x3max - msz.x3min;
+
   par_for("part_setgid", DevExeSpace(), 0, npart-1, KOKKOS_LAMBDA(const int p) {
+    if (wrap) {
+      Real s;
+      s = Kokkos::floor((pr(IPX, p) - xmin)/Lx)*Lx;
+      pr(IPX, p) -= s;  if (has_prev) pr(IPX0, p) -= s;
+      s = Kokkos::floor((pr(IPY, p) - ymin)/Ly)*Ly;
+      pr(IPY, p) -= s;  if (has_prev) pr(IPY0, p) -= s;
+      s = Kokkos::floor((pr(IPZ, p) - zmin)/Lz)*Lz;
+      pr(IPZ, p) -= s;  if (has_prev) pr(IPZ0, p) -= s;
+    }
     Real px = pr(IPX, p), py = pr(IPY, p), pz = pr(IPZ, p);
     int mcur = pi(PGID, p) - gids;
     int mown = (mcur >= 0 && mcur < nmb) ? mcur : 0;   // keep current/valid as fallback

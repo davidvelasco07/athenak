@@ -75,6 +75,7 @@ self_gravity = true
 type      = sink
 pusher    = leapfrog
 accretion = true
+creation  = false     # sink creation (LP threshold + potential minimum)
 cfl_par   = 0.5
 ppc       = 4.76837158203125e-07   # = 1/128^3: exactly ONE particle
 

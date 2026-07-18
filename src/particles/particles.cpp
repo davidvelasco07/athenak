@@ -34,6 +34,8 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
   // control-volume gas accretion onto sinks: opt-in (accretion tests set it true);
   // orbit/gravity tests with inert or no gas leave it off so the kernel never runs
   accretion = pin->GetOrAddBoolean("particles","accretion",false);
+  // sink creation (LP threshold + potential minimum; see particles_creation.cpp)
+  creation = pin->GetOrAddBoolean("particles","creation",false);
 
   // particle CFL number (see particles.hpp); 0.5 guarantees <= 1 cell crossed per step
   cfl_par = pin->GetOrAddReal("particles","cfl_par",0.5);
