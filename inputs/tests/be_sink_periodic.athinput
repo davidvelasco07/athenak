@@ -1,0 +1,90 @@
+# Bonnor-Ebert sphere collapse onto a sink particle (GO13 sec 3.4 analogue).
+# Marginally supercritical (f=1.2) BE sphere, rc=6.45, code units cs=1, 4piG=1
+# (rho_c = f, t_ff = pi*sqrt(3/(8f)) ~ 1.72). The sink (seeded with the gas mass
+# inside r_ctrl) accretes the collapsing core; the F&C (1993) peak-rate reference
+# 47 cs^3/G is written to the history. Gas self-gravity ON (this is the
+# gas-gravity-dominated accretion test). Run with meshblock 64^3 for the 2^3-block
+# corner stress test (sink control volume straddles all 8 blocks).
+
+<comment>
+problem   = Bonnor-Ebert collapse onto sink
+
+<job>
+basename  = besink
+
+<mesh>
+nghost = 4
+nx1    = 128
+x1min  = -12.8
+x1max  =  12.8
+ix1_bc = periodic
+ox1_bc = periodic
+
+nx2    = 128
+x2min  = -12.8
+x2max  =  12.8
+ix2_bc = periodic
+ox2_bc = periodic
+
+nx3    = 128
+x3min  = -12.8
+x3max  =  12.8
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 128
+nx2 = 128
+nx3 = 128
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.3
+nlim       = -1
+tlim       = 3.5      # ~2 t_ff: through peak accretion and decline
+ndiag      = 100
+
+<hydro>
+eos             = isothermal
+reconstruct     = plm
+rsolver         = hlle
+iso_sound_speed = 1.0
+
+<gravity>
+four_pi_G      = 1.0
+mg_bc          = none
+mporder        = 4
+threshold      = -1
+niteration     = 10
+npresmooth     = 1
+npostsmooth    = 1
+full_multigrid = true
+fmg_ncycle     = 1
+mg_nghost      = 1
+root_on_host   = false
+
+<hydro_srcterms>
+self_gravity = true
+
+<particles>
+type      = sink
+pusher    = leapfrog
+accretion = true
+creation  = false     # sink creation (LP threshold + potential minimum)
+cfl_par   = 0.5
+ppc       = 4.76837158203125e-07   # = 1/128^3: exactly ONE particle
+
+<problem>
+cloud_radius = 6.45
+f            = 1.2
+user_hist    = true
+
+<output1>
+file_type = hst
+dt        = 0.01
+
+<output2>
+file_type = bin
+variable  = hydro_w
+dt        = 0.07

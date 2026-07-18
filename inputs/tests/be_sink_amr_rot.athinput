@@ -1,0 +1,104 @@
+# Bonnor-Ebert sphere collapse onto a sink particle, WITH adaptive mesh refinement.
+# Same physics as be_sink.athinput (f=1.2, rc=6.45, cs=1, 4piG=1) but on a coarse
+# 64^3 root grid (meshblock 16^3) that adaptively refines to keep the collapsing core
+# Jeans-resolved (njeans=16) AND to keep a same-level halo around the sink so its
+# control volume never straddles a level jump (sink_buf_cells=4). num_levels=3 gives a
+# 256^3-effective finest core. This is the AMR fix for the fixed-grid mass
+# non-conservation (unresolved isothermal singular collapse violates the Jeans/Truelove
+# criterion on a fixed grid). Combined user AMR criterion = BESinkRefinement().
+
+<comment>
+problem   = Bonnor-Ebert collapse onto sink (AMR)
+
+<job>
+basename  = besink_amr_rot
+
+<mesh>
+nghost = 4
+nx1    = 64
+x1min  = -12.8
+x1max  =  12.8
+ix1_bc = outflow
+ox1_bc = outflow
+
+nx2    = 64
+x2min  = -12.8
+x2max  =  12.8
+ix2_bc = outflow
+ox2_bc = outflow
+
+nx3    = 64
+x3min  = -12.8
+x3max  =  12.8
+ix3_bc = outflow
+ox3_bc = outflow
+
+<meshblock>
+nx1 = 16
+nx2 = 16
+nx3 = 16
+
+<mesh_refinement>
+refinement          = adaptive
+max_nmb_per_rank    = 4096
+num_levels          = 3
+refinement_interval = 1
+
+<amr_criterion0>
+method = user
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.3
+nlim       = -1
+tlim       = 3.5      # ~2 t_ff: through peak accretion and decline
+ndiag      = 100
+
+<hydro>
+eos             = isothermal
+reconstruct     = plm
+rsolver         = hlle
+iso_sound_speed = 1.0
+
+<gravity>
+four_pi_G      = 1.0
+mg_bc          = multipole
+mporder        = 4
+threshold      = -1
+niteration     = 10
+npresmooth     = 1
+npostsmooth    = 1
+full_multigrid = true
+fmg_ncycle     = 1
+mg_nghost      = 1
+root_on_host   = false
+
+<hydro_srcterms>
+self_gravity = true
+
+<particles>
+type      = sink
+pusher    = leapfrog
+accretion = true
+creation  = false     # sink creation (LP threshold + potential minimum)
+cfl_par   = 0.5
+ppc       = 3.814697265625e-06   # = 1/64^3 (2^-18): exactly ONE particle on the root grid
+
+<problem>
+cloud_radius   = 6.45
+f              = 1.2
+njeans         = 16
+omegatff       = 0.3      # solid-body rotation: Omega = omegatff/t_ff (disk-forming)
+amp            = 0.0      # m=2 perturbation amplitude (>0 seeds fragmentation)
+sink_buf_cells = 4        # same-level halo (cells) kept around each sink
+user_hist      = true
+
+<output1>
+file_type = hst
+dt        = 0.01
+
+<output2>
+file_type = bin
+variable  = hydro_w
+dt        = 0.07
