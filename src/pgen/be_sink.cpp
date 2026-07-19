@@ -36,6 +36,7 @@
 //! totals, and the F&C reference rate in the Mdot_ana column.
 
 #include <algorithm>
+#include <climits>
 #include <cmath>
 #include <cstdio>
 #include <iostream>
@@ -182,31 +183,40 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     }
   }
 
-  // ---- one sink at the sphere centre ----
-  auto &pr = pmbp->ppart->prtcl_rdata;
-  auto &pi = pmbp->ppart->prtcl_idata;
-  const int npart = pmbp->ppart->nprtcl_thispack;
-  auto gids = pmbp->gids;
-  if (npart != 1 && global_variable::my_rank == 0) {
-    std::printf("be_sink WARNING: npart=%d (expected 1; check particles/ppc)\n", npart);
-  }
-  par_for("be_part", DevExeSpace(), 0, npart-1,
-  KOKKOS_LAMBDA(int p) {
-    pr(IPX, p) = x0;  pr(IPY, p) = y0;  pr(IPZ, p) = z0;
-    pr(IPVX, p) = 0.0; pr(IPVY, p) = 0.0; pr(IPVZ, p) = 0.0;
-    pr(IPM, p) = mstar;
-    pr(IPGX, p) = 0.0; pr(IPGY, p) = 0.0; pr(IPGZ, p) = 0.0;
-    pr(IPX0, p) = x0; pr(IPY0, p) = y0; pr(IPZ0, p) = z0;
-    int mown = 0;
+  // ---- one sink at the sphere centre (skipped in creation mode, where it is born) ----
+  // MPI-robust seed: ppc rounds a single global particle to 0 on every rank under
+  // decomposition, so place exactly one sink on the rank whose local block contains
+  // (x0,y0,z0) (lower-inclusive -> unique owner, even at a shared block corner) and zero
+  // on the rest, resizing the particle arrays to match.
+  if (!pmbp->ppart->creation) {
+    auto gids = pmbp->gids;
+    int mown = -1;
     for (int mm = 0; mm < nmb; ++mm) {
-      if (x0 >= mbsize.d_view(mm).x1min && x0 < mbsize.d_view(mm).x1max &&
-          y0 >= mbsize.d_view(mm).x2min && y0 < mbsize.d_view(mm).x2max &&
-          z0 >= mbsize.d_view(mm).x3min && z0 < mbsize.d_view(mm).x3max) {
-        mown = mm;
+      if (x0 >= mbsize.h_view(mm).x1min && x0 < mbsize.h_view(mm).x1max &&
+          y0 >= mbsize.h_view(mm).x2min && y0 < mbsize.h_view(mm).x2max &&
+          z0 >= mbsize.h_view(mm).x3min && z0 < mbsize.h_view(mm).x3max) {
+        mown = mm; break;
       }
     }
-    pi(PGID, p) = gids + mown;
-  });
+    const int desired = (mown >= 0) ? 1 : 0;
+    Kokkos::resize(pmbp->ppart->prtcl_rdata, pmbp->ppart->nrdata, desired);
+    Kokkos::resize(pmbp->ppart->prtcl_idata, pmbp->ppart->nidata, desired);
+    pmbp->ppart->nprtcl_thispack = desired;
+    if (desired == 1) {
+      auto pr = pmbp->ppart->prtcl_rdata;
+      auto pi = pmbp->ppart->prtcl_idata;
+      const int gidown = gids + mown;
+      par_for("be_part", DevExeSpace(), 0, 0, KOKKOS_LAMBDA(int p) {
+        pr(IPX, p) = x0;  pr(IPY, p) = y0;  pr(IPZ, p) = z0;
+        pr(IPVX, p) = 0.0; pr(IPVY, p) = 0.0; pr(IPVZ, p) = 0.0;
+        pr(IPM, p) = mstar;
+        pr(IPGX, p) = 0.0; pr(IPGY, p) = 0.0; pr(IPGZ, p) = 0.0;
+        pr(IPX0, p) = x0; pr(IPY0, p) = y0; pr(IPZ0, p) = z0;
+        pi(PGID, p) = gidown;
+        pi(PTAG, p) = 0;
+      });
+    }
+  }
 
   pmbp->ppart->dtnew = dx;   // seed; Particles::NewTimeStep refreshes per cycle
   return;
@@ -220,7 +230,7 @@ namespace {
 
 void BESinkHistory(HistoryData *pdata, Mesh *pm) {
   MeshBlockPack *pmbp = pm->pmb_pack;
-  pdata->nhist = 11;
+  pdata->nhist = 18;
   pdata->label[0] = "mass";
   pdata->label[1] = "1-mom";
   pdata->label[2] = "2-mom";
@@ -232,6 +242,11 @@ void BESinkHistory(HistoryData *pdata, Mesh *pm) {
   pdata->label[8] = "px_tot";
   pdata->label[9] = "Mdot_FC";
   pdata->label[10] = "Lz_gas";   // gas z-angular momentum about the domain axis (rotation)
+  pdata->label[11] = "n_sink";   // number of sinks (0 before creation) -> gate video marker
+  // per-sink positions of the first two sinks (tag-sorted), for exact video markers
+  // incl. the off-centre secondary that forms when the disk fragments (single-rank exact)
+  pdata->label[12] = "x_sink0"; pdata->label[13] = "y_sink0"; pdata->label[14] = "z_sink0";
+  pdata->label[15] = "x_sink1"; pdata->label[16] = "y_sink1"; pdata->label[17] = "z_sink1";
 
   auto &u0 = pmbp->phydro->u0;
   auto &mbsz = pmbp->pmb->mb_size;
@@ -273,12 +288,19 @@ void BESinkHistory(HistoryData *pdata, Mesh *pm) {
   const int npart = pmbp->ppart->nprtcl_thispack;
   auto pr_h = Kokkos::create_mirror_view(pmbp->ppart->prtcl_rdata);
   Kokkos::deep_copy(pr_h, pmbp->ppart->prtcl_rdata);
+  auto pi_h = Kokkos::create_mirror_view(pmbp->ppart->prtcl_idata);
+  Kokkos::deep_copy(pi_h, pmbp->ppart->prtcl_idata);
   Real msink = 0.0, vxsink = 0.0, xsink = 0.0, pxsink = 0.0;
+  // track the two lowest-tag sinks (creation order) for exact per-sink video markers
+  int t0 = INT_MAX, t1 = INT_MAX, p0 = -1, p1 = -1;
   for (int p = 0; p < npart; ++p) {
     msink  += pr_h(IPM, p);
     vxsink += pr_h(IPVX, p);
     xsink  += pr_h(IPX, p);
     pxsink += pr_h(IPM, p)*pr_h(IPVX, p);
+    int tg = pi_h(PTAG, p);
+    if (tg < t0)      { t1 = t0; p1 = p0; t0 = tg; p0 = p; }
+    else if (tg < t1) { t1 = tg; p1 = p; }
   }
 
   pdata->hdata[0] = gsum[0];
@@ -290,8 +312,16 @@ void BESinkHistory(HistoryData *pdata, Mesh *pm) {
   pdata->hdata[6] = xsink;
   pdata->hdata[7] = gsum[0] + msink;
   pdata->hdata[8] = gsum[1] + pxsink;
-  pdata->hdata[9] = mdot_ref_;
+  // global constant: divide by nranks -- hst user data is MPI_SUM-reduced across ranks
+  pdata->hdata[9] = mdot_ref_/static_cast<Real>(global_variable::nranks);
   pdata->hdata[10] = lzsum;
+  pdata->hdata[11] = static_cast<Real>(npart);   // n_sink (0 before creation)
+  pdata->hdata[12] = (p0 >= 0) ? pr_h(IPX, p0) : 0.0;
+  pdata->hdata[13] = (p0 >= 0) ? pr_h(IPY, p0) : 0.0;
+  pdata->hdata[14] = (p0 >= 0) ? pr_h(IPZ, p0) : 0.0;
+  pdata->hdata[15] = (p1 >= 0) ? pr_h(IPX, p1) : 0.0;
+  pdata->hdata[16] = (p1 >= 0) ? pr_h(IPY, p1) : 0.0;
+  pdata->hdata[17] = (p1 >= 0) ? pr_h(IPZ, p1) : 0.0;
   for (int n = pdata->nhist; n < NHISTORY_VARIABLES; ++n) pdata->hdata[n] = 0.0;
 }
 

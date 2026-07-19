@@ -230,31 +230,41 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   Kokkos::deep_copy(u0, u0_h);
 
   // ---- one sink at the sphere centre ----
-  auto &pr = pmbp->ppart->prtcl_rdata;
-  auto &pi = pmbp->ppart->prtcl_idata;
-  const int npart = pmbp->ppart->nprtcl_thispack;
-  auto gids = pmbp->gids;
-  if (npart != 1 && global_variable::my_rank == 0) {
-    std::printf("shu_collapse WARNING: npart=%d (expected 1; check particles/ppc)\n",
-                npart);
-  }
-  par_for("shu_part", DevExeSpace(), 0, npart-1,
-  KOKKOS_LAMBDA(int p) {
-    pr(IPX, p) = x0;  pr(IPY, p) = y0;  pr(IPZ, p) = z0;
-    pr(IPVX, p) = vadvx; pr(IPVY, p) = vadvy; pr(IPVZ, p) = vadvz;
-    pr(IPM, p) = mstar;
-    pr(IPGX, p) = 0.0; pr(IPGY, p) = 0.0; pr(IPGZ, p) = 0.0;
-    pr(IPX0, p) = x0; pr(IPY0, p) = y0; pr(IPZ0, p) = z0;
-    int mown = 0;
+  // MPI-robust seed (as in be_sink.cpp): ppc rounds a single global particle to 0 on
+  // every rank under decomposition, so place exactly one sink on the rank whose local
+  // block contains the centre (lower-inclusive -> unique owner) and zero elsewhere,
+  // resizing the particle arrays to match.
+  {
+    auto gids = pmbp->gids;
+    auto mbsize_h = pmbp->pmb->mb_size;
+    int mown = -1;
     for (int mm = 0; mm < nmb; ++mm) {
-      if (x0 >= mbsize.d_view(mm).x1min && x0 < mbsize.d_view(mm).x1max &&
-          y0 >= mbsize.d_view(mm).x2min && y0 < mbsize.d_view(mm).x2max &&
-          z0 >= mbsize.d_view(mm).x3min && z0 < mbsize.d_view(mm).x3max) {
-        mown = mm;
+      if (x0 >= mbsize_h.h_view(mm).x1min && x0 < mbsize_h.h_view(mm).x1max &&
+          y0 >= mbsize_h.h_view(mm).x2min && y0 < mbsize_h.h_view(mm).x2max &&
+          z0 >= mbsize_h.h_view(mm).x3min && z0 < mbsize_h.h_view(mm).x3max) {
+        mown = mm; break;
       }
     }
-    pi(PGID, p) = gids + mown;
-  });
+    const int desired = (mown >= 0) ? 1 : 0;
+    Kokkos::resize(pmbp->ppart->prtcl_rdata, pmbp->ppart->nrdata, desired);
+    Kokkos::resize(pmbp->ppart->prtcl_idata, pmbp->ppart->nidata, desired);
+    pmbp->ppart->nprtcl_thispack = desired;
+    if (desired == 1) {
+      auto pr = pmbp->ppart->prtcl_rdata;
+      auto pi = pmbp->ppart->prtcl_idata;
+      const int gidown = gids + mown;
+      par_for("shu_part", DevExeSpace(), 0, 0,
+      KOKKOS_LAMBDA(int p) {
+        pr(IPX, p) = x0;  pr(IPY, p) = y0;  pr(IPZ, p) = z0;
+        pr(IPVX, p) = vadvx; pr(IPVY, p) = vadvy; pr(IPVZ, p) = vadvz;
+        pr(IPM, p) = mstar;
+        pr(IPGX, p) = 0.0; pr(IPGY, p) = 0.0; pr(IPGZ, p) = 0.0;
+        pr(IPX0, p) = x0; pr(IPY0, p) = y0; pr(IPZ0, p) = z0;
+        pi(PGID, p) = gidown;
+        pi(PTAG, p) = 0;
+      });
+    }
+  }
 
   // seed particle dt for cycle 1 (Particles::NewTimeStep refreshes it every cycle)
   pmbp->ppart->dtnew = dx;
@@ -326,7 +336,8 @@ void ShuHistory(HistoryData *pdata, Mesh *pm) {
   pdata->hdata[6] = xsink;
   pdata->hdata[7] = gsum[0] + msink;
   pdata->hdata[8] = gsum[1] + pxsink;
-  pdata->hdata[9] = m0_ana_*std::pow(cs_, 3)/gm_;
+  // global constant: divide by nranks -- hst user data is MPI_SUM-reduced across ranks
+  pdata->hdata[9] = m0_ana_*std::pow(cs_, 3)/gm_/static_cast<Real>(global_variable::nranks);
   for (int n = pdata->nhist; n < NHISTORY_VARIABLES; ++n) pdata->hdata[n] = 0.0;
 }
 
