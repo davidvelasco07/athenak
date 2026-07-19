@@ -90,6 +90,19 @@ class Particles {
   bool creation = false;
   int created_total_ = 0;   // running count, for unique tags
 
+  // Cross-rank control-volume reset (MPI). When a sink's control volume reaches into an
+  // off-rank neighbour, the accretion kernel stages the off-rank-destined reset cells
+  // (owner_m, xw, yw, zw, rho, M1, M2, M3) into cvemit_ (cvemit_cnt_ = atomic count);
+  // ExchangeCVReset() then routes them host-side to every rank whose blocks' expanded
+  // (interior+ghost) bounds contain the cell; each receiver scatters the values to ALL
+  // its local coincident copies of u0/w0. Sized once accretion is enabled.
+  DvceArray2D<Real> cvemit_;      // [cvemit_max_][8] staging buffer (device)
+  DvceArray1D<int>  cvemit_cnt_;  // [1] atomic write counter (device)
+  int cvemit_max_ = 0;
+#if MPI_PARALLEL_ENABLED
+  MPI_Comm mpi_comm_cvscat_ = MPI_COMM_NULL;   // dedicated communicator for the CV scatter
+#endif
+
   // Particle-mesh coupling layer (allocated for sink type, nullptr for tracers).
   ParticleMesh *ppm = nullptr;
 
@@ -108,6 +121,7 @@ class Particles {
   TaskStatus ExchangePhi(Driver *pdriver, int stage);
   TaskStatus Push(Driver *pdriver, int stage);
   TaskStatus AccreteMass(Driver *pdriver, int stage);
+  void ExchangeCVReset();   // MPI: apply off-rank control-volume reset cells
   TaskStatus CreateSinks(Driver *pdriver, int stage);
   TaskStatus NewTimeStep(Driver *pdriver, int stage);
   TaskStatus NewGID(Driver *pdriver, int stage);

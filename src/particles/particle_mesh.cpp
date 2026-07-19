@@ -11,10 +11,15 @@
 
 #include "particle_mesh.hpp"
 
+#include <algorithm>
+#include <cstdlib>
+#include <vector>
+
 #include "globals.hpp"
 #include "mesh/mesh.hpp"
 #include "mesh/meshblock.hpp"
 #include "mesh/meshblock_pack.hpp"
+#include "coordinates/cell_locations.hpp"
 #include "bvals/bvals.hpp"
 
 namespace particles {
@@ -44,6 +49,16 @@ ParticleMesh::ParticleMesh(MeshBlockPack *ppack, ParameterInput *pin, int nmesha
   // cross-rank flush path, and is reused by Particles::ExchangePhi for phi's halo swap.
   pmbval = new MeshBoundaryValuesCC(ppack, pin, false);
   pmbval->InitializeBuffers(nmeshaux);
+
+  // Cross-rank deposit-flush staging buffer + communicator. The ghost spill destined
+  // off-rank is bounded by the ghost-cell count of the blocks a sink straddles; size
+  // generously and grow on demand (overflow guarded + warned).
+  dfemit_max_ = 4096;
+  Kokkos::realloc(dfemit_, dfemit_max_, 6);
+  Kokkos::realloc(dfemit_cnt_, 1);
+#if MPI_PARALLEL_ENABLED
+  MPI_Comm_dup(MPI_COMM_WORLD, &mpi_comm_dfscat_);
+#endif
 }
 
 ParticleMesh::~ParticleMesh() {
@@ -351,18 +366,14 @@ void ParticleMesh::FlushDepositBoundaries() {
   int nmb    = pmy_pack->nmb_thispack;
   int nvar   = dmesh.extent_int(1);
 
-#if MPI_PARALLEL_ENABLED
-  // One-time warning for the not-yet-implemented cross-rank path.
-  static bool warned = false;
-  if (!warned && global_variable::nranks > 1) {
-    if (global_variable::my_rank == 0) {
-      std::cout << "### WARNING in ParticleMesh::FlushDepositBoundaries: cross-rank (MPI) "
-                << "particle-mesh deposit flush is not yet implemented; deposits that spill "
-                << "across a rank boundary are dropped." << std::endl;
-    }
-    warned = true;
-  }
-#endif
+  // Cross-rank spill: on >1 rank, every nonzero ghost cell is staged into dfemit_ and
+  // ExchangeDepositFlush() (below) atomic-adds the ones whose containing block is an
+  // off-rank same-level neighbour. Zero the counter each call.
+  const bool mpi_on = (global_variable::nranks > 1);
+  if (mpi_on) Kokkos::deep_copy(dfemit_cnt_, 0);
+  auto dfemit = dfemit_;
+  auto dfcnt  = dfemit_cnt_;
+  const int dfmax = dfemit_max_;
 
   const int my_rank = global_variable::my_rank;
   const int nnghbr = pmy_pack->pmb->nnghbr;
@@ -405,10 +416,25 @@ void ParticleMesh::FlushDepositBoundaries() {
                     msize.d_view(m).x3min + (static_cast<Real>(k-ks) + 0.5)*dzs : 0.0;
     const int mylev = mblev.d_view(m);
 
+    // stage this nonzero ghost cell for the cross-rank exchange (multi-rank only). Its
+    // containing block is resolved host-side in ExchangeDepositFlush(); if that block is
+    // an off-rank same-level neighbour the deposit is atomic-added there, else skipped
+    // (on-rank containers are handled by the device loop below; off-rank level-jumps are
+    // dropped, as on-rank AMR was validated separately).
+    if (mpi_on) {
+      const int e = Kokkos::atomic_fetch_add(&dfcnt(0), 1);
+      if (e < dfmax) {
+        dfemit(e, 0) = static_cast<Real>(m);
+        dfemit(e, 1) = static_cast<Real>(v);
+        dfemit(e, 2) = xs; dfemit(e, 3) = ys; dfemit(e, 4) = zs;
+        dfemit(e, 5) = rho;
+      }
+    }
+
     // find the neighbour MeshBlock whose bounds contain this cell centre
     for (int n = 0; n < nnghbr; ++n) {
       if (nghbr.d_view(m,n).gid < 0) continue;
-      if (nghbr.d_view(m,n).rank != my_rank) continue;   // MPI path TODO (warned)
+      if (nghbr.d_view(m,n).rank != my_rank) continue;   // off-rank: via ExchangeDepositFlush
       const int dnb = nghbr.d_view(m,n).gid - mbgid.d_view(0);
       if (dnb < 0 || dnb >= nmb) continue;               // safety
 
@@ -486,6 +512,9 @@ void ParticleMesh::FlushDepositBoundaries() {
     }
   });
 
+  // add spill whose containing block is an off-rank same-level neighbour (multi-rank)
+  if (mpi_on) ExchangeDepositFlush();
+
   // Zero every ghost cell: its deposit has been flushed to the owning neighbour interior
   // (or, at a physical/off-rank boundary, dropped). Prevents double-counting.
   par_for("PMFlushZeroGhost", DevExeSpace(), 0, nmb-1, 0, nvar-1, 0, n3-1, 0, n2-1, 0, n1-1,
@@ -494,6 +523,160 @@ void ParticleMesh::FlushDepositBoundaries() {
       dm(m, v, k, j, i) = 0.0;
     }
   });
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void ParticleMesh::ExchangeDepositFlush()
+//! \brief MPI transport for the deposit-flush ghost spill. FlushDepositBoundaries stages
+//! every nonzero ghost cell (owner_m, v, x, y, z, rho); here, host-side, each cell is
+//! routed to the neighbour block whose interior contains it -- if that block is an
+//! off-rank same-level neighbour the deposit is atomic-added there (on-rank containers are
+//! folded by the device loop; off-rank level-jumps are dropped). Mirrors
+//! Particles::ExchangeCVReset (add, not overwrite; density only).
+
+void ParticleMesh::ExchangeDepositFlush() {
+#if MPI_PARALLEL_ENABLED
+  const int my_rank = global_variable::my_rank;
+  const int nranks  = global_variable::nranks;
+  if (nranks == 1) return;
+
+  auto cnt_h = Kokkos::create_mirror_view(dfemit_cnt_);
+  Kokkos::deep_copy(cnt_h, dfemit_cnt_);
+  const int nemit = std::min(cnt_h(0), dfemit_max_);
+  if (cnt_h(0) > dfemit_max_ && my_rank == 0) {
+    std::cout << "### WARNING in ParticleMesh::ExchangeDepositFlush: dfemit overflow ("
+              << cnt_h(0) << " > " << dfemit_max_ << "); some cross-rank spill dropped."
+              << std::endl;
+  }
+  auto emit_h = Kokkos::create_mirror_view(dfemit_);
+  Kokkos::deep_copy(emit_h, dfemit_);
+
+  Mesh *pm = pmy_pack->pmesh;
+  auto &ms = pm->mesh_size;
+  const Real Lx1 = ms.x1max - ms.x1min;
+  const Real Lx2 = ms.x2max - ms.x2min;
+  const Real Lx3 = ms.x3max - ms.x3min;
+  auto &indcs = pm->mb_indcs;
+  const int is = indcs.is, js = indcs.js, ks = indcs.ks;
+  auto &nghbr = pmy_pack->pmb->nghbr;
+  auto &mblev = pmy_pack->pmb->mb_lev;
+  const int nnghbr = pmy_pack->pmb->nnghbr;
+
+  std::vector<int>  s_rank;
+  std::vector<int>  s_int;    // 5 ints per record: dest_gid, v, i, j, k
+  std::vector<Real> s_real;   // 1 real per record: rho
+  for (int e = 0; e < nemit; ++e) {
+    const int om = static_cast<int>(emit_h(e, 0));
+    if (om < 0 || om >= pmy_pack->nmb_thispack) continue;
+    const int olev = mblev.h_view(om);
+    const int vv = static_cast<int>(emit_h(e, 1));
+    const Real xw = emit_h(e, 2), yw = emit_h(e, 3), zw = emit_h(e, 4);
+    const Real rho = emit_h(e, 5);
+    for (int n = 0; n < nnghbr; ++n) {
+      if (nghbr.h_view(om, n).gid < 0) continue;
+      const int dg = nghbr.h_view(om, n).gid;
+      const auto &ll = pm->lloc_eachmb[dg];
+      const int nmbx1 = pm->nmb_rootx1 << (ll.level - pm->root_level);
+      const int nmbx2 = pm->nmb_rootx2 << (ll.level - pm->root_level);
+      const int nmbx3 = pm->nmb_rootx3 << (ll.level - pm->root_level);
+      const Real x1d = (ll.lx1 == 0) ? ms.x1min : LeftEdgeX(ll.lx1, nmbx1, ms.x1min, ms.x1max);
+      const Real x1u = (ll.lx1 == nmbx1-1) ? ms.x1max
+                                           : LeftEdgeX(ll.lx1+1, nmbx1, ms.x1min, ms.x1max);
+      const Real x2d = (ll.lx2 == 0) ? ms.x2min : LeftEdgeX(ll.lx2, nmbx2, ms.x2min, ms.x2max);
+      const Real x2u = (ll.lx2 == nmbx2-1) ? ms.x2max
+                                           : LeftEdgeX(ll.lx2+1, nmbx2, ms.x2min, ms.x2max);
+      const Real x3d = (ll.lx3 == 0) ? ms.x3min : LeftEdgeX(ll.lx3, nmbx3, ms.x3min, ms.x3max);
+      const Real x3u = (ll.lx3 == nmbx3-1) ? ms.x3max
+                                           : LeftEdgeX(ll.lx3+1, nmbx3, ms.x3min, ms.x3max);
+      Real xc = xw, yc = yw, zc = zw, ctr;
+      ctr = 0.5*(x1d + x1u);  if (xc-ctr >  0.5*Lx1) xc -= Lx1;  if (xc-ctr < -0.5*Lx1) xc += Lx1;
+      ctr = 0.5*(x2d + x2u);  if (yc-ctr >  0.5*Lx2) yc -= Lx2;  if (yc-ctr < -0.5*Lx2) yc += Lx2;
+      ctr = 0.5*(x3d + x3u);  if (zc-ctr >  0.5*Lx3) zc -= Lx3;  if (zc-ctr < -0.5*Lx3) zc += Lx3;
+      if (xc < x1d || xc >= x1u || yc < x2d || yc >= x2u || zc < x3d || zc >= x3u) continue;
+      // unique containing block found; route only if it is an off-rank same-level neighbour
+      if (nghbr.h_view(om, n).rank != my_rank && nghbr.h_view(om, n).lev == olev) {
+        const Real dx1 = (x1u-x1d)/indcs.nx1;
+        const Real dx2 = (x2u-x2d)/indcs.nx2;
+        const Real dx3 = (x3u-x3d)/indcs.nx3;
+        s_rank.push_back(pm->rank_eachmb[dg]);
+        s_int.push_back(dg); s_int.push_back(vv);
+        s_int.push_back(is + static_cast<int>((xc-x1d)/dx1));
+        s_int.push_back(js + static_cast<int>((yc-x2d)/dx2));
+        s_int.push_back(ks + static_cast<int>((zc-x3d)/dx3));
+        s_real.push_back(rho);
+      }
+      break;   // exactly one block contains the cell centre
+    }
+  }
+
+  std::vector<int> nsend(nranks, 0);
+  for (int r : s_rank) nsend[r]++;
+  std::vector<int> nrecv(nranks, 0);
+  MPI_Alltoall(nsend.data(), 1, MPI_INT, nrecv.data(), 1, MPI_INT, mpi_comm_dfscat_);
+
+  std::vector<int> soff(nranks, 0), sacc(nranks, 0);
+  for (int r = 1; r < nranks; ++r) soff[r] = soff[r-1] + nsend[r-1];
+  const int ntot_send = soff[nranks-1] + nsend[nranks-1];
+  std::vector<int>  send_i(5*ntot_send);
+  std::vector<Real> send_r(ntot_send);
+  for (size_t rec = 0; rec < s_rank.size(); ++rec) {
+    const int r = s_rank[rec];
+    const int pos = soff[r] + sacc[r]; sacc[r]++;
+    for (int q = 0; q < 5; ++q) send_i[5*pos+q] = s_int[5*rec+q];
+    send_r[pos] = s_real[rec];
+  }
+
+  std::vector<int> roff(nranks, 0);
+  for (int r = 1; r < nranks; ++r) roff[r] = roff[r-1] + nrecv[r-1];
+  const int ntot_recv = roff[nranks-1] + nrecv[nranks-1];
+  std::vector<int>  recv_i(5*ntot_recv);
+  std::vector<Real> recv_r(ntot_recv);
+
+  std::vector<MPI_Request> reqs;
+  for (int r = 0; r < nranks; ++r) {
+    if (r == my_rank || nrecv[r] == 0) continue;
+    reqs.emplace_back();
+    MPI_Irecv(&recv_i[5*roff[r]], 5*nrecv[r], MPI_INT, r, 1, mpi_comm_dfscat_, &reqs.back());
+    reqs.emplace_back();
+    MPI_Irecv(&recv_r[roff[r]], nrecv[r], MPI_ATHENA_REAL, r, 0, mpi_comm_dfscat_, &reqs.back());
+  }
+  for (int r = 0; r < nranks; ++r) {
+    if (r == my_rank || nsend[r] == 0) continue;
+    reqs.emplace_back();
+    MPI_Isend(&send_i[5*soff[r]], 5*nsend[r], MPI_INT, r, 1, mpi_comm_dfscat_, &reqs.back());
+    reqs.emplace_back();
+    MPI_Isend(&send_r[soff[r]], nsend[r], MPI_ATHENA_REAL, r, 0, mpi_comm_dfscat_, &reqs.back());
+  }
+  if (!reqs.empty()) MPI_Waitall(reqs.size(), reqs.data(), MPI_STATUSES_IGNORE);
+  if (ntot_recv == 0) return;
+
+  const int gid0 = pm->gids_eachrank[my_rank];
+  const int nmb_ = pmy_pack->nmb_thispack;
+  auto dm = dmesh;
+  DualArray2D<int>  rint("dfrecv_i", ntot_recv, 4);   // m, v, and the (i,j,k) -> pack j,k
+  DualArray2D<Real> rreal("dfrecv_r", ntot_recv, 1);
+  DualArray2D<int>  rijk("dfrecv_ijk", ntot_recv, 3);
+  for (int t = 0; t < ntot_recv; ++t) {
+    rint.h_view(t,0) = recv_i[5*t+0] - gid0;   // local block index
+    rint.h_view(t,1) = recv_i[5*t+1];          // v
+    rijk.h_view(t,0) = recv_i[5*t+2];          // i
+    rijk.h_view(t,1) = recv_i[5*t+3];          // j
+    rijk.h_view(t,2) = recv_i[5*t+4];          // k
+    rreal.h_view(t,0) = recv_r[t];
+  }
+  rint.template modify<HostMemSpace>();  rint.template sync<DevExeSpace>();
+  rijk.template modify<HostMemSpace>();  rijk.template sync<DevExeSpace>();
+  rreal.template modify<HostMemSpace>(); rreal.template sync<DevExeSpace>();
+  auto ri = rint.d_view;  auto rk = rijk.d_view;  auto rr = rreal.d_view;
+
+  Kokkos::parallel_for("dfflush_apply", Kokkos::RangePolicy<>(DevExeSpace(), 0, ntot_recv),
+  KOKKOS_LAMBDA(const int t) {
+    const int m = ri(t,0), v = ri(t,1);
+    const int i = rk(t,0), j = rk(t,1), k = rk(t,2);
+    if (m < 0 || m >= nmb_) return;
+    Kokkos::atomic_add(&dm(m, v, k, j, i), rr(t,0));
+  });
+#endif
 }
 
 }  // namespace particles

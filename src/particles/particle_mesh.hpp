@@ -123,8 +123,11 @@ class ParticleMesh {
   // (with periodic wrapping), so faces/edges/corners and graded octree refinement all
   // use one code path -- including coarser "interior edge" regions that SetNeighbors
   // leaves unpopulated because the coarse face neighbour covers them.
-  // Off-rank (MPI) neighbours are not yet folded (warned once).
+  // Off-rank same-level neighbours are folded via a sparse cross-rank exchange
+  // (ExchangeDepositFlush, mirroring the accretion CV scatter); off-rank level-jumps
+  // are still dropped (warned once).
   void FlushDepositBoundaries();
+  void ExchangeDepositFlush();   // MPI: add off-rank ghost-spill deposits to owners
 
   // Boundary-value helper for dmesh: provides the buffers/MPI machinery for the
   // future cross-rank flush path, and is reused by Particles::ExchangePhi for the
@@ -138,6 +141,14 @@ class ParticleMesh {
   // deposit; a nonzero count triggers a rate-limited warning instead of memory
   // corruption / SIGBUS.
   DvceArray1D<int> nbad_;
+  // Cross-rank deposit-flush staging: off-rank-destined ghost spill (owner_m, v, x, y, z,
+  // rho); ExchangeDepositFlush() routes + atomic-adds into off-rank interiors.
+  DvceArray2D<Real> dfemit_;
+  DvceArray1D<int>  dfemit_cnt_;
+  int dfemit_max_ = 0;
+#if MPI_PARALLEL_ENABLED
+  MPI_Comm mpi_comm_dfscat_ = MPI_COMM_NULL;
+#endif
 };
 
 }  // namespace particles

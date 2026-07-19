@@ -42,10 +42,22 @@
 //! Athena++ ghost-particle mechanism and its NGHOST >= req+rctrl+1 requirement).
 //! Duplicate writes carry identical values, so no atomics are needed.
 //!
-//! Sinks are SKIPPED (no accretion, warning-free) when the region they would touch
-//! overlaps (a) a different-level (AMR) neighbour -- the reference also punts on AMR --
-//! or (b) an off-rank neighbour (cross-rank scatter TODO, same scope as the deposit
-//! flush; a one-time host warning is printed when running multi-rank).
+//! CROSS-RANK control volumes: reset cells whose reach touches an off-rank same-level
+//! neighbour are additionally staged into a device buffer and exchanged after the
+//! kernel (ExchangeCVReset): counts negotiated with MPI_Alltoall, then per-peer
+//! Isend/Irecv of (position, rho, M1..3) records on a dedicated communicator. Each
+//! receiver applies the SAME geometric scatter locally -- every local block whose
+//! interior+ghost array contains the (wrapped) position gets the value, interior and
+//! ghost copies alike, so multi-rank runs stay bit-consistent with single-rank ones.
+//! The sink cell itself is binned in the GLOBAL mesh frame (not the owner block's
+//! frame): block-frame binning resolves a position within round-off of a block edge
+//! differently in different blocks' frames (catastrophic cancellation), which breaks
+//! decomposition invariance.
+//!
+//! Sinks are SKIPPED (no accretion, warning-free) only when the region they would
+//! touch overlaps a different-level (AMR) neighbour -- the reference also punts on
+//! AMR; the sink-region AMR refinement halo (see be_sink.cpp) keeps real runs clear
+//! of this case.
 //!
 //! After scattering the reset conserved values, the matching PRIMITIVES are written to
 //! w0 for the same cells (isothermal: w_d = u_d, w_vi = M_i/rho). In AthenaK,
@@ -55,14 +67,21 @@
 //!
 //! LIMITATIONS (documented scope): isothermal only (resets IDN+IM1..3; no energy/B);
 //! same-level neighbourhoods only (sink near an AMR coarse-fine boundary skips
-//! accretion); single-rank control volumes (cross-rank skips accretion).
+//! accretion). Cross-rank particle MIGRATION is separate machinery: a sink whose
+//! position leaves this rank's blocks keeps a stale PGID (SetGIDFromPosition is
+//! on-rank only); accretion stays correct while the sink remains within the ghost
+//! depth of its stale owner, i.e. for slowly-moving sinks near a rank boundary.
 
+#include <algorithm>
+#include <cstdlib>
 #include <iostream>
 #include <string>
+#include <vector>
 
 #include "athena.hpp"
 #include "globals.hpp"
 #include "mesh/mesh.hpp"
+#include "coordinates/cell_locations.hpp"
 #include "driver/driver.hpp"
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
@@ -87,19 +106,21 @@ TaskStatus Particles::AccreteMass(Driver *pdriver, int stage) {
   auto u0 = is_mhd ? pmy_pack->pmhd->u0 : pmy_pack->phydro->u0;
   auto w0 = is_mhd ? pmy_pack->pmhd->w0 : pmy_pack->phydro->w0;
 
-#if MPI_PARALLEL_ENABLED
-  // one-time warning: sinks whose control volume touches an off-rank neighbour skip
-  // accretion (cross-rank scatter TODO, same scope as the deposit-flush MPI path)
-  static bool warned_mpi = false;
-  if (!warned_mpi && global_variable::nranks > 1) {
-    if (global_variable::my_rank == 0) {
-      std::cout << "### WARNING in Particles::AccreteMass: cross-rank control volumes "
-                << "are not yet implemented; sinks within " << 4
-                << " cells of a rank boundary will not accrete." << std::endl;
+  // cross-rank control-volume reset: when running on >1 rank, sinks whose CV reaches an
+  // off-rank neighbour stage those reset cells into cvemit_ for ExchangeCVReset() (below).
+  // Grow the staging buffer with the sink count and zero its counter each step.
+  const bool mpi_on = (global_variable::nranks > 1);
+  if (mpi_on) {
+    const int need = std::max(1, nprtcl_thispack)*64;
+    if (need > cvemit_max_) {
+      cvemit_max_ = need;
+      Kokkos::realloc(cvemit_, cvemit_max_, 8);
     }
-    warned_mpi = true;
+    Kokkos::deep_copy(cvemit_cnt_, 0);
   }
-#endif
+  auto cvemit = cvemit_;
+  auto cvcnt = cvemit_cnt_;
+  const int cvmax = cvemit_max_;
 
   auto &pr = prtcl_rdata;
   auto &pi = prtcl_idata;
@@ -147,6 +168,7 @@ TaskStatus Particles::AccreteMass(Driver *pdriver, int stage) {
       // Guard invalid PGID before ANY indexed access (mirrors ParticleMesh::DepositMass):
       // a corrupt/ejected particle must skip accretion, not fault.
       if (m < 0 || m >= nmb_) continue;
+      bool touches_offrank = false;   // CV reaches an off-rank same-level neighbour
       const Real dx1 = mbsize.d_view(m).dx1;
       const Real dx2 = mbsize.d_view(m).dx2;
       const Real dx3 = mbsize.d_view(m).dx3;
@@ -154,24 +176,34 @@ TaskStatus Particles::AccreteMass(Driver *pdriver, int stage) {
 
       // cell containing the sink now and at the start of the step -- guard the
       // double->int conversions against non-finite/wild positions (UB otherwise),
-      // and use floor (truncation is wrong for fractional offsets in (-1,0))
-      const Real xi1 = (pr(IPX, p) - mbsize.d_view(m).x1min)/dx1;
-      const Real xi2 = (pr(IPY, p) - mbsize.d_view(m).x2min)/dx2;
-      const Real xi3 = (pr(IPZ, p) - mbsize.d_view(m).x3min)/dx3;
-      const Real yi1 = (pr(IPX0, p) - mbsize.d_view(m).x1min)/dx1;
-      const Real yi2 = (pr(IPY0, p) - mbsize.d_view(m).x2min)/dx2;
-      const Real yi3 = (pr(IPZ0, p) - mbsize.d_view(m).x3min)/dx3;
+      // and use floor (truncation is wrong for fractional offsets in (-1,0)).
+      // BIN IN THE GLOBAL MESH FRAME, then convert to the owner-local index: block-frame
+      // binning is frame-DEPENDENT for a position within round-off of a block boundary
+      // (catastrophic cancellation resolves the same physical point to different cells
+      // in different blocks' frames), which breaks decomposition invariance when ranks
+      // hold different owner blocks. One global origin -> one answer on every rank.
+      const Real xi1 = (pr(IPX, p) - msz.x1min)/dx1;
+      const Real xi2 = (pr(IPY, p) - msz.x2min)/dx2;
+      const Real xi3 = (pr(IPZ, p) - msz.x3min)/dx3;
+      const Real yi1 = (pr(IPX0, p) - msz.x1min)/dx1;
+      const Real yi2 = (pr(IPY0, p) - msz.x2min)/dx2;
+      const Real yi3 = (pr(IPZ0, p) - msz.x3min)/dx3;
       if (!(xi1 > -1.0e9 && xi1 < 1.0e9) || !(xi2 > -1.0e9 && xi2 < 1.0e9) ||
           !(xi3 > -1.0e9 && xi3 < 1.0e9) || !(yi1 > -1.0e9 && yi1 < 1.0e9) ||
           !(yi2 > -1.0e9 && yi2 < 1.0e9) || !(yi3 > -1.0e9 && yi3 < 1.0e9)) {
         continue;
       }
-      const int ip  = static_cast<int>(Kokkos::floor(xi1)) + is;
-      const int jp  = static_cast<int>(Kokkos::floor(xi2)) + js;
-      const int kp  = static_cast<int>(Kokkos::floor(xi3)) + ks;
-      const int ip0 = static_cast<int>(Kokkos::floor(yi1)) + is;
-      const int jp0 = static_cast<int>(Kokkos::floor(yi2)) + js;
-      const int kp0 = static_cast<int>(Kokkos::floor(yi3)) + ks;
+      // owner block's integer cell offset from the mesh origin (exact by construction:
+      // block edges lie on the global cell lattice)
+      const int off1 = static_cast<int>((mbsize.d_view(m).x1min - msz.x1min)/dx1 + 0.5);
+      const int off2 = static_cast<int>((mbsize.d_view(m).x2min - msz.x2min)/dx2 + 0.5);
+      const int off3 = static_cast<int>((mbsize.d_view(m).x3min - msz.x3min)/dx3 + 0.5);
+      const int ip  = static_cast<int>(Kokkos::floor(xi1)) - off1 + is;
+      const int jp  = static_cast<int>(Kokkos::floor(xi2)) - off2 + js;
+      const int kp  = static_cast<int>(Kokkos::floor(xi3)) - off3 + ks;
+      const int ip0 = static_cast<int>(Kokkos::floor(yi1)) - off1 + is;
+      const int jp0 = static_cast<int>(Kokkos::floor(yi2)) - off2 + js;
+      const int kp0 = static_cast<int>(Kokkos::floor(yi3)) - off3 + ks;
 
       // ---- eligibility gate --------------------------------------------------------
       // The region this sink touches (new + old control volumes and their extrapolation
@@ -196,14 +228,18 @@ TaskStatus Particles::AccreteMass(Driver *pdriver, int stage) {
         // direction the sink is close to. Distance of sink to the owner face in the
         // neighbour's direction:
         if (!same_rank) {
-          // off-rank: conservative -- skip if the sink is within reach of ANY face
+          // off-rank: conservative proximity test (neighbour box unknown on device)
           const bool near = (xs - mbsize.d_view(m).x1min < h1) ||
                             (mbsize.d_view(m).x1max - xs < h1) ||
                             (ys - mbsize.d_view(m).x2min < h2) ||
                             (mbsize.d_view(m).x2max - ys < h2) ||
                             (zs - mbsize.d_view(m).x3min < h3) ||
                             (mbsize.d_view(m).x3max - zs < h3);
-          if (near) { eligible = false; break; }
+          if (near) {
+            // off-rank SAME level: reset cells are staged for the cross-rank exchange
+            // (ExchangeCVReset). off-rank DIFFERENT level (AMR): still skip.
+            if (same_lev) { touches_offrank = true; } else { eligible = false; break; }
+          }
           continue;
         }
         // on-rank different level: precise overlap test against its box
@@ -350,6 +386,18 @@ TaskStatus Particles::AccreteMass(Driver *pdriver, int stage) {
               w0(dnb, IVZ, kn_, jn_, in_) = scr(3, c)/wd;
             }
           }
+          // stage this reset cell for the cross-rank exchange (owner + physical centre +
+          // conserved values); ExchangeCVReset() routes it to any off-rank block whose
+          // interior contains the position. Only for sinks flagged near a rank boundary.
+          if (touches_offrank) {
+            const int e = Kokkos::atomic_fetch_add(&cvcnt(0), 1);
+            if (e < cvmax) {
+              cvemit(e, 0) = static_cast<Real>(m);
+              cvemit(e, 1) = xw; cvemit(e, 2) = yw; cvemit(e, 3) = zw;
+              cvemit(e, 4) = scr(0, c); cvemit(e, 5) = scr(1, c);
+              cvemit(e, 6) = scr(2, c); cvemit(e, 7) = scr(3, c);
+            }
+          }
         });
         tm.team_barrier();
       };
@@ -380,7 +428,214 @@ TaskStatus Particles::AccreteMass(Driver *pdriver, int stage) {
     }
   });
 
+  // apply reset cells that landed in off-rank neighbour interiors (multi-rank only)
+  if (mpi_on) ExchangeCVReset();
+
   return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void Particles::ExchangeCVReset()
+//! \brief MPI transport for the control-volume reset. The accretion kernel stages every
+//! reset cell of near-a-rank-boundary sinks into cvemit_ (owner_m, x, y, z, rho, M1..3).
+//! Here, host-side: for each staged cell find the off-rank same-level neighbour block(s)
+//! whose INTERIOR contains it (dest geometry from Mesh::lloc_eachmb + mesh_size, so no
+//! device access to off-rank blocks is needed), negotiate counts, Isend/Irecv the payload
+//! (dest_gid,i,j,k + rho,M1..3), and the receiver overwrites u0/w0. Same-level only
+//! (AMR level-jumps are gated out); mirrors the ParticlesBoundaryValues MPI pattern.
+
+void Particles::ExchangeCVReset() {
+#if MPI_PARALLEL_ENABLED
+  const int my_rank = global_variable::my_rank;
+  const int nranks  = global_variable::nranks;
+  if (nranks == 1) return;
+
+  // how many cells were staged this step
+  auto cnt_h = Kokkos::create_mirror_view(cvemit_cnt_);
+  Kokkos::deep_copy(cnt_h, cvemit_cnt_);
+  const int nemit = std::min(cnt_h(0), cvemit_max_);
+  if (cnt_h(0) > cvemit_max_ && my_rank == 0) {
+    std::cout << "### WARNING in Particles::ExchangeCVReset: cvemit overflow ("
+              << cnt_h(0) << " > " << cvemit_max_ << "); some cross-rank resets dropped."
+              << std::endl;
+  }
+  auto emit_h = Kokkos::create_mirror_view(cvemit_);
+  Kokkos::deep_copy(emit_h, cvemit_);
+
+  Mesh *pm = pmy_pack->pmesh;
+  auto &ms = pm->mesh_size;
+  const Real Lx1 = ms.x1max - ms.x1min;
+  const Real Lx2 = ms.x2max - ms.x2min;
+  const Real Lx3 = ms.x3max - ms.x3min;
+  auto &indcs = pm->mb_indcs;
+  const int is = indcs.is, js = indcs.js, ks = indcs.ks;
+  auto &nghbr = pmy_pack->pmb->nghbr;
+  auto &mblev = pmy_pack->pmb->mb_lev;
+  const int nnghbr = pmy_pack->pmb->nnghbr;
+
+  // build the send plan: a reset cell must reach EVERY rank owning a same-level
+  // neighbour block whose interior+ghost array contains it -- the receiver then writes
+  // all its local coincident copies (interior AND ghosts), mirroring the on-rank
+  // scatter. Writing only interiors is NOT enough: the receiving rank's ghost copies
+  // would stay pre-reset and its next flux computation near the boundary would diverge
+  // from the single-rank run. Payload: 7 reals (x, y, z, rho, M1, M2, M3) per record;
+  // one record per (cell, destination rank), deduplicated across that rank's blocks.
+  std::vector<int>  s_rank;    // destination rank per record
+  std::vector<Real> s_real;    // 7 reals per record
+  for (int e = 0; e < nemit; ++e) {
+    const int om = static_cast<int>(emit_h(e, 0));
+    if (om < 0 || om >= pmy_pack->nmb_thispack) continue;
+    const int olev = mblev.h_view(om);
+    const Real xw = emit_h(e, 1), yw = emit_h(e, 2), zw = emit_h(e, 3);
+    int sent_ranks[8]; int nsent = 0;   // per-cell rank dedup (few peers in practice)
+    for (int n = 0; n < nnghbr; ++n) {
+      if (nghbr.h_view(om, n).gid < 0) continue;
+      if (nghbr.h_view(om, n).rank == my_rank) continue;   // on-rank done on device
+      if (nghbr.h_view(om, n).lev != olev) continue;       // AMR level-jump gated out
+      const int drank = nghbr.h_view(om, n).rank;
+      bool dup = false;
+      for (int q = 0; q < nsent; ++q) if (sent_ranks[q] == drank) { dup = true; break; }
+      if (dup) continue;
+      const int dg = nghbr.h_view(om, n).gid;
+      const auto &ll = pm->lloc_eachmb[dg];
+      const int nmbx1 = pm->nmb_rootx1 << (ll.level - pm->root_level);
+      const int nmbx2 = pm->nmb_rootx2 << (ll.level - pm->root_level);
+      const int nmbx3 = pm->nmb_rootx3 << (ll.level - pm->root_level);
+      const Real x1d = (ll.lx1 == 0) ? ms.x1min : LeftEdgeX(ll.lx1, nmbx1, ms.x1min, ms.x1max);
+      const Real x1u = (ll.lx1 == nmbx1-1) ? ms.x1max
+                                           : LeftEdgeX(ll.lx1+1, nmbx1, ms.x1min, ms.x1max);
+      const Real x2d = (ll.lx2 == 0) ? ms.x2min : LeftEdgeX(ll.lx2, nmbx2, ms.x2min, ms.x2max);
+      const Real x2u = (ll.lx2 == nmbx2-1) ? ms.x2max
+                                           : LeftEdgeX(ll.lx2+1, nmbx2, ms.x2min, ms.x2max);
+      const Real x3d = (ll.lx3 == 0) ? ms.x3min : LeftEdgeX(ll.lx3, nmbx3, ms.x3min, ms.x3max);
+      const Real x3u = (ll.lx3 == nmbx3-1) ? ms.x3max
+                                           : LeftEdgeX(ll.lx3+1, nmbx3, ms.x3min, ms.x3max);
+      const Real dx1 = (x1u-x1d)/indcs.nx1;
+      const Real dx2 = (x2u-x2d)/indcs.nx2;
+      const Real dx3 = (x3u-x3d)/indcs.nx3;
+      // wrap the cell centre into the neighbour's frame (periodic domains)
+      Real xc = xw, yc = yw, zc = zw, ctr;
+      ctr = 0.5*(x1d + x1u);  if (xc-ctr >  0.5*Lx1) xc -= Lx1;  if (xc-ctr < -0.5*Lx1) xc += Lx1;
+      ctr = 0.5*(x2d + x2u);  if (yc-ctr >  0.5*Lx2) yc -= Lx2;  if (yc-ctr < -0.5*Lx2) yc += Lx2;
+      ctr = 0.5*(x3d + x3u);  if (zc-ctr >  0.5*Lx3) zc -= Lx3;  if (zc-ctr < -0.5*Lx3) zc += Lx3;
+      // containment in the EXPANDED (interior + ng ghosts) bounds
+      const Real g1 = indcs.ng*dx1, g2 = indcs.ng*dx2, g3 = indcs.ng*dx3;
+      if (xc < x1d-g1 || xc >= x1u+g1 || yc < x2d-g2 || yc >= x2u+g2 ||
+          zc < x3d-g3 || zc >= x3u+g3) continue;
+      if (nsent < 8) sent_ranks[nsent++] = drank;
+      s_rank.push_back(drank);
+      s_real.push_back(xw); s_real.push_back(yw); s_real.push_back(zw);
+      s_real.push_back(emit_h(e,4)); s_real.push_back(emit_h(e,5));
+      s_real.push_back(emit_h(e,6)); s_real.push_back(emit_h(e,7));
+    }
+  }
+
+  // per-destination-rank counts of records to send
+  std::vector<int> nsend(nranks, 0);
+  for (int r : s_rank) nsend[r]++;
+  std::vector<int> nrecv(nranks, 0);
+  MPI_Alltoall(nsend.data(), 1, MPI_INT, nrecv.data(), 1, MPI_INT, mpi_comm_cvscat_);
+
+  // pack sends contiguously per destination rank (stable order: preserves the emit
+  // order, so the old-CV overlap re-reset correctly supersedes the new-CV values)
+  std::vector<int> soff(nranks, 0), sacc(nranks, 0);
+  for (int r = 1; r < nranks; ++r) soff[r] = soff[r-1] + nsend[r-1];
+  const int ntot_send = soff[nranks-1] + nsend[nranks-1];
+  std::vector<Real> send_r(7*ntot_send);
+  for (size_t rec = 0; rec < s_rank.size(); ++rec) {
+    const int r = s_rank[rec];
+    const int pos = soff[r] + sacc[r]; sacc[r]++;
+    for (int q = 0; q < 7; ++q) send_r[7*pos+q] = s_real[7*rec+q];
+  }
+
+  // receive layout
+  std::vector<int> roff(nranks, 0);
+  for (int r = 1; r < nranks; ++r) roff[r] = roff[r-1] + nrecv[r-1];
+  const int ntot_recv = roff[nranks-1] + nrecv[nranks-1];
+  std::vector<Real> recv_r(7*ntot_recv);
+
+  // post non-blocking recvs then sends, per peer rank
+  std::vector<MPI_Request> reqs;
+  for (int r = 0; r < nranks; ++r) {
+    if (r == my_rank || nrecv[r] == 0) continue;
+    reqs.emplace_back();
+    MPI_Irecv(&recv_r[7*roff[r]], 7*nrecv[r], MPI_ATHENA_REAL, r, 0, mpi_comm_cvscat_,
+              &reqs.back());
+  }
+  for (int r = 0; r < nranks; ++r) {
+    if (r == my_rank || nsend[r] == 0) continue;
+    reqs.emplace_back();
+    MPI_Isend(&send_r[7*soff[r]], 7*nsend[r], MPI_ATHENA_REAL, r, 0, mpi_comm_cvscat_,
+              &reqs.back());
+  }
+  // records destined for this rank never go through MPI (neighbour rank != my_rank), so
+  // no self-copy is needed.
+  if (!reqs.empty()) MPI_Waitall(reqs.size(), reqs.data(), MPI_STATUSES_IGNORE);
+
+  if (ntot_recv == 0) return;
+
+  // apply on the device with the SAME geometric scatter as the on-rank path: for each
+  // received cell, write every local coincident copy -- any local block whose
+  // interior+ghost array contains the (wrapped) position, interior or ghost alike.
+  // Parallel over blocks, serial over records within a block: preserves the record
+  // order so an old-CV overlap re-reset supersedes the new-CV value (no write race --
+  // different blocks write disjoint arrays).
+  const bool is_mhd = (pmy_pack->pmhd != nullptr);
+  auto u0 = is_mhd ? pmy_pack->pmhd->u0 : pmy_pack->phydro->u0;
+  auto w0 = is_mhd ? pmy_pack->pmhd->w0 : pmy_pack->phydro->w0;
+  const int nmb_ = pmy_pack->nmb_thispack;
+  auto &mbsize = pmy_pack->pmb->mb_size;
+  const int ncells1 = indcs.nx1 + 2*indcs.ng;
+  const int ncells2 = indcs.nx2 + 2*indcs.ng;
+  const int ncells3 = indcs.nx3 + 2*indcs.ng;
+
+  DualArray2D<Real> rreal("cvrecv_r", ntot_recv, 7);
+  for (int t = 0; t < ntot_recv; ++t) {
+    for (int q = 0; q < 7; ++q) rreal.h_view(t,q) = recv_r[7*t+q];
+  }
+  rreal.template modify<HostMemSpace>();  rreal.template sync<DevExeSpace>();
+  auto rr = rreal.d_view;
+  const int is_ = is, js_ = js, ks_ = ks;
+
+  Kokkos::parallel_for("cvreset_apply", Kokkos::RangePolicy<>(DevExeSpace(), 0, nmb_),
+  KOKKOS_LAMBDA(const int m) {
+    const Real x1d = mbsize.d_view(m).x1min, x1u = mbsize.d_view(m).x1max;
+    const Real x2d = mbsize.d_view(m).x2min, x2u = mbsize.d_view(m).x2max;
+    const Real x3d = mbsize.d_view(m).x3min, x3u = mbsize.d_view(m).x3max;
+    const Real dx1 = mbsize.d_view(m).dx1;
+    const Real dx2 = mbsize.d_view(m).dx2;
+    const Real dx3 = mbsize.d_view(m).dx3;
+    for (int t = 0; t < ntot_recv; ++t) {
+      // wrap the cell centre into this block's frame (periodic domains)
+      Real xc = rr(t,0), yc = rr(t,1), zc = rr(t,2), ctr;
+      ctr = 0.5*(x1d + x1u);
+      if (xc - ctr >  0.5*Lx1) xc -= Lx1;
+      if (xc - ctr < -0.5*Lx1) xc += Lx1;
+      ctr = 0.5*(x2d + x2u);
+      if (yc - ctr >  0.5*Lx2) yc -= Lx2;
+      if (yc - ctr < -0.5*Lx2) yc += Lx2;
+      ctr = 0.5*(x3d + x3u);
+      if (zc - ctr >  0.5*Lx3) zc -= Lx3;
+      if (zc - ctr < -0.5*Lx3) zc += Lx3;
+      const int i = static_cast<int>(Kokkos::floor((xc - x1d)/dx1)) + is_;
+      const int j = static_cast<int>(Kokkos::floor((yc - x2d)/dx2)) + js_;
+      const int k = static_cast<int>(Kokkos::floor((zc - x3d)/dx3)) + ks_;
+      if (i < 0 || i >= ncells1 || j < 0 || j >= ncells2 ||
+          k < 0 || k >= ncells3) continue;
+      const Real rho = rr(t,3), m1 = rr(t,4), m2 = rr(t,5), m3 = rr(t,6);
+      u0(m, IDN, k, j, i) = rho;
+      u0(m, IM1, k, j, i) = m1;
+      u0(m, IM2, k, j, i) = m2;
+      u0(m, IM3, k, j, i) = m3;
+      if (rho > 0.0) {
+        w0(m, IDN, k, j, i) = rho;
+        w0(m, IVX, k, j, i) = m1/rho;
+        w0(m, IVY, k, j, i) = m2/rho;
+        w0(m, IVZ, k, j, i) = m3/rho;
+      }
+    }
+  });
+#endif
 }
 
 }  // namespace particles

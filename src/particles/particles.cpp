@@ -121,6 +121,18 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     ppm = new ParticleMesh(ppack, pin, 1);
   }
 
+  // staging buffer + communicator for the cross-rank control-volume reset (MPI). Sized
+  // to hold every reset cell of every sink twice over (new + old CV = 54 cells), which
+  // bounds the off-rank-destined subset; overflow is guarded + warned in the kernel.
+  if (particle_type == ParticleType::sink && accretion) {
+    cvemit_max_ = std::max(1, nprtcl_thispack)*64;
+    Kokkos::realloc(cvemit_, cvemit_max_, 8);
+    Kokkos::realloc(cvemit_cnt_, 1);
+#if MPI_PARALLEL_ENABLED
+    MPI_Comm_dup(MPI_COMM_WORLD, &mpi_comm_cvscat_);
+#endif
+  }
+
   // allocate boundary object
   pbval_part = new ParticlesBoundaryValues(this, pin);
 }

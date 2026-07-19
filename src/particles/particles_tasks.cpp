@@ -6,6 +6,7 @@
 //! \file particles_tasks.cpp
 //! \brief functions that control Particles tasks stored in tasklists in MeshBlockPack
 
+#include <algorithm>
 #include <map>
 #include <memory>
 #include <string>
@@ -19,6 +20,7 @@
 #include "parameter_input.hpp"
 #include "tasklist/task_list.hpp"
 #include "mesh/mesh.hpp"
+#include "mesh/nghbr_index.hpp"
 #include "bvals/bvals.hpp"
 #include "gravity/gravity.hpp"
 #include "particles.hpp"
@@ -63,12 +65,22 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
     id.push   = tl["stagen"]->AddTask(&Particles::Push, this, id.xphi);
     // After the drift, re-bin by absolute position (not the incremental neighbour-based
     // SetNewPrtclGID, which mis-assigns PGID for particles crossing coarse-fine boundaries
-    // under AMR). Serial / on-rank only -- cross-rank particle communication is a TODO.
+    // under AMR). Particles that left every local block are assigned their neighbour gid
+    // and staged for the cross-rank migration chain below.
     id.newgid = tl["stagen"]->AddTask(&Particles::SetGIDFromPosition, this, id.push);
+    // cross-rank particle migration (same chain as tracers, driven by the sendlist
+    // populated in SetGIDFromPosition); no-ops on a single rank
+    id.count  = tl["stagen"]->AddTask(&Particles::SendCnt, this, id.newgid);
+    id.irecv  = tl["stagen"]->AddTask(&Particles::InitRecv, this, id.count);
+    id.sendp  = tl["stagen"]->AddTask(&Particles::SendP, this, id.irecv);
+    id.recvp  = tl["stagen"]->AddTask(&Particles::RecvP, this, id.sendp);
+    id.crecv  = tl["stagen"]->AddTask(&Particles::ClearRecv, this, id.recvp);
+    id.csend  = tl["stagen"]->AddTask(&Particles::ClearSend, this, id.crecv);
     // Refresh the particle timestep every cycle from the end-of-cycle velocities
     // (dtnew was previously seeded once at t=0 by the pgens -- a latent bug once
-    // particle speeds grow, e.g. under accretion).
-    id.newdt  = tl["stagen"]->AddTask(&Particles::NewTimeStep, this, id.newgid);
+    // particle speeds grow, e.g. under accretion). After the migration chain, so
+    // arrivals contribute on their new rank.
+    id.newdt  = tl["stagen"]->AddTask(&Particles::NewTimeStep, this, id.csend);
 
     // operator-split accretion: gas in the control volume -> sink, at the last RK stage.
     // Registered only when <particles>/accretion=true -- orbit/gravity tests with inert
@@ -118,8 +130,12 @@ TaskStatus Particles::Deposit(Driver *pdrive, int stage) {
 //! \brief Recompute each particle's PGID absolutely, from its position, by finding the
 //! MeshBlock in this pack whose bounds contain it (lower-inclusive). Unlike the
 //! incremental SetNewPrtclGID, this recovers correct PGIDs after an AMR regrid has
-//! renumbered MeshBlocks. Serial / on-rank: a particle whose owning block is on another
-//! rank is left unchanged (cross-rank redistribution on regrid is a TODO).
+//! renumbered MeshBlocks. A particle whose position has left every local block falls
+//! back to the neighbour-based assignment from its current owner (valid because the
+//! particle CFL limits the drift to <= 1 cell/step) and, when the destination is
+//! off-rank, is staged into the bvals_part sendlist for the migration chain
+//! (SendCnt -> SendP -> RecvP). Regrid-driven cross-rank REDISTRIBUTION (a block
+//! handed to another rank by load balancing) remains a TODO.
 
 TaskStatus Particles::SetGIDFromPosition(Driver *pdrive, int stage) {
   auto &pr = prtcl_rdata;
@@ -128,7 +144,12 @@ TaskStatus Particles::SetGIDFromPosition(Driver *pdrive, int stage) {
   int gids = pmy_pack->gids;
   int nmb = pmy_pack->nmb_thispack;
   int npart = nprtcl_thispack;
-  if (npart <= 0) return TaskStatus::complete;
+  auto &psendl = pbval_part->sendlist;
+  if (npart <= 0) {
+    pbval_part->nprtcl_send = 0;
+    Kokkos::realloc(pbval_part->sendlist, 0);
+    return TaskStatus::complete;
+  }
 
   // On strictly periodic meshes, wrap particle positions back into the domain when
   // they exit (e.g. bulk-advection tests). The start-of-step position IPX0 is shifted
@@ -141,7 +162,26 @@ TaskStatus Particles::SetGIDFromPosition(Driver *pdrive, int stage) {
   const Real ymin = msz.x2min, Ly = msz.x2max - msz.x2min;
   const Real zmin = msz.x3min, Lz = msz.x3max - msz.x3min;
 
+  // cross-rank migration support: particles whose position has left every local block
+  // fall back to the neighbour-based assignment (the drift moves <= 1 cell per step by
+  // the particle CFL, so the destination is always among the current owner's
+  // neighbours) and, when the new owner is off-rank, are staged into the bvals_part
+  // sendlist for the SendCnt/SendP/RecvP chain. Device counter + host mirror (a plain
+  // host int atomically incremented from a device kernel reads back stale on GPU).
+  const int my_rank = global_variable::my_rank;
+  auto &nghbr = pmy_pack->pmb->nghbr;
+  auto &mblev = pmy_pack->pmb->mb_lev;
+  const bool multi_d = pmy_pack->pmesh->multi_d;
+  const bool three_d = pmy_pack->pmesh->three_d;
+  Kokkos::realloc(pbval_part->sendlist, std::max(1, npart));
+  Kokkos::View<int> d_cnt("setgid_cnt");
+  Kokkos::deep_copy(d_cnt, 0);
+
   par_for("part_setgid", DevExeSpace(), 0, npart-1, KOKKOS_LAMBDA(const int p) {
+    // pre-wrap position (relative offsets to the CURRENT owner block use this; a
+    // particle exiting a periodic domain edge is adjacent to its old block only in
+    // unwrapped coordinates)
+    const Real pxu = pr(IPX, p), pyu = pr(IPY, p), pzu = pr(IPZ, p);
     if (wrap) {
       Real s;
       s = Kokkos::floor((pr(IPX, p) - xmin)/Lx)*Lx;
@@ -152,8 +192,8 @@ TaskStatus Particles::SetGIDFromPosition(Driver *pdrive, int stage) {
       pr(IPZ, p) -= s;  if (has_prev) pr(IPZ0, p) -= s;
     }
     Real px = pr(IPX, p), py = pr(IPY, p), pz = pr(IPZ, p);
-    int mcur = pi(PGID, p) - gids;
-    int mown = (mcur >= 0 && mcur < nmb) ? mcur : 0;   // keep current/valid as fallback
+    const int mcur = pi(PGID, p) - gids;
+    int mown = -1;
     for (int mm = 0; mm < nmb; ++mm) {
       if (px >= mbsize.d_view(mm).x1min && px < mbsize.d_view(mm).x1max &&
           py >= mbsize.d_view(mm).x2min && py < mbsize.d_view(mm).x2max &&
@@ -161,8 +201,74 @@ TaskStatus Particles::SetGIDFromPosition(Driver *pdrive, int stage) {
         mown = mm;
       }
     }
-    pi(PGID, p) = gids + mown;
+    if (mown >= 0) {
+      // absolute on-rank re-bin (AMR-regrid safe: derived from position alone)
+      pi(PGID, p) = gids + mown;
+    } else if (mcur >= 0 && mcur < nmb) {
+      // left every local block: neighbour-based assignment from the current owner
+      // (SetNewPrtclGID logic), staging off-rank destinations for the particle comm
+      const int m = mcur;
+      const int mylevel = mblev.d_view(m);
+      const Real lx = mbsize.d_view(m).x1max - mbsize.d_view(m).x1min;
+      const Real ly = mbsize.d_view(m).x2max - mbsize.d_view(m).x2min;
+      const Real lz = mbsize.d_view(m).x3max - mbsize.d_view(m).x3min;
+      int ix = static_cast<int>((pxu - mbsize.d_view(m).x1min + lx)/lx) - 1;
+      int iy = static_cast<int>((pyu - mbsize.d_view(m).x2min + ly)/ly) - 1;
+      int iz = static_cast<int>((pzu - mbsize.d_view(m).x3min + lz)/lz) - 1;
+      ix = (ix > 1) ? 1 : ((ix < -1) ? -1 : ix);
+      iy = (iy > 1) ? 1 : ((iy < -1) ? -1 : iy);
+      iz = (iz > 1) ? 1 : ((iz < -1) ? -1 : iz);
+      int fx = (pxu < 0.5*(mbsize.d_view(m).x1min + mbsize.d_view(m).x1max)) ? 0 : 1;
+      int fy = (pyu < 0.5*(mbsize.d_view(m).x2min + mbsize.d_view(m).x2max)) ? 0 : 1;
+      int fz = (pzu < 0.5*(mbsize.d_view(m).x3min + mbsize.d_view(m).x3max)) ? 0 : 1;
+      fy = multi_d ? fy : 0;
+      fz = three_d ? fz : 0;
+      if ((abs(ix) + abs(iy) + abs(iz)) != 0) {
+        int indx;
+        if (iz == 0 && iy == 0) {                        // x1 face
+          indx = NeighborIndex(ix, 0, 0, 0, 0);
+          if (nghbr.d_view(m,indx).lev > mylevel) indx = NeighborIndex(ix, 0, 0, fy, fz);
+        } else if (iz == 0 && ix == 0) {                 // x2 face
+          indx = NeighborIndex(0, iy, 0, 0, 0);
+          if (nghbr.d_view(m,indx).lev > mylevel) indx = NeighborIndex(0, iy, 0, fx, fz);
+        } else if (iz == 0) {                            // x1x2 edge
+          indx = NeighborIndex(ix, iy, 0, 0, 0);
+          if (nghbr.d_view(m,indx).lev > mylevel) indx = NeighborIndex(ix, iy, 0, fz, 0);
+        } else if (iy == 0 && ix == 0) {                 // x3 face
+          indx = NeighborIndex(0, 0, iz, 0, 0);
+          if (nghbr.d_view(m,indx).lev > mylevel) indx = NeighborIndex(0, 0, iz, fx, fy);
+        } else if (iy == 0) {                            // x3x1 edge
+          indx = NeighborIndex(ix, 0, iz, 0, 0);
+          if (nghbr.d_view(m,indx).lev > mylevel) indx = NeighborIndex(ix, 0, iz, fy, 0);
+        } else if (ix == 0) {                            // x2x3 edge
+          indx = NeighborIndex(0, iy, iz, 0, 0);
+          if (nghbr.d_view(m,indx).lev > mylevel) indx = NeighborIndex(0, iy, iz, fx, 0);
+        } else {                                         // corner
+          indx = NeighborIndex(ix, iy, iz, 0, 0);
+        }
+        while (nghbr.d_view(m,indx).gid < 0) { indx++; } // coarser neighbour fallback
+        pi(PGID, p) = nghbr.d_view(m,indx).gid;
+        if (nghbr.d_view(m,indx).rank != my_rank) {
+          const int slot = Kokkos::atomic_fetch_add(&d_cnt(), 1);
+          psendl.d_view(slot).prtcl_indx = p;
+          psendl.d_view(slot).dest_gid   = nghbr.d_view(m,indx).gid;
+          psendl.d_view(slot).dest_rank  = nghbr.d_view(m,indx).rank;
+        }
+      }
+      // else: containment miss with zero block offset (round-off at a block edge);
+      // keep the current PGID -- reads/writes remain valid through ghost zones
+    }
+    // else: stale/invalid PGID and no local containment -- leave unchanged (guarded
+    // downstream); can only arise from regrid-driven load balancing (TODO)
   });
+
+  // publish the migration list for the SendCnt/SendP/RecvP chain
+  auto h_cnt = Kokkos::create_mirror_view(d_cnt);
+  Kokkos::deep_copy(h_cnt, d_cnt);
+  pbval_part->nprtcl_send = h_cnt();
+  Kokkos::resize(pbval_part->sendlist, pbval_part->nprtcl_send);
+  pbval_part->sendlist.template modify<DevExeSpace>();
+  pbval_part->sendlist.template sync<HostMemSpace>();
   return TaskStatus::complete;
 }
 
