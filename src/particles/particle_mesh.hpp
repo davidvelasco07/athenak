@@ -20,6 +20,8 @@
 
 #include "athena.hpp"
 #include "parameter_input.hpp"
+#include "mesh/mesh.hpp"
+#include "mesh/nghbr_index.hpp"
 
 class MeshBlockPack;
 class MeshBoundaryValuesCC;
@@ -49,6 +51,61 @@ Real TSCWeight(Real dxi) {
   if (a >= 1.5) return 0.0;
   return (a < 0.5) ? (0.75 - a*a)
                    : (0.5 * (1.5 - a) * (1.5 - a));
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn KOKKOS_INLINE_FUNCTION Real CICWeight(Real dxi)
+//! \brief Cloud-In-Cell (linear) weight kernel: 1-|dxi| for |dxi|<1, else 0. The two
+//! nonzero values at the bracketing cell centers sum to 1.
+
+KOKKOS_INLINE_FUNCTION
+Real CICWeight(Real dxi) {
+  Real a = (dxi < 0.0) ? -dxi : dxi;
+  return (a < 1.0) ? (1.0 - a) : 0.0;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn KOKKOS_INLINE_FUNCTION bool NearCoarserLevel(...)
+//! \brief true when a COARSER neighbour of block m lies within `reach` (per axis) of
+//! position (px,py,pz) -- i.e. the particle's fine-lattice TSC cloud could touch a
+//! coarser region, so the level-matched coarse-lattice path must be used for the
+//! deposit/gather pair (see ParticleMesh::DepositMass).
+//!
+//! A face/edge/corner of a block has either one same-or-coarser neighbour spanning it
+//! or finer ones, so "coarser region within reach in direction (ix,iy,iz)" reduces to
+//! per-axis distances from the particle to the owner's own boundary in that direction:
+//! no neighbour-box geometry is needed, which makes the test identical for on-rank and
+//! off-rank neighbours (decomposition-invariant).
+
+KOKKOS_INLINE_FUNCTION
+bool NearCoarserLevel(const DualArray2D<NeighborBlock> &nghbr,
+                      const DualArray1D<RegionSize> &mbsize,
+                      const DualArray1D<int> &mblev,
+                      const int m, const bool multi_d, const bool three_d,
+                      const Real px, const Real py, const Real pz, const Real reach) {
+  const int mylev = mblev.d_view(m);
+  const Real dxm = px - mbsize.d_view(m).x1min, dxp = mbsize.d_view(m).x1max - px;
+  const Real dym = py - mbsize.d_view(m).x2min, dyp = mbsize.d_view(m).x2max - py;
+  const Real dzm = pz - mbsize.d_view(m).x3min, dzp = mbsize.d_view(m).x3max - pz;
+  const int nz = three_d ? 1 : 0;
+  const int ny = multi_d ? 1 : 0;
+  for (int iz = -nz; iz <= nz; ++iz) {
+    for (int iy = -ny; iy <= ny; ++iy) {
+      for (int ix = -1; ix <= 1; ++ix) {
+        if (ix == 0 && iy == 0 && iz == 0) continue;
+        // distance from the particle to the owner boundary in this direction
+        const Real dx_ = (ix < 0) ? dxm : ((ix > 0) ? dxp : 0.0);
+        const Real dy_ = (iy < 0) ? dym : ((iy > 0) ? dyp : 0.0);
+        const Real dz_ = (iz < 0) ? dzm : ((iz > 0) ? dzp : 0.0);
+        if (dx_ > reach || dy_ > reach || dz_ > reach) continue;
+        // level of the neighbour spanning this direction: first populated slot
+        int indx = NeighborIndex(ix, iy, iz, 0, 0);
+        while (nghbr.d_view(m, indx).gid < 0) { indx++; }
+        if (nghbr.d_view(m, indx).lev < mylev) return true;
+      }
+    }
+  }
+  return false;
 }
 
 //----------------------------------------------------------------------------------------

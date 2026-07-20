@@ -114,6 +114,7 @@ class Particles {
 
   // functions...
   void CreateParticleTags(ParameterInput *pin);
+  void RefreshMeshParticleCounts();  // after pgen-side array resize
   void AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> tl);
   TaskStatus SetGIDFromPosition(Driver *pdriver, int stage);
   TaskStatus Deposit(Driver *pdriver, int stage);

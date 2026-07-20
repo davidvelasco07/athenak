@@ -99,40 +99,58 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   });
 
   // two sink particles, symmetric about the centre, on a circular orbit in the xy-plane
-  // (counter-clockwise: particle at -x moves -y, particle at +x moves +y; COM at rest)
-  auto &pr = pmbp->ppart->prtcl_rdata;
-  auto &pi = pmbp->ppart->prtcl_idata;
-  int npart = pmbp->ppart->nprtcl_thispack;
-  auto gids = pmbp->gids;
-  auto &mbsz = pmbp->pmb->mb_size;
-  par_for("orbit_parts", DevExeSpace(), 0, npart-1,
-  KOKKOS_LAMBDA(int p) {
-    Real sgn = (p == 0) ? -1.0 : 1.0;
-    Real px = cx + sgn*0.5*dsep;
-    Real py = cy;
-    Real pz = cz;
-    pr(IPX, p) = px;
-    pr(IPY, p) = py;
-    pr(IPZ, p) = pz;
-    pr(IPVX, p) = 0.0;
-    pr(IPVY, p) = sgn*vorb;
-    pr(IPVZ, p) = 0.0;
-    pr(IPM, p) = mpar;
-    pr(IPGX, p) = 0.0;
-    pr(IPGY, p) = 0.0;
-    pr(IPGZ, p) = 0.0;
-    // assign the MeshBlock that actually contains this particle (lower-inclusive),
-    // not just gids -- required when the mesh is decomposed into multiple blocks
-    int mown = 0;
-    for (int mm = 0; mm < nmb; ++mm) {
-      if (px >= mbsz.d_view(mm).x1min && px < mbsz.d_view(mm).x1max &&
-          py >= mbsz.d_view(mm).x2min && py < mbsz.d_view(mm).x2max &&
-          pz >= mbsz.d_view(mm).x3min && pz < mbsz.d_view(mm).x3max) {
-        mown = mm;
+  // (counter-clockwise: particle at -x moves -y, particle at +x moves +y; COM at rest).
+  // Count-robust seed (as in be_sink/shu_collapse): the ppc-derived particle count
+  // varies with the block count (e.g. static/adaptive refinement changes nmb), and the
+  // old p==0 ? -x : +x placement then STACKED every extra particle at +x. Instead seed
+  // exactly the two orbit positions, each on the rank whose block contains it, and
+  // resize the particle arrays to the local count.
+  {
+    auto gids = pmbp->gids;
+    auto &mbsz = pmbp->pmb->mb_size;
+    const Real seedx[2] = {cx - 0.5*dsep, cx + 0.5*dsep};
+    const Real seedvy[2] = {-vorb, vorb};
+    int mown_h[2], nloc = 0;
+    for (int s = 0; s < 2; ++s) {
+      mown_h[s] = -1;
+      for (int mm = 0; mm < nmb; ++mm) {
+        if (seedx[s] >= mbsz.h_view(mm).x1min && seedx[s] < mbsz.h_view(mm).x1max &&
+            cy >= mbsz.h_view(mm).x2min && cy < mbsz.h_view(mm).x2max &&
+            cz >= mbsz.h_view(mm).x3min && cz < mbsz.h_view(mm).x3max) {
+          mown_h[s] = mm; break;
+        }
+      }
+      if (mown_h[s] >= 0) nloc++;
+    }
+    Kokkos::resize(pmbp->ppart->prtcl_rdata, pmbp->ppart->nrdata, nloc);
+    Kokkos::resize(pmbp->ppart->prtcl_idata, pmbp->ppart->nidata, nloc);
+    pmbp->ppart->nprtcl_thispack = nloc;
+    pmbp->ppart->RefreshMeshParticleCounts();
+    if (nloc > 0) {
+      auto pr = pmbp->ppart->prtcl_rdata;
+      auto pi = pmbp->ppart->prtcl_idata;
+      const bool has_prev = (pmbp->ppart->nrdata > IPX0);
+      // pack the locally-owned seeds contiguously, keeping global tags 0/1
+      int slot = 0;
+      for (int s = 0; s < 2; ++s) {
+        if (mown_h[s] < 0) continue;
+        const Real px = seedx[s], py = cy, pz = cz;
+        const Real pvy = seedvy[s];
+        const int gidown = gids + mown_h[s];
+        const int tag = s, sp = slot;
+        par_for("orbit_parts", DevExeSpace(), 0, 0, KOKKOS_LAMBDA(int) {
+          pr(IPX, sp) = px;  pr(IPY, sp) = py;  pr(IPZ, sp) = pz;
+          pr(IPVX, sp) = 0.0; pr(IPVY, sp) = pvy; pr(IPVZ, sp) = 0.0;
+          pr(IPM, sp) = mpar;
+          pr(IPGX, sp) = 0.0; pr(IPGY, sp) = 0.0; pr(IPGZ, sp) = 0.0;
+          if (has_prev) { pr(IPX0, sp) = px; pr(IPY0, sp) = py; pr(IPZ0, sp) = pz; }
+          pi(PGID, sp) = gidown;
+          pi(PTAG, sp) = tag;
+        });
+        slot++;
       }
     }
-    pi(PGID, p) = gids + mown;
-  });
+  }
 
   // constant particle timestep: keep sub-cell motion per step
   auto &mbsize = pmbp->pmb->mb_size;
@@ -144,6 +162,10 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   // conservation and mirror symmetry of the particle-mesh density across each split plane.
   if (pin->GetOrAddBoolean("problem", "diag_flush", false)) {
     auto *ppm = pmbp->ppart->ppm;
+    auto &pr = pmbp->ppart->prtcl_rdata;
+    auto &pi = pmbp->ppart->prtcl_idata;
+    const int npart = pmbp->ppart->nprtcl_thispack;
+    auto &mbsz = pmbp->pmb->mb_size;
     ppm->DepositMass(pr, pi, npart);
     ppm->FlushDepositBoundaries();
     auto dmv = ppm->dmesh;

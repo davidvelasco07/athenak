@@ -202,6 +202,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     Kokkos::resize(pmbp->ppart->prtcl_rdata, pmbp->ppart->nrdata, desired);
     Kokkos::resize(pmbp->ppart->prtcl_idata, pmbp->ppart->nidata, desired);
     pmbp->ppart->nprtcl_thispack = desired;
+    pmbp->ppart->RefreshMeshParticleCounts();
     if (desired == 1) {
       auto pr = pmbp->ppart->prtcl_rdata;
       auto pi = pmbp->ppart->prtcl_idata;

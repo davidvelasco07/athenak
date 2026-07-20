@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <iostream>
 #include <vector>
 
 #include "globals.hpp"
@@ -124,6 +125,24 @@ void ParticleMesh::DepositMass(const DvceArray2D<Real>& prtcl_rdata_in,
   const bool multi_d = pmy_pack->pmesh->multi_d;
   const bool three_d = pmy_pack->pmesh->three_d;
   auto bad = nbad_;
+  // level-matched coarse-lattice path: requires ng >= 4 (the coarse CIC gather stencil
+  // reaches 2 coarse = 4 fine cells past a block face). With fewer ghosts fall back to
+  // the fine-lattice path everywhere (one-time warning): an asymmetric near-interface
+  // kernel beats a zeroed one.
+  const bool multilevel = pmy_pack->pmesh->multilevel && (indcs.ng >= 4);
+  if (pmy_pack->pmesh->multilevel && indcs.ng < 4) {
+    static bool warned = false;
+    if (!warned && global_variable::my_rank == 0) {
+      std::cout << "### WARNING in ParticleMesh: level-matched coarse-lattice deposit/"
+                << "gather needs nghost >= 4 (have " << indcs.ng << "); particles near "
+                << "coarse-fine interfaces use the fine-lattice kernel (asymmetric)."
+                << std::endl;
+      warned = true;
+    }
+  }
+  auto &nghbr = pmy_pack->pmb->nghbr;
+  auto &mblev = pmy_pack->pmb->mb_lev;
+  auto &msz = pmy_pack->pmesh->mesh_size;
 
   par_for("PMDepositMass", DevExeSpace(), 0, npar - 1,
     KOKKOS_LAMBDA(const int p) {
@@ -138,6 +157,78 @@ void ParticleMesh::DepositMass(const DvceArray2D<Real>& prtcl_rdata_in,
       if (multi_d) dV *= mbsize.d_view(m).dx2;
       if (three_d) dV *= mbsize.d_view(m).dx3;
       Real inv_dV = 1.0 / dV;
+
+      // ---- level-matched coarse-lattice deposit -------------------------------------
+      // If a COARSER region lies within the fine TSC footprint (2 dx), a fine-lattice
+      // deposit would put part of the cloud at dx and part effectively at 2 dx: the
+      // kernel the particle sees through its own deposit is asymmetric and the
+      // deposit/gather self-force cancellation breaks (measured as a spurious
+      // interface force on sinks). Instead deposit the WHOLE cloud with CIC on the
+      // COARSE lattice in the global frame: each coarse-cell weight becomes a uniform
+      // density over the 2^d fine cells covering it (conservative; the boundary flush
+      // reconstitutes the exact coarse value on coarse neighbours). GatherGravity uses
+      // the matching CIC coarse-lattice gather, so the pair is symmetric on one
+      // uniform (coarse) lattice and the self-force cancels there. CIC (not TSC) keeps
+      // the worst-case stencil reach at 2 coarse = 4 fine cells = ng. Proper nesting
+      // bounds the jump to one level.
+      if (multilevel && three_d) {
+        const Real dxf = mbsize.d_view(m).dx1;
+        if (NearCoarserLevel(nghbr, mbsize, mblev, m, multi_d, three_d,
+                             pr(IPX, p), pr(IPY, p), pr(IPZ, p), 2.0*dxf)) {
+          const Real dxc = 2.0*dxf, dyc = 2.0*mbsize.d_view(m).dx2;
+          const Real dzc = 2.0*mbsize.d_view(m).dx3;
+          const Real inv_dVc = 1.0/(dxc*dyc*dzc);
+          // global coarse-lattice fractional index and bracketing cells
+          const Real xic = (pr(IPX, p) - msz.x1min)/dxc;
+          const Real yic = (pr(IPY, p) - msz.x2min)/dyc;
+          const Real zic = (pr(IPZ, p) - msz.x3min)/dzc;
+          if (!(xic > -1.0e9 && xic < 1.0e9) || !(yic > -1.0e9 && yic < 1.0e9) ||
+              !(zic > -1.0e9 && zic < 1.0e9)) {
+            Kokkos::atomic_add(&bad(0), 1); return;
+          }
+          const int ic0 = static_cast<int>(Kokkos::floor(xic - 0.5));
+          const int jc0 = static_cast<int>(Kokkos::floor(yic - 0.5));
+          const int kc0 = static_cast<int>(Kokkos::floor(zic - 0.5));
+          const Real fxc = xic - (static_cast<Real>(ic0) + 0.5);
+          const Real fyc = yic - (static_cast<Real>(jc0) + 0.5);
+          const Real fzc = zic - (static_cast<Real>(kc0) + 0.5);
+          // owner block's fine-cell offset from the mesh origin (exact integer)
+          const int of1 = static_cast<int>((mbsize.d_view(m).x1min - msz.x1min)/dxf + 0.5);
+          const int of2 = static_cast<int>((mbsize.d_view(m).x2min - msz.x2min)/
+                                           mbsize.d_view(m).dx2 + 0.5);
+          const int of3 = static_cast<int>((mbsize.d_view(m).x3min - msz.x3min)/
+                                           mbsize.d_view(m).dx3 + 0.5);
+          // whole-footprint bounds check (fine indices of the 4^3 covered fine cells);
+          // a correctly-binned particle always passes (reach <= 2 coarse = ng fine)
+          const int if0 = 2*ic0 - of1 + is, jf0 = 2*jc0 - of2 + js;
+          const int kf0 = 2*kc0 - of3 + ks;
+          if (if0 < 0 || if0 + 3 >= n1 || jf0 < 0 || jf0 + 3 >= n2 ||
+              kf0 < 0 || kf0 + 3 >= n3) {
+            Kokkos::atomic_add(&bad(0), 1); return;
+          }
+          for (int kk = 0; kk < 2; ++kk) {
+            const Real w3 = (kk == 0) ? (1.0 - fzc) : fzc;
+            for (int jj = 0; jj < 2; ++jj) {
+              const Real w2 = (jj == 0) ? (1.0 - fyc) : fyc;
+              for (int ii = 0; ii < 2; ++ii) {
+                const Real w1 = (ii == 0) ? (1.0 - fxc) : fxc;
+                const Real rho_c = mp*w1*w2*w3*inv_dVc;
+                // uniform density into the 8 fine cells covering this coarse cell
+                for (int fk = 0; fk < 2; ++fk) {
+                  const int kf = kf0 + 2*kk + fk;
+                  for (int fj = 0; fj < 2; ++fj) {
+                    const int jf = jf0 + 2*jj + fj;
+                    for (int fi = 0; fi < 2; ++fi) {
+                      Kokkos::atomic_add(&dm(m, 0, kf, jf, if0 + 2*ii + fi), rho_c);
+                    }
+                  }
+                }
+              }
+            }
+          }
+          return;   // coarse path complete for this particle
+        }
+      }
 
       // x-axis: always active (particles only in 2D/3D).
       Real xi1 = (pr(IPX, p) - mbsize.d_view(m).x1min) / mbsize.d_view(m).dx1 + is;
@@ -244,6 +335,11 @@ void ParticleMesh::GatherGravity(const DvceArray5D<Real>& phi_in,
   const bool multi_d = pmy_pack->pmesh->multi_d;
   const bool three_d = pmy_pack->pmesh->three_d;
   auto bad = nbad_;
+  // level-matched coarse-lattice path (mirrors DepositMass, incl. the ng >= 4 gate)
+  const bool multilevel = pmy_pack->pmesh->multilevel && (indcs.ng >= 4);
+  auto &nghbr = pmy_pack->pmb->nghbr;
+  auto &mblev = pmy_pack->pmb->mb_lev;
+  auto &msz = pmy_pack->pmesh->mesh_size;
 
   par_for("PMGatherGravity", DevExeSpace(), 0, npar - 1,
     KOKKOS_LAMBDA(const int p) {
@@ -254,6 +350,83 @@ void ParticleMesh::GatherGravity(const DvceArray5D<Real>& phi_in,
         Kokkos::atomic_add(&bad(0), 1);
         pr(IPGX, p) = 0.0; pr(IPGY, p) = 0.0; pr(IPGZ, p) = 0.0;
         return;
+      }
+
+      // ---- level-matched coarse-lattice gather ----------------------------------------
+      // MUST take this branch exactly when DepositMass took its coarse branch (same
+      // criterion, same reach): the self-force cancels only when deposit and gather use
+      // the same kernel on the same lattice. phi at a coarse cell is the mean of its
+      // 2^d covering fine values from the owner's array; for ghost regions beyond a
+      // coarse-fine boundary those fine values are ProlongateCC output, whose 2^d mean
+      // IS the neighbour's coarse phi exactly (the prolongation is mean-preserving), so
+      // no coarse-array plumbing is needed. Force = CIC-weighted central differences on
+      // the coarse lattice (a = 0.5/dx_c), matching srcterms at that level.
+      if (multilevel && three_d) {
+        const Real dxf = mbsize.d_view(m).dx1;
+        if (NearCoarserLevel(nghbr, mbsize, mblev, m, multi_d, three_d,
+                             pr(IPX, p), pr(IPY, p), pr(IPZ, p), 2.0*dxf)) {
+          const Real dxc = 2.0*dxf, dyc = 2.0*mbsize.d_view(m).dx2;
+          const Real dzc = 2.0*mbsize.d_view(m).dx3;
+          const Real xic = (pr(IPX, p) - msz.x1min)/dxc;
+          const Real yic = (pr(IPY, p) - msz.x2min)/dyc;
+          const Real zic = (pr(IPZ, p) - msz.x3min)/dzc;
+          if (!(xic > -1.0e9 && xic < 1.0e9) || !(yic > -1.0e9 && yic < 1.0e9) ||
+              !(zic > -1.0e9 && zic < 1.0e9)) {
+            Kokkos::atomic_add(&bad(0), 1);
+            pr(IPGX, p) = 0.0; pr(IPGY, p) = 0.0; pr(IPGZ, p) = 0.0;
+            return;
+          }
+          const int ic0 = static_cast<int>(Kokkos::floor(xic - 0.5));
+          const int jc0 = static_cast<int>(Kokkos::floor(yic - 0.5));
+          const int kc0 = static_cast<int>(Kokkos::floor(zic - 0.5));
+          const Real fxc = xic - (static_cast<Real>(ic0) + 0.5);
+          const Real fyc = yic - (static_cast<Real>(jc0) + 0.5);
+          const Real fzc = zic - (static_cast<Real>(kc0) + 0.5);
+          const int of1 = static_cast<int>((mbsize.d_view(m).x1min - msz.x1min)/dxf + 0.5);
+          const int of2 = static_cast<int>((mbsize.d_view(m).x2min - msz.x2min)/
+                                           mbsize.d_view(m).dx2 + 0.5);
+          const int of3 = static_cast<int>((mbsize.d_view(m).x3min - msz.x3min)/
+                                           mbsize.d_view(m).dx3 + 0.5);
+          // fine index of the low corner of coarse cell (ic0,jc0,kc0) in the owner array
+          const int if0 = 2*ic0 - of1 + is;
+          const int jf0 = 2*jc0 - of2 + js;
+          const int kf0 = 2*kc0 - of3 + ks;
+          // whole-stencil bounds: coarse cells [ic0-1, ic0+2] -> fine [if0-2, if0+5]
+          if (if0 - 2 < 0 || if0 + 5 >= n1 || jf0 - 2 < 0 || jf0 + 5 >= n2 ||
+              kf0 - 2 < 0 || kf0 + 5 >= n3) {
+            Kokkos::atomic_add(&bad(0), 1);
+            pr(IPGX, p) = 0.0; pr(IPGY, p) = 0.0; pr(IPGZ, p) = 0.0;
+            return;
+          }
+          // coarse-cell phi = mean of the 2^3 covering fine values, evaluated lazily
+          // via fine low-corner indices relative to (if0,jf0,kf0)
+          auto phic = [&](const int dic, const int djc, const int dkc) -> Real {
+            const int i = if0 + 2*dic, j = jf0 + 2*djc, k = kf0 + 2*dkc;
+            return 0.125*(ph(m,0,k  ,j  ,i) + ph(m,0,k  ,j  ,i+1) +
+                          ph(m,0,k  ,j+1,i) + ph(m,0,k  ,j+1,i+1) +
+                          ph(m,0,k+1,j  ,i) + ph(m,0,k+1,j  ,i+1) +
+                          ph(m,0,k+1,j+1,i) + ph(m,0,k+1,j+1,i+1));
+          };
+          const Real a1c = 0.5/dxc, a2c = 0.5/dyc, a3c = 0.5/dzc;
+          Real gx = 0.0, gy = 0.0, gz = 0.0;
+          for (int kk = 0; kk < 2; ++kk) {
+            const Real w3 = (kk == 0) ? (1.0 - fzc) : fzc;
+            for (int jj = 0; jj < 2; ++jj) {
+              const Real w2 = (jj == 0) ? (1.0 - fyc) : fyc;
+              for (int ii = 0; ii < 2; ++ii) {
+                const Real w1 = (ii == 0) ? (1.0 - fxc) : fxc;
+                const Real w = w1*w2*w3;
+                gx += w*a1c*(phic(ii-1, jj, kk) - phic(ii+1, jj, kk));
+                gy += w*a2c*(phic(ii, jj-1, kk) - phic(ii, jj+1, kk));
+                gz += w*a3c*(phic(ii, jj, kk-1) - phic(ii, jj, kk+1));
+              }
+            }
+          }
+          pr(IPGX, p) = gx;
+          pr(IPGY, p) = gy;
+          pr(IPGZ, p) = gz;
+          return;   // coarse path complete for this particle
+        }
       }
 
       // Central-difference prefactors a = 0.5/dx (matches srcterms SelfGravity).
@@ -529,10 +702,13 @@ void ParticleMesh::FlushDepositBoundaries() {
 //! \fn void ParticleMesh::ExchangeDepositFlush()
 //! \brief MPI transport for the deposit-flush ghost spill. FlushDepositBoundaries stages
 //! every nonzero ghost cell (owner_m, v, x, y, z, rho); here, host-side, each cell is
-//! routed to the neighbour block whose interior contains it -- if that block is an
-//! off-rank same-level neighbour the deposit is atomic-added there (on-rank containers are
-//! folded by the device loop; off-rank level-jumps are dropped). Mirrors
-//! Particles::ExchangeCVReset (add, not overwrite; density only).
+//! routed to the neighbour block whose interior contains it -- if that block is
+//! off-rank the deposit is shipped and atomic-added there (on-rank containers are
+//! folded by the device loop). Level jumps are converted on the SENDER so the wire
+//! format stays (dest cell, value): fine->coarse adds rho*dV_s/dV_d to the containing
+//! coarse cell; coarse->fine splits the mass uniformly over the covered fine cells --
+//! the same rules as the on-rank flush. Mirrors Particles::ExchangeCVReset (add, not
+//! overwrite; density only).
 
 void ParticleMesh::ExchangeDepositFlush() {
 #if MPI_PARALLEL_ENABLED
@@ -593,17 +769,50 @@ void ParticleMesh::ExchangeDepositFlush() {
       ctr = 0.5*(x2d + x2u);  if (yc-ctr >  0.5*Lx2) yc -= Lx2;  if (yc-ctr < -0.5*Lx2) yc += Lx2;
       ctr = 0.5*(x3d + x3u);  if (zc-ctr >  0.5*Lx3) zc -= Lx3;  if (zc-ctr < -0.5*Lx3) zc += Lx3;
       if (xc < x1d || xc >= x1u || yc < x2d || yc >= x2u || zc < x3d || zc >= x3u) continue;
-      // unique containing block found; route only if it is an off-rank same-level neighbour
-      if (nghbr.h_view(om, n).rank != my_rank && nghbr.h_view(om, n).lev == olev) {
+      // unique containing block found; route if off-rank (any level). The sender does
+      // the level conversion so the wire format stays (dest cell, add-value):
+      //   same level   : one cell, add rho;
+      //   fine->coarse : one containing coarse cell, add rho*dV_s/dV_d (= rho/8^jump);
+      //   coarse->fine : the (2^jump)^3 fine cells the source cell covers, add rho to
+      //                  each (uniform split of the mass; matches the on-rank flush).
+      // Block edges lie on every coarser lattice, so a cell's coverage never straddles
+      // blocks and centre-containment routing stays exactly-once.
+      if (nghbr.h_view(om, n).rank != my_rank) {
+        const int dlev = nghbr.h_view(om, n).lev;
+        const int drank = pm->rank_eachmb[dg];
         const Real dx1 = (x1u-x1d)/indcs.nx1;
         const Real dx2 = (x2u-x2d)/indcs.nx2;
         const Real dx3 = (x3u-x3d)/indcs.nx3;
-        s_rank.push_back(pm->rank_eachmb[dg]);
-        s_int.push_back(dg); s_int.push_back(vv);
-        s_int.push_back(is + static_cast<int>((xc-x1d)/dx1));
-        s_int.push_back(js + static_cast<int>((yc-x2d)/dx2));
-        s_int.push_back(ks + static_cast<int>((zc-x3d)/dx3));
-        s_real.push_back(rho);
+        if (dlev <= olev) {
+          // same level or coarser destination: one containing cell
+          Real val = rho;
+          for (int q = 0; q < 3*(olev - dlev); ++q) val *= 0.5;   // rho/8^jump
+          s_rank.push_back(drank);
+          s_int.push_back(dg); s_int.push_back(vv);
+          s_int.push_back(is + static_cast<int>((xc-x1d)/dx1));
+          s_int.push_back(js + static_cast<int>((yc-x2d)/dx2));
+          s_int.push_back(ks + static_cast<int>((zc-x3d)/dx3));
+          s_real.push_back(val);
+        } else {
+          // finer destination: uniform split over the covered fine cells
+          const int nsub = 1 << (dlev - olev);
+          const Real dxs1 = dx1*nsub, dxs2 = dx2*nsub, dxs3 = dx3*nsub; // source cell size
+          const Real x0f = xc - 0.5*dxs1 + 0.5*dx1;   // first covered fine-cell centre
+          const Real y0f = yc - 0.5*dxs2 + 0.5*dx2;
+          const Real z0f = zc - 0.5*dxs3 + 0.5*dx3;
+          for (int sk = 0; sk < nsub; ++sk) {
+            for (int sj = 0; sj < nsub; ++sj) {
+              for (int si = 0; si < nsub; ++si) {
+                s_rank.push_back(drank);
+                s_int.push_back(dg); s_int.push_back(vv);
+                s_int.push_back(is + static_cast<int>((x0f + si*dx1 - x1d)/dx1));
+                s_int.push_back(js + static_cast<int>((y0f + sj*dx2 - x2d)/dx2));
+                s_int.push_back(ks + static_cast<int>((z0f + sk*dx3 - x3d)/dx3));
+                s_real.push_back(rho);
+              }
+            }
+          }
+        }
       }
       break;   // exactly one block contains the cell centre
     }

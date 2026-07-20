@@ -138,6 +138,29 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
 }
 
 //----------------------------------------------------------------------------------------
+//! \fn void Particles::RefreshMeshParticleCounts()
+//! \brief Re-derive the Mesh's global particle bookkeeping (nprtcl_thisrank,
+//! nprtcl_eachrank, nprtcl_total) from the CURRENT nprtcl_thispack. The Mesh sets these
+//! once, from the ppc-derived count, BEFORE the problem generator runs; any pgen that
+//! resizes the particle arrays (count-robust single/two-sink seeding) must call this
+//! afterwards or downstream consumers (e.g. tracked-particle output sized from
+//! nprtcl_eachrank) index past the resized arrays.
+
+void Particles::RefreshMeshParticleCounts() {
+  Mesh *pm = pmy_pack->pmesh;
+  pm->nprtcl_thisrank = nprtcl_thispack;
+  pm->nprtcl_eachrank[global_variable::my_rank] = nprtcl_thispack;
+#if MPI_PARALLEL_ENABLED
+  MPI_Allgather(&(pm->nprtcl_thisrank), 1, MPI_INT, pm->nprtcl_eachrank, 1, MPI_INT,
+                MPI_COMM_WORLD);
+#endif
+  pm->nprtcl_total = 0;
+  for (int n = 0; n < global_variable::nranks; ++n) {
+    pm->nprtcl_total += pm->nprtcl_eachrank[n];
+  }
+}
+
+//----------------------------------------------------------------------------------------
 // destructor
 
 Particles::~Particles() {
