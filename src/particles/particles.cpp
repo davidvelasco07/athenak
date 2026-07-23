@@ -36,6 +36,9 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
   accretion = pin->GetOrAddBoolean("particles","accretion",false);
   // sink creation (LP threshold + potential minimum; see particles_creation.cpp)
   creation = pin->GetOrAddBoolean("particles","creation",false);
+  // sink-sink merging on overlapping control volumes (see particles_merger.cpp)
+  merging = pin->GetOrAddBoolean("particles","merging",false);
+  merge_bound = pin->GetOrAddBoolean("particles","merge_bound",true);
 
   // particle CFL number (see particles.hpp); 0.5 guarantees <= 1 cell crossed per step
   cfl_par = pin->GetOrAddReal("particles","cfl_par",0.5);

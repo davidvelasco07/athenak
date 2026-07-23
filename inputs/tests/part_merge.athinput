@@ -1,0 +1,109 @@
+# AthenaK input: sink-particle merging validation
+# Two unequal-mass sinks fall together under multigrid self-gravity (inert gas) and
+# merge when their 27-cell control volumes overlap. Merging conserves mass and linear
+# momentum exactly, so the final Mtot/Ptot must match the initial values printed at
+# setup, and npart must drop from 2 to 1. A common z-drift gives the pair a nonzero
+# total momentum so momentum conservation is tested non-trivially.
+
+<job>
+basename = part_merge
+
+<mesh>
+nghost = 2
+nx1    = 64
+x1min  = -0.5
+x1max  =  0.5
+ix1_bc = outflow
+ox1_bc = outflow
+
+nx2    = 64
+x2min  = -0.5
+x2max  =  0.5
+ix2_bc = outflow
+ox2_bc = outflow
+
+nx3    = 64
+x3min  = -0.5
+x3max  =  0.5
+ix3_bc = outflow
+ox3_bc = outflow
+
+<meshblock>
+nx1 = 64
+nx2 = 64
+nx3 = 64
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.3
+tlim       = 1.0
+nlim       = -1
+ndiag      = 100
+
+<hydro>
+eos             = isothermal
+reconstruct     = plm
+rsolver         = llf
+iso_sound_speed = 1.0
+
+<gravity>
+four_pi_G      = 1.0
+mg_bc          = multipole
+mporder        = 4
+threshold      = -1
+niteration     = 20
+npresmooth     = 1
+npostsmooth    = 1
+full_multigrid = true
+fmg_ncycle     = 1
+show_defect    = 0
+mg_verbose     = 0
+mg_nghost      = 1
+root_on_host   = false
+
+<hydro_srcterms>
+self_gravity = false
+
+<particles>
+type        = sink
+pusher      = leapfrog
+# exactly 2 particles on a single 64^3 block: 2 / 64^3 = 2^-17 (exact)
+ppc         = 7.62939453125e-06
+merging     = true
+merge_bound = true
+cfl_par     = 0.3
+
+<problem>
+# number of sinks: 2 -> mass0/mass1; >2 -> equally spaced by `separation`, masses (k+1)*mass0
+nsink      = 2
+mass0      = 1.0
+mass1      = 2.0
+separation = 0.3
+# rigid offset of the whole group from box centre (cluster inside a rank, or straddle x=0)
+offx       = 0.0
+offy       = 0.0
+offz       = 0.0
+driftx     = 0.0
+drifty     = 0.0
+driftz     = 0.05
+approach   = 0.0
+impact     = 0.0
+# separation-axis direction (normalised internally); (1,0,0)=head-on x, (1,1,1)=diagonal
+sep_dirx   = 1.0
+sep_diry   = 0.0
+sep_dirz   = 0.0
+rho0       = 1.0e-8
+
+<output1>
+file_type  = trk
+variable   = prtcl
+nparticles = 2
+dt         = 0.02
+
+<output2>
+file_type = bin
+variable  = grav_phi
+dt        = 0.01
+# set true (e.g. for the MPI-domain video) to write each rank's blocks to bin/rank_NNNNNNNN/
+single_file_per_rank = false

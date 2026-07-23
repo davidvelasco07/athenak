@@ -82,19 +82,25 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
     // arrivals contribute on their new rank.
     id.newdt  = tl["stagen"]->AddTask(&Particles::NewTimeStep, this, id.csend);
 
-    // operator-split accretion: gas in the control volume -> sink, at the last RK stage.
-    // Registered only when <particles>/accretion=true -- orbit/gravity tests with inert
-    // or no gas skip the kernel entirely.
+    // operator-split sink physics at the last RK stage, ordered create -> merge ->
+    // accrete. Each stage is opt-in and chained onto the previous one so it runs only
+    // when enabled; orbit/gravity tests with inert or no gas skip all three.
+    //   create  (<particles>/creation) : new sinks are massless; the AccreteMass reset
+    //           that follows seeds them conservatively (Moon & Ostriker 2025 eq. 54).
+    //   merge   (<particles>/merging)  : combine sinks whose 27-cell halos overlap, so
+    //           AccreteMass never sees overlapping control volumes.
+    //   accrete (<particles>/accretion): control-volume gas -> sink.
+    TaskID dep = none;
+    if (accretion && creation) {
+      id.create = tl["after_stagen"]->AddTask(&Particles::CreateSinks, this, dep);
+      dep = id.create;
+    }
+    if (merging) {
+      id.merge = tl["after_stagen"]->AddTask(&Particles::MergeSinks, this, dep);
+      dep = id.merge;
+    }
     if (accretion) {
-      // creation (opt-in) runs first: new sinks are massless and the AccreteMass
-      // reset that follows seeds them conservatively (Moon & Ostriker 2025 eq. 54)
-      if (creation) {
-        id.create  = tl["after_stagen"]->AddTask(&Particles::CreateSinks, this, none);
-        id.accrete = tl["after_stagen"]->AddTask(&Particles::AccreteMass, this,
-                                                 id.create);
-      } else {
-        id.accrete = tl["after_stagen"]->AddTask(&Particles::AccreteMass, this, none);
-      }
+      id.accrete = tl["after_stagen"]->AddTask(&Particles::AccreteMass, this, dep);
     }
   } else {
     // Tracer / cosmic-ray (drift) particles: integrated once per cycle in the

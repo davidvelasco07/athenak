@@ -35,6 +35,7 @@ struct ParticlesTaskIDs {
   TaskID flush;
   TaskID xphi;
   TaskID push;
+  TaskID merge;
   TaskID accrete;
   TaskID create;
   TaskID newdt;
@@ -90,6 +91,20 @@ class Particles {
   bool creation = false;
   int created_total_ = 0;   // running count, for unique tags
 
+  // Enable sink-sink merging (<particles>/merging, default false): two sinks whose
+  // 27-cell control volumes (halos) overlap are combined into one, conserving mass and
+  // linear momentum. Independent of accretion (a decaying gravitational binary can merge
+  // with accretion off), but typically used with it -- merging removes the overlapping
+  // control volumes that AccreteMass cannot otherwise handle, so it is ordered
+  // create -> merge -> accrete. See particles_merger.cpp.
+  bool merging = false;
+  // Require the overlapping pair to be gravitationally bound before merging
+  // (<particles>/merge_bound, default true): 0.5*mu*|dv|^2 - G*m_a*m_b/r < 0. Rejects
+  // unbound fly-bys that momentarily pass within the halo. Set false to merge on halo
+  // overlap alone. Needs the gravity module; falls back to overlap-only (one-time
+  // warning) if <gravity> is absent.
+  bool merge_bound = true;
+
   // Cross-rank control-volume reset (MPI). When a sink's control volume reaches into an
   // off-rank neighbour, the accretion kernel stages the off-rank-destined reset cells
   // (owner_m, xw, yw, zw, rho, M1, M2, M3) into cvemit_ (cvemit_cnt_ = atomic count);
@@ -121,6 +136,7 @@ class Particles {
   TaskStatus FlushDeposit(Driver *pdriver, int stage);
   TaskStatus ExchangePhi(Driver *pdriver, int stage);
   TaskStatus Push(Driver *pdriver, int stage);
+  TaskStatus MergeSinks(Driver *pdriver, int stage);
   TaskStatus AccreteMass(Driver *pdriver, int stage);
   void ExchangeCVReset();   // MPI: apply off-rank control-volume reset cells
   TaskStatus CreateSinks(Driver *pdriver, int stage);
