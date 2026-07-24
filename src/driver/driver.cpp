@@ -353,7 +353,7 @@ void Driver::Initialize(Mesh *pmesh, ParameterInput *pin, Outputs *pout, bool re
   if (pionn != nullptr) {
     if (nimp_stages == 0) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-          << std::endl << "IonNetral MHD can only be run with ImEx integrators."
+          << std::endl << "IonNeutral MHD can only be run with ImEx integrators."
           << std::endl;
       std::exit(EXIT_FAILURE);
     }
@@ -389,6 +389,7 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
     }
     while ((pmesh->time < tlim) && (pmesh->ncycle < nlim || nlim < 0) &&
            (elapsed_time < wall_time)) {
+      pmesh->ClearMeshUpdated();
       if (global_variable::my_rank == 0) {OutputCycleDiagnostics(pmesh);}
 
       // Execute TaskLists

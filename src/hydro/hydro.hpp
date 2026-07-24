@@ -99,10 +99,38 @@ class Hydro {
   DvceFaceFld5D<Real> uflx;   // fluxes of conserved quantities on cell faces
   Real dtnew;
 
+  // Global per-face L/R primitive buffers used by the split-kernel flux path
+  // (PLM + LLF|HLLC). Shaped (nmb, nvars, nf3, nf2, nf1) where
+  //   nf1 = nx1+1,
+  //   nf2 = (nx2>1) ? nx2+1 : 1,
+  //   nf3 = (nx3>1) ? nx3+1 : 1.
+  // The buffer is sized to the max active face range across all three directions,
+  // and reused sequentially per direction.  Indexing convention is
+  //   wl(m, n, k-ks, j-js, i-is)
+  // where for direction d the face-normal axis is face-indexed and the two
+  // transverse axes are cell-indexed (origin-shifted by ks/js/is).
+  DvceArray5D<Real> wl_split;
+  DvceArray5D<Real> wr_split;
+
   // following used for FOFC
   DvceArray4D<bool> fofc;  // flag for each cell to indicate if FOFC is needed
   bool use_fofc = false;   // flag to enable FOFC
   DvceArray5D<Real> utest;  // scratch array for FOFC
+
+  // following used for the MOOD a-posteriori fallback ("FB") scheme.  Shares the
+  // fofc/utest arrays: fofc marks cells flagged (newly demoted) in the current
+  // revision iteration, utest holds the candidate update.
+  bool use_mood = false;    // flag to enable MOOD fallback
+  int mood_max_revs = 1;    // max revision iterations per RK stage
+  int mood_nad_scale;       // NAD tolerance scale: 0=relative(|bound|), 1=grange, 2=gdu
+  Real mood_nad_theta;      // grange Mach-softening: eps = rtol*G^theta*|bound|^(1-theta)
+  bool mood_nad_energy;     // include the energy variable in NAD (density always on)
+  Real mood_rtol;           // NAD tolerance as a fraction of the selected scale
+  Real mood_eps0;           // round-off floor (relative to the violated bound)
+  Real mood_atol;           // absolute floor of the NAD tolerance
+  bool mood_sed;            // exempt smooth extrema from NAD detection
+  int n_fb_tiers;           // # of fallback tiers below base scheme (2, or 1 if base=plm)
+  DvceArray4D<int> fb_level;    // per-cell cascade level (0=base, 1=plm, 2=dc)
 
   // container to hold names of TaskIDs
   HydroTaskIDs id;
@@ -139,6 +167,11 @@ class Hydro {
 
   // first-order flux correction
   void FOFC(Driver *d, int stage);
+
+  // MOOD a-posteriori fallback, templated over Riemann solver (fallback tiers re-solve
+  // flagged faces with the same solver as the base scheme)
+  template <Hydro_RSolver T>
+  void MOODLoop(Driver *d, int stage);
 
  private:
   MeshBlockPack* pmy_pack;  // ptr to MeshBlockPack containing this Hydro

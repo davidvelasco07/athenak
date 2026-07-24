@@ -54,7 +54,7 @@ using Real = double;
 // data types only used in physics modules (defined here to avoid recursive dependencies)
 
 // constants that determine array index of Hydro/MHD variables
-// array indices for conserved: density, momemtum, total energy
+// array indices for conserved: density, momentum, total energy
 enum VariableIndex {IDN=0, IM1=1, IVX=1, IM2=2, IVY=2, IM3=3, IVZ=3, IEN=4,
                     ITM=4, IPR=4, IYF=5};
 // array indices for components of magnetic field
@@ -66,7 +66,9 @@ enum MetricIndex {I00=0, I01=1, I02=2, I03=3, I11=4, I12=5, I13=6, I22=7, I23=8,
 enum ParticlesIndex {PGID=0, PTAG=1, IPX=0, IPVX=1, IPY=2, IPVY=3, IPZ=4, IPVZ=5};
 
 // integer constants to specify spatial reconstruction methods
-enum ReconstructionMethod {dc, plm, ppm4, ppmx, wenoz};
+// (ppm = unlimited 4th-order face interpolation; requires the MOOD a-posteriori
+// fallback for stability since the shared face value provides no upwind dissipation)
+enum ReconstructionMethod {dc, plm, ppm4, ppmx, wenoz, ppm};
 
 // constants that enumerate time evolution options
 enum TimeEvolution {tstatic, kinematic, dynamic};
@@ -99,6 +101,14 @@ using HostMemSpace = Kokkos::HostSpace;
 using ScratchMemSpace = DevExeSpace::scratch_memory_space;
 using LayoutWrapper = Kokkos::LayoutRight;                // increments last index fastest
 using TeamMember_t = Kokkos::TeamPolicy<>::member_type;   // for Kokkos thread teams
+
+// Kokkos::AUTO team sizing can return no valid config on GH200/Hopper for nested
+// TeamPolicy functors (e.g. boundary buffers). Use a fixed size for CUDA builds.
+#if defined(KOKKOS_ENABLE_CUDA)
+constexpr int ATHENA_TEAM_SIZE = 32;
+#else
+constexpr auto ATHENA_TEAM_SIZE = Kokkos::AUTO;
+#endif
 
 //----------------------------------------------------------------------------------------
 // alias template declarations for various array types (formerly AthenaArrays)
@@ -350,7 +360,7 @@ inline void par_for_outer(const std::string &name, DevExeSpace exec_space,
                           size_t scr_size, const int scr_level,
                           const int kl, const int ku, const Function &function) {
   const int nk = ku - kl + 1;
-  Kokkos::TeamPolicy<> policy(exec_space, nk, Kokkos::AUTO);
+  Kokkos::TeamPolicy<> policy(exec_space, nk, ATHENA_TEAM_SIZE);
   Kokkos::parallel_for(name, policy.set_scratch_size(scr_level,Kokkos::PerTeam(scr_size)),
   KOKKOS_LAMBDA(TeamMember_t tmember) {
     const int k = tmember.league_rank() + kl;
@@ -368,7 +378,7 @@ inline void par_for_outer(const std::string &name, DevExeSpace exec_space,
   const int nk = ku - kl + 1;
   const int nj = ju - jl + 1;
   const int nkj = nk*nj;
-  Kokkos::TeamPolicy<> policy(exec_space, nkj, Kokkos::AUTO);
+  Kokkos::TeamPolicy<> policy(exec_space, nkj, ATHENA_TEAM_SIZE);
   Kokkos::parallel_for(name, policy.set_scratch_size(scr_level,Kokkos::PerTeam(scr_size)),
   KOKKOS_LAMBDA(TeamMember_t tmember) {
     const int k = tmember.league_rank()/nj + kl;
@@ -389,7 +399,7 @@ inline void par_for_outer(const std::string &name, DevExeSpace exec_space,
   const int nj = ju - jl + 1;
   const int nkj  = nk*nj;
   const int nnkj = nn*nk*nj;
-  Kokkos::TeamPolicy<> policy(exec_space, nnkj, Kokkos::AUTO);
+  Kokkos::TeamPolicy<> policy(exec_space, nnkj, ATHENA_TEAM_SIZE);
   Kokkos::parallel_for(name, policy.set_scratch_size(scr_level,Kokkos::PerTeam(scr_size)),
   KOKKOS_LAMBDA(TeamMember_t tmember) {
     int n = (tmember.league_rank())/nkj;
@@ -416,7 +426,7 @@ inline void par_for_outer(const std::string &name, DevExeSpace exec_space,
   const int nkj   = nk*nj;
   const int nnkj  = nn*nk*nj;
   const int nmnkj = nm*nn*nk*nj;
-  Kokkos::TeamPolicy<> policy(exec_space, nmnkj, Kokkos::AUTO);
+  Kokkos::TeamPolicy<> policy(exec_space, nmnkj, ATHENA_TEAM_SIZE);
   Kokkos::parallel_for(name, policy.set_scratch_size(scr_level,Kokkos::PerTeam(scr_size)),
   KOKKOS_LAMBDA(TeamMember_t tmember) {
     int m = (tmember.league_rank())/nnkj;

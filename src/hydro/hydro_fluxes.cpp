@@ -4,35 +4,30 @@
 // Licensed under the 3-clause BSD License (the "LICENSE")
 //========================================================================================
 //! \file hydro_fluxes.cpp
-//! \brief Calculate 3D fluxes for hydro
-
-#include <iostream>
+//! \brief Calculate 3D fluxes for hydro.
+//!
+//! Fluxes are computed with two 1D-RangePolicy kernels per direction: (1) a per-cell
+//! reconstruction kernel that materializes the L/R primitive states in the global
+//! wl_split/wr_split buffers, followed by (2) a per-face Riemann solve that reads those
+//! buffers and writes the interface flux.  All reconstruction methods (DC/PLM/PPM4/
+//! PPMX/WENOZ) and non-relativistic Riemann solvers (Advect/LLF/HLLE/HLLC/Roe) are
+//! supported; the reconstruction method is chosen at runtime, the solver at compile time
+//! via the rsolver template parameter.
 
 #include "athena.hpp"
 #include "mesh/mesh.hpp"
 #include "coordinates/coordinates.hpp"
 #include "hydro.hpp"
 #include "eos/eos.hpp"
-#include "reconstruct/dc.hpp"
-#include "reconstruct/plm.hpp"
-#include "reconstruct/ppm.hpp"
-#include "reconstruct/wenoz.hpp"
-#include "hydro/rsolvers/advect_hyd.hpp"
-#include "hydro/rsolvers/llf_hyd.hpp"
-#include "hydro/rsolvers/hlle_hyd.hpp"
-#include "hydro/rsolvers/hllc_hyd.hpp"
-#include "hydro/rsolvers/roe_hyd.hpp"
-#include "hydro/rsolvers/llf_srhyd.hpp"
-#include "hydro/rsolvers/hlle_srhyd.hpp"
-#include "hydro/rsolvers/hllc_srhyd.hpp"
-#include "hydro/rsolvers/llf_grhyd.hpp"
-#include "hydro/rsolvers/hlle_grhyd.hpp"
+#include "reconstruct/recon.hpp"
+#include "hydro/rsolvers/solve_face_hyd.hpp"
 
 namespace hydro {
+
 //----------------------------------------------------------------------------------------
 //! \fn void Hydro::CalculateFluxes
-//! \brief Calls reconstruction and Riemann solver functions to compute hydro fluxes
-//! Note this function is templated over RS for better performance on GPUs.
+//! \brief Calls reconstruction and Riemann solver functions to compute hydro fluxes.
+//! Templated over the Riemann solver for better performance on GPUs.
 
 template <Hydro_RSolver rsolver_method_>
 void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
@@ -40,305 +35,166 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
   int is = indcs_.is, ie = indcs_.ie;
   int js = indcs_.js, je = indcs_.je;
   int ks = indcs_.ks, ke = indcs_.ke;
-  int ncells1 = indcs_.nx1 + 2*(indcs_.ng);
 
   int &nhyd_  = nhydro;
   int nvars = nhydro + nscalars;
   int nmb1 = pmy_pack->nmb_thispack - 1;
   const auto recon_method_ = recon_method;
-  bool extrema = false;
-  if (recon_method == ReconstructionMethod::ppmx) {
-    extrema = true;
+
+  // Face-normal and transverse flux ranges.  With FOFC/MOOD the correction algorithms
+  // read the main fluxes beyond the active domain in every dimension (to build the
+  // candidate update in a ghost halo for cross-block detection consistency), so the
+  // reconstruction/solve ranges are extended on both sides: by one cell for FOFC, and
+  // by mood_max_revs cells for MOOD (each revision iteration shrinks the halo of ghost
+  // cells whose candidate is consistent with the neighbor block by one — the
+  // parallel-MOOD "light cone").
+  int il1 = is, iu1 = ie+1, jl2 = js, ju2 = je+1, kl3 = ks, ku3 = ke+1;
+  int itl = is, itu = ie, jtl = js, jtu = je, ktl = ks, ktu = ke;
+  if (use_fofc || use_mood) {
+    const int ext = (use_mood) ? mood_max_revs : 1;
+    il1 = is-ext; iu1 = ie+1+ext;
+    jl2 = js-ext; ju2 = je+1+ext;
+    kl3 = ks-ext; ku3 = ke+1+ext;
+    itl = is-ext; itu = ie+ext;
+    if (pmy_pack->pmesh->multi_d) { jtl = js-ext; jtu = je+ext; }
+    if (pmy_pack->pmesh->three_d) { ktl = ks-ext; ktu = ke+ext; }
   }
 
   auto &eos_ = peos->eos_data;
   auto &size_ = pmy_pack->pmb->mb_size;
   auto &coord_ = pmy_pack->pcoord->coord_data;
   auto &w0_ = w0;
+  auto wl_ = wl_split;
+  auto wr_ = wr_split;
 
-  //--------------------------------------------------------------------------------------
-  // i-direction
+  //------------------------------------------------------------------------------------
+  // x1 direction
+  {
+    auto &flx1 = uflx.x1f;
+    // Reconstruction over cells i in [il1-1, iu1], j in [jtl, jtu], k in [ktl, ktu]
+    par_for("hflux_x1_recon", DevExeSpace(),
+      0, nmb1, ktl, ktu, jtl, jtu, il1-1, iu1,
+      KOKKOS_LAMBDA(int m, int k, int j, int i) {
+        ReconCell<IVX>(recon_method_, eos_, true, m, k, j, i, is, js, ks, ie, je, ke,
+                       nvars, w0_, wl_, wr_);
+      });
 
-  size_t scr_size = ScrArray2D<Real>::shmem_size(nvars, ncells1) * 2;
-  int scr_level = 0;
-  auto &flx1_ = uflx.x1f;
+    // Riemann solve over faces i in [il1, iu1]
+    par_for("hflux_x1_rsolve", DevExeSpace(),
+      0, nmb1, ktl, ktu, jtl, jtu, il1, iu1,
+      KOKKOS_LAMBDA(int m, int k, int j, int i) {
+        auto eos = eos_;
+        auto indcs = indcs_;
+        auto size = size_;
+        auto coord = coord_;
+        auto wl = wl_;
+        auto wr = wr_;
+        auto flx = flx1;
+        const int is_ = is, js_ = js, ks_ = ks;
+        SolveFace<rsolver_method_, IVX>(eos, indcs, size, coord,
+                                        m, k, j, i, is_, js_, ks_, wl, wr, flx);
+      });
 
-  // set the loop limits for 1D/2D/3D problems
-  int il = is, iu = ie+1, jl = js, ju = je, kl = ks, ku = ke;
-  if (use_fofc) {
-    il = is-1, iu = ie+2;
-    if (pmy_pack->pmesh->two_d) {
-      jl = js-1, ju = je+1, kl = ks, ku = ke;
-    } else {
-      jl = js-1, ju = je+1, kl = ks-1, ku = ke+1;
-    }
-  }
-
-  par_for_outer("hflux_x1",DevExeSpace(), scr_size, scr_level, 0, nmb1, kl, ku, jl, ju,
-  KOKKOS_LAMBDA(TeamMember_t member, const int m, const int k, const int j) {
-    ScrArray2D<Real> wl(member.team_scratch(scr_level), nvars, ncells1);
-    ScrArray2D<Real> wr(member.team_scratch(scr_level), nvars, ncells1);
-
-    // Reconstruct qR[i] and qL[i+1]
-    switch (recon_method_) {
-      case ReconstructionMethod::dc:
-        DonorCellX1(member, m, k, j, il-1, iu, w0_, wl, wr);
-        break;
-      case ReconstructionMethod::plm:
-        PiecewiseLinearX1(member, m, k, j, il-1, iu, w0_, wl, wr);
-        break;
-      case ReconstructionMethod::ppm4:
-      case ReconstructionMethod::ppmx:
-        PiecewiseParabolicX1(member,eos_,extrema,true, m, k, j, il-1, iu, w0_, wl, wr);
-        break;
-      case ReconstructionMethod::wenoz:
-        WENOZX1(member, eos_, true, m, k, j, il-1, iu, w0_, wl, wr);
-        break;
-      default:
-        break;
-    }
-    // Sync all threads in the team so that scratch memory is consistent
-    member.team_barrier();
-
-    // compute fluxes over [is,ie+1]
-    // NOTE(@pdmullen): Capture variables prior to if constexpr.  Required for cuda 11.6+.
-    auto eos = eos_;
-    auto indcs = indcs_;
-    auto size = size_;
-    auto coord = coord_;
-    auto flx1 = flx1_;
-    if constexpr (rsolver_method_ == Hydro_RSolver::advect) {
-      Advect(member, eos, indcs, size, coord, m, k, j, il, iu, IVX, wl, wr, flx1);
-    } else if constexpr (rsolver_method_ == Hydro_RSolver::llf) {
-      LLF(member, eos, indcs, size, coord, m, k, j, il, iu, IVX, wl, wr, flx1);
-    } else if constexpr (rsolver_method_ == Hydro_RSolver::hlle) {
-      HLLE(member, eos, indcs, size, coord, m, k, j, il, iu, IVX, wl, wr, flx1);
-    } else if constexpr (rsolver_method_ == Hydro_RSolver::hllc) {
-      HLLC(member, eos, indcs, size, coord, m, k, j, il, iu, IVX, wl, wr, flx1);
-    } else if constexpr (rsolver_method_ == Hydro_RSolver::roe) {
-      Roe(member, eos, indcs, size, coord, m, k, j, il, iu, IVX, wl, wr, flx1);
-    } else if constexpr (rsolver_method_ == Hydro_RSolver::llf_sr) {
-      LLF_SR(member, eos, indcs, size, coord, m, k, j, il, iu, IVX, wl, wr, flx1);
-    } else if constexpr (rsolver_method_ == Hydro_RSolver::hlle_sr) {
-      HLLE_SR(member, eos, indcs, size, coord, m, k, j, il, iu, IVX, wl, wr, flx1);
-    } else if constexpr (rsolver_method_ == Hydro_RSolver::hllc_sr) {
-      HLLC_SR(member, eos, indcs, size, coord, m, k, j, il, iu, IVX, wl, wr, flx1);
-    } else if constexpr (rsolver_method_ == Hydro_RSolver::llf_gr) {
-      LLF_GR(member, eos, indcs, size, coord, m, k, j, il, iu, IVX, wl, wr, flx1);
-    } else if constexpr (rsolver_method_ == Hydro_RSolver::hlle_gr) {
-      HLLE_GR(member, eos, indcs, size, coord, m, k, j, il, iu, IVX, wl, wr, flx1);
-    }
-    member.team_barrier();
-
-    // calculate fluxes of scalars (if any)
+    // Scalar fluxes (upwind from sign of mass flux)
     if (nvars > nhyd_) {
-      for (int n=nhyd_; n<nvars; ++n) {
-        par_for_inner(member, is, ie+1, [&](const int i) {
-          if (flx1_(m,IDN,k,j,i) >= 0.0) {
-            flx1_(m,n,k,j,i) = flx1_(m,IDN,k,j,i)*wl(n,i);
-          } else {
-            flx1_(m,n,k,j,i) = flx1_(m,IDN,k,j,i)*wr(n,i);
+      par_for("hflux_x1_scalars", DevExeSpace(),
+        0, nmb1, ks, ke, js, je, is, ie+1,
+        KOKKOS_LAMBDA(int m, int k, int j, int i) {
+          for (int n = nhyd_; n < nvars; ++n) {
+            if (flx1(m, IDN, k, j, i) >= 0.0) {
+              flx1(m, n, k, j, i) = flx1(m, IDN, k, j, i) * wl_(m, n, k, j, i);
+            } else {
+              flx1(m, n, k, j, i) = flx1(m, IDN, k, j, i) * wr_(m, n, k, j, i);
+            }
           }
         });
-      }
     }
-  });
-
-  //--------------------------------------------------------------------------------------
-  // j-direction
-
-  if (pmy_pack->pmesh->multi_d) {
-    scr_size = ScrArray2D<Real>::shmem_size(nvars, ncells1) * 3;
-    auto &flx2_ = uflx.x2f;
-
-    // set the loop limits for 1D/2D/3D problems
-    il = is, iu = ie, jl = js-1, ju = je+1, kl = ks, ku = ke;
-    if (use_fofc) {
-      jl = js-2, ju = je+2;
-      if (pmy_pack->pmesh->two_d) {
-        il = is-1, iu = ie+1, kl = ks, ku = ke;
-      } else {
-        il = is-1, iu = ie+1, kl = ks-1, ku = ke+1;
-      }
-    }
-
-    par_for_outer("hflux_x2",DevExeSpace(), scr_size, scr_level, 0, nmb1, kl, ku,
-    KOKKOS_LAMBDA(TeamMember_t member, const int m, const int k) {
-      ScrArray2D<Real> scr1(member.team_scratch(scr_level), nvars, ncells1);
-      ScrArray2D<Real> scr2(member.team_scratch(scr_level), nvars, ncells1);
-      ScrArray2D<Real> scr3(member.team_scratch(scr_level), nvars, ncells1);
-
-      for (int j=jl; j<=ju; ++j) {
-        // Permute scratch arrays.
-        auto wl     = scr1;
-        auto wl_jp1 = scr2;
-        auto wr     = scr3;
-        if ((j%2) == 0) {
-          wl     = scr2;
-          wl_jp1 = scr1;
-        }
-
-        // Reconstruct qR[j] and qL[j+1]
-        switch (recon_method_) {
-          case ReconstructionMethod::dc:
-            DonorCellX2(member, m, k, j, il, iu, w0_, wl_jp1, wr);
-            break;
-          case ReconstructionMethod::plm:
-            PiecewiseLinearX2(member, m, k, j, il, iu, w0_, wl_jp1, wr);
-            break;
-          case ReconstructionMethod::ppm4:
-          case ReconstructionMethod::ppmx:
-            PiecewiseParabolicX2(member,eos_,extrema,true,m,k,j,il,iu, w0_, wl_jp1, wr);
-            break;
-          case ReconstructionMethod::wenoz:
-            WENOZX2(member, eos_, true, m, k, j, il, iu, w0_, wl_jp1, wr);
-            break;
-          default:
-            break;
-        }
-        member.team_barrier();
-
-        // compute fluxes over [js,je+1].  RS returns flux in input wr array
-        if (j>jl) {
-          // NOTE(@pdmullen): Capture variables prior to if constexpr.
-          auto eos = eos_;
-          auto indcs = indcs_;
-          auto size = size_;
-          auto coord = coord_;
-          auto flx2 = flx2_;
-          if constexpr (rsolver_method_ == Hydro_RSolver::advect) {
-            Advect(member, eos, indcs, size, coord, m, k, j, il, iu, IVY, wl, wr, flx2);
-          } else if constexpr (rsolver_method_ == Hydro_RSolver::llf) {
-            LLF(member, eos, indcs, size, coord, m, k, j, il, iu, IVY, wl, wr, flx2);
-          } else if constexpr (rsolver_method_ == Hydro_RSolver::hlle) {
-            HLLE(member, eos, indcs, size, coord, m, k, j, il, iu, IVY, wl, wr, flx2);
-          } else if constexpr (rsolver_method_ == Hydro_RSolver::hllc) {
-            HLLC(member, eos, indcs, size, coord, m, k, j, il, iu, IVY, wl, wr, flx2);
-          } else if constexpr (rsolver_method_ == Hydro_RSolver::roe) {
-            Roe(member, eos, indcs, size, coord, m, k, j, il, iu, IVY, wl, wr, flx2);
-          } else if constexpr (rsolver_method_ == Hydro_RSolver::llf_sr) {
-            LLF_SR(member, eos, indcs, size, coord, m, k, j, il, iu, IVY, wl, wr, flx2);
-          } else if constexpr (rsolver_method_ == Hydro_RSolver::hlle_sr) {
-            HLLE_SR(member, eos, indcs, size, coord, m, k, j, il, iu, IVY, wl, wr, flx2);
-          } else if constexpr (rsolver_method_ == Hydro_RSolver::hllc_sr) {
-            HLLC_SR(member, eos, indcs, size, coord, m, k, j, il, iu, IVY, wl, wr, flx2);
-          } else if constexpr (rsolver_method_ == Hydro_RSolver::llf_gr) {
-            LLF_GR(member, eos, indcs, size, coord, m, k, j, il, iu, IVY, wl, wr, flx2);
-          } else if constexpr (rsolver_method_ == Hydro_RSolver::hlle_gr) {
-            HLLE_GR(member, eos, indcs, size, coord, m, k, j, il, iu, IVY, wl, wr, flx2);
-          }
-          member.team_barrier();
-        }
-
-        // calculate fluxes of scalars (if any)
-        if (nvars > nhyd_) {
-          for (int n=nhyd_; n<nvars; ++n) {
-            par_for_inner(member, is, ie, [&](const int i) {
-              if (flx2_(m,IDN,k,j,i) >= 0.0) {
-                flx2_(m,n,k,j,i) = flx2_(m,IDN,k,j,i)*wl(n,i);
-              } else {
-                flx2_(m,n,k,j,i) = flx2_(m,IDN,k,j,i)*wr(n,i);
-              }
-            });
-          }
-        }
-      } // end of loop over j
-    });
   }
 
-  //--------------------------------------------------------------------------------------
-  // k-direction. Note order of k,j loops switched
+  //------------------------------------------------------------------------------------
+  // x2 direction
+  if (pmy_pack->pmesh->multi_d) {
+    auto &flx2 = uflx.x2f;
+    // Reconstruction over cells j in [jl2-1, ju2], i in [itl, itu], k in [ktl, ktu]
+    par_for("hflux_x2_recon", DevExeSpace(),
+      0, nmb1, ktl, ktu, jl2-1, ju2, itl, itu,
+      KOKKOS_LAMBDA(int m, int k, int j, int i) {
+        ReconCell<IVY>(recon_method_, eos_, true, m, k, j, i, is, js, ks, ie, je, ke,
+                       nvars, w0_, wl_, wr_);
+      });
 
+    // Riemann solve over faces j in [jl2, ju2]
+    par_for("hflux_x2_rsolve", DevExeSpace(),
+      0, nmb1, ktl, ktu, jl2, ju2, itl, itu,
+      KOKKOS_LAMBDA(int m, int k, int j, int i) {
+        auto eos = eos_;
+        auto indcs = indcs_;
+        auto size = size_;
+        auto coord = coord_;
+        auto wl = wl_;
+        auto wr = wr_;
+        auto flx = flx2;
+        const int is_ = is, js_ = js, ks_ = ks;
+        SolveFace<rsolver_method_, IVY>(eos, indcs, size, coord,
+                                        m, k, j, i, is_, js_, ks_, wl, wr, flx);
+      });
+
+    if (nvars > nhyd_) {
+      par_for("hflux_x2_scalars", DevExeSpace(),
+        0, nmb1, ks, ke, js, je+1, is, ie,
+        KOKKOS_LAMBDA(int m, int k, int j, int i) {
+          for (int n = nhyd_; n < nvars; ++n) {
+            if (flx2(m, IDN, k, j, i) >= 0.0) {
+              flx2(m, n, k, j, i) = flx2(m, IDN, k, j, i) * wl_(m, n, k, j, i);
+            } else {
+              flx2(m, n, k, j, i) = flx2(m, IDN, k, j, i) * wr_(m, n, k, j, i);
+            }
+          }
+        });
+    }
+  }
+
+  //------------------------------------------------------------------------------------
+  // x3 direction
   if (pmy_pack->pmesh->three_d) {
-    scr_size = ScrArray2D<Real>::shmem_size(nvars, ncells1) * 3;
-    auto &flx3_ = uflx.x3f;
+    auto &flx3 = uflx.x3f;
+    // Reconstruction over cells k in [kl3-1, ku3], j in [jtl, jtu], i in [itl, itu]
+    par_for("hflux_x3_recon", DevExeSpace(),
+      0, nmb1, kl3-1, ku3, jtl, jtu, itl, itu,
+      KOKKOS_LAMBDA(int m, int k, int j, int i) {
+        ReconCell<IVZ>(recon_method_, eos_, true, m, k, j, i, is, js, ks, ie, je, ke,
+                       nvars, w0_, wl_, wr_);
+      });
 
-    // set the loop limits
-    il = is, iu = ie, jl = js, ju = je, kl = ks-1, ku = ke+1;
-    if (use_fofc) { il = is-1, iu = ie+1, jl = js-1, ju = je+1, kl = ks-2, ku = ke+2; }
+    // Riemann solve over faces k in [kl3, ku3]
+    par_for("hflux_x3_rsolve", DevExeSpace(),
+      0, nmb1, kl3, ku3, jtl, jtu, itl, itu,
+      KOKKOS_LAMBDA(int m, int k, int j, int i) {
+        auto eos = eos_;
+        auto indcs = indcs_;
+        auto size = size_;
+        auto coord = coord_;
+        auto wl = wl_;
+        auto wr = wr_;
+        auto flx = flx3;
+        const int is_ = is, js_ = js, ks_ = ks;
+        SolveFace<rsolver_method_, IVZ>(eos, indcs, size, coord,
+                                        m, k, j, i, is_, js_, ks_, wl, wr, flx);
+      });
 
-    par_for_outer("hflux_x3",DevExeSpace(), scr_size, scr_level, 0, nmb1, jl, ju,
-    KOKKOS_LAMBDA(TeamMember_t member, const int m, const int j) {
-      ScrArray2D<Real> scr1(member.team_scratch(scr_level), nvars, ncells1);
-      ScrArray2D<Real> scr2(member.team_scratch(scr_level), nvars, ncells1);
-      ScrArray2D<Real> scr3(member.team_scratch(scr_level), nvars, ncells1);
-
-      for (int k=kl; k<=ku; ++k) {
-        // Permute scratch arrays.
-        auto wl     = scr1;
-        auto wl_kp1 = scr2;
-        auto wr     = scr3;
-        if ((k%2) == 0) {
-          wl     = scr2;
-          wl_kp1 = scr1;
-        }
-
-        // Reconstruct qR[k] and qL[k+1]
-        switch (recon_method_) {
-          case ReconstructionMethod::dc:
-            DonorCellX3(member, m, k, j, il, iu, w0_, wl_kp1, wr);
-            break;
-          case ReconstructionMethod::plm:
-            PiecewiseLinearX3(member, m, k, j, il, iu, w0_, wl_kp1, wr);
-            break;
-          case ReconstructionMethod::ppm4:
-          case ReconstructionMethod::ppmx:
-            PiecewiseParabolicX3(member,eos_,extrema,true,m,k,j,il,iu, w0_, wl_kp1, wr);
-            break;
-          case ReconstructionMethod::wenoz:
-            WENOZX3(member, eos_, true, m, k, j, il, iu, w0_, wl_kp1, wr);
-            break;
-          default:
-            break;
-        }
-        member.team_barrier();
-
-        // compute fluxes over [ks,ke+1].  RS returns flux in input wr array
-        if (k>kl) {
-          // NOTE(@pdmullen): Capture variables prior to if constexpr.
-          auto eos = eos_;
-          auto indcs = indcs_;
-          auto size = size_;
-          auto coord = coord_;
-          auto flx3 = flx3_;
-          if constexpr (rsolver_method_ == Hydro_RSolver::advect) {
-            Advect(member, eos, indcs, size, coord, m, k, j, il, iu, IVZ, wl, wr, flx3);
-          } else if constexpr (rsolver_method_ == Hydro_RSolver::llf) {
-            LLF(member, eos, indcs, size, coord, m, k, j, il, iu, IVZ, wl, wr, flx3);
-          } else if constexpr (rsolver_method_ == Hydro_RSolver::hlle) {
-            HLLE(member, eos, indcs, size, coord, m, k, j, il, iu, IVZ, wl, wr, flx3);
-          } else if constexpr (rsolver_method_ == Hydro_RSolver::hllc) {
-            HLLC(member, eos, indcs, size, coord, m, k, j, il, iu, IVZ, wl, wr, flx3);
-          } else if constexpr (rsolver_method_ == Hydro_RSolver::roe) {
-            Roe(member, eos, indcs, size, coord, m, k, j, il, iu, IVZ, wl, wr, flx3);
-          } else if constexpr (rsolver_method_ == Hydro_RSolver::llf_sr) {
-            LLF_SR(member, eos, indcs, size, coord, m, k, j, il, iu, IVZ, wl, wr, flx3);
-          } else if constexpr (rsolver_method_ == Hydro_RSolver::hlle_sr) {
-            HLLE_SR(member, eos, indcs, size, coord, m, k, j, il, iu, IVZ, wl, wr, flx3);
-          } else if constexpr (rsolver_method_ == Hydro_RSolver::hllc_sr) {
-            HLLC_SR(member, eos, indcs, size, coord, m, k, j, il, iu, IVZ, wl, wr, flx3);
-          } else if constexpr (rsolver_method_ == Hydro_RSolver::llf_gr) {
-            LLF_GR(member, eos, indcs, size, coord, m, k, j, il, iu, IVZ, wl, wr, flx3);
-          } else if constexpr (rsolver_method_ == Hydro_RSolver::hlle_gr) {
-            HLLE_GR(member, eos, indcs, size, coord, m, k, j, il, iu, IVZ, wl, wr, flx3);
+    if (nvars > nhyd_) {
+      par_for("hflux_x3_scalars", DevExeSpace(),
+        0, nmb1, ks, ke+1, js, je, is, ie,
+        KOKKOS_LAMBDA(int m, int k, int j, int i) {
+          for (int n = nhyd_; n < nvars; ++n) {
+            if (flx3(m, IDN, k, j, i) >= 0.0) {
+              flx3(m, n, k, j, i) = flx3(m, IDN, k, j, i) * wl_(m, n, k, j, i);
+            } else {
+              flx3(m, n, k, j, i) = flx3(m, IDN, k, j, i) * wr_(m, n, k, j, i);
+            }
           }
-          member.team_barrier();
-        }
-
-        // calculate fluxes of scalars (if any)
-        if (nvars > nhyd_) {
-          for (int n=nhyd_; n<nvars; ++n) {
-            par_for_inner(member, is, ie, [&](const int i) {
-              if (flx3_(m,IDN,k,j,i) >= 0.0) {
-                flx3_(m,n,k,j,i) = flx3_(m,IDN,k,j,i)*wl(n,i);
-              } else {
-                flx3_(m,n,k,j,i) = flx3_(m,IDN,k,j,i)*wr(n,i);
-              }
-            });
-          }
-        }
-      } // end loop over k
-    });
+        });
+    }
   }
 
   return;

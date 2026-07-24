@@ -36,9 +36,12 @@ using MHDBoundaryFnPtr = void (*)(int m, Mesh* pm, MHD* pmhd, DvceArray5D<Real> 
 }
 
 // constants that enumerate MHD Riemann Solver options
-enum class MHD_RSolver {advect, llf, hlle, hlld, roe,   // non-relativistic
+enum class MHD_RSolver {advect, llf, hlle, hlld, lhlld, roe,   // non-relativistic
                         llf_sr, hlle_sr,                // SR
                         llf_gr, hlle_gr};                       // GR
+
+// constants that enumerate EMF (corner electric field) averaging options
+enum class MHD_EMF {ct_contact, uct_hll, uct_hlld};
 
 //----------------------------------------------------------------------------------------
 //! \struct MHDTaskIDs
@@ -93,6 +96,7 @@ class MHD {
   // data
   ReconstructionMethod recon_method;
   MHD_RSolver rsolver_method;
+  MHD_EMF emf_method;
   EquationOfState *peos;   // chosen EOS
 
   int nmhd;                // number of mhd variables (5/4 for ideal/isothermal EOS)
@@ -126,12 +130,28 @@ class MHD {
   // following only used for time-evolving flow
   DvceArray5D<Real> u1;       // conserved variables, second register
   DvceFaceFld4D<Real> b1;     // face-centered magnetic fields, second register
+  // candidate face-centered B for the MHD MOOD detector: the genuine staggered CT update of
+  // b0 with the candidate corner EMFs, averaged to cell centers to fill bcctest (so the
+  // detector sees the real evolved field, not the FOFC face-E proxy). Allocated when mood.
+  DvceFaceFld4D<Real> b0_test;
   DvceFaceFld5D<Real> uflx;   // fluxes of conserved quantities on cell faces
   DvceEdgeFld4D<Real> efld;   // edge-centered electric fields (fluxes of B)
   // temporary variables used to store face-centered electric fields returned by RS
   DvceArray4D<Real> e3x1, e2x1;
   DvceArray4D<Real> e1x2, e3x2;
   DvceArray4D<Real> e2x3, e1x3;
+  // UCT data stored at cell faces by Riemann solvers (only allocated when UCT is used)
+  // x1-faces: flux weight, diffusion coefficients, upwind transverse velocities
+  DvceArray5D<Real> sdet;  // per-direction velocity compression (LHLLD carbuncle sensor)
+  DvceArray4D<Real> aL_x1f, dL_x1f, dR_x1f, vy_x1f, vz_x1f;
+  // x2-faces: flux weight, diffusion coefficients, upwind transverse velocities
+  DvceArray4D<Real> aL_x2f, dL_x2f, dR_x2f, vx_x2f, vz_x2f;
+  // x3-faces: flux weight, diffusion coefficients, upwind transverse velocities
+  DvceArray4D<Real> aL_x3f, dL_x3f, dR_x3f, vx_x3f, vy_x3f;
+  // global per-face L/R buffers for the split-kernel flux path: primitives (nmhd+nscalars
+  // components) and reconstructed cell-centered B-field (3 components)
+  DvceArray5D<Real> wl_split, wr_split;
+  DvceArray5D<Real> bl_split, br_split;
   Real dtnew;
 
   // following used for time derivatives in computation of jcon
@@ -142,6 +162,29 @@ class MHD {
   // following used for FOFC algorithm
   DvceArray4D<bool> fofc;  // flag for each cell to indicate if FOFC is needed
   bool use_fofc = false;   // flag to enable FOFC
+
+  // following used for the MOOD a-posteriori fallback ("FB") scheme.  Shares the
+  // fofc/utest/bcctest arrays: fofc marks cells flagged (newly demoted) in the current
+  // revision iteration, utest/bcctest hold the candidate update.
+  bool use_mood = false;    // flag to enable MOOD fallback
+  int mood_max_revs = 1;    // max revision iterations per RK stage
+  int mood_nad_scale;       // NAD tolerance scale: 0=relative, 1=grange, 2=gdu, 3=gcfl
+  Real mood_nad_theta;      // grange Mach-softening exponent
+  bool mood_nad_energy;     // include the energy variable in NAD (density always on)
+  int mood_nad_b;           // B in NAD: 0=|B| magnitude, 1=components (of bcctest)
+  int mood_nad_v;           // velocity in NAD: 0=off, 1=|v| magnitude, 2=components
+  bool uct_diag;            // print max|d| (UCT dissipation coeff) + EMF-NaN diagnostic
+  int mood_edge_flag;       // 1: explicitly demote UCT edge reconstruction at edges
+                            // adjacent to demoted cells; false: implicit blending of
+                            // revised face data through the corner composition
+  Real mood_rtol;           // NAD tolerance as a fraction of the selected scale
+  Real mood_eps0;           // round-off floor (relative to the violated bound)
+  Real mood_atol;           // absolute floor of the NAD tolerance
+  bool mood_sed;            // exempt smooth extrema from NAD detection
+  int n_fb_tiers;           // # of fallback tiers below base scheme (2, or 1 if plm)
+  int mood_halo0;           // first-iteration detection halo (light-cone start width)
+  DvceArray4D<int> fb_level;    // per-cell cascade level (0=base, 1=plm, 2=dc)
+  DvceArray4D<Real> bmag_ref;   // |B| of stage-input bcc0 (only for mood_nad_b=0)
 
   // container to hold names of TaskIDs
   MHDTaskIDs id;
@@ -168,6 +211,11 @@ class MHD {
   TaskStatus SendU_Shr(Driver *d, int stage);
   TaskStatus RecvU_Shr(Driver *d, int stage);
   TaskStatus CornerE(Driver *d, int stage);
+  // Compose edge-centered corner EMFs (efld) from the current face-centered E-fields and
+  // UCT face coefficients over an arbitrary edge-point range [il,iu]x[jl,ju]x[kl,ku].
+  // Newtonian-ideal UCT path only (factored out of CornerE so the MOOD detector can build
+  // the genuine staggered candidate B over its light-cone halo — see mhd_mood.cpp).
+  void ComposeCornerEMF(int il, int iu, int jl, int ju, int kl, int ku);
   TaskStatus EFieldSrc(Driver *d, int stage);
   TaskStatus SendE(Driver *d, int stage);
   TaskStatus RecvE(Driver *d, int stage);
@@ -194,7 +242,12 @@ class MHD {
   // first-order flux correction
   void FOFC(Driver *d, int stage);
 
-  DvceArray5D<Real> utest, bcctest;  // scratch arrays for FOFC
+  // MOOD a-posteriori fallback, templated over Riemann solver (fallback tiers re-solve
+  // flagged faces with the same solver as the base scheme)
+  template <MHD_RSolver T>
+  void MOODLoop(Driver *d, int stage);
+
+  DvceArray5D<Real> utest, bcctest;  // scratch arrays for FOFC/MOOD
 
  private:
   MeshBlockPack* pmy_pack;   // ptr to MeshBlockPack containing this MHD

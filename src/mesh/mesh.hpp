@@ -69,8 +69,9 @@ struct LogicalLocation {
 
 struct EventCounters {
   int nfofc, neos_dfloor, neos_efloor, neos_tfloor, neos_vceil, neos_fail, maxit_c2p;
+  int nmood;  // cells demoted down the MOOD fallback cascade
   EventCounters() : nfofc(0), neos_dfloor(0), neos_efloor(0), neos_tfloor(0),
-                    neos_vceil(0), neos_fail(0), maxit_c2p(0) {}
+                    neos_vceil(0), neos_fail(0), maxit_c2p(0), nmood(0) {}
 };
 
 // Forward declarations required due to recursive definitions amongst mesh classes
@@ -172,9 +173,15 @@ class Mesh {
   int NumberOfMeshBlockCells() const {
     return (mb_indcs.nx1)*(mb_indcs.nx2)*(mb_indcs.nx3);
   }
+  bool IsMeshUpdated() const { return mesh_updated_; }
+  void MarkMeshUpdated() {mesh_updated_ = true; ++amr_lb_seq_;}
+  void ClearMeshUpdated() { mesh_updated_ = false; }
+  int GetAMRLoadBalanceUpdateSeq() const { return amr_lb_seq_; }
 
  private:
   std::unique_ptr<MeshBlockTree> ptree;  // pointer to root node in binary/quad/oct-tree
   void LoadBalance(float *clist, int *rlist, int *slist, int *nlist, int nb);
+  bool mesh_updated_ = false;
+  int amr_lb_seq_ = 0;
 };
 #endif  // MESH_MESH_HPP_

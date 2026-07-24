@@ -58,11 +58,12 @@ add_executable(
 
         geodesic-grid/geodesic_grid.cpp
         geodesic-grid/spherical_grid.cpp
-	geodesic-grid/gauss_legendre.cpp
+        geodesic-grid/gauss_legendre.cpp
 
         hydro/hydro.cpp
         hydro/hydro_fluxes.cpp
         hydro/hydro_fofc.cpp
+        hydro/hydro_mood.cpp
         hydro/hydro_newdt.cpp
         hydro/hydro_tasks.cpp
         hydro/hydro_update.cpp
@@ -84,6 +85,7 @@ add_executable(
         mhd/mhd_ct.cpp
         mhd/mhd_fluxes.cpp
         mhd/mhd_fofc.cpp
+        mhd/mhd_mood.cpp
         mhd/mhd_newdt.cpp
         mhd/mhd_tasks.cpp
         mhd/mhd_update.cpp

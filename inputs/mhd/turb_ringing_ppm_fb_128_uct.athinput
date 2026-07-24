@@ -1,0 +1,145 @@
+# Strong guide-field ringing reproducer with unlimited PPM + MOOD fallback (PPM+FB).
+# Same physical/numerical setup as turb_ringing_reproducer.athinput except:
+#   reconstruct = ppm, mood = true, nghost = 5 (MOOD halo requirement).
+
+<comment>
+problem = strong-guide-field driven turbulence ringing reproducer (PPM+FB)
+
+<job>
+basename = turb_ringing_ppm_fb
+
+<mesh>
+nghost = 6
+
+nx1 = 128
+x1min = -0.5
+x1max = 0.5
+ix1_bc = periodic
+ox1_bc = periodic
+
+nx2 = 128
+x2min = -0.5
+x2max = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+
+nx3 = 128
+x3min = -0.5
+x3max = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 64
+nx2 = 64
+nx3 = 64
+
+<time>
+evolution = dynamic
+integrator = rk3
+cfl_number = 0.33
+nlim = -1
+tlim = 1.5
+ndiag = 1
+
+<mhd>
+eos = ideal
+reconstruct = ppm
+mood = true
+# MOOD knobs (explicit so they can be overridden on the command line)
+mood_rtol = 1.0e-5
+mood_atol = 0.0
+mood_max_revs = 2
+mood_nad_scale = gcfl
+mood_nad_b = comps
+mood_nad_v = comps
+mood_sed = true
+rsolver = hlld
+emf = uct_hlld
+gamma = 1.00001
+
+<problem>
+beta = 0.04
+ifield = 2
+user_hist = true
+
+<turb_driving>
+turb_flag = 2
+tcorr = 1.0
+dt_update = 0.01
+normalization = edot
+dedt = 0.25
+spectrum = parabolic
+npeak = 2
+nlow = 1
+nhigh = 3
+min_kz = 1
+max_kz = 3
+driving_type = 0
+sol_fraction = 1.0
+rseed = 1
+
+<output1>
+file_type = hst
+dt = 0.015625
+data_format = %24.16e
+
+<output2>
+file_type = rst
+dt = 0.25
+single_file_per_rank = true
+
+<output3>
+file_type = bin
+variable = mhd_w_bcc
+id = full_mhd_w_bcc
+dt = 0.25
+single_file_per_rank = true
+
+<output4>
+file_type = bin
+variable = mhd_bmag
+slice_x1 = 0.0
+id = slice_x1_0_bmag
+dt = 0.25
+single_file_per_rank = true
+
+<output5>
+file_type = bin
+variable = mhd_curv_alt
+slice_x1 = 0.0
+id = slice_x1_0_curvature
+dt = 0.25
+single_file_per_rank = true
+
+<output6>
+file_type = bin
+variable = mhd_j2
+slice_x1 = 0.0
+id = slice_x1_0_current2
+dt = 0.25
+single_file_per_rank = true
+
+<output7>
+file_type = bin
+variable = mhd_bmag
+slice_x2 = 0.01953125
+id = slice_x2_001953125_bmag
+dt = 0.25
+single_file_per_rank = true
+
+<output8>
+file_type = bin
+variable = mhd_curv_alt
+slice_x2 = 0.01953125
+id = slice_x2_001953125_curvature
+dt = 0.25
+single_file_per_rank = true
+
+<output9>
+file_type = bin
+variable = mhd_j2
+slice_x2 = 0.01953125
+id = slice_x2_001953125_current2
+dt = 0.25
+single_file_per_rank = true

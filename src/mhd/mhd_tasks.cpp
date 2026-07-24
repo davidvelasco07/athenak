@@ -137,7 +137,7 @@ TaskStatus MHD::InitRecv(Driver *pdrive, int stage) {
     }
   }
 
-  // with shearing box boundaries caluclate x2-distance x1-boundaries have sheared and
+  // with shearing box boundaries calculate x2-distance x1-boundaries have sheared and
   // with MPI post receives for U and B
   if (psbox_u != nullptr) {
     // only execute when (3D OR 2d_r_phi)
@@ -185,6 +185,8 @@ TaskStatus MHD::Fluxes(Driver *pdrive, int stage) {
     CalculateFluxes<MHD_RSolver::hlle>(pdrive, stage);
   } else if (rsolver_method == MHD_RSolver::hlld) {
     CalculateFluxes<MHD_RSolver::hlld>(pdrive, stage);
+  } else if (rsolver_method == MHD_RSolver::lhlld) {
+    CalculateFluxes<MHD_RSolver::lhlld>(pdrive, stage);
   } else if (rsolver_method == MHD_RSolver::llf_sr) {
     CalculateFluxes<MHD_RSolver::llf_sr>(pdrive, stage);
   } else if (rsolver_method == MHD_RSolver::hlle_sr) {
@@ -206,8 +208,26 @@ TaskStatus MHD::Fluxes(Driver *pdrive, int stage) {
     pcond->AddHeatFlux(w0, peos->eos_data, uflx);
   }
 
-  // call FOFC if necessary
-  if (use_fofc) {
+  // call the MOOD fallback or FOFC if necessary
+  if (use_mood) {
+    if (rsolver_method == MHD_RSolver::advect) {
+      MOODLoop<MHD_RSolver::advect>(pdrive, stage);
+    } else if (rsolver_method == MHD_RSolver::llf) {
+      MOODLoop<MHD_RSolver::llf>(pdrive, stage);
+    } else if (rsolver_method == MHD_RSolver::hlle) {
+      MOODLoop<MHD_RSolver::hlle>(pdrive, stage);
+    } else if (rsolver_method == MHD_RSolver::hlld) {
+      MOODLoop<MHD_RSolver::hlld>(pdrive, stage);
+    } else if (rsolver_method == MHD_RSolver::llf_sr) {
+      MOODLoop<MHD_RSolver::llf_sr>(pdrive, stage);
+    } else if (rsolver_method == MHD_RSolver::hlle_sr) {
+      MOODLoop<MHD_RSolver::hlle_sr>(pdrive, stage);
+    } else if (rsolver_method == MHD_RSolver::llf_gr) {
+      MOODLoop<MHD_RSolver::llf_gr>(pdrive, stage);
+    } else if (rsolver_method == MHD_RSolver::hlle_gr) {
+      MOODLoop<MHD_RSolver::hlle_gr>(pdrive, stage);
+    }
+  } else if (use_fofc) {
     FOFC(pdrive, stage);
   } else if (pmy_pack->pcoord->is_general_relativistic) {
     if (pmy_pack->pcoord->coord_data.bh_excise) {
@@ -491,7 +511,7 @@ TaskStatus MHD::RecvB_Shr(Driver *pdrive, int stage) {
 
 //----------------------------------------------------------------------------------------
 //! \fn TaskStatus MHD::ApplyPhysicalBCs
-//! \brief Wrapper task list function to call funtions that set physical and user BCs
+//! \brief Wrapper task list function to call functions that set physical and user BCs
 
 TaskStatus MHD::ApplyPhysicalBCs(Driver *pdrive, int stage) {
   // do not apply BCs if domain is strictly periodic

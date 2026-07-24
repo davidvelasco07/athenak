@@ -21,7 +21,7 @@
     #error NHISTORY > NREDUCTION in outputs.hpp
 #endif
 
-#define NOUTPUT_CHOICES 153
+#define NOUTPUT_CHOICES 154
 // choices for output variables used in <ouput> blocks in input file
 // TO ADD MORE CHOICES:
 //   - add more strings to array below, change NOUTPUT_CHOICES above appropriately
@@ -44,7 +44,7 @@ static const char *var_choice[NOUTPUT_CHOICES] = {
   "mhd_t",
   // MHD derived variables (39-46)
   "mhd_jz",    "mhd_j2",     "mhd_curv",   "mhd_k_jxb",  "mhd_curv_perp", "mhd_bmag",
-  "mhd_divb", "mhd_jcon",
+  "mhd_divb", "mhd_jcon",   "mhd_curv_alt",
   // useful for coarsened binary output (47-48)
   "hydro_sgs", "mhd_sgs",
   // dynamo wavenumber scales (49)

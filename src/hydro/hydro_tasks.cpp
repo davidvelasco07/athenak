@@ -34,7 +34,7 @@ namespace hydro {
 //! Many of the functions in the task list are implemented in this file because they are
 //! simple, or they are wrappers that call one or more other functions.
 //!
-//! "before_stagen" tasks are those that must be cmpleted over all MeshBlocks BEFORE each
+//! "before_stagen" tasks are those that must be completed over all MeshBlocks BEFORE each
 //! stage can be run (such as posting MPI receives, setting BoundaryCommStatus flags, etc)
 //!
 //! "stagen" tasks are those performed DURING each stage
@@ -106,7 +106,7 @@ TaskStatus Hydro::InitRecv(Driver *pdrive, int stage) {
   }
   if (tstat != TaskStatus::complete) return tstat;
 
-  // with shearing box boundaries calculate x2-distance x1-boundarues have sheared and
+  // with shearing box boundaries calculate x2-distance x1-boundaries have sheared and
   // with MPI post receives for U.
   // only execute if (3D OR 2d_r_phi)
   if (psbox_u != nullptr) {
@@ -188,8 +188,30 @@ TaskStatus Hydro::Fluxes(Driver *pdrive, int stage) {
     pcond->AddHeatFlux(w0, peos->eos_data, uflx);
   }
 
-  // call FOFC if necessary
-  if (use_fofc) {
+  // call MOOD a-posteriori fallback or FOFC if necessary
+  if (use_mood) {
+    if (rsolver_method == Hydro_RSolver::advect) {
+      MOODLoop<Hydro_RSolver::advect>(pdrive, stage);
+    } else if (rsolver_method == Hydro_RSolver::llf) {
+      MOODLoop<Hydro_RSolver::llf>(pdrive, stage);
+    } else if (rsolver_method == Hydro_RSolver::hlle) {
+      MOODLoop<Hydro_RSolver::hlle>(pdrive, stage);
+    } else if (rsolver_method == Hydro_RSolver::hllc) {
+      MOODLoop<Hydro_RSolver::hllc>(pdrive, stage);
+    } else if (rsolver_method == Hydro_RSolver::roe) {
+      MOODLoop<Hydro_RSolver::roe>(pdrive, stage);
+    } else if (rsolver_method == Hydro_RSolver::llf_sr) {
+      MOODLoop<Hydro_RSolver::llf_sr>(pdrive, stage);
+    } else if (rsolver_method == Hydro_RSolver::hlle_sr) {
+      MOODLoop<Hydro_RSolver::hlle_sr>(pdrive, stage);
+    } else if (rsolver_method == Hydro_RSolver::hllc_sr) {
+      MOODLoop<Hydro_RSolver::hllc_sr>(pdrive, stage);
+    } else if (rsolver_method == Hydro_RSolver::llf_gr) {
+      MOODLoop<Hydro_RSolver::llf_gr>(pdrive, stage);
+    } else if (rsolver_method == Hydro_RSolver::hlle_gr) {
+      MOODLoop<Hydro_RSolver::hlle_gr>(pdrive, stage);
+    }
+  } else if (use_fofc) {
     FOFC(pdrive, stage);
   } else if (pmy_pack->pcoord->is_general_relativistic) {
     if (pmy_pack->pcoord->coord_data.bh_excise) {
@@ -352,7 +374,7 @@ TaskStatus Hydro::RecvU_Shr(Driver *pdrive, int stage) {
 
 //----------------------------------------------------------------------------------------
 //! \fn TaskList Hydro::ApplyPhysicalBCs
-//! \brief Wrapper task list function to call funtions that set physical and user BCs,
+//! \brief Wrapper task list function to call functions that set physical and user BCs,
 
 TaskStatus Hydro::ApplyPhysicalBCs(Driver *pdrive, int stage) {
   // do not apply BCs if domain is strictly periodic

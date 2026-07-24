@@ -774,19 +774,35 @@ void ProblemGenerator::OutputErrors(ParameterInput *pin, Mesh *pm) {
         max_err = fmax(max_err, evars.the_array[IEN]);
       }
 
-      // cell-centered B
-      Real bcc0 = 0.5*(b0_.x1f(m,k,j,i) + b0_.x1f(m,k,j,i+1));
-      Real bcc1 = 0.5*(b1_.x1f(m,k,j,i) + b1_.x1f(m,k,j,i+1));
+      // cell-centered B (4th-order face-to-center interpolation)
+      Real bcc0 = (7.0/12.0)*(b0_.x1f(m,k,j,i) + b0_.x1f(m,k,j,i+1))
+               - (1.0/12.0)*(b0_.x1f(m,k,j,i-1) + b0_.x1f(m,k,j,i+2));
+      Real bcc1 = (7.0/12.0)*(b1_.x1f(m,k,j,i) + b1_.x1f(m,k,j,i+1))
+               - (1.0/12.0)*(b1_.x1f(m,k,j,i-1) + b1_.x1f(m,k,j,i+2));
       evars.the_array[bindx] = vol*fabs(bcc0 - bcc1);
       max_err = fmax(max_err, evars.the_array[IEN+1]);
 
-      bcc0 = 0.5*(b0_.x2f(m,k,j,i) + b0_.x2f(m,k,j+1,i));
-      bcc1 = 0.5*(b1_.x2f(m,k,j,i) + b1_.x2f(m,k,j+1,i));
+      if (nx2 > 1) {
+        bcc0 = (7.0/12.0)*(b0_.x2f(m,k,j,i) + b0_.x2f(m,k,j+1,i))
+             - (1.0/12.0)*(b0_.x2f(m,k,j-1,i) + b0_.x2f(m,k,j+2,i));
+        bcc1 = (7.0/12.0)*(b1_.x2f(m,k,j,i) + b1_.x2f(m,k,j+1,i))
+             - (1.0/12.0)*(b1_.x2f(m,k,j-1,i) + b1_.x2f(m,k,j+2,i));
+      } else {
+        bcc0 = 0.5*(b0_.x2f(m,k,j,i) + b0_.x2f(m,k,j+1,i));
+        bcc1 = 0.5*(b1_.x2f(m,k,j,i) + b1_.x2f(m,k,j+1,i));
+      }
       evars.the_array[bindx+1] = vol*fabs(bcc0 - bcc1);
       max_err = fmax(max_err, evars.the_array[IEN+2]);
 
-      bcc0 = 0.5*(b0_.x3f(m,k,j,i) + b0_.x3f(m,k+1,j,i));
-      bcc1 = 0.5*(b1_.x3f(m,k,j,i) + b1_.x3f(m,k+1,j,i));
+      if (nx3 > 1) {
+        bcc0 = (7.0/12.0)*(b0_.x3f(m,k,j,i) + b0_.x3f(m,k+1,j,i))
+             - (1.0/12.0)*(b0_.x3f(m,k-1,j,i) + b0_.x3f(m,k+2,j,i));
+        bcc1 = (7.0/12.0)*(b1_.x3f(m,k,j,i) + b1_.x3f(m,k+1,j,i))
+             - (1.0/12.0)*(b1_.x3f(m,k-1,j,i) + b1_.x3f(m,k+2,j,i));
+      } else {
+        bcc0 = 0.5*(b0_.x3f(m,k,j,i) + b0_.x3f(m,k+1,j,i));
+        bcc1 = 0.5*(b1_.x3f(m,k,j,i) + b1_.x3f(m,k+1,j,i));
+      }
       evars.the_array[bindx+2] = vol*fabs(bcc0 - bcc1);
       max_err = fmax(max_err, evars.the_array[IEN+3]);
 
