@@ -1,0 +1,109 @@
+# Boss-Bodenheimer rotating-cloud collapse & fragmentation (isothermal), with sink
+# creation + accretion + MERGING (Bleuler & Teyssier 2014, fig 7 analogue).
+# Uniform sphere R=1, alpha=0.25 (thermal/grav), beta=0.20 (rot/grav), m=2 amp=0.1.
+# Code units cs=1, 4piG=1. t_ff ~ 0.351. AMR keeps the collapsing filament/fragments
+# Jeans-resolved; sinks form at density peaks, accrete, and merge on CV overlap.
+
+<comment>
+problem = Boss-Bodenheimer collapse with sink creation + merging
+
+<job>
+basename = bb_collapse_hr
+
+<mesh>
+nghost = 4
+nx1    = 64
+x1min  = -2.0
+x1max  =  2.0
+ix1_bc = outflow
+ox1_bc = outflow
+
+nx2    = 64
+x2min  = -2.0
+x2max  =  2.0
+ix2_bc = outflow
+ox2_bc = outflow
+
+nx3    = 64
+x3min  = -2.0
+x3max  =  2.0
+ix3_bc = outflow
+ox3_bc = outflow
+
+<meshblock>
+nx1 = 16
+nx2 = 16
+nx3 = 16
+
+<mesh_refinement>
+refinement          = adaptive
+max_nmb_per_rank    = 8192
+num_levels          = 4
+refinement_interval = 1
+
+<amr_criterion0>
+method = user
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.3
+nlim       = -1
+tlim       = 0.55       # ~1.57 t_ff: filament fragmentation + ongoing creation/merging
+ndiag      = 100
+
+<hydro>
+eos             = isothermal
+reconstruct     = plm
+rsolver         = hlle
+iso_sound_speed = 1.0
+
+<gravity>
+four_pi_G      = 1.0
+mg_bc          = multipole
+mporder        = 4
+threshold      = -1
+niteration     = 10
+npresmooth     = 1
+npostsmooth    = 1
+full_multigrid = true
+fmg_ncycle     = 1
+mg_nghost      = 1
+root_on_host   = false
+
+<hydro_srcterms>
+self_gravity = true
+
+<particles>
+type        = sink
+pusher      = leapfrog
+accretion   = true
+creation    = true
+merging     = true
+merge_bound = true
+cfl_par     = 0.5
+ppc         = 0.0        # creation mode: start with zero sinks
+
+<problem>
+cloud_radius   = 1.0
+alpha          = 0.25
+beta           = 0.20
+amp            = 0.1
+contrast       = 100.0
+njeans         = 8
+sink_buf_cells = 4
+user_hist      = true
+
+<output1>
+file_type = hst
+dt        = 0.005
+
+<output2>
+file_type = bin
+variable  = hydro_w
+dt        = 0.02
+
+<output3>
+file_type = bin
+variable  = prtcl_d      # deposited sink density -> marks all sink positions in the mosaic
+dt        = 0.02
