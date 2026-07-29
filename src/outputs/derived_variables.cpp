@@ -1264,13 +1264,30 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
     par_for("pdens", DevExeSpace(), 0, (npart-1),
     KOKKOS_LAMBDA(const int p) {
       int m = pi(PGID,p) - gids;
-      int ip = (pr(IPX,p) - size.d_view(m).x1min)/size.d_view(m).dx1 + is;
-      int jp = (pr(IPY,p) - size.d_view(m).x2min)/size.d_view(m).dx2 + js;
-      int kp = ks;
+      // Guard the block index: a stale/foreign PGID (e.g. transiently produced during an
+      // AMR regrid, or a dead slot before compaction) would make size.d_view(m) an
+      // out-of-bounds READ and pdens(m,...) an out-of-bounds WRITE -- a CUDA illegal
+      // memory access. Skip such particles (mirrors the guards in
+      // ParticleMesh::DepositMass; this output path previously had none and crashed the
+      // BB-collapse AMR run at the end-of-run output).
+      if (m < 0 || m >= nmb) return;
+      Real xi = (pr(IPX,p) - size.d_view(m).x1min)/size.d_view(m).dx1 + is;
+      Real yj = (pr(IPY,p) - size.d_view(m).x2min)/size.d_view(m).dx2 + js;
+      Real zk = static_cast<Real>(ks);
       if (three_d) {
-        kp = (pr(IPZ,p) - size.d_view(m).x3min)/size.d_view(m).dx3 + ks;
+        zk = (pr(IPZ,p) - size.d_view(m).x3min)/size.d_view(m).dx3 + ks;
       }
-      pdens(m,0,kp,jp,ip) += 1.0;
+      // Guard non-finite positions before the double->int cast (undefined behaviour),
+      // then bound the write index to the allocated array (interior + ghosts).
+      if (!(xi > -1.0e9 && xi < 1.0e9) || !(yj > -1.0e9 && yj < 1.0e9) ||
+          !(zk > -1.0e9 && zk < 1.0e9)) { return; }
+      int ip = static_cast<int>(xi);
+      int jp = static_cast<int>(yj);
+      int kp = static_cast<int>(zk);
+      if (ip < 0 || ip >= n1 || jp < 0 || jp >= n2 || kp < 0 || kp >= n3) { return; }
+      // atomic: two sinks can momentarily share an output cell (e.g. just after a
+      // creation pair or before a merge), and the plain += would race.
+      Kokkos::atomic_add(&pdens(m,0,kp,jp,ip), 1.0);
     });
   }
   i_dv = i_dv % n_dv; // reset derived variable index
