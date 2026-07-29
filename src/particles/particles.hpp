@@ -114,13 +114,23 @@ class Particles {
 
   // Cross-rank control-volume reset (MPI). When a sink's control volume reaches into an
   // off-rank neighbour, the accretion kernel stages the off-rank-destined reset cells
-  // (owner_m, xw, yw, zw, rho, M1, M2, M3) into cvemit_ (cvemit_cnt_ = atomic count);
-  // ExchangeCVReset() then routes them host-side to every rank whose blocks' expanded
-  // (interior+ghost) bounds contain the cell; each receiver scatters the values to ALL
-  // its local coincident copies of u0/w0. Sized once accretion is enabled.
-  DvceArray2D<Real> cvemit_;      // [cvemit_max_][8] staging buffer (device)
+  // (owner_m, xw, yw, zw, rho, M1..3 post-reset, rho, M1..3 pre-reset) into cvemit_
+  // (cvemit_cnt_ = atomic count); ExchangeCVReset() then routes them host-side to every
+  // rank whose blocks' expanded (interior+ghost) bounds contain the cell; each receiver
+  // scatters the values to ALL its local coincident copies of u0/w0, at whatever
+  // refinement level those copies live (see particles_accretion.cpp for the level rule --
+  // the pre-reset values are what make the coarser-target case conservative).
+  // Sized once accretion is enabled.
+  static constexpr int NCVEMIT = 12;   // m, x, y, z, 4 post-reset, 4 pre-reset
+  DvceArray2D<Real> cvemit_;      // [cvemit_max_][NCVEMIT] staging buffer (device)
   DvceArray1D<int>  cvemit_cnt_;  // [1] atomic write counter (device)
   int cvemit_max_ = 0;
+  // Count of sinks whose control volume could not be processed this step (defensively
+  // skipped, e.g. a >1 level jump in the reach). Reported once with a rate limit: a
+  // silently skipped sink stops accreting while gas keeps flowing in, which shows up
+  // much later as a pile-up and a collapsing timestep.
+  DvceArray1D<int>  accskip_;     // [1] atomic count of skipped sinks (device)
+  int accskip_warned_ = 0;
 #if MPI_PARALLEL_ENABLED
   MPI_Comm mpi_comm_cvscat_ = MPI_COMM_NULL;   // dedicated communicator for the CV scatter
 #endif

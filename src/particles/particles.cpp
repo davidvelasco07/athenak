@@ -129,8 +129,9 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
   // bounds the off-rank-destined subset; overflow is guarded + warned in the kernel.
   if (particle_type == ParticleType::sink && accretion) {
     cvemit_max_ = std::max(1, nprtcl_thispack)*64;
-    Kokkos::realloc(cvemit_, cvemit_max_, 8);
+    Kokkos::realloc(cvemit_, cvemit_max_, NCVEMIT);
     Kokkos::realloc(cvemit_cnt_, 1);
+    Kokkos::realloc(accskip_, 1);
 #if MPI_PARALLEL_ENABLED
     MPI_Comm_dup(MPI_COMM_WORLD, &mpi_comm_cvscat_);
 #endif
