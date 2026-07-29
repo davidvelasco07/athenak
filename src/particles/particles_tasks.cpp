@@ -21,6 +21,7 @@
 #include "tasklist/task_list.hpp"
 #include "mesh/mesh.hpp"
 #include "mesh/nghbr_index.hpp"
+#include "coordinates/cell_locations.hpp"
 #include "bvals/bvals.hpp"
 #include "gravity/gravity.hpp"
 #include "particles.hpp"
@@ -45,6 +46,18 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
     // across ranks on regrid is a TODO.)
     id.setgid = tl["before_timeintegrator"]->AddTask(&Particles::SetGIDFromPosition,
                                                      this, none);
+    // Migrate any particle whose owning MeshBlock was handed to another rank by the
+    // previous cycle's AMR load balancing (regrid-driven cross-rank redistribution).
+    // SetGIDFromPosition above stages such particles into the sendlist; this chain ships
+    // them to their new rank BEFORE the deposit below reads particle mass. No-ops on a
+    // single rank / when nothing crossed. (The per-step drift migration is the separate
+    // chain in "stagen" after Push.)
+    id.bt_count = tl["before_timeintegrator"]->AddTask(&Particles::SendCnt, this, id.setgid);
+    id.bt_irecv = tl["before_timeintegrator"]->AddTask(&Particles::InitRecv, this, id.bt_count);
+    id.bt_sendp = tl["before_timeintegrator"]->AddTask(&Particles::SendP, this, id.bt_irecv);
+    id.bt_recvp = tl["before_timeintegrator"]->AddTask(&Particles::RecvP, this, id.bt_sendp);
+    id.bt_crecv = tl["before_timeintegrator"]->AddTask(&Particles::ClearRecv, this, id.bt_recvp);
+    id.bt_csend = tl["before_timeintegrator"]->AddTask(&Particles::ClearSend, this, id.bt_crecv);
 
     // Self-gravitating (sink) particles are integrated WITHIN the time integrator
     // so they are stage-synchronized with the gravity solve and the gas, giving a
@@ -150,7 +163,6 @@ TaskStatus Particles::SetGIDFromPosition(Driver *pdrive, int stage) {
   int gids = pmy_pack->gids;
   int nmb = pmy_pack->nmb_thispack;
   int npart = nprtcl_thispack;
-  auto &psendl = pbval_part->sendlist;
   if (npart <= 0) {
     pbval_part->nprtcl_send = 0;
     Kokkos::realloc(pbval_part->sendlist, 0);
@@ -175,19 +187,26 @@ TaskStatus Particles::SetGIDFromPosition(Driver *pdrive, int stage) {
   // sendlist for the SendCnt/SendP/RecvP chain. Device counter + host mirror (a plain
   // host int atomically incremented from a device kernel reads back stale on GPU).
   const int my_rank = global_variable::my_rank;
-  auto &nghbr = pmy_pack->pmb->nghbr;
-  auto &mblev = pmy_pack->pmb->mb_lev;
   const bool multi_d = pmy_pack->pmesh->multi_d;
   const bool three_d = pmy_pack->pmesh->three_d;
-  Kokkos::realloc(pbval_part->sendlist, std::max(1, npart));
-  Kokkos::View<int> d_cnt("setgid_cnt");
-  Kokkos::deep_copy(d_cnt, 0);
+
+  // Device pass: re-bin each particle ABSOLUTELY from its (wrapped) position by finding
+  // the local MeshBlock that contains it. Particles found locally get their PGID set here
+  // (the common case; no communication). A particle contained in NO local block is a
+  // "stray": its owner is necessarily on ANOTHER rank -- either it drifted across a rank
+  // boundary, or (the regrid case) load balancing handed its block to another rank. Strays
+  // are collected (index + wrapped position) for host-side global resolution below, which
+  // needs the bounds of off-rank blocks -- those live only in the host tree
+  // (lloc_eachmb/rank_eachmb). SetGIDFromPosition is used only by the (few) sink particles,
+  // so the host pass is cheap and runs only when strays exist.
+  DualArray1D<int>  stray_idx("setgid_stray_idx", npart);
+  DualArray1D<Real> stray_pos("setgid_stray_pos", 3*npart);
+  Kokkos::View<int> d_nstray("setgid_nstray");
+  Kokkos::deep_copy(d_nstray, 0);
 
   par_for("part_setgid", DevExeSpace(), 0, npart-1, KOKKOS_LAMBDA(const int p) {
-    // pre-wrap position (relative offsets to the CURRENT owner block use this; a
-    // particle exiting a periodic domain edge is adjacent to its old block only in
-    // unwrapped coordinates)
-    const Real pxu = pr(IPX, p), pyu = pr(IPY, p), pzu = pr(IPZ, p);
+    // wrap positions back into the domain on strictly-periodic meshes (IPX0 shifted by the
+    // same offset so AccreteMass cell-crossing detection stays consistent across the wrap)
     if (wrap) {
       Real s;
       s = Kokkos::floor((pr(IPX, p) - xmin)/Lx)*Lx;
@@ -197,8 +216,7 @@ TaskStatus Particles::SetGIDFromPosition(Driver *pdrive, int stage) {
       s = Kokkos::floor((pr(IPZ, p) - zmin)/Lz)*Lz;
       pr(IPZ, p) -= s;  if (has_prev) pr(IPZ0, p) -= s;
     }
-    Real px = pr(IPX, p), py = pr(IPY, p), pz = pr(IPZ, p);
-    const int mcur = pi(PGID, p) - gids;
+    const Real px = pr(IPX, p), py = pr(IPY, p), pz = pr(IPZ, p);
     int mown = -1;
     for (int mm = 0; mm < nmb; ++mm) {
       if (px >= mbsize.d_view(mm).x1min && px < mbsize.d_view(mm).x1max &&
@@ -210,72 +228,136 @@ TaskStatus Particles::SetGIDFromPosition(Driver *pdrive, int stage) {
     if (mown >= 0) {
       // absolute on-rank re-bin (AMR-regrid safe: derived from position alone)
       pi(PGID, p) = gids + mown;
-    } else if (mcur >= 0 && mcur < nmb) {
-      // left every local block: neighbour-based assignment from the current owner
-      // (SetNewPrtclGID logic), staging off-rank destinations for the particle comm
-      const int m = mcur;
-      const int mylevel = mblev.d_view(m);
-      const Real lx = mbsize.d_view(m).x1max - mbsize.d_view(m).x1min;
-      const Real ly = mbsize.d_view(m).x2max - mbsize.d_view(m).x2min;
-      const Real lz = mbsize.d_view(m).x3max - mbsize.d_view(m).x3min;
-      int ix = static_cast<int>((pxu - mbsize.d_view(m).x1min + lx)/lx) - 1;
-      int iy = static_cast<int>((pyu - mbsize.d_view(m).x2min + ly)/ly) - 1;
-      int iz = static_cast<int>((pzu - mbsize.d_view(m).x3min + lz)/lz) - 1;
-      ix = (ix > 1) ? 1 : ((ix < -1) ? -1 : ix);
-      iy = (iy > 1) ? 1 : ((iy < -1) ? -1 : iy);
-      iz = (iz > 1) ? 1 : ((iz < -1) ? -1 : iz);
-      int fx = (pxu < 0.5*(mbsize.d_view(m).x1min + mbsize.d_view(m).x1max)) ? 0 : 1;
-      int fy = (pyu < 0.5*(mbsize.d_view(m).x2min + mbsize.d_view(m).x2max)) ? 0 : 1;
-      int fz = (pzu < 0.5*(mbsize.d_view(m).x3min + mbsize.d_view(m).x3max)) ? 0 : 1;
-      fy = multi_d ? fy : 0;
-      fz = three_d ? fz : 0;
-      if ((abs(ix) + abs(iy) + abs(iz)) != 0) {
-        int indx;
-        if (iz == 0 && iy == 0) {                        // x1 face
-          indx = NeighborIndex(ix, 0, 0, 0, 0);
-          if (nghbr.d_view(m,indx).lev > mylevel) indx = NeighborIndex(ix, 0, 0, fy, fz);
-        } else if (iz == 0 && ix == 0) {                 // x2 face
-          indx = NeighborIndex(0, iy, 0, 0, 0);
-          if (nghbr.d_view(m,indx).lev > mylevel) indx = NeighborIndex(0, iy, 0, fx, fz);
-        } else if (iz == 0) {                            // x1x2 edge
-          indx = NeighborIndex(ix, iy, 0, 0, 0);
-          if (nghbr.d_view(m,indx).lev > mylevel) indx = NeighborIndex(ix, iy, 0, fz, 0);
-        } else if (iy == 0 && ix == 0) {                 // x3 face
-          indx = NeighborIndex(0, 0, iz, 0, 0);
-          if (nghbr.d_view(m,indx).lev > mylevel) indx = NeighborIndex(0, 0, iz, fx, fy);
-        } else if (iy == 0) {                            // x3x1 edge
-          indx = NeighborIndex(ix, 0, iz, 0, 0);
-          if (nghbr.d_view(m,indx).lev > mylevel) indx = NeighborIndex(ix, 0, iz, fy, 0);
-        } else if (ix == 0) {                            // x2x3 edge
-          indx = NeighborIndex(0, iy, iz, 0, 0);
-          if (nghbr.d_view(m,indx).lev > mylevel) indx = NeighborIndex(0, iy, iz, fx, 0);
-        } else {                                         // corner
-          indx = NeighborIndex(ix, iy, iz, 0, 0);
-        }
-        while (nghbr.d_view(m,indx).gid < 0) { indx++; } // coarser neighbour fallback
-        pi(PGID, p) = nghbr.d_view(m,indx).gid;
-        if (nghbr.d_view(m,indx).rank != my_rank) {
-          const int slot = Kokkos::atomic_fetch_add(&d_cnt(), 1);
-          psendl.d_view(slot).prtcl_indx = p;
-          psendl.d_view(slot).dest_gid   = nghbr.d_view(m,indx).gid;
-          psendl.d_view(slot).dest_rank  = nghbr.d_view(m,indx).rank;
-        }
-      }
-      // else: containment miss with zero block offset (round-off at a block edge);
-      // keep the current PGID -- reads/writes remain valid through ghost zones
+    } else {
+      // owner is off-rank (no local block contains it): collect for host global resolution
+      const int s = Kokkos::atomic_fetch_add(&d_nstray(), 1);
+      stray_idx.d_view(s)     = p;
+      stray_pos.d_view(3*s)   = px;
+      stray_pos.d_view(3*s+1) = py;
+      stray_pos.d_view(3*s+2) = pz;
     }
-    // else: stale/invalid PGID and no local containment -- leave unchanged (guarded
-    // downstream); can only arise from regrid-driven load balancing (TODO)
   });
 
-  // publish the migration list for the SendCnt/SendP/RecvP chain
-  auto h_cnt = Kokkos::create_mirror_view(d_cnt);
-  Kokkos::deep_copy(h_cnt, d_cnt);
-  pbval_part->nprtcl_send = h_cnt();
-  Kokkos::resize(pbval_part->sendlist, pbval_part->nprtcl_send);
-  pbval_part->sendlist.template modify<DevExeSpace>();
-  pbval_part->sendlist.template sync<HostMemSpace>();
+  // Host-side resolution of strays. Every rank knows the full tree (lloc_eachmb +
+  // rank_eachmb), so the owning block's gid+rank is found by geometric containment; this
+  // handles cross-rank DRIFT and regrid-driven cross-rank REDISTRIBUTION uniformly. The
+  // sender must carry the destination (global) gid in PGID before packing, so PGID is
+  // written back for every resolved stray; off-rank strays are staged for the send chain.
+  int nstray = 0;
+  {
+    auto h_ns = Kokkos::create_mirror_view(d_nstray);
+    Kokkos::deep_copy(h_ns, d_nstray);
+    nstray = h_ns();
+  }
+  pbval_part->nprtcl_send = 0;
+  Kokkos::realloc(pbval_part->sendlist, 0);
+  if (nstray > 0) {
+    stray_idx.template modify<DevExeSpace>();  stray_idx.template sync<HostMemSpace>();
+    stray_pos.template modify<DevExeSpace>();  stray_pos.template sync<HostMemSpace>();
+    Mesh *pm = pmy_pack->pmesh;
+    auto &ms = pm->mesh_size;
+    const int rlev = pm->root_level;
+    std::vector<int> wp_idx, wp_gid;                 // (particle index, new global gid)
+    std::vector<ParticleLocationData> slist;         // off-rank migration list
+    for (int s = 0; s < nstray; ++s) {
+      const int  p  = stray_idx.h_view(s);
+      const Real px = stray_pos.h_view(3*s);
+      const Real py = stray_pos.h_view(3*s+1);
+      const Real pz = stray_pos.h_view(3*s+2);
+      int dgid = -1;
+      for (int g = 0; g < pm->nmb_total; ++g) {
+        const LogicalLocation &ll = pm->lloc_eachmb[g];
+        const int nx1 = pm->nmb_rootx1 << (ll.level - rlev);
+        const Real x1d = LeftEdgeX(ll.lx1,   nx1, ms.x1min, ms.x1max);
+        const Real x1u = LeftEdgeX(ll.lx1+1, nx1, ms.x1min, ms.x1max);
+        if (px < x1d || px >= x1u) continue;
+        if (multi_d) {
+          const int nx2 = pm->nmb_rootx2 << (ll.level - rlev);
+          const Real x2d = LeftEdgeX(ll.lx2,   nx2, ms.x2min, ms.x2max);
+          const Real x2u = LeftEdgeX(ll.lx2+1, nx2, ms.x2min, ms.x2max);
+          if (py < x2d || py >= x2u) continue;
+        }
+        if (three_d) {
+          const int nx3 = pm->nmb_rootx3 << (ll.level - rlev);
+          const Real x3d = LeftEdgeX(ll.lx3,   nx3, ms.x3min, ms.x3max);
+          const Real x3u = LeftEdgeX(ll.lx3+1, nx3, ms.x3min, ms.x3max);
+          if (pz < x3d || pz >= x3u) continue;
+        }
+        dgid = g; break;
+      }
+      if (dgid < 0) continue;   // left the domain (e.g. outflow BC); keep PGID (guarded)
+      wp_idx.push_back(p);  wp_gid.push_back(dgid);
+      const int drank = pm->rank_eachmb[dgid];
+      if (drank != my_rank) {
+        ParticleLocationData d;
+        d.prtcl_indx = p;  d.dest_gid = dgid;  d.dest_rank = drank;
+        slist.push_back(d);
+      }
+    }
+    // write resolved global PGID back to the device (packed by the sender; also correct
+    // for the receiver, which decodes local index as PGID - gids on its own rank)
+    const int nwp = static_cast<int>(wp_idx.size());
+    if (nwp > 0) {
+      DualArray1D<int> wb("setgid_writeback", 2*nwp);
+      for (int i = 0; i < nwp; ++i) {
+        wb.h_view(2*i) = wp_idx[i];  wb.h_view(2*i+1) = wp_gid[i];
+      }
+      wb.template modify<HostMemSpace>();  wb.template sync<DevExeSpace>();
+      auto wbd = wb.d_view;  auto pidata = pi;
+      par_for("setgid_wb", DevExeSpace(), 0, nwp-1, KOKKOS_LAMBDA(const int i) {
+        pidata(PGID, wbd(2*i)) = wbd(2*i+1);
+      });
+    }
+    // publish the off-rank migration list for the SendCnt/SendP/RecvP chain
+    const int nsend = static_cast<int>(slist.size());
+    // optional diagnostic (set env PART_XRANK_DBG): confirms the cross-rank redistribution
+    // path is exercised; cross-rank particle migration is a normal event, not an error.
+    if (nsend > 0 && std::getenv("PART_XRANK_DBG") != nullptr) {
+      long gtot = 0;
+      for (int r = 0; r < global_variable::nranks; ++r) {
+        gtot += pmy_pack->pmesh->nprtcl_eachrank[r];
+      }
+      std::cout << "### [part-xrank] rank " << my_rank << " ships " << nsend
+                << " particle(s) to other ranks (cycle=" << pmy_pack->pmesh->ncycle
+                << ", t=" << pmy_pack->pmesh->time << ", global nprtcl=" << gtot << ")"
+                << std::endl;
+    }
+    pbval_part->nprtcl_send = nsend;
+    Kokkos::realloc(pbval_part->sendlist, std::max(1, nsend));
+    for (int i = 0; i < nsend; ++i) { pbval_part->sendlist.h_view(i) = slist[i]; }
+    pbval_part->sendlist.template modify<HostMemSpace>();
+    pbval_part->sendlist.template sync<DevExeSpace>();
+  }
   return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void Particles::ReconcileOwnership
+//! \brief Re-bin particles from position AND complete any resulting cross-rank migration,
+//! synchronously. This is the task-list chain (setgid -> SendCnt -> InitRecv -> SendP ->
+//! RecvP -> ClearRecv/ClearSend) collapsed into one blocking call, for use OUTSIDE the
+//! task lists -- specifically Driver::Finalize, which writes the end-of-run output after
+//! the last AMR regrid has renumbered (and possibly re-ranked) MeshBlocks. Without the
+//! migration half, SetGIDFromPosition would leave particles whose block moved to another
+//! rank holding an off-rank PGID, and the final particle-mesh output would silently drop
+//! them (the same defect the per-cycle chain exists to prevent).
+//! All ranks must call this: the migration chain contains MPI collectives.
+
+void Particles::ReconcileOwnership(Driver *pdrive, int stage) {
+  SetGIDFromPosition(pdrive, stage);
+#if MPI_PARALLEL_ENABLED
+  if (global_variable::nranks > 1) {
+    SendCnt(pdrive, stage);
+    InitRecv(pdrive, stage);
+    SendP(pdrive, stage);
+    // RecvP returns incomplete until the non-blocking receives land; drain it here since
+    // there is no task list to re-invoke it.
+    while (RecvP(pdrive, stage) != TaskStatus::complete) {}
+    ClearRecv(pdrive, stage);
+    ClearSend(pdrive, stage);
+  }
+#endif
+  return;
 }
 
 //----------------------------------------------------------------------------------------

@@ -46,6 +46,13 @@ struct ParticlesTaskIDs {
   TaskID recvp;
   TaskID csend;
   TaskID crecv;
+  // regrid-driven cross-rank particle migration chain (before_timeintegrator)
+  TaskID bt_count;
+  TaskID bt_irecv;
+  TaskID bt_sendp;
+  TaskID bt_recvp;
+  TaskID bt_csend;
+  TaskID bt_crecv;
 };
 
 namespace particles {
@@ -132,6 +139,7 @@ class Particles {
   void RefreshMeshParticleCounts();  // after pgen-side array resize
   void AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> tl);
   TaskStatus SetGIDFromPosition(Driver *pdriver, int stage);
+  void ReconcileOwnership(Driver *pdriver, int stage);  // setgid + cross-rank migration
   TaskStatus Deposit(Driver *pdriver, int stage);
   TaskStatus FlushDeposit(Driver *pdriver, int stage);
   TaskStatus ExchangePhi(Driver *pdriver, int stage);

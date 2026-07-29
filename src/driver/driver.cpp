@@ -25,6 +25,7 @@
 #include "radiation/radiation.hpp"
 #include "driver.hpp"
 #include "gravity/gravity.hpp"
+#include "particles/particles.hpp"
 
 #if MPI_PARALLEL_ENABLED
 #include <mpi.h>
@@ -466,6 +467,20 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
 //!  and printing diagnostic messages
 
 void Driver::Finalize(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
+  // Refresh particle->MeshBlock ownership (PGID) before the final output. The per-cycle
+  // SetGIDFromPosition runs at the TOP of each cycle (before_timeintegrator), so it fixes
+  // PGIDs left stale by the PREVIOUS cycle's end-of-cycle AMR regrid. After the LAST cycle
+  // there is no next cycle, so the final regrid's renumbering is never reconciled and the
+  // particle positions/PGIDs seen here are stale -- particle-mesh deposits (e.g. the
+  // prtcl_d output) would then bin sinks into the wrong/out-of-range block and silently
+  // drop them (or, unguarded, fault). Re-derive PGID from position once more here.
+  // ReconcileOwnership also completes the cross-rank migration this can imply (the final
+  // regrid may have handed a particle's block to another rank), so the output below sees
+  // every particle on the rank that owns its block. All ranks call it (MPI collectives).
+  if (pmesh->pmb_pack->ppart != nullptr) {
+    pmesh->pmb_pack->ppart->ReconcileOwnership(this, nexp_stages);
+  }
+
   // cycle through output Types and load data / write files
   //  This design allows for asynchronous outputs to implemented in the future.
   for (auto &out : pout->pout_list) {
