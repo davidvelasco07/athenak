@@ -21,6 +21,7 @@
 #include <cmath>
 #include <cstdio>
 #include <iostream>
+#include <vector>
 
 #include "parameter_input.hpp"
 #include "athena.hpp"
@@ -30,6 +31,7 @@
 #include "hydro/hydro.hpp"
 #include "particles/particles.hpp"
 #include "particles/particle_mesh.hpp"
+#include "particles/sink_positions.hpp"
 #include "gravity/gravity.hpp"
 
 namespace {
@@ -254,17 +256,22 @@ void SinkRefinement(MeshBlockPack *pmbp) {
   int nmb = pmbp->nmb_thispack;
   int mbs = pmbp->pmesh->gids_eachrank[global_variable::my_rank];
   auto &size = pmbp->pmb->mb_size;
-  auto pr = pmbp->ppart->prtcl_rdata;
-  int npart = pmbp->ppart->nprtcl_thispack;
   Real rbuf = sink_refine_buf_;
+
+  // Test against ALL sinks on ALL ranks, not just this rank's -- see the rationale in
+  // sink_positions.hpp (a rank-local test makes the mesh depend on the rank count and
+  // leaves sinks beside asymmetric coarse-fine boundaries).
+  int nsink = 0;
+  DualArray1D<Real> spos = GatherAllSinkPositions(pmbp, nsink);
+  auto sp = spos.d_view;
 
   par_for("SinkAMR", DevExeSpace(), 0, nmb-1, KOKKOS_LAMBDA(int m) {
     Real x1min = size.d_view(m).x1min, x1max = size.d_view(m).x1max;
     Real x2min = size.d_view(m).x2min, x2max = size.d_view(m).x2max;
     Real x3min = size.d_view(m).x3min, x3max = size.d_view(m).x3max;
     int flag = -1;  // derefine unless a sink is near
-    for (int p = 0; p < npart; ++p) {
-      Real px = pr(IPX, p), py = pr(IPY, p), pz = pr(IPZ, p);
+    for (int p = 0; p < nsink; ++p) {
+      Real px = sp(3*p), py = sp(3*p+1), pz = sp(3*p+2);
       if (px > (x1min-rbuf) && px < (x1max+rbuf) &&
           py > (x2min-rbuf) && py < (x2max+rbuf) &&
           pz > (x3min-rbuf) && pz < (x3max+rbuf)) {

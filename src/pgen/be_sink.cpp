@@ -48,6 +48,7 @@
 #include "hydro/hydro.hpp"
 #include "eos/eos.hpp"
 #include "particles/particles.hpp"
+#include "particles/sink_positions.hpp"
 #include "gravity/gravity.hpp"
 #include "outputs/outputs.hpp"
 
@@ -370,8 +371,12 @@ void BESinkRefinement(MeshBlockPack *pmbp) {
   const int ni   = (nx1 + 2*ng);
   auto &size = pmbp->pmb->mb_size;
   auto &u0 = pmbp->phydro->u0;
-  auto pr = pmbp->ppart->prtcl_rdata;
-  const int npart = pmbp->ppart->nprtcl_thispack;
+  // sink-proximity test must see EVERY sink, not just this rank's (see sink_positions.hpp):
+  // a rank-local test makes the mesh rank-count-dependent and leaves sinks against
+  // asymmetric coarse-fine boundaries, corrupting the deposit/gather force.
+  int nsink = 0;
+  DualArray1D<Real> spos = GatherAllSinkPositions(pmbp, nsink);
+  auto sp = spos.d_view;
   const Real cs = cs_global_;
   const Real njeans = njeans_global_;
   const Real sbuf = sink_buf_cells_;
@@ -404,8 +409,8 @@ void BESinkRefinement(MeshBlockPack *pmbp) {
       const Real x2min = size.d_view(m).x2min, x2max = size.d_view(m).x2max;
       const Real x3min = size.d_view(m).x3min, x3max = size.d_view(m).x3max;
       int fs = -1;
-      for (int p = 0; p < npart; ++p) {
-        const Real px = pr(IPX, p), py = pr(IPY, p), pz = pr(IPZ, p);
+      for (int p = 0; p < nsink; ++p) {
+        const Real px = sp(3*p), py = sp(3*p+1), pz = sp(3*p+2);
         if (px > (x1min-bx) && px < (x1max+bx) &&
             py > (x2min-by) && py < (x2max+by) &&
             pz > (x3min-bz) && pz < (x3max+bz)) {
