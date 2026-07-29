@@ -33,7 +33,6 @@ struct ParticlesTaskIDs {
   TaskID setgid;
   TaskID deposit;
   TaskID flush;
-  TaskID xphi;
   TaskID push;
   TaskID merge;
   TaskID accrete;
@@ -53,6 +52,15 @@ struct ParticlesTaskIDs {
   TaskID bt_recvp;
   TaskID bt_csend;
   TaskID bt_crecv;
+  // gravitational-potential halo exchange, split into tasks like every other exchange
+  TaskID xphi_irecv;
+  TaskID xphi_rest;
+  TaskID xphi_send;
+  TaskID xphi_recv;
+  TaskID xphi_bcs;
+  TaskID xphi_prol;
+  TaskID xphi_csend;
+  TaskID xphi_crecv;
 };
 
 namespace particles {
@@ -138,6 +146,12 @@ class Particles {
   // Particle-mesh coupling layer (allocated for sink type, nullptr for tracers).
   ParticleMesh *ppm = nullptr;
 
+  // Dedicated boundary-values object for the potential's halo exchange. Its own object,
+  // NOT the particle-mesh deposit's (ppm->pmbval): one object per exchanged field is the
+  // convention here, each carrying its own buffers, MPI requests and communicators, and
+  // sharing one between two different fields couples their exchange state.
+  MeshBoundaryValuesCC *pbval_phi = nullptr;
+
   // Boundary communication buffers and functions for particles
   ParticlesBoundaryValues *pbval_part;
 
@@ -152,7 +166,22 @@ class Particles {
   void ReconcileOwnership(Driver *pdriver, int stage);  // setgid + cross-rank migration
   TaskStatus Deposit(Driver *pdriver, int stage);
   TaskStatus FlushDeposit(Driver *pdriver, int stage);
-  TaskStatus ExchangePhi(Driver *pdriver, int stage);
+  // Gravitational-potential halo exchange. GatherGravity reads phi two cells deep near
+  // MeshBlock boundaries but the multigrid leaves only mg_nghost layers valid, so phi
+  // needs a halo swap after each solve. Split into the same task sequence every other
+  // field exchange uses -- receives posted in "before_stagen", restrict/send/recv/BC/
+  // prolongate in "stagen" before the gather, buffers cleared in "after_stagen" -- rather
+  // than one call that posts, sends and then SPINS until the receives drain. The spin
+  // blocked the whole task list mid-stage on every rank, which is both a serialization
+  // point and a structure no other exchange in the code uses.
+  TaskStatus XPhiInitRecv(Driver *pdriver, int stage);
+  TaskStatus XPhiRestrict(Driver *pdriver, int stage);
+  TaskStatus XPhiSend(Driver *pdriver, int stage);
+  TaskStatus XPhiRecv(Driver *pdriver, int stage);
+  TaskStatus XPhiBCs(Driver *pdriver, int stage);
+  TaskStatus XPhiProlongate(Driver *pdriver, int stage);
+  TaskStatus XPhiClearSend(Driver *pdriver, int stage);
+  TaskStatus XPhiClearRecv(Driver *pdriver, int stage);
   TaskStatus Push(Driver *pdriver, int stage);
   TaskStatus MergeSinks(Driver *pdriver, int stage);
   TaskStatus AccreteMass(Driver *pdriver, int stage);

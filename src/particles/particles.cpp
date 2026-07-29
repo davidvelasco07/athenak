@@ -122,6 +122,10 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
   if (particle_type == ParticleType::sink) {
     // 1 slot for ρ_particles; extend (to 4 with momentum) when needed.
     ppm = new ParticleMesh(ppack, pin, 1);
+    // Own boundary-values object for the potential halo exchange (1 variable). Separate
+    // from ppm->pmbval so phi's exchange state cannot interact with the deposit's.
+    pbval_phi = new MeshBoundaryValuesCC(ppack, pin, false);
+    pbval_phi->InitializeBuffers(1);
   }
 
   // staging buffer + communicator for the cross-rank control-volume reset (MPI). Sized
@@ -171,6 +175,10 @@ Particles::~Particles() {
   if (ppm != nullptr) {
     delete ppm;
     ppm = nullptr;
+  }
+  if (pbval_phi != nullptr) {
+    delete pbval_phi;
+    pbval_phi = nullptr;
   }
 }
 

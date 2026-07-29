@@ -47,7 +47,8 @@ ParticleMesh::ParticleMesh(MeshBlockPack *ppack, ParameterInput *pin, int nmesha
   Kokkos::deep_copy(nbad_, 0);
 
   // Boundary-values object for dmesh: provides the buffers/MPI machinery for the future
-  // cross-rank flush path, and is reused by Particles::ExchangePhi for phi's halo swap.
+  // cross-rank flush path. The potential's halo exchange has its OWN object
+  // (Particles::pbval_phi): one boundary-values object per exchanged field.
   pmbval = new MeshBoundaryValuesCC(ppack, pin, false);
   pmbval->InitializeBuffers(nmeshaux);
 

@@ -73,9 +73,18 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
 
     // Fill phi ghost cells (>=2 layers) from neighbour interiors before the gather, which
     // reads phi two cells deep near MeshBlock boundaries (the multigrid only keeps
-    // mg_nghost valid layers). Runs in "stagen", after the Driver's per-stage solve.
-    id.xphi   = tl["stagen"]->AddTask(&Particles::ExchangePhi, this, none);
-    id.push   = tl["stagen"]->AddTask(&Particles::Push, this, id.xphi);
+    // mg_nghost valid layers). Structured exactly like every other field exchange: post
+    // the receives in "before_stagen", do restrict/send/recv/BC/prolongate in "stagen"
+    // after the Driver's per-stage solve and before the gather, and clear the buffers in
+    // "after_stagen". Recv returns incomplete and is retried by the task list instead of
+    // spinning inside one call.
+    id.xphi_irecv = tl["before_stagen"]->AddTask(&Particles::XPhiInitRecv, this, none);
+    id.xphi_rest  = tl["stagen"]->AddTask(&Particles::XPhiRestrict, this, none);
+    id.xphi_send  = tl["stagen"]->AddTask(&Particles::XPhiSend, this, id.xphi_rest);
+    id.xphi_recv  = tl["stagen"]->AddTask(&Particles::XPhiRecv, this, id.xphi_send);
+    id.xphi_bcs   = tl["stagen"]->AddTask(&Particles::XPhiBCs, this, id.xphi_recv);
+    id.xphi_prol  = tl["stagen"]->AddTask(&Particles::XPhiProlongate, this, id.xphi_bcs);
+    id.push   = tl["stagen"]->AddTask(&Particles::Push, this, id.xphi_prol);
     // After the drift, re-bin by absolute position (not the incremental neighbour-based
     // SetNewPrtclGID, which mis-assigns PGID for particles crossing coarse-fine boundaries
     // under AMR). Particles that left every local block are assigned their neighbour gid
@@ -103,6 +112,11 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
     //   merge   (<particles>/merging)  : combine sinks whose 27-cell halos overlap, so
     //           AccreteMass never sees overlapping control volumes.
     //   accrete (<particles>/accretion): control-volume gas -> sink.
+    // release the potential exchange's buffers once the stage is done with them
+    id.xphi_csend = tl["after_stagen"]->AddTask(&Particles::XPhiClearSend, this, none);
+    id.xphi_crecv = tl["after_stagen"]->AddTask(&Particles::XPhiClearRecv, this,
+                                                id.xphi_csend);
+
     TaskID dep = none;
     if (accretion && creation) {
       id.create = tl["after_stagen"]->AddTask(&Particles::CreateSinks, this, dep);
@@ -374,54 +388,73 @@ TaskStatus Particles::FlushDeposit(Driver *pdrive, int stage) {
 }
 
 //----------------------------------------------------------------------------------------
-//! \fn TaskStatus Particles::ExchangePhi
-//! \brief Fill the gravitational potential's ghost cells from neighbouring MeshBlock
-//! interiors so GatherGravity can read phi two cells deep near MeshBlock boundaries.
-//! Reuses the particle-mesh boundary-values object (1 variable) for a standard cell-
-//! centered halo exchange. Synchronous: correct for serial / on-rank; the MPI path
-//! completes here by draining the receives (a later pass can split this across tasks
-//! to overlap communication).
+//! The gravitational potential's halo exchange, as the standard task sequence
+//! (InitRecv -> Restrict -> Send -> Recv -> ApplyPhysicalBCs -> Prolongate -> Clear).
+//! GatherGravity reads phi two cells deep near MeshBlock boundaries while the multigrid
+//! leaves only mg_nghost layers valid, so phi needs this swap after every solve.
+//!
+//! Every step matters on a refined mesh: without the restriction coarse neighbours receive
+//! unrestricted data; without the physical-BC fill, phi ghosts at non-periodic domain
+//! boundaries are never written and the coarse fill/prolongation then consumes
+//! uninitialized memory at blocks adjacent to both a physical and a coarse-fine boundary
+//! (benign-looking zeros on CPU, ~1e252 on GPU, read by the gather as an enormous force).
+//!
+//! Each step is its own task, on this object's own buffers, for two reasons: Recv can
+//! report incomplete and be retried by the task list instead of spinning inside one call
+//! and stalling every other task on the rank mid-stage, and the exchange no longer shares
+//! buffers/requests with the particle-mesh deposit.
 
-TaskStatus Particles::ExchangePhi(Driver *pdrive, int stage) {
-  if (ppm == nullptr || pmy_pack->pgrav == nullptr) return TaskStatus::complete;
-  auto pb = ppm->pmbval;
-  auto &phi  = pmy_pack->pgrav->phi;
-  auto &cphi = pmy_pack->pgrav->coarse_phi;
+TaskStatus Particles::XPhiInitRecv(Driver *pdrive, int stage) {
+  if (pbval_phi == nullptr || pmy_pack->pgrav == nullptr) return TaskStatus::complete;
+  return pbval_phi->InitRecv(1);
+}
 
-  // Full AMR-correct CC halo exchange for phi, mirroring the validated hydro sequence
-  // (RestrictU -> SendU -> RecvU -> ApplyPhysicalBCs -> Prolongate). Skipping any of
-  // these steps leaves some class of ghost cells unset on a refined mesh:
-  //  - without the restriction, coarse neighbours receive garbage;
-  //  - without the physical-BC fill, phi ghosts at *physical* (non-periodic) domain
-  //    boundaries are never written; FillCoarseInBndryCC/ProlongateCC then consume
-  //    them at blocks adjacent to both a physical boundary and a coarse-fine
-  //    boundary, spraying uninitialized values (e.g. 1e252 on GPU, where fresh
-  //    allocations are not benign zeros) into fine-block ghosts that GatherGravity
-  //    reads as enormous spurious forces.
-  pb->InitRecv(1);
-  // Restrict this block's fine interior into the coarse buffer, so the pack sends the
-  // correct restricted data to coarser neighbours and the prolongation has a valid
-  // coarse source.
+TaskStatus Particles::XPhiRestrict(Driver *pdrive, int stage) {
+  if (pbval_phi == nullptr || pmy_pack->pgrav == nullptr) return TaskStatus::complete;
+  // restrict the fine interior into the coarse buffer, so coarser neighbours are sent
+  // restricted data and the prolongation has a valid coarse source
   if (pmy_pack->pmesh->multilevel) {
-    pmy_pack->pmesh->pmr->RestrictCC(phi, cphi);
+    pmy_pack->pmesh->pmr->RestrictCC(pmy_pack->pgrav->phi, pmy_pack->pgrav->coarse_phi);
   }
-  pb->PackAndSendCC(phi, cphi);
-  while (pb->RecvAndUnpackCC(phi, cphi) != TaskStatus::complete) {}
-  // Physical (non-periodic) boundary fill for phi ghosts, as hydro does before its
-  // prolongation. HydroBCs is variable-agnostic (outflow = zero-gradient copy), which
-  // both initializes the memory and is an adequate extrapolation for the gather.
-  if (!(pmy_pack->pmesh->strictly_periodic)) {
-    MeshBoundaryValues::HydroBCs(pmy_pack, pb->u_in, phi);
-  }
-  // Prolongate into fine-block ghost cells at coarse/fine boundaries (before clearing
-  // buffers).
-  if (pmy_pack->pmesh->multilevel) {
-    pb->FillCoarseInBndryCC(phi, cphi);
-    pb->ProlongateCC(phi, cphi);
-  }
-  pb->ClearSend();
-  pb->ClearRecv();
   return TaskStatus::complete;
+}
+
+TaskStatus Particles::XPhiSend(Driver *pdrive, int stage) {
+  if (pbval_phi == nullptr || pmy_pack->pgrav == nullptr) return TaskStatus::complete;
+  return pbval_phi->PackAndSendCC(pmy_pack->pgrav->phi, pmy_pack->pgrav->coarse_phi);
+}
+
+TaskStatus Particles::XPhiRecv(Driver *pdrive, int stage) {
+  if (pbval_phi == nullptr || pmy_pack->pgrav == nullptr) return TaskStatus::complete;
+  return pbval_phi->RecvAndUnpackCC(pmy_pack->pgrav->phi, pmy_pack->pgrav->coarse_phi);
+}
+
+TaskStatus Particles::XPhiBCs(Driver *pdrive, int stage) {
+  if (pbval_phi == nullptr || pmy_pack->pgrav == nullptr) return TaskStatus::complete;
+  if (pmy_pack->pmesh->strictly_periodic) return TaskStatus::complete;
+  // HydroBCs is variable-agnostic (outflow = zero-gradient copy), which both initializes
+  // the memory and is an adequate extrapolation for the gather
+  pbval_phi->HydroBCs(pmy_pack, pbval_phi->u_in, pmy_pack->pgrav->phi);
+  return TaskStatus::complete;
+}
+
+TaskStatus Particles::XPhiProlongate(Driver *pdrive, int stage) {
+  if (pbval_phi == nullptr || pmy_pack->pgrav == nullptr) return TaskStatus::complete;
+  if (pmy_pack->pmesh->multilevel) {
+    pbval_phi->FillCoarseInBndryCC(pmy_pack->pgrav->phi, pmy_pack->pgrav->coarse_phi);
+    pbval_phi->ProlongateCC(pmy_pack->pgrav->phi, pmy_pack->pgrav->coarse_phi);
+  }
+  return TaskStatus::complete;
+}
+
+TaskStatus Particles::XPhiClearSend(Driver *pdrive, int stage) {
+  if (pbval_phi == nullptr || pmy_pack->pgrav == nullptr) return TaskStatus::complete;
+  return pbval_phi->ClearSend();
+}
+
+TaskStatus Particles::XPhiClearRecv(Driver *pdrive, int stage) {
+  if (pbval_phi == nullptr || pmy_pack->pgrav == nullptr) return TaskStatus::complete;
+  return pbval_phi->ClearRecv();
 }
 
 //----------------------------------------------------------------------------------------

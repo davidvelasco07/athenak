@@ -187,8 +187,8 @@ class ParticleMesh {
   void ExchangeDepositFlush();   // MPI: add off-rank ghost-spill deposits to owners
 
   // Boundary-value helper for dmesh: provides the buffers/MPI machinery for the
-  // future cross-rank flush path, and is reused by Particles::ExchangePhi for the
-  // potential's halo exchange.
+  // future cross-rank flush path. The potential's halo exchange has its OWN object
+  // (Particles::pbval_phi): one boundary-values object per exchanged field.
   MeshBoundaryValuesCC *pmbval = nullptr;
 
  private:

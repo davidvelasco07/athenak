@@ -97,7 +97,7 @@ TaskStatus Particles::CreateSinks(Driver *pdriver, int stage) {
     const Real rho_thr = thr_fac/(dx1*dx1);
     const Real rho = u0(m, IDN, k, j, i);
     if (rho <= rho_thr) return;
-    // local potential minimum over the 26 neighbours (phi ghosts valid: ExchangePhi
+    // local potential minimum over the 26 neighbours (phi ghosts valid: the XPhi tasks
     // ran this stage)
     const Real p0 = phi(m, 0, k, j, i);
     for (int dk = -1; dk <= 1; ++dk) {
