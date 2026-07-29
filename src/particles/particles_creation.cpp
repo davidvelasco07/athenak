@@ -29,6 +29,7 @@
 //! are resized on the host (Kokkos::resize preserves contents); serial/on-rank.
 
 #include <iostream>
+#include <vector>
 
 #include "athena.hpp"
 #include "globals.hpp"
@@ -39,6 +40,10 @@
 #include "eos/eos.hpp"
 #include "gravity/gravity.hpp"
 #include "particles.hpp"
+
+#if MPI_PARALLEL_ENABLED
+#include <mpi.h>
+#endif
 
 namespace particles {
 
@@ -130,7 +135,8 @@ TaskStatus Particles::CreateSinks(Driver *pdriver, int stage) {
   auto ncand_h = Kokkos::create_mirror_view(ncand_d);
   Kokkos::deep_copy(ncand_h, ncand_d);
   int nnew = ncand_h(0);
-  if (nnew <= 0) return TaskStatus::complete;
+  // NOTE: no early return for nnew == 0. Every rank must reach the tag-numbering
+  // collective below, and the loops between here and there are no-ops when nnew is 0.
   if (nnew > MAX_NEW_SINKS) {
     if (global_variable::my_rank == 0) {
       std::cout << "### WARNING in Particles::CreateSinks: " << nnew << " candidates, "
@@ -163,7 +169,42 @@ TaskStatus Particles::CreateSinks(Driver *pdriver, int stage) {
   }
   int nkeep = 0;
   for (int n = 0; n < nnew; ++n) if (keep[n]) ++nkeep;
-  if (nkeep <= 0) return TaskStatus::complete;
+
+  // ---- globally unique tags ------------------------------------------------------
+  // PTAG must be unique across the WHOLE run, not just this rank: the merger gathers
+  // every sink and keys survivors/absorbed by tag, so two distinct sinks sharing a tag
+  // are taken for one object. `created_total_` alone is rank-local, so on N ranks the
+  // first sink created on each rank got tag 1000000 -- the merger then "merged" two
+  // physically separate sinks (mirror images of an m=2 pair, nowhere near each other),
+  // summed their masses, and every rank wrote the sum back onto its own copy, doubling
+  // the sink mass EVERY cycle (observed: 9.8 -> 1e72 over ~230 cycles).
+  // Fix: number this step's new sinks from a global base. Each rank takes the block
+  // [created_total_ + offset, ... + nkeep), where offset is the exclusive prefix sum of
+  // nkeep over lower ranks, and every rank then advances created_total_ by the GLOBAL
+  // total so the counters never drift apart and no later step can collide either.
+  // The collective is unconditional -- it must be reached even by ranks creating
+  // nothing, hence no early return above (the nkeep <= 0 exit is below it).
+  int tag_offset = 0, ncreated_global = nkeep;
+#if MPI_PARALLEL_ENABLED
+  if (global_variable::nranks > 1) {
+    std::vector<int> nk(global_variable::nranks, 0);
+    MPI_Allgather(&nkeep, 1, MPI_INT, nk.data(), 1, MPI_INT, MPI_COMM_WORLD);
+    tag_offset = 0;
+    for (int r = 0; r < global_variable::my_rank; ++r) tag_offset += nk[r];
+    ncreated_global = 0;
+    for (int r = 0; r < global_variable::nranks; ++r) ncreated_global += nk[r];
+  }
+#endif
+  const int tag0 = 1000000 + created_total_ + tag_offset;
+  created_total_ += ncreated_global;
+
+  if (nkeep <= 0) {
+    // This rank created nothing, but another rank may have: RefreshMeshParticleCounts is
+    // collective, so it is keyed off the GLOBAL count (identical on every rank) rather
+    // than the local one, which would deadlock.
+    if (ncreated_global > 0) RefreshMeshParticleCounts();
+    return TaskStatus::complete;
+  }
 
   // ---- grow the particle arrays (Kokkos::resize preserves existing columns) ----
   const int npart_new = npart + nkeep;
@@ -180,15 +221,16 @@ TaskStatus Particles::CreateSinks(Driver *pdriver, int stage) {
   for (int n = 0; n < nnew; ++n) {
     if (!keep[n]) continue;
     for (int c = 0; c < 4; ++c) cnew_h(q, c) = cand_h(n, c);
-    if (global_variable::my_rank == 0) {
-      std::printf("CreateSinks: new sink #%d at (%.5f, %.5f, %.5f) cycle=%d\n",
-                  npart + q, cx[n], cy[n], cz[n], pmy_pack->pmesh->ncycle);
-    }
+    // Print on the CREATING rank, and report the global TAG rather than a local slot
+    // index: rank-0-only prints hide every sink born on another rank, and the tag is what
+    // the merger and the history output key on (a duplicated tag is a real bug -- see the
+    // tag-numbering comment above).
+    std::printf("CreateSinks: new sink tag=%d on rank %d at (%.5f, %.5f, %.5f) cycle=%d\n",
+                tag0 + q, global_variable::my_rank, cx[n], cy[n], cz[n],
+                pmy_pack->pmesh->ncycle);
     ++q;
   }
   Kokkos::deep_copy(cnew, cnew_h);
-  const int tag0 = 1000000 + created_total_;
-  created_total_ += nkeep;
 
   par_for("sink_create_fill", DevExeSpace(), 0, nkeep-1,
   KOKKOS_LAMBDA(const int n) {
@@ -210,6 +252,10 @@ TaskStatus Particles::CreateSinks(Driver *pdriver, int stage) {
   });
 
   nprtcl_thispack = npart_new;
+  // creation changed the particle count, so refresh the Mesh's global bookkeeping
+  // (nprtcl_total / nprtcl_eachrank) that the outputs read. Collective; every rank
+  // reaches it because ncreated_global > 0 here implies it on all ranks.
+  RefreshMeshParticleCounts();
   return TaskStatus::complete;
 }
 
