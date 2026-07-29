@@ -44,6 +44,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <iostream>
 #include <map>
 #include <set>
@@ -161,6 +162,35 @@ TaskStatus Particles::MergeSinks(Driver *pdriver, int stage) {
 #endif
   if (Ntot < 2) return refresh_return();
 
+  // ---- PTAGs must be globally unique --------------------------------------------------
+  // Everything below keys survivors and absorbed sinks by tag, so two distinct sinks
+  // sharing a tag are silently taken for one object: they get "merged" however far apart
+  // they are, their masses are summed, and every rank writes the sum onto its own copy --
+  // a mass that doubles every cycle. Creation numbers tags from a global base to prevent
+  // this, but check it here too, where the assumption is actually relied on, and where a
+  // violation can be reported against the offending tag instead of being inferred later
+  // from a runaway mass. Cheap: a sort over the (few) sinks, no communication, and G is
+  // identical on every rank so the verdict is too.
+  {
+    std::vector<int> tags(Ntot);
+    for (int i = 0; i < Ntot; ++i) {
+      tags[i] = static_cast<int>(G[static_cast<size_t>(i)*REC + 10]);
+    }
+    std::vector<int> sorted_tags = tags;
+    std::sort(sorted_tags.begin(), sorted_tags.end());
+    auto dup = std::adjacent_find(sorted_tags.begin(), sorted_tags.end());
+    if (dup != sorted_tags.end()) {
+      if (my_rank == 0) {
+        std::cout << "### FATAL ERROR in Particles::MergeSinks: PTAG " << *dup
+                  << " is used by more than one sink (of " << Ntot << " globally). Sink "
+                  << "tags must be unique across ALL ranks -- merging keys on them, so "
+                  << "duplicates fuse unrelated sinks and their mass diverges."
+                  << std::endl;
+      }
+      std::exit(EXIT_FAILURE);
+    }
+  }
+
   // ---- global union-find over all sinks (identical on every rank) ----
   auto GX = [&](int i, int c) -> Real { return G[static_cast<size_t>(i)*REC + c]; };
   auto mimg = [&](Real d, int c) { return per ? d - L[c]*std::floor(d/L[c] + 0.5) : d; };
@@ -225,26 +255,26 @@ TaskStatus Particles::MergeSinks(Driver *pdriver, int stage) {
     }
   }
 
-  // ---- global conservation check (computed from the actual survivors, catches bugs) ----
-  if (my_rank == 0) {
-    Real Mpre=0, Ppre[3]={0,0,0}, Mpost=0, Ppost[3]={0,0,0};
-    for (int i = 0; i < Ntot; ++i) {
-      Mpre += GX(i,6);
-      for (int c = 0; c < 3; ++c) Ppre[c] += GX(i,6)*GX(i,3+c);
+  // ---- pre-merge totals, measured from the ACTUAL particle arrays ----------------
+  // NOT from the gathered list G. Summing G before and after the group reduction only
+  // proves the reduction arithmetic is self-consistent: if G itself is wrong -- e.g. it
+  // lists one physical sink twice because two ranks assigned the same PTAG -- then both
+  // sums double-count it identically and the check reports dM=0 while the sink's mass
+  // doubles every cycle. That is exactly what happened before tags were made globally
+  // unique: 230 cycles of "dM=0.000e+00" while the mass ran to 1e72. So measure the real
+  // state instead, and compare it after the arrays have been mutated and compacted.
+  // Safe under MPI: every rank derives survmap from the same G, so all ranks take this
+  // branch together and the reductions below cannot deadlock.
+  Real m_pre_loc = 0.0, p_pre_loc[3] = {0.0, 0.0, 0.0};
+  const bool check_cons = !survmap.empty();
+  if (check_cons) {
+    for (int p = 0; p < nloc; ++p) {
+      const Real m = hr(IPM, p);
+      m_pre_loc += m;
+      p_pre_loc[0] += m*hr(IPVX, p);
+      p_pre_loc[1] += m*hr(IPVY, p);
+      p_pre_loc[2] += m*hr(IPVZ, p);
     }
-    for (int root = 0; root < Ntot; ++root) {
-      auto &mem = groups[root];
-      if (mem.size() == 1) {
-        int i = mem[0]; Mpost += GX(i,6);
-        for (int c = 0; c < 3; ++c) Ppost[c] += GX(i,6)*GX(i,3+c);
-      }
-    }
-    for (auto &kv : survmap) {
-      const Surv &s = kv.second; Mpost += s.M;
-      Ppost[0] += s.M*s.vx; Ppost[1] += s.M*s.vy; Ppost[2] += s.M*s.vz;
-    }
-    std::printf("  merge conservation (global): dM=% .3e  dP=(% .3e,% .3e,% .3e)\n",
-                Mpost-Mpre, Ppost[0]-Ppre[0], Ppost[1]-Ppre[1], Ppost[2]-Ppre[2]);
   }
 
   // ---- mutate this rank's local particles, keyed by tag ----
@@ -289,6 +319,47 @@ TaskStatus Particles::MergeSinks(Driver *pdriver, int stage) {
   Kokkos::deep_copy(prtcl_rdata, hr2);
   Kokkos::deep_copy(prtcl_idata, hi2);
   nprtcl_thispack = nnew;
+
+  // ---- post-merge totals from the ACTUAL arrays, and the verdict -------------------
+  // A merge moves mass and momentum between particles, so both totals must be unchanged.
+  // Reported as a relative error and escalated to a WARNING past a tolerance far above
+  // round-off, so a real violation is impossible to read as noise.
+  if (check_cons) {
+    Real m_post_loc = 0.0, p_post_loc[3] = {0.0, 0.0, 0.0};
+    for (int n = 0; n < nnew; ++n) {
+      const Real m = hr2(IPM, n);
+      m_post_loc += m;
+      p_post_loc[0] += m*hr2(IPVX, n);
+      p_post_loc[1] += m*hr2(IPVY, n);
+      p_post_loc[2] += m*hr2(IPVZ, n);
+    }
+    Real loc[8] = {m_pre_loc, p_pre_loc[0], p_pre_loc[1], p_pre_loc[2],
+                   m_post_loc, p_post_loc[0], p_post_loc[1], p_post_loc[2]};
+    Real glb[8];
+    for (int c = 0; c < 8; ++c) glb[c] = loc[c];
+#if MPI_PARALLEL_ENABLED
+    if (global_variable::nranks > 1) {
+      MPI_Allreduce(loc, glb, 8, MPI_ATHENA_REAL, MPI_SUM, MPI_COMM_WORLD);
+    }
+#endif
+    const Real dM = glb[4] - glb[0];
+    const Real dP[3] = {glb[5]-glb[1], glb[6]-glb[2], glb[7]-glb[3]};
+    const Real mscale = std::max(std::abs(glb[0]), 1.0e-300);
+    const Real pscale = std::max({std::abs(glb[1]), std::abs(glb[2]),
+                                  std::abs(glb[3]), 1.0e-300});
+    const Real relM = std::abs(dM)/mscale;
+    const Real relP = std::max({std::abs(dP[0]), std::abs(dP[1]),
+                                std::abs(dP[2])})/pscale;
+    if (my_rank == 0) {
+      std::printf("  merge conservation (measured): dM/M=% .3e  dP/P=% .3e"
+                  "  (M %.6e -> %.6e)\n", relM, relP, glb[0], glb[4]);
+      if (relM > 1.0e-10 || relP > 1.0e-8) {
+        std::cout << "### WARNING in Particles::MergeSinks: the merge did NOT conserve "
+                  << "sink mass/momentum (dM/M=" << relM << ", dP/P=" << relP
+                  << "). Check for duplicate PTAGs across ranks." << std::endl;
+      }
+    }
+  }
   return refresh_return();
 }
 
