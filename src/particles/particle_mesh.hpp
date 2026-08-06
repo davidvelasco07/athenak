@@ -180,9 +180,10 @@ class ParticleMesh {
   // (with periodic wrapping), so faces/edges/corners and graded octree refinement all
   // use one code path -- including coarser "interior edge" regions that SetNeighbors
   // leaves unpopulated because the coarse face neighbour covers them.
-  // Off-rank same-level neighbours are folded via a sparse cross-rank exchange
-  // (ExchangeDepositFlush, mirroring the accretion CV scatter); off-rank level-jumps
-  // are still dropped (warned once).
+  // Off-rank neighbours are folded via a sparse cross-rank exchange
+  // (ExchangeDepositFlush, mirroring the accretion CV scatter), at ANY level: the SENDER
+  // applies the same three rules above, so the wire record stays (dest cell, add-value)
+  // and the receiver only has to atomic-add.
   void FlushDepositBoundaries();
   void ExchangeDepositFlush();   // MPI: add off-rank ghost-spill deposits to owners
 

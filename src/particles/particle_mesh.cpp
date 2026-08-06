@@ -519,7 +519,8 @@ void ParticleMesh::GatherGravity(const DvceArray5D<Real>& phi_in,
 //----------------------------------------------------------------------------------------
 //! \fn void ParticleMesh::FlushDepositBoundaries()
 //! \brief Fold ghost-zone deposit contributions into neighbour interiors, then zero the
-//! ghost spill (Phase 1c + AMR). On-rank neighbours at any refinement level.
+//! ghost spill (Phase 1c + AMR). On-rank neighbours at any refinement level; off-rank ones
+//! at any level too, via ExchangeDepositFlush() below.
 //!
 //! Each nonzero ghost cell resolves its owner geometrically: it searches this block's
 //! neighbour list for the (unique) on-rank MeshBlock whose bounds contain the cell's
@@ -531,18 +532,19 @@ void ParticleMesh::GatherGravity(const DvceArray5D<Real>& phi_in,
 //!                   split of the mass rho*dV_c over 2^d cells of volume dV_f)
 //! Geometric ownership handles faces, edges and corners in one code path -- including
 //! coarser "interior edge" regions for which SetNeighbors leaves no dedicated slot
-//! because the coarse face neighbour covers them. Cells owned by off-rank neighbours
-//! (MPI, warned once) or lying outside the domain (physical boundaries) are dropped;
-//! the trailing ghost-zero pass discards them either way. After all adds complete, a
-//! second kernel zeroes every ghost cell so the spill is not double-counted when the
-//! gravity source is assembled.
+//! because the coarse face neighbour covers them. Cells whose owner is OFF-RANK are
+//! staged here and shipped by ExchangeDepositFlush(), which applies the same three rules
+//! on the sender; only cells lying outside the domain (physical boundaries) are dropped,
+//! and the trailing ghost-zero pass discards those. After all adds complete, a second
+//! kernel zeroes every ghost cell so the spill is not double-counted when the gravity
+//! source is assembled.
 void ParticleMesh::FlushDepositBoundaries() {
   int nmb    = pmy_pack->nmb_thispack;
   int nvar   = dmesh.extent_int(1);
 
   // Cross-rank spill: on >1 rank, every nonzero ghost cell is staged into dfemit_ and
-  // ExchangeDepositFlush() (below) atomic-adds the ones whose containing block is an
-  // off-rank same-level neighbour. Zero the counter each call.
+  // ExchangeDepositFlush() (below) atomic-adds the ones whose containing block is
+  // off-rank, at any refinement level. Zero the counter each call.
   const bool mpi_on = (global_variable::nranks > 1);
   if (mpi_on) Kokkos::deep_copy(dfemit_cnt_, 0);
   auto dfemit = dfemit_;
@@ -592,9 +594,8 @@ void ParticleMesh::FlushDepositBoundaries() {
 
     // stage this nonzero ghost cell for the cross-rank exchange (multi-rank only). Its
     // containing block is resolved host-side in ExchangeDepositFlush(); if that block is
-    // an off-rank same-level neighbour the deposit is atomic-added there, else skipped
-    // (on-rank containers are handled by the device loop below; off-rank level-jumps are
-    // dropped, as on-rank AMR was validated separately).
+    // off-rank the deposit is shipped and atomic-added there, at any refinement level
+    // (on-rank containers are handled by the device loop below).
     if (mpi_on) {
       const int e = Kokkos::atomic_fetch_add(&dfcnt(0), 1);
       if (e < dfmax) {
@@ -686,11 +687,12 @@ void ParticleMesh::FlushDepositBoundaries() {
     }
   });
 
-  // add spill whose containing block is an off-rank same-level neighbour (multi-rank)
+  // add spill whose containing block is off-rank, at any level (multi-rank)
   if (mpi_on) ExchangeDepositFlush();
 
-  // Zero every ghost cell: its deposit has been flushed to the owning neighbour interior
-  // (or, at a physical/off-rank boundary, dropped). Prevents double-counting.
+  // Zero every ghost cell: its deposit has been flushed to the owning neighbour interior,
+  // on-rank or off-rank (or, at a physical boundary where no owner exists, dropped).
+  // Prevents double-counting.
   par_for("PMFlushZeroGhost", DevExeSpace(), 0, nmb-1, 0, nvar-1, 0, n3-1, 0, n2-1, 0, n1-1,
   KOKKOS_LAMBDA(int m, int v, int k, int j, int i) {
     if (i < is || i > ie || j < js || j > je || k < ks || k > ke) {

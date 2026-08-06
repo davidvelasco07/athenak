@@ -34,13 +34,14 @@
 //! <= rctrl+1 cells from the sink cell) come from the OWNER block's array -- valid in
 //! its ghost zones, which hold post-update neighbour interiors at "after_stagen". The
 //! reset values are then GEOMETRICALLY SCATTERED to every coincident cell copy in the
-//! pack: the owner's cells (interior or ghost), and for each same-level on-rank
-//! neighbour the cell of its (interior+ghost) array containing the same physical
-//! position (periodic-wrapped) -- the containment pattern of
-//! ParticleMesh::FlushDepositBoundaries. Writing ALL copies keeps every block
+//! pack: the owner's cells (interior or ghost), and for each on-rank neighbour -- at ANY
+//! refinement level, by the three-way rule below -- the cell(s) of its (interior+ghost)
+//! array covering the same physical position (periodic-wrapped) -- the containment
+//! pattern of ParticleMesh::FlushDepositBoundaries. Writing ALL copies keeps every block
 //! bit-consistent immediately, with no extra boundary exchange (this replaces the
 //! Athena++ ghost-particle mechanism and its NGHOST >= req+rctrl+1 requirement).
-//! Duplicate writes carry identical values, so no atomics are needed.
+//! The same-level and finer writes are assignments carrying identical values, so no
+//! atomics are needed; the coarser writes accumulate and are serialized (see below).
 //!
 //! CROSS-RANK control volumes: reset cells whose reach touches an off-rank neighbour are
 //! additionally staged into a device buffer and exchanged after the kernel
@@ -195,7 +196,7 @@ TaskStatus Particles::AccreteMass(Driver *pdriver, int stage) {
       // Guard invalid PGID before ANY indexed access (mirrors ParticleMesh::DepositMass):
       // a corrupt/ejected particle must skip accretion, not fault.
       if (m < 0 || m >= nmb_) continue;
-      bool touches_offrank = false;   // CV reaches an off-rank same-level neighbour
+      bool touches_offrank = false;   // CV reaches an off-rank neighbour (any level)
       const Real dx1 = mbsize.d_view(m).dx1;
       const Real dx2 = mbsize.d_view(m).dx2;
       const Real dx3 = mbsize.d_view(m).dx3;
@@ -335,12 +336,14 @@ TaskStatus Particles::AccreteMass(Driver *pdriver, int stage) {
         tm.team_barrier();
 
         // Scatter the reset values to EVERY coincident cell copy in the pack: the
-        // owner's cell (interior or ghost), plus, for each same-level on-rank
-        // neighbour, the cell of its interior+ghost array containing the same
-        // physical position (periodic-wrapped). Also write matching primitives to w0
-        // (isothermal: w_d = u_d, w_vi = M_i/rho); without the w0 update the reset is
-        // invisible to the next cycle's fluxes (ConToPrim already ran this stage).
-        // Duplicate writes carry identical values -> no atomics needed.
+        // owner's cell (interior or ghost), plus, for each on-rank neighbour at THIS
+        // level or FINER, the cell(s) of its interior+ghost array covering the same
+        // physical position (periodic-wrapped). Coarser neighbours accumulate a
+        // difference instead and are handled by the serial pass below. Also write
+        // matching primitives to w0 (isothermal: w_d = u_d, w_vi = M_i/rho); without the
+        // w0 update the reset is invisible to the next cycle's fluxes (ConToPrim already
+        // ran this stage). These writes are assignments carrying identical values, so
+        // duplicates are harmless and no atomics are needed.
         Kokkos::parallel_for(Kokkos::TeamThreadRange(tm, 27), [&](const int c) {
           const int di = c%3 - 1, dj = (c/3)%3 - 1, dk = c/9 - 1;
           const int i = ic + di, j = jc + dj, k = kc + dk;
