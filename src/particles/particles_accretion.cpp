@@ -98,6 +98,7 @@
 //! sink moving and the next regrid -- accrete conservatively instead of not at all.
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <iostream>
 #include <string>
@@ -182,20 +183,124 @@ TaskStatus Particles::AccreteMass(Driver *pdriver, int stage) {
   const size_t scr_bytes = ScrArray2D<Real>::shmem_size(8, 27)
                          + ScrArray1D<Real>::shmem_size(4);
 
-  Kokkos::TeamPolicy<> policy(DevExeSpace(), 1, Kokkos::AUTO);
-  policy.set_scratch_size(scr_level, Kokkos::PerTeam(scr_bytes));
+  // ---- conflict colouring -----------------------------------------------------------
+  // The reference semantics are "strictly sequential across sinks", but that requirement
+  // only ever binds between sinks whose regions actually touch: a later sink's integral
+  // must see an earlier sink's reset. Sinks that cannot reach each other's cells commute,
+  // so they can run concurrently. Colour the sinks by that conflict relation and launch
+  // ONE TEAM PER SINK within each colour, instead of one team looping every sink -- which
+  // occupied a single SM regardless of how many sinks there were.
+  //
+  // Conflict radius, from the kernel's own reach numbers:
+  //   write region = the 27 cells of the new CV, union the old CV whose centre is at most
+  //                  one cell away             -> half-width rctrl+1 = 2 cells
+  //   read region  = the extrapolation stencil, rctrl+1 from a CV centre, plus the same
+  //                  one-cell crossing offset  -> half-width 3 cells
+  // A conflict is write(A)-read(B) or write(A)-write(B), so |dx| < 2+3 = 5 cells, i.e.
+  // half-widths of 2.5 dx each. When a sink's reach touches a COARSER neighbour its writes
+  // round outward to the containing coarse cell, widening the write region to 3 cells; 3.5
+  // dx is used there, which also guarantees two same-colour sinks can never accumulate
+  // into the same coarse cell (the coarser-target += is not idempotent).
+  //
+  // Colours are assigned by LAYERING, not greedy: colour[j] = 1 + max(colour[i]) over
+  // conflicting i < j. That guarantees colour(j) > colour(i) for every conflicting pair
+  // with i < j, so processing colour by colour reproduces the old sequential order for
+  // exactly those pairs whose order mattered -- the change is bit-identical, not merely
+  // "equivalent for well-separated sinks". Within a colour the order is irrelevant by
+  // construction, so the result does not depend on the launch order either.
+  //
+  // Colouring is LOCAL to the rank, deliberately. Sinks on different ranks are already
+  // processed concurrently today (each rank runs its own kernel and the cross-rank reset
+  // is applied afterwards by ExchangeCVReset), so a local colouring preserves the existing
+  // semantics exactly and -- unlike a global one -- adds no collective to a step that
+  // already has too many.
+  //
+  // Cost is O(N^2) on the host over the (few) sinks; fine into the hundreds. Past ~10^4
+  // sinks this test itself would need a spatial hash.
+  std::vector<int> corder;      // sink indices grouped by colour
+  std::vector<int> coff(2, 0);  // [ncolours+1] offsets into corder
+  {
+    auto hr = Kokkos::create_mirror_view_and_copy(HostMemSpace(), prtcl_rdata);
+    auto hi = Kokkos::create_mirror_view_and_copy(HostMemSpace(), prtcl_idata);
+    auto msz_h = pmy_pack->pmb->mb_size.h_view;
+    auto lev_h = pmy_pack->pmb->mb_lev.h_view;
+    auto ngh_h = pmy_pack->pmb->nghbr.h_view;
+    const bool per = pmy_pack->pmesh->strictly_periodic;
+    const Real L[3] = {Lx1, Lx2, Lx3};
+    auto mimg = [&](Real d, int c) {
+      return per ? d - L[c]*std::floor(d/L[c] + 0.5) : d;
+    };
+    std::vector<Real> qx(npart), qy(npart), qz(npart);
+    std::vector<Real> hx(npart), hy(npart), hz(npart);
+    std::vector<int> colour(npart, 0);
+    for (int p = 0; p < npart; ++p) {
+      qx[p] = hr(IPX, p);  qy[p] = hr(IPY, p);  qz[p] = hr(IPZ, p);
+      const int m = hi(PGID, p) - gids;
+      if (m < 0 || m >= nmb_) {   // invalid PGID: the kernel skips it, so it conflicts with nothing
+        hx[p] = hy[p] = hz[p] = 0.0;
+        continue;
+      }
+      bool coarser = false;
+      for (int n = 0; n < nnghbr; ++n) {
+        if (ngh_h(m, n).gid < 0) continue;
+        if (ngh_h(m, n).lev < lev_h(m)) { coarser = true; break; }
+      }
+      const Real f = coarser ? 3.5 : 2.5;
+      hx[p] = f*msz_h(m).dx1;  hy[p] = f*msz_h(m).dx2;  hz[p] = f*msz_h(m).dx3;
+    }
+    int ncol = 1;
+    for (int j = 0; j < npart; ++j) {
+      for (int i = 0; i < j; ++i) {
+        if (std::fabs(mimg(qx[j]-qx[i], 0)) < hx[i] + hx[j] &&
+            std::fabs(mimg(qy[j]-qy[i], 1)) < hy[i] + hy[j] &&
+            std::fabs(mimg(qz[j]-qz[i], 2)) < hz[i] + hz[j]) {
+          colour[j] = std::max(colour[j], colour[i] + 1);
+        }
+      }
+      ncol = std::max(ncol, colour[j] + 1);
+    }
+    coff.assign(ncol + 1, 0);
+    for (int p = 0; p < npart; ++p) coff[colour[p] + 1]++;
+    for (int c = 0; c < ncol; ++c) coff[c+1] += coff[c];
+    corder.resize(std::max(1, npart));
+    std::vector<int> fill(coff.begin(), coff.end() - 1);
+    for (int p = 0; p < npart; ++p) corder[fill[colour[p]]++] = p;
+    // Report every step under the switch, not only when ncol > 1: a message that appears
+    // only on conflicting steps is easily misread as "this configuration always conflicts".
+    if (global_variable::my_rank == 0 && std::getenv("SINK_COLOUR_DBG") != nullptr) {
+      std::cout << "### [sink-colour] cycle=" << pmy_pack->pmesh->ncycle << "  " << npart
+                << " sink(s) in " << ncol << " colour(s)"
+                << (ncol > 1 ? "  (colours > 1 = interacting control volumes, serialized)"
+                             : "  (fully parallel)") << std::endl;
+    }
+  }
+  DualArray1D<int> plist("acc_colour_order", std::max(1, npart));
+  for (int i = 0; i < npart; ++i) plist.h_view(i) = corder[i];
+  plist.template modify<HostMemSpace>();
+  plist.template sync<DevExeSpace>();
+  auto pl = plist.d_view;
 
-  Kokkos::parallel_for("sink_accrete", policy,
-  KOKKOS_LAMBDA(TeamMember_t tm) {
+  for (int c = 0; c + 1 < static_cast<int>(coff.size()); ++c) {
+    const int c0 = coff[c];
+    const int nteam = coff[c+1] - c0;
+    if (nteam <= 0) continue;
+    Kokkos::TeamPolicy<> policy(DevExeSpace(), nteam, Kokkos::AUTO);
+    policy.set_scratch_size(scr_level, Kokkos::PerTeam(scr_bytes));
+
+    Kokkos::parallel_for("sink_accrete", policy,
+    KOKKOS_LAMBDA(TeamMember_t tm) {
     ScrArray2D<Real> scr(tm.team_scratch(scr_level), 8, 27);
     ScrArray1D<Real> acc(tm.team_scratch(scr_level), 4);
 
-    // serial over sinks (reference semantics; sinks are few), team-parallel inside
-    for (int p = 0; p < npart; ++p) {
+    // one team per sink; sinks sharing a colour provably cannot touch each other's cells
+    {
+      const int p = pl(c0 + tm.league_rank());
       const int m = pi(PGID, p) - gids;
       // Guard invalid PGID before ANY indexed access (mirrors ParticleMesh::DepositMass):
-      // a corrupt/ejected particle must skip accretion, not fault.
-      if (m < 0 || m >= nmb_) continue;
+      // a corrupt/ejected particle must skip accretion, not fault. Every thread of the team
+      // evaluates this identically, so the whole team returns together and the barriers
+      // below stay collective.
+      if (m < 0 || m >= nmb_) return;
       bool touches_offrank = false;   // CV reaches an off-rank neighbour (any level)
       const Real dx1 = mbsize.d_view(m).dx1;
       const Real dx2 = mbsize.d_view(m).dx2;
@@ -219,7 +324,7 @@ TaskStatus Particles::AccreteMass(Driver *pdriver, int stage) {
       if (!(xi1 > -1.0e9 && xi1 < 1.0e9) || !(xi2 > -1.0e9 && xi2 < 1.0e9) ||
           !(xi3 > -1.0e9 && xi3 < 1.0e9) || !(yi1 > -1.0e9 && yi1 < 1.0e9) ||
           !(yi2 > -1.0e9 && yi2 < 1.0e9) || !(yi3 > -1.0e9 && yi3 < 1.0e9)) {
-        continue;
+        return;
       }
       // owner block's integer cell offset from the mesh origin (exact by construction:
       // block edges lie on the global cell lattice)
@@ -266,7 +371,7 @@ TaskStatus Particles::AccreteMass(Driver *pdriver, int stage) {
         Kokkos::single(Kokkos::PerTeam(tm), [&]() {
           Kokkos::atomic_fetch_add(&accskip(0), 1);
         });
-        continue;
+        return;
       }
 
       // zero the per-sink accumulator
@@ -543,7 +648,8 @@ TaskStatus Particles::AccreteMass(Driver *pdriver, int stage) {
       });
       tm.team_barrier();
     }
-  });
+    });
+  }
 
   // apply reset cells that landed in off-rank neighbour interiors (multi-rank only)
   if (mpi_on) ExchangeCVReset();
