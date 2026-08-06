@@ -68,8 +68,24 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
     //   --- Driver solves Poisson for phi (ρ_gas + ρ_particle) ---
     //   stagen        : Push (gather -grad(phi) -> IPGX/Y/Z, then KDK kick/drift)
     //                   followed by the MeshBlock-crossing communication chain.
-    id.deposit = tl["before_stagen"]->AddTask(&Particles::Deposit, this, none);
+    // The deposit's boundary reconciliation is a PAIR, and both halves live here:
+    //   flush     -- reverse: ADD each block's ghost spill into the neighbour interiors
+    //                that own it (a deposit writes into territory it does not own), then
+    //                clear the ghosts;
+    //   dm_rest.. -- forward: COPY the now-complete neighbour interiors back out into the
+    //                ghosts, exactly as the gas's exchange does. Without it dmesh would
+    //                end the step with empty ghosts -- the opposite convention to every
+    //                other cell-centred field, and a silent zero for any future consumer
+    //                that reads them.
+    // Receives are posted first (dm_irecv), the exchange runs after the flush, and the
+    // buffers are released in "after_stagen".
+    id.dm_irecv = tl["before_stagen"]->AddTask(&Particles::DMeshInitRecv, this, none);
+    id.deposit = tl["before_stagen"]->AddTask(&Particles::Deposit, this, id.dm_irecv);
     id.flush   = tl["before_stagen"]->AddTask(&Particles::FlushDeposit, this, id.deposit);
+    id.dm_rest = tl["before_stagen"]->AddTask(&Particles::DMeshRestrict, this, id.flush);
+    id.dm_send = tl["before_stagen"]->AddTask(&Particles::DMeshSend, this, id.dm_rest);
+    id.dm_recv = tl["before_stagen"]->AddTask(&Particles::DMeshRecv, this, id.dm_send);
+    id.dm_prol = tl["before_stagen"]->AddTask(&Particles::DMeshProlongate, this, id.dm_recv);
 
     // Fill phi ghost cells (>=2 layers) from neighbour interiors before the gather, which
     // reads phi two cells deep near MeshBlock boundaries (the multigrid only keeps
@@ -116,6 +132,10 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
     id.xphi_csend = tl["after_stagen"]->AddTask(&Particles::XPhiClearSend, this, none);
     id.xphi_crecv = tl["after_stagen"]->AddTask(&Particles::XPhiClearRecv, this,
                                                 id.xphi_csend);
+    // release the deposit's forward-exchange buffers too
+    id.dm_csend = tl["after_stagen"]->AddTask(&Particles::DMeshClearSend, this, none);
+    id.dm_crecv = tl["after_stagen"]->AddTask(&Particles::DMeshClearRecv, this,
+                                              id.dm_csend);
 
     TaskID dep = none;
     if (accretion && creation) {
@@ -385,6 +405,49 @@ TaskStatus Particles::FlushDeposit(Driver *pdrive, int stage) {
     ppm->FlushDepositBoundaries();
   }
   return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn TaskStatus Particles::DMesh*
+//! \brief Forward ("inbox") half of the deposit's boundary exchange: copy the
+//! post-flush neighbour interiors back out into this block's ghost cells, so dmesh holds
+//! the same invariant as u0 -- every cell, interior or ghost, is the total particle
+//! density at that location. Thin wrappers; the work and the rationale are on
+//! ParticleMesh (see particle_mesh.hpp). No-ops without particle-mesh coupling.
+
+TaskStatus Particles::DMeshInitRecv(Driver *pdrive, int stage) {
+  if (ppm == nullptr) return TaskStatus::complete;
+  return ppm->RefreshGhostsInitRecv();
+}
+
+TaskStatus Particles::DMeshRestrict(Driver *pdrive, int stage) {
+  if (ppm == nullptr) return TaskStatus::complete;
+  return ppm->RefreshGhostsRestrict();
+}
+
+TaskStatus Particles::DMeshSend(Driver *pdrive, int stage) {
+  if (ppm == nullptr) return TaskStatus::complete;
+  return ppm->RefreshGhostsSend();
+}
+
+TaskStatus Particles::DMeshRecv(Driver *pdrive, int stage) {
+  if (ppm == nullptr) return TaskStatus::complete;
+  return ppm->RefreshGhostsRecv();
+}
+
+TaskStatus Particles::DMeshProlongate(Driver *pdrive, int stage) {
+  if (ppm == nullptr) return TaskStatus::complete;
+  return ppm->RefreshGhostsProlongate();
+}
+
+TaskStatus Particles::DMeshClearSend(Driver *pdrive, int stage) {
+  if (ppm == nullptr) return TaskStatus::complete;
+  return ppm->RefreshGhostsClearSend();
+}
+
+TaskStatus Particles::DMeshClearRecv(Driver *pdrive, int stage) {
+  if (ppm == nullptr) return TaskStatus::complete;
+  return ppm->RefreshGhostsClearRecv();
 }
 
 //----------------------------------------------------------------------------------------

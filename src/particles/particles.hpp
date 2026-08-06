@@ -33,6 +33,15 @@ struct ParticlesTaskIDs {
   TaskID setgid;
   TaskID deposit;
   TaskID flush;
+  // forward ghost exchange of the particle-mesh deposit (the "inbox" half; see
+  // ParticleMesh::RefreshGhosts*)
+  TaskID dm_irecv;
+  TaskID dm_rest;
+  TaskID dm_send;
+  TaskID dm_recv;
+  TaskID dm_prol;
+  TaskID dm_csend;
+  TaskID dm_crecv;
   TaskID push;
   TaskID merge;
   TaskID accrete;
@@ -166,6 +175,18 @@ class Particles {
   void ReconcileOwnership(Driver *pdriver, int stage);  // setgid + cross-rank migration
   TaskStatus Deposit(Driver *pdriver, int stage);
   TaskStatus FlushDeposit(Driver *pdriver, int stage);
+  // Forward ghost exchange of dmesh, completing the pair the flush starts: the flush
+  // ADDS each block's ghost spill into the neighbour interiors that own it (the reverse
+  // half), and these copy the now-complete interiors back OUT into the ghosts (the
+  // forward half, which is the only half the gas needs). Thin wrappers so the steps can
+  // be task-list entries; the work and the rationale live on ParticleMesh.
+  TaskStatus DMeshInitRecv(Driver *pdriver, int stage);
+  TaskStatus DMeshRestrict(Driver *pdriver, int stage);
+  TaskStatus DMeshSend(Driver *pdriver, int stage);
+  TaskStatus DMeshRecv(Driver *pdriver, int stage);
+  TaskStatus DMeshProlongate(Driver *pdriver, int stage);
+  TaskStatus DMeshClearSend(Driver *pdriver, int stage);
+  TaskStatus DMeshClearRecv(Driver *pdriver, int stage);
   // Gravitational-potential halo exchange. GatherGravity reads phi two cells deep near
   // MeshBlock boundaries but the multigrid leaves only mg_nghost layers valid, so phi
   // needs a halo swap after each solve. Split into the same task sequence every other

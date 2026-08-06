@@ -20,6 +20,7 @@
 
 #include "athena.hpp"
 #include "parameter_input.hpp"
+#include "tasklist/task_list.hpp"
 #include "mesh/mesh.hpp"
 #include "mesh/nghbr_index.hpp"
 
@@ -127,6 +128,12 @@ class ParticleMesh {
   // Shape (nmb, nmeshaux, ncells3, ncells2, ncells1) with hydro-style ghosts.
   DvceArray5D<Real> dmesh;
 
+  // Coarse companion of dmesh, sized like any coarse CC array (cf. hydro coarse_u0).
+  // Required by the forward ghost exchange at coarse-fine (AMR) boundaries: the CC
+  // machinery reads/writes it whenever a neighbour is at a different level, so leaving it
+  // unsized would index out of bounds the moment dmesh is exchanged on a refined mesh.
+  DvceArray5D<Real> coarse_dmesh;
+
   // Zero every slot in every cell (called before each deposition pass).
   void Zero();
 
@@ -187,8 +194,43 @@ class ParticleMesh {
   void FlushDepositBoundaries();
   void ExchangeDepositFlush();   // MPI: add off-rank ghost-spill deposits to owners
 
-  // Boundary-value helper for dmesh: provides the buffers/MPI machinery for the
-  // future cross-rank flush path. The potential's halo exchange has its OWN object
+  // ---- forward ("inbox") half of the deposit's boundary exchange --------------------
+  // A deposit uses ghost cells in the OPPOSITE sense to every other cell-centred field,
+  // and it takes both halves to reconcile the two:
+  //
+  //   gas (u0)      ghost = INBOX : the neighbour authors the value; the exchange COPIES
+  //                                 neighbour interior -> this block's ghost. One pass.
+  //   deposit (dmesh) ghost = OUTBOX: THIS block's particles author a contribution to
+  //                                 territory the neighbour owns; FlushDepositBoundaries()
+  //                                 ADDS ghost -> neighbour interior. That is the reverse
+  //                                 pass, and it leaves the ghosts holding a duplicate.
+  //
+  // RefreshGhosts* is the missing forward pass: once every interior cell holds the
+  // complete particle density (post-flush), a standard CC exchange copies those interiors
+  // back out into the ghosts. dmesh then ends the step with the SAME invariant as u0 --
+  // "every cell, interior or ghost, holds the total particle density at that location" --
+  // instead of the surprising "ghosts are empty". Nothing in the current code reads
+  // dmesh's ghosts, so this changes no result today; it exists so that anything which
+  // later does (a momentum slot, a full-extent diagnostic, a different gravity solver)
+  // reads a correct value rather than a silent zero.
+  //
+  // Split into the usual task sequence rather than one blocking call, for the reason
+  // recorded on Particles::XPhi*: a Recv that spins inside a single call stalls every
+  // other task on the rank mid-stage.
+  //
+  // Physical (non-periodic) boundaries need no handling here, unlike phi: there are no
+  // particles outside the domain, so the correct ghost content is zero -- which is what
+  // the flush's ghost-clearing pass already left there and the exchange never overwrites.
+  TaskStatus RefreshGhostsInitRecv();
+  TaskStatus RefreshGhostsRestrict();
+  TaskStatus RefreshGhostsSend();
+  TaskStatus RefreshGhostsRecv();
+  TaskStatus RefreshGhostsProlongate();
+  TaskStatus RefreshGhostsClearSend();
+  TaskStatus RefreshGhostsClearRecv();
+
+  // Boundary-value helper for dmesh: carries the buffers/MPI machinery for the forward
+  // ghost exchange above. The potential's halo exchange has its OWN object
   // (Particles::pbval_phi): one boundary-values object per exchanged field.
   MeshBoundaryValuesCC *pmbval = nullptr;
 

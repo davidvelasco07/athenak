@@ -40,6 +40,14 @@ ParticleMesh::ParticleMesh(MeshBlockPack *ppack, ParameterInput *pin, int nmesha
   // avoids per-regrid reallocation (DepositMass keeps a defensive realloc).
   int nmb = std::max((ppack->nmb_thispack), (ppack->pmesh->nmb_maxperrank));
   Kokkos::realloc(dmesh, nmb, nmeshaux, ncells3, ncells2, ncells1);
+  // Coarse companion, sized like any coarse CC array (cf. hydro coarse_u0 / gravity
+  // coarse_phi). The forward ghost exchange reads and writes it at every coarse-fine
+  // boundary; an unsized one is an out-of-bounds access the first time dmesh is exchanged
+  // on a refined mesh (the defect that bit gravity's coarse_phi).
+  int n_ccells1 = indcs.cnx1 + 2*indcs.ng;
+  int n_ccells2 = (indcs.cnx2 > 1) ? (indcs.cnx2 + 2*indcs.ng) : 1;
+  int n_ccells3 = (indcs.cnx3 > 1) ? (indcs.cnx3 + 2*indcs.ng) : 1;
+  Kokkos::realloc(coarse_dmesh, nmb, nmeshaux, n_ccells3, n_ccells2, n_ccells1);
   Zero();
 
   // Device counter for particles skipped by the deposit/gather index guards.
@@ -73,6 +81,10 @@ ParticleMesh::~ParticleMesh() {
 
 void ParticleMesh::Zero() {
   Kokkos::deep_copy(dmesh, 0.0);
+  // The coarse companion too: on GPU an untouched allocation holds garbage (~1e252, not
+  // the harmless ~0 seen on CPU), and the prolongation reads coarse cells that the
+  // restriction/boundary fill does not necessarily write at every level jump.
+  Kokkos::deep_copy(coarse_dmesh, 0.0);
 }
 
 //----------------------------------------------------------------------------------------
@@ -105,6 +117,12 @@ void ParticleMesh::DepositMass(const DvceArray2D<Real>& prtcl_rdata_in,
       int nc2 = (ix.nx2 > 1) ? (ix.nx2 + 2*ix.ng) : 1;
       int nc3 = (ix.nx3 > 1) ? (ix.nx3 + 2*ix.ng) : 1;
       Kokkos::realloc(dmesh, nmb, nmeshaux, nc3, nc2, nc1);
+      // keep the coarse companion in step, or the next forward exchange on a refined
+      // mesh indexes past it
+      int cc1 = ix.cnx1 + 2*ix.ng;
+      int cc2 = (ix.cnx2 > 1) ? (ix.cnx2 + 2*ix.ng) : 1;
+      int cc3 = (ix.cnx3 > 1) ? (ix.cnx3 + 2*ix.ng) : 1;
+      Kokkos::realloc(coarse_dmesh, nmb, nmeshaux, cc3, cc2, cc1);
     }
   }
   Zero();
@@ -690,15 +708,90 @@ void ParticleMesh::FlushDepositBoundaries() {
   // add spill whose containing block is off-rank, at any level (multi-rank)
   if (mpi_on) ExchangeDepositFlush();
 
-  // Zero every ghost cell: its deposit has been flushed to the owning neighbour interior,
-  // on-rank or off-rank (or, at a physical boundary where no owner exists, dropped).
-  // Prevents double-counting.
+  // Clear every ghost cell. Two distinct jobs, both needed:
+  //   (1) EMPTY THE OUTBOX. The spill has now been added into the interior of whichever
+  //       block owns it (on-rank above, off-rank via ExchangeDepositFlush), so the copy
+  //       sitting here is a duplicate of mass that already lives somewhere else.
+  //   (2) SET THE PHYSICAL-BOUNDARY VALUE. A ghost outside the domain has no owning
+  //       neighbour, so the forward exchange that follows never writes it. Zero is the
+  //       correct particle density out there -- there are no particles outside the
+  //       domain -- which is why dmesh needs no equivalent of Particles::XPhiBCs.
+  // RefreshGhosts* then overwrites every ghost that DOES have a neighbour with that
+  // neighbour's interior value, so dmesh ends the step with the same invariant as u0.
   par_for("PMFlushZeroGhost", DevExeSpace(), 0, nmb-1, 0, nvar-1, 0, n3-1, 0, n2-1, 0, n1-1,
   KOKKOS_LAMBDA(int m, int v, int k, int j, int i) {
     if (i < is || i > ie || j < js || j > je || k < ks || k > ke) {
       dm(m, v, k, j, i) = 0.0;
     }
   });
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn ParticleMesh::RefreshGhosts*()
+//! \brief forward ("inbox") half of the deposit's boundary exchange -- see the block
+//! comment on these declarations in particle_mesh.hpp for why a deposit needs both halves
+//! while the gas needs only this one. Standard CC sequence, one step per task:
+//!   InitRecv -> Restrict -> Send -> Recv -> Prolongate ... ClearSend -> ClearRecv
+//! No physical-BC step: ghosts outside the domain must hold zero, and the flush's
+//! ghost-clearing pass already left them there.
+
+TaskStatus ParticleMesh::RefreshGhostsInitRecv() {
+  return pmbval->InitRecv(nmeshaux);
+}
+
+TaskStatus ParticleMesh::RefreshGhostsRestrict() {
+  // restrict the fine interior into the coarse buffer so coarser neighbours are sent
+  // restricted data and the prolongation below has a valid coarse source
+  if (pmy_pack->pmesh->multilevel) {
+    pmy_pack->pmesh->pmr->RestrictCC(dmesh, coarse_dmesh);
+  }
+  return TaskStatus::complete;
+}
+
+TaskStatus ParticleMesh::RefreshGhostsSend() {
+  return pmbval->PackAndSendCC(dmesh, coarse_dmesh);
+}
+
+TaskStatus ParticleMesh::RefreshGhostsRecv() {
+  TaskStatus t = pmbval->RecvAndUnpackCC(dmesh, coarse_dmesh);
+  // TEMPORARY VERIFICATION SCAFFOLD -- remove
+  if (t == TaskStatus::complete && std::getenv("PM_GHOST_DBG") != nullptr) {
+    static int n = 0;
+    if (n < 3) {
+      auto &ix = pmy_pack->pmesh->mb_indcs;
+      const int is_=ix.is, ie_=ix.ie, js_=ix.js, je_=ix.je, ks_=ix.ks, ke_=ix.ke;
+      auto dm = dmesh;
+      Real gsum = 0.0, isum = 0.0;
+      const int nmb = pmy_pack->nmb_thispack;
+      const int n1 = dmesh.extent_int(4), n2 = dmesh.extent_int(3), n3 = dmesh.extent_int(2);
+      Kokkos::parallel_reduce("ghostdbg",
+        Kokkos::MDRangePolicy<Kokkos::Rank<4>>({0,0,0,0},{nmb,n3,n2,n1}),
+        KOKKOS_LAMBDA(int m,int k,int j,int i, Real &g, Real &in) {
+          bool interior = (i>=is_&&i<=ie_&&j>=js_&&j<=je_&&k>=ks_&&k<=ke_);
+          if (interior) in += dm(m,0,k,j,i); else g += dm(m,0,k,j,i);
+        }, gsum, isum);
+      std::cout << "### [pm-ghost] after forward exchange: sum(interior)=" << isum
+                << "  sum(ghost)=" << gsum << std::endl;
+      ++n;
+    }
+  }
+  return t;
+}
+
+TaskStatus ParticleMesh::RefreshGhostsProlongate() {
+  if (pmy_pack->pmesh->multilevel) {
+    pmbval->FillCoarseInBndryCC(dmesh, coarse_dmesh);
+    pmbval->ProlongateCC(dmesh, coarse_dmesh);
+  }
+  return TaskStatus::complete;
+}
+
+TaskStatus ParticleMesh::RefreshGhostsClearSend() {
+  return pmbval->ClearSend();
+}
+
+TaskStatus ParticleMesh::RefreshGhostsClearRecv() {
+  return pmbval->ClearRecv();
 }
 
 //----------------------------------------------------------------------------------------
