@@ -108,6 +108,17 @@ file_type = bin
 variable  = prtcl_d      # deposited sink density: marks sink positions on the grid
 dt        = 0.01
 
+<output5>
+# Full per-particle state: gid tag x vx y vy z vz m gx gy gz x0 y0 z0.
+# This is the only output that carries per-sink MASS (prtcl_d deposits a COUNT, and the
+# history file has a fixed 20 columns). Read it with vis/python/read_trk.py.
+# `variable` is unused by the particle writer but the output parser requires the key.
+# `nparticles` omitted => every particle is written, which is what a creation-driven
+# sink run needs; a positive value would restrict output to tags below it.
+file_type = trk
+variable  = prtcl
+dt        = 0.01
+
 <output4>
 file_type = rst
 dt        = 0.1

@@ -193,14 +193,10 @@ struct HistoryData {
 };
 
 //----------------------------------------------------------------------------------------
-//! \struct TrackedParticleData
-//! \brief data (tag, pos, vel) output for tracked particles
-
-struct TrackedParticleData {
-  int tag;
-  Real x,y,z;
-  Real vx,vy,vz;
-};
+//! \note The tracked-particle output no longer uses a fixed (tag,pos,vel) struct. It
+//! writes EVERY column the particle species carries -- all nidata integer properties
+//! followed by all nrdata real properties -- so the record width is a runtime property of
+//! the Particles instance rather than a compile-time struct. See track_prtcl.cpp.
 
 //----------------------------------------------------------------------------------------
 // \brief abstract base class for different output types (modes/formats); node in
@@ -463,9 +459,13 @@ class TrackedParticleOutput : public BaseTypeOutput {
   int ntrack;           // total number of tracked particles across all ranks
   int ntrack_thisrank;  // number of tracked particles this rank (guess)
   int npout;            // number of tracked particles to be written this rank
+  int nrec;             // Reals per record = nidata + nrdata (set in LoadOutputData)
   bool header_written;
   std::vector<int> npout_eachrank;
-  HostArray1D<TrackedParticleData> outpart;
+  // (npout, nrec) records: the integer properties cast to Real, then the real ones.
+  // One uniform type keeps the file trivially readable and the MPI offsets trivial;
+  // Real is exact for gid/tag and keeps full precision for mass.
+  HostArray2D<Real> outpart;
 };
 
 //----------------------------------------------------------------------------------------
