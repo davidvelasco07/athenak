@@ -24,8 +24,9 @@
 //!   # columns: gid tag x vx y vy z vz m gx gy gz x0 y0 z0
 //!   <npout_total * nrec Reals, little-endian>
 //!
-//! Records are laid out contiguously in RANK ORDER, each rank writing its own block at an
-//! offset derived from the prefix sum of the per-rank counts. This deliberately replaces
+//! Records are laid out contiguously in RANK ORDER: every rank's records are gathered
+//! onto rank 0, which writes them with plain POSIX I/O in one open/close. This
+//! deliberately replaces
 //! the previous scheme, which placed each record at an offset derived from its tag and so
 //! silently assumed tags ran 0..(nparticles-1) with no gaps. Created sinks are numbered
 //! from a global base of 1000000 (see Particles::CreateSinks), so under that assumption
@@ -128,20 +129,12 @@ void TrackedParticleOutput::LoadOutputData(Mesh *pm) {
 
 //----------------------------------------------------------------------------------------
 //! \fn void TrackedParticleOutput:::WriteOutputFile(Mesh *pm)
-//! \brief Appends one self-describing dump: a text header, then this rank's records at
-//! its slot in the contiguous rank-ordered block.
+//! \brief Appends one self-describing dump: a text header, then every rank's records,
+//! gathered onto rank 0 and written there with plain POSIX I/O.
 
 void TrackedParticleOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   particles::Particles *pp = pm->pmb_pack->ppart;
   if (pp == nullptr) { return; }
-
-  // total records across all ranks, and this rank's offset into the block
-  std::vector<int> rank_offset(global_variable::nranks, 0);
-  int npout_total = npout_eachrank[0];
-  for (int n=1; n<global_variable::nranks; ++n) {
-    rank_offset[n] = rank_offset[n-1] + npout_eachrank[n-1];
-    npout_total += npout_eachrank[n];
-  }
 
   // create filename: "trk/file_basename".trk
   std::string fname;
@@ -149,7 +142,44 @@ void TrackedParticleOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   fname.append(out_params.file_basename);
   fname.append(".trk");
 
-  // Root process opens/creates file and appends the header for this dump
+  // Gather every rank's records onto rank 0 and let it write with plain POSIX I/O.
+  //
+  // This output deliberately does NOT use the collective MPI-IO path the mesh outputs
+  // use. On Vista, OMPIO's collective MPI_File_open is the failure point for large runs:
+  // with HPC-X HCOLL enabled it segfaults inside the barrier, and with HCOLL disabled it
+  // can still hang (observed leaving a 0-byte dump and a stale .loc lock). The mesh
+  // outputs work around it with single_file_per_rank; for particles there is no need to
+  // work around anything, because the data is tiny -- tens of sinks, not 10^8 cells -- so
+  // one gather and one serial write removes the whole failure class and keeps the file a
+  // single simple stream.
+  std::vector<Real> mine(static_cast<std::size_t>(std::max(0,npout))*nrec);
+  for (int p=0; p<npout; ++p) {
+    for (int v=0; v<nrec; ++v) { mine[static_cast<std::size_t>(p)*nrec + v] = outpart(p,v); }
+  }
+
+  std::vector<Real> all;
+  int npout_total = 0;
+  for (int n=0; n<global_variable::nranks; ++n) { npout_total += npout_eachrank[n]; }
+#if MPI_PARALLEL_ENABLED
+  if (global_variable::nranks > 1) {
+    std::vector<int> cnt(global_variable::nranks), dsp(global_variable::nranks);
+    int off = 0;
+    for (int n=0; n<global_variable::nranks; ++n) {
+      cnt[n] = npout_eachrank[n]*nrec;
+      dsp[n] = off;
+      off += cnt[n];
+    }
+    if (global_variable::my_rank == 0) { all.resize(std::max(1,off)); }
+    MPI_Gatherv(mine.data(), npout*nrec, MPI_ATHENA_REAL,
+                all.data(), cnt.data(), dsp.data(), MPI_ATHENA_REAL, 0, MPI_COMM_WORLD);
+  } else {
+    all = mine;
+  }
+#else
+  all = mine;
+#endif
+
+  // Rank 0 appends this dump: text header, then the binary block, in one open/close.
   if (global_variable::my_rank == 0) {
     // Column names, so a reader never has to know the particle type. nidata is (gid,tag)
     // for every species; the real columns follow the ParticlesIndex layout in athena.hpp.
@@ -164,58 +194,30 @@ void TrackedParticleOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     } else {
       for (int v=0; v<pp->nrdata; ++v) { cols += " r" + std::to_string(v); }
     }
-    std::stringstream msg;
-    msg << "# AthenaK particle data" << std::endl
-        << "# time=" << pm->time
-        << " cycle=" << pm->ncycle
-        << " nranks=" << global_variable::nranks
-        << " nparticles=" << npout_total
-        << " nidata=" << pp->nidata
-        << " nrdata=" << pp->nrdata
-        << " nrec=" << nrec
-        << " dtype=Real" << std::endl
-        << "# columns: " << cols << std::endl;
     FILE *pfile;
-    if ((pfile = std::fopen(fname.c_str(),"a")) == nullptr) {
+    if ((pfile = std::fopen(fname.c_str(),"ab")) == nullptr) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
         << std::endl << "Output file '" << fname << "' could not be opened" <<std::endl;
       exit(EXIT_FAILURE);
     }
-    std::fprintf(pfile,"%s",msg.str().c_str());
+    std::fprintf(pfile,
+                 "# AthenaK particle data\n"
+                 "# time=%.17g cycle=%d nranks=%d nparticles=%d"
+                 " nidata=%d nrdata=%d nrec=%d dtype=Real\n"
+                 "# columns: %s\n",
+                 static_cast<double>(pm->time), pm->ncycle, global_variable::nranks,
+                 npout_total, pp->nidata, pp->nrdata, nrec, cols.c_str());
+    if (npout_total > 0) {
+      std::size_t want = static_cast<std::size_t>(npout_total)*nrec;
+      if (std::fwrite(all.data(), sizeof(Real), want, pfile) != want) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+            << std::endl << "particle data not written correctly to '" << fname << "'"
+            << std::endl;
+        exit(EXIT_FAILURE);
+      }
+    }
     std::fclose(pfile);
   }
-#if MPI_PARALLEL_ENABLED
-  // every rank must see rank 0's header before it queries the file length below, or the
-  // ranks disagree about where the binary block starts
-  MPI_Barrier(MPI_COMM_WORLD);
-#endif
-
-  // Now all ranks open the file and append their own block of records
-  IOWrapper partfile;
-  partfile.Open(fname.c_str(), IOWrapper::FileMode::append);
-  std::size_t header_offset = partfile.GetPosition();
-
-  if (npout > 0) {
-    // flatten this rank's records
-    std::vector<Real> data(static_cast<std::size_t>(npout)*nrec);
-    for (int p=0; p<npout; ++p) {
-      for (int v=0; v<nrec; ++v) { data[static_cast<std::size_t>(p)*nrec + v] = outpart(p,v); }
-    }
-    // contiguous, rank-ordered placement -- no assumption about tag values
-    std::size_t myoffset = header_offset
-                         + static_cast<std::size_t>(rank_offset[global_variable::my_rank])
-                           *nrec*sizeof(Real);
-    std::size_t cnt = static_cast<std::size_t>(npout)*nrec;
-    if (partfile.Write_any_type_at(data.data(),cnt,myoffset,"Real") != cnt) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-          << std::endl << "particle data not written correctly to tracked particle file"
-          << std::endl;
-      exit(EXIT_FAILURE);
-    }
-  }
-
-  // close the output file and clean up
-  partfile.Close();
 
   // increment counters
   if (out_params.last_time < 0.0) {

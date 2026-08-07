@@ -99,14 +99,14 @@ file_type = hst
 dt        = 0.002
 
 <output2>
+# single_file_per_rank is MANDATORY, not a tuning knob. With one shared file the
+# collective MPI_File_open in OMPIO hangs partway through a long run on Vista -- job
+# 894482 wrote three dumps, then left a 0-byte 4th and a stale .loc lock and stalled for
+# six hours. Per-rank files remove the collective entirely.
 file_type = bin
-variable  = hydro_w
-dt        = 0.01
-
-<output3>
-file_type = bin
-variable  = prtcl_d      # deposited sink density: marks sink positions on the grid
-dt        = 0.01
+single_file_per_rank = true
+variable  = hydro_w_d    # density only -- the projections need nothing else, and
+dt        = 0.01         # hydro_w would write all 4 primitives for 4x the disk
 
 <output5>
 # Full per-particle state: gid tag x vx y vy z vz m gx gy gz x0 y0 z0.
@@ -121,4 +121,5 @@ dt        = 0.01
 
 <output4>
 file_type = rst
-dt        = 0.1
+single_file_per_rank = true
+dt        = 0.2
