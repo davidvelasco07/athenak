@@ -78,6 +78,7 @@ class MeshBlock;
 class MeshBlockPack;
 class MeshBlockTree;
 class Mesh;
+class Driver;
 
 #include "parameter_input.hpp"
 #include "meshblock.hpp"
@@ -100,6 +101,14 @@ class Mesh {
   friend class ShearingBox;
 
  public:
+  // Back-pointer to the Driver, set by the Driver constructor. Exists so that problem
+  // generators can express a physics-based STOPPING CRITERION: their hooks receive a
+  // Mesh* but not a Driver*, and the time-integration loop tests `pmesh->time < tlim`
+  // with tlim owned by the Driver. Setting pm->pmy_driver->tlim to the current time ends
+  // the run cleanly at the end of the cycle, taking the normal shutdown path (final
+  // output, "Terminating on time limit") rather than aborting.
+  Driver *pmy_driver = nullptr;
+
   explicit Mesh(ParameterInput *pin);
   ~Mesh();
 

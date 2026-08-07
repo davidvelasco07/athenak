@@ -21,7 +21,18 @@
 #include "eos/eos.hpp"
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
+#include "globals.hpp"
+#include "driver/driver.hpp"
+#include "particles/particles.hpp"
+#include "outputs/outputs.hpp"
 #include "pgen.hpp"
+
+namespace {
+Real sfe_term_ = -1.0;      // terminal star-formation efficiency; <= 0 disables
+Real mtot0_ = -1.0;         // initial gas mass, set on the first history call
+bool sfe_stop_announced_ = false;
+void GMTFHistory(HistoryData *pdata, Mesh *pm);
+}  // namespace
 
 #if MPI_PARALLEL_ENABLED
 #include <mpi.h>
@@ -126,6 +137,20 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   int nlow = pin->GetInteger("problem", "nlow");
   int nhigh = pin->GetInteger("problem", "nhigh");
   Real expo = pin->GetReal("problem", "expo");
+
+  // Star-formation efficiency diagnostic and stopping criterion.
+  //   SFE = M_sink / (M_sink + M_gas)
+  // A pure gravo-turbulent box has no feedback -- no radiation, no outflows, no
+  // supernovae -- and with periodic boundaries nothing opposes global collapse, so SFE
+  // runs away to ~1 regardless of the physics being modelled. Real clouds convert only a
+  // few per cent per free-fall time before feedback intervenes. sfe_term is therefore a
+  // statement about the DOMAIN OF VALIDITY of this setup, not about the gas: past it the
+  // run is integrating a cloud that could not exist. It was previously read from the
+  // input and never used, so it silently did nothing.
+  sfe_term_ = pin->GetOrAddReal("problem", "sfe_term", -1.0);
+  if (pin->GetOrAddBoolean("problem", "user_hist", false)) {
+    user_hist_func = GMTFHistory;
+  }
 
   if (mach <= 0.0) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -292,3 +317,95 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     u0(m,IM3,k,j,i) += mach/vrms*dv(m,2,k,j,i);
   });
 }
+
+namespace {
+//----------------------------------------------------------------------------------------
+//! \fn void GMTFHistory()
+//! \brief gas mass/momenta, sink mass and count, and the star-formation efficiency.
+//! Also applies the sfe_term stopping criterion: once SFE reaches it, tlim is pulled back
+//! to the current time so the run ends at the close of this cycle by the NORMAL path --
+//! final outputs are written and the usual "Terminating on time limit" message appears,
+//! rather than aborting and losing the last dump.
+
+void GMTFHistory(HistoryData *pdata, Mesh *pm) {
+  MeshBlockPack *pmbp = pm->pmb_pack;
+  pdata->nhist = 7;
+  pdata->label[0] = "mass";     // gas
+  pdata->label[1] = "1-mom";
+  pdata->label[2] = "2-mom";
+  pdata->label[3] = "3-mom";
+  pdata->label[4] = "m_sink";
+  pdata->label[5] = "n_sink";
+  pdata->label[6] = "SFE";
+
+  auto &u0 = pmbp->phydro->u0;
+  auto &sz = pmbp->pmb->mb_size;
+  auto &ix = pm->mb_indcs;
+  const int is = ix.is, nx1 = ix.nx1, js = ix.js, nx2 = ix.nx2, ks = ix.ks, nx3 = ix.nx3;
+  const int nmkji = (pmbp->nmb_thispack)*nx3*nx2*nx1;
+  const int nkji = nx3*nx2*nx1, nji = nx2*nx1;
+  Real g[4] = {0.0, 0.0, 0.0, 0.0};
+  for (int v = 0; v < 4; ++v) {
+    Real sum = 0.0;
+    Kokkos::parallel_reduce("gmtf_hist", Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+    KOKKOS_LAMBDA(const int &idx, Real &psum) {
+      const int m = idx/nkji;
+      const int k = (idx - m*nkji)/nji + ks;
+      const int j = (idx - m*nkji - (k-ks)*nji)/nx1 + js;
+      const int i = (idx - m*nkji - (k-ks)*nji - (j-js)*nx1) + is;
+      psum += u0(m, v, k, j, i)*sz.d_view(m).dx1*sz.d_view(m).dx2*sz.d_view(m).dx3;
+    }, Kokkos::Sum<Real>(sum));
+    g[v] = sum;
+  }
+
+  // sink mass on THIS rank; the history machinery MPI_SUM-reduces across ranks
+  Real msink = 0.0;
+  int nsink = 0;
+  if (pmbp->ppart != nullptr) {
+    nsink = pmbp->ppart->nprtcl_thispack;
+    auto pr = Kokkos::create_mirror_view_and_copy(HostMemSpace(),
+                                                  pmbp->ppart->prtcl_rdata);
+    for (int p = 0; p < nsink; ++p) { msink += pr(IPM, p); }
+  }
+
+  for (int v = 0; v < 4; ++v) { pdata->hdata[v] = g[v]; }
+  pdata->hdata[4] = msink;
+  pdata->hdata[5] = static_cast<Real>(nsink);
+  // SFE is a RATIO, so it cannot be formed from this rank's numbers and then summed.
+  // Store the numerator here and rebuild it after the reduction below, where the global
+  // totals are available; on one rank the two agree.
+  pdata->hdata[6] = 0.0;
+  for (int n = pdata->nhist; n < NHISTORY_VARIABLES; ++n) { pdata->hdata[n] = 0.0; }
+
+  // ---- global totals, for the stopping criterion -------------------------------------
+  Real loc[2] = {g[0], msink}, glb[2] = {g[0], msink};
+#if MPI_PARALLEL_ENABLED
+  if (global_variable::nranks > 1) {
+    MPI_Allreduce(loc, glb, 2, MPI_ATHENA_REAL, MPI_SUM, MPI_COMM_WORLD);
+  }
+#endif
+  const Real mtot = glb[0] + glb[1];
+  if (mtot0_ < 0.0) { mtot0_ = mtot; }
+  const Real sfe = (mtot > 0.0) ? glb[1]/mtot : 0.0;
+  // report the GLOBAL value divided by nranks, since hst user data is MPI_SUM-reduced
+  pdata->hdata[6] = sfe/static_cast<Real>(global_variable::nranks);
+
+  if (sfe_term_ > 0.0 && sfe >= sfe_term_ && pm->pmy_driver != nullptr) {
+    if (!sfe_stop_announced_) {
+      sfe_stop_announced_ = true;
+      if (global_variable::my_rank == 0) {
+        std::cout << std::endl
+                  << "### GMTF: SFE = " << sfe << " reached sfe_term = " << sfe_term_
+                  << " at t = " << pm->time << " (cycle " << pm->ncycle << ")."
+                  << std::endl
+                  << "    M_sink = " << glb[1] << ", M_gas = " << glb[0]
+                  << ", M_tot = " << mtot << " (initial " << mtot0_ << ")." << std::endl
+                  << "    Stopping: beyond this the box has converted more gas than any"
+                  << " feedback-free setup can represent." << std::endl << std::endl;
+      }
+    }
+    // end the run at the close of this cycle, via the normal shutdown path
+    pm->pmy_driver->tlim = pm->time;
+  }
+}
+}  // namespace

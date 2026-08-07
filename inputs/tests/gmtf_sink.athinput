@@ -88,7 +88,11 @@ ppc         = 0.0        # creation mode: start with zero sinks
 <problem>
 Mach     = 10
 mu_phi   = 2
-sfe_term = 0.15
+# Terminal star-formation efficiency: SFE = M_sink/(M_sink+M_gas). Requires
+# user_hist=true, which registers the hook that both reports SFE and applies the stop.
+# Set <= 0 to disable and run to tlim.
+sfe_term  = 0.15
+user_hist = true
 rseed    = 0
 nlow     = 0
 nhigh    = 16
