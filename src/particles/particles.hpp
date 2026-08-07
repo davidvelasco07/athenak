@@ -92,6 +92,13 @@ class Particles {
   int nrdata, nidata;
   DvceArray2D<Real> prtcl_rdata;   // real number properties each particle (x,v,etc.)
   DvceArray2D<int>  prtcl_idata;   // integer properties each particle (gid, tag, etc.)
+  // Particle timestep constraint, consumed by Mesh::NewTimeStep as dt = min(dt, dtnew).
+  // Initialised to "no constraint" in the constructor. It MUST have a defined value from
+  // the moment the module exists: with <particles>/ppc = 0 (creation-driven runs) there
+  // are no particles to derive it from, NewTimeStep returns early, and an uninitialised
+  // dtnew silently drives the global dt to zero -- the run then spins at t = 0 forever,
+  // never advancing far enough for a sink to form and set it. Every sink pgen used to
+  // seed this by hand, which worked only because they all remembered to.
   Real dtnew;
 
   ParticlesPusher pusher;

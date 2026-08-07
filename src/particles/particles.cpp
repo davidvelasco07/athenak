@@ -9,6 +9,7 @@
 #include <iostream>
 #include <string>
 #include <algorithm>
+#include <limits>
 
 #include "athena.hpp"
 #include "globals.hpp"
@@ -24,6 +25,10 @@ namespace particles {
 
 Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     pmy_pack(ppack) {
+  // No particles yet => no particle timestep constraint. See the declaration in
+  // particles.hpp: leaving this indeterminate makes Mesh::NewTimeStep collapse the global
+  // dt to zero on any creation-driven run (ppc = 0), which hangs at t = 0.
+  dtnew = std::numeric_limits<Real>::max();
   // check this is at least a 2D problem
   if (pmy_pack->pmesh->one_d) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl

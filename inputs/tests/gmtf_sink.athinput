@@ -1,0 +1,113 @@
+# Gravo-turbulent fragmentation with sink particles (isothermal HYDRO).
+#
+# Derived from the user's previous MHD gmtf run ($WORK/gmtf_grav/j716654):
+# same box, turbulence spectrum, seed and gravity strength, with MHD swapped for
+# hydro and sink creation/accretion/merging enabled.
+#
+#   four_pi_G = 4*pi^2  =>  G = pi,  and with cs = 1, rho0 = 1 the Jeans length
+#   lambda_J = 2*pi/sqrt(4 pi G rho) = 1, so the L = 4 box holds 4 Jeans lengths.
+#
+# NOTE nghost = 4, not the 2 used before. Sinks need nghost >= rctrl+2 = 3 for the
+# control-volume read stencil; 4 is used here to match the other sink pgens and to
+# leave room if a refined variant is ever run (the level-matched deposit needs 4).
+#
+# Sink creation threshold is rho_LP(dx/2) = (8.86/pi) cs^2/(G dx^2):
+#   64^3  -> 2.3e2 x mean density
+#   512^3 -> 1.5e4 x mean density
+
+<comment>
+problem = gravo-turbulent fragmentation with sinks
+
+<job>
+basename = GMTF_sink
+
+<mesh>
+nghost = 4
+nx1    = 512
+x1min  = -2.0
+x1max  =  2.0
+ix1_bc = periodic
+ox1_bc = periodic
+
+nx2    = 512
+x2min  = -2.0
+x2max  =  2.0
+ix2_bc = periodic
+ox2_bc = periodic
+
+nx3    = 512
+x3min  = -2.0
+x3max  =  2.0
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 64
+nx2 = 64
+nx3 = 64
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.3
+nlim       = -1
+tlim       = 1.0
+ndiag      = 10
+
+<hydro>
+eos             = isothermal
+reconstruct     = plm
+rsolver         = hlle
+iso_sound_speed = 1.0
+
+<hydro_srcterms>
+self_gravity = true
+
+<gravity>
+four_pi_G      = 39.47841760435743
+# no mg_bc: on a periodic mesh the multigrid inherits the mesh boundary flags.
+# ("periodic" is NOT a valid mg_bc value -- only zerofixed / zerograd / multipole.)
+threshold      = 1.0e-6
+niteration     = 100
+npresmooth     = 1
+npostsmooth    = 1
+full_multigrid = true
+fmg_ncycle     = 1
+mg_nghost      = 1
+
+<particles>
+type        = sink
+pusher      = leapfrog
+accretion   = true
+creation    = true
+merging     = true
+merge_bound = true
+cfl_par     = 0.5
+ppc         = 0.0        # creation mode: start with zero sinks
+
+<problem>
+Mach     = 10
+mu_phi   = 2
+sfe_term = 0.15
+rseed    = 0
+nlow     = 0
+nhigh    = 16
+expo     = 2.0
+
+<output1>
+file_type = hst
+dt        = 0.002
+
+<output2>
+file_type = bin
+variable  = hydro_w
+dt        = 0.01
+
+<output3>
+file_type = bin
+variable  = prtcl_d      # deposited sink density: marks sink positions on the grid
+dt        = 0.01
+
+<output4>
+file_type = rst
+dt        = 0.1
