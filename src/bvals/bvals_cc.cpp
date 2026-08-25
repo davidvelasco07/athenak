@@ -36,6 +36,10 @@ MeshBoundaryValuesCC::MeshBoundaryValuesCC(MeshBlockPack *pp, ParameterInput *pi
 //! large number of MeshBlocks per MPI rank. Buffer data are then sent (via MPI) or copied
 //! directly for periodic or block boundaries.
 //!
+//! Same-rank neighbors write directly into the destination MeshBlock ghost cells
+//! (or coarse array), skipping the recv-buffer hop. Off-rank neighbors still pack into
+//! the rank-packed MPI aggregate buffer.
+//!
 //! Input arrays must be 5D Kokkos View dimensioned (nmb, nvar, nx3, nx2, nx1)
 //! 5D Kokkos View of coarsened (restricted) array data also required with SMR/AMR
 
@@ -103,68 +107,65 @@ TaskStatus MeshBoundaryValuesCC::PackAndSendCC(DvceArray5D<Real> &a,
       int ni = iu - il + 1;
       int nj = ju - jl + 1;
       int nk = ku - kl + 1;
-      int nkj  = nk*nj;
+      int ncell = ni*nj*nk;
 
       // indices of recv'ing (destination) MB and buffer: MB IDs are stored sequentially
       // in MeshBlockPacks, so array index equals (target_id - first_id)
       int dm = nghbr.d_view(m,n).gid - mbgid.d_view(0);
       int dn = nghbr.d_view(m,n).dest;
 
-      // Middle loop over k,j
-      Kokkos::parallel_for(Kokkos::TeamThreadRange<>(tmember, nkj), [&](const int idx) {
-        int k = idx / nj;
-        int j = (idx - k * nj) + jl;
-        k += kl;
+      // Flat payload loop with i fastest (LayoutRight)
+      Kokkos::parallel_for(Kokkos::TeamThreadRange<>(tmember, ncell), [&](const int idx) {
+        int di = idx % ni;
+        int q = idx / ni;
+        int dj = q % nj;
+        int dk = q / nj;
+        int i = di + il;
+        int j = dj + jl;
+        int k = dk + kl;
 
-        // Inner (vector) loop over i
-        // copy directly into recv buffer if MeshBlocks on same rank
-
+        // Same-rank: write directly into destination ghosts / coarse array
         if (nghbr.d_view(m,n).rank == my_rank) {
-          // if neighbor is at same or finer level, load data from u0
-          if (nghbr.d_view(m,n).lev >= mblev.d_view(m)) {
-            Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember,il,iu+1),
-            [&](const int i) {
-              rbuf[dn].vars(dm, (i-il + ni*(j-jl + nj*(k-kl + nk*v))) ) = a(m,v,k,j,i);
-            });
-          // if neighbor is at coarser level, load data from coarse_u0
+          int ild, jld, kld;
+          // Dest recv indices mirror how the destination unpacks this neighbor.
+          // Same level: isame → a; to coarser: dest sees finer → ifine → a;
+          // to finer: dest sees coarser → icoar → ca.
+          if (nghbr.d_view(m,n).lev == mblev.d_view(m)) {
+            ild = rbuf[dn].isame[0].bis;
+            jld = rbuf[dn].isame[0].bjs;
+            kld = rbuf[dn].isame[0].bks;
+            a(dm, v, kld+dk, jld+dj, ild+di) = a(m, v, k, j, i);
+          } else if (nghbr.d_view(m,n).lev < mblev.d_view(m)) {
+            ild = rbuf[dn].ifine[0].bis;
+            jld = rbuf[dn].ifine[0].bjs;
+            kld = rbuf[dn].ifine[0].bks;
+            a(dm, v, kld+dk, jld+dj, ild+di) = ca(m, v, k, j, i);
           } else {
-            Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember,il,iu+1),
-            [&](const int i) {
-              rbuf[dn].vars(dm, (i-il + ni*(j-jl + nj*(k-kl + nk*v))) ) = ca(m,v,k,j,i);
-            });
+            ild = rbuf[dn].icoar[0].bis;
+            jld = rbuf[dn].icoar[0].bjs;
+            kld = rbuf[dn].icoar[0].bks;
+            ca(dm, v, kld+dk, jld+dj, ild+di) = a(m, v, k, j, i);
           }
 
         // else copy into send buffer for MPI communication below
-
         } else {
+          const int bi = idx + ncell*v;
 #if MPI_PARALLEL_ENABLED
           // off-rank: write straight into the rank-packed aggregate send buffer
           // at this entry's base offset (fuses the former RankPackAgg kernel).
           int base = sendoff(m*nnghbr + n);
           if (nghbr.d_view(m,n).lev >= mblev.d_view(m)) {
-            Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember,il,iu+1),
-            [&](const int i) {
-              aggsbuf(base + (i-il + ni*(j-jl + nj*(k-kl + nk*v))) ) = a(m,v,k,j,i);
-            });
+            aggsbuf(base + bi) = a(m,v,k,j,i);
           } else {
-            Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember,il,iu+1),
-            [&](const int i) {
-              aggsbuf(base + (i-il + ni*(j-jl + nj*(k-kl + nk*v))) ) = ca(m,v,k,j,i);
-            });
+            aggsbuf(base + bi) = ca(m,v,k,j,i);
           }
 #else
           // if neighbor is at same or finer level, load data from u0
           if (nghbr.d_view(m,n).lev >= mblev.d_view(m)) {
-            Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember,il,iu+1),
-            [&](const int i) {
-              sbuf[n].vars(m, (i-il + ni*(j-jl + nj*(k-kl + nk*v))) ) = a(m,v,k,j,i);
-            });
+            sbuf[n].vars(m, bi) = a(m,v,k,j,i);
           // if neighbor is at coarser level, load data from coarse_u0
           } else {
-            Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember,il,iu+1),
-            [&](const int i) {
-              sbuf[n].vars(m, (i-il + ni*(j-jl + nj*(k-kl + nk*v))) ) = ca(m,v,k,j,i);
-            });
+            sbuf[n].vars(m, bi) = ca(m,v,k,j,i);
           }
 #endif
         }
@@ -193,7 +194,7 @@ TaskStatus MeshBoundaryValuesCC::PackAndSendCC(DvceArray5D<Real> &a,
         int ni = iu - il + 1;
         int nj = ju - jl + 1;
         int nk = ku - kl + 1;
-        int nkj  = nk*nj;
+        int ncell = ni*nj*nk;
         int ndat = nvar*sbuf[n].isame_ndat; // size of same level data already in buff
 
         // indices of recv'ing (destination) MB and buffer: MB IDs are stored sequentially
@@ -201,35 +202,31 @@ TaskStatus MeshBoundaryValuesCC::PackAndSendCC(DvceArray5D<Real> &a,
         int dm = nghbr.d_view(m,n).gid - mbgid.d_view(0);
         int dn = nghbr.d_view(m,n).dest;
 
-        // Middle loop over k,j
-        Kokkos::parallel_for(Kokkos::TeamThreadRange<>(tmember, nkj), [&](const int idx) {
-          int k = idx / nj;
-          int j = (idx - k * nj) + jl;
-          k += kl;
+        Kokkos::parallel_for(Kokkos::TeamThreadRange<>(tmember, ncell), [&](const int idx) {
+          int di = idx % ni;
+          int q = idx / ni;
+          int dj = q % nj;
+          int dk = q / nj;
+          int i = di + il;
+          int j = dj + jl;
+          int k = dk + kl;
 
-          // Inner (vector) loop over i
-          // copy directly into recv buffer if MeshBlocks on same rank
+          // Same-rank: write coarse data directly into dest coarse ghosts
           if (nghbr.d_view(m,n).rank == my_rank) {
-            // load data from coarse_u0
-            Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember,il,iu+1),
-            [&](const int i) {
-              rbuf[dn].vars(dm,ndat+ (i-il + ni*(j-jl + nj*(k-kl + nk*v))))=ca(m,v,k,j,i);
-            });
+            int ild = rbuf[dn].isame_z4c.bis;
+            int jld = rbuf[dn].isame_z4c.bjs;
+            int kld = rbuf[dn].isame_z4c.bks;
+            ca(dm, v, kld+dk, jld+dj, ild+di) = ca(m, v, k, j, i);
 
           // else copy into send buffer for MPI communication below
           } else {
+            const int bi = ndat + idx + ncell*v;
 #if MPI_PARALLEL_ENABLED
             int base = sendoff(m*nnghbr + n);
-            Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember,il,iu+1),
-            [&](const int i) {
-              aggsbuf(base+ndat+ (i-il + ni*(j-jl + nj*(k-kl + nk*v))) )=ca(m,v,k,j,i);
-            });
+            aggsbuf(base + bi) = ca(m,v,k,j,i);
 #else
             // load data from coarse_u0
-            Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember,il,iu+1),
-            [&](const int i) {
-              sbuf[n].vars(m,ndat+ (i-il + ni*(j-jl + nj*(k-kl + nk*v))) )=ca(m,v,k,j,i);
-            });
+            sbuf[n].vars(m, bi) = ca(m,v,k,j,i);
 #endif
           }
         });
@@ -275,6 +272,7 @@ TaskStatus MeshBoundaryValuesCC::RecvAndUnpackCC(DvceArray5D<Real> &a,
   // create local references for variables in kernel
   int nmb = pmy_pack->nmb_thispack;
   int nnghbr = pmy_pack->pmb->nnghbr;
+  int my_rank = global_variable::my_rank;
   auto &nghbr = pmy_pack->pmb->nghbr;
   auto &rbuf = recvbuf;
   auto &is_z4c = is_z4c_;
@@ -305,8 +303,8 @@ TaskStatus MeshBoundaryValuesCC::RecvAndUnpackCC(DvceArray5D<Real> &a,
 
   //----- STEP 2: buffers have all completed, so unpack
   // Off-rank payloads are read directly out of the rank-packed aggregate recv
-  // buffer (fuses the former RankUnpackScatter kernel); on-rank payloads remain
-  // in their per-neighbour recv buffers, written there directly by the sender.
+  // buffer (fuses the former RankUnpackScatter kernel). Same-rank ghosts were
+  // already written directly by PackAndSendCC, so those neighbors are skipped.
 
   int nvar = a.extent_int(1);  // TODO(@user): 2nd index from L of in array must be NVAR
   auto &mblev = pmy_pack->pmb->mb_lev;
@@ -322,8 +320,8 @@ TaskStatus MeshBoundaryValuesCC::RecvAndUnpackCC(DvceArray5D<Real> &a,
     const int n = (tmember.league_rank() - m*(nnghbr*nvar))/nvar;
     const int v = (tmember.league_rank() - m*(nnghbr*nvar) - n*nvar);
 
-    // only unpack buffers when neighbor exists
-    if (nghbr.d_view(m,n).gid >= 0) {
+    // only unpack buffers when neighbor exists and is off-rank (same-rank done in pack)
+    if (nghbr.d_view(m,n).gid >= 0 && nghbr.d_view(m,n).rank != my_rank) {
       int il, iu, jl, ju, kl, ku;
       // if neighbor is at coarser level, use coar indices to unpack buffer
       if (nghbr.d_view(m,n).lev < mblev.d_view(m)) {
@@ -353,42 +351,35 @@ TaskStatus MeshBoundaryValuesCC::RecvAndUnpackCC(DvceArray5D<Real> &a,
       int ni = iu - il + 1;
       int nj = ju - jl + 1;
       int nk = ku - kl + 1;
-      int nkj  = nk*nj;
+      int ncell = ni*nj*nk;
 
-      // base offset of this (m,n) payload in the aggregate buffer; -1 == on-rank
+      // base offset of this (m,n) payload in the aggregate buffer
 #if MPI_PARALLEL_ENABLED
       const int base = recvoff(m*nnghbr + n);
 #endif
 
-      // Middle loop over k,j
-      Kokkos::parallel_for(Kokkos::TeamThreadRange<>(tmember, nkj), [&](const int idx) {
-        int k = idx / nj;
-        int j = (idx - k * nj) + jl;
-        k += kl;
+      Kokkos::parallel_for(Kokkos::TeamThreadRange<>(tmember, ncell), [&](const int idx) {
+        int i = idx % ni + il;
+        int q = idx / ni;
+        int j = q % nj + jl;
+        int k = q / nj + kl;
+        const int bi = idx + ncell*v;
 
         // if neighbor is at same or finer level, load data directly into u0
         if (nghbr.d_view(m,n).lev >= mblev.d_view(m)) {
-          Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember,il,iu+1),
-          [&](const int i) {
-            const int bi = (i-il + ni*(j-jl + nj*(k-kl + nk*v)));
 #if MPI_PARALLEL_ENABLED
-            a(m,v,k,j,i) = (base >= 0) ? aggrbuf(base + bi) : rbuf[n].vars(m, bi);
+          a(m,v,k,j,i) = aggrbuf(base + bi);
 #else
-            a(m,v,k,j,i) = rbuf[n].vars(m, bi);
+          a(m,v,k,j,i) = rbuf[n].vars(m, bi);
 #endif
-          });
 
         // if neighbor is at coarser level, load data into coarse_u0
         } else {
-          Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember,il,iu+1),
-          [&](const int i) {
-            const int bi = (i-il + ni*(j-jl + nj*(k-kl + nk*v)));
 #if MPI_PARALLEL_ENABLED
-            ca(m,v,k,j,i) = (base >= 0) ? aggrbuf(base + bi) : rbuf[n].vars(m, bi);
+          ca(m,v,k,j,i) = aggrbuf(base + bi);
 #else
-            ca(m,v,k,j,i) = rbuf[n].vars(m, bi);
+          ca(m,v,k,j,i) = rbuf[n].vars(m, bi);
 #endif
-          });
         }
       });
     }  // end if-neighbor-exists block
@@ -400,8 +391,8 @@ TaskStatus MeshBoundaryValuesCC::RecvAndUnpackCC(DvceArray5D<Real> &a,
     const int m = (tmember.league_rank())/(nnghbr*nvar);
     const int n = (tmember.league_rank() - m*(nnghbr*nvar))/nvar;
     const int v = (tmember.league_rank() - m*(nnghbr*nvar) - n*nvar);
-    // only unpack buffers when neighbor exists
-    if (nghbr.d_view(m,n).gid >= 0) {
+    // only unpack buffers when neighbor exists and is off-rank
+    if (nghbr.d_view(m,n).gid >= 0 && nghbr.d_view(m,n).rank != my_rank) {
       int il, iu, jl, ju, kl, ku;
       // If neighbor is at same level and data is for Z4c module, unpack data from coarse
       // array for higher-order prolongation
@@ -415,28 +406,25 @@ TaskStatus MeshBoundaryValuesCC::RecvAndUnpackCC(DvceArray5D<Real> &a,
         int ni = iu - il + 1;
         int nj = ju - jl + 1;
         int nk = ku - kl + 1;
-        int nkj  = nk*nj;
+        int ncell = ni*nj*nk;
         int ndat = nvar*rbuf[n].isame_ndat; // size of same level data packed in buff
 #if MPI_PARALLEL_ENABLED
         const int base = recvoff(m*nnghbr + n);
 #endif
 
-        // Middle loop over k,j
-        Kokkos::parallel_for(Kokkos::TeamThreadRange<>(tmember, nkj), [&](const int idx) {
-          int k = idx / nj;
-          int j = (idx - k * nj) + jl;
-          k += kl;
+        Kokkos::parallel_for(Kokkos::TeamThreadRange<>(tmember, ncell), [&](const int idx) {
+          int i = idx % ni + il;
+          int q = idx / ni;
+          int j = q % nj + jl;
+          int k = q / nj + kl;
+          const int bi = ndat + idx + ncell*v;
 
           // load data into coarse_u0
-          Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember,il,iu+1),
-          [&](const int i) {
-            const int bi = ndat + (i-il + ni*(j-jl + nj*(k-kl + nk*v)));
 #if MPI_PARALLEL_ENABLED
-            ca(m,v,k,j,i) = (base >= 0) ? aggrbuf(base + bi) : rbuf[n].vars(m, bi);
+          ca(m,v,k,j,i) = aggrbuf(base + bi);
 #else
-            ca(m,v,k,j,i) = rbuf[n].vars(m, bi);
+          ca(m,v,k,j,i) = rbuf[n].vars(m, bi);
 #endif
-          });
         });
       }
     }  // end if-neighbor-exists block

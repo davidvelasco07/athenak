@@ -72,6 +72,7 @@ TaskStatus MeshBoundaryValuesFC::PackAndSendFC(DvceFaceFld4D<Real> &b,
   auto &mblev = pmy_pack->pmb->mb_lev;
   auto &sbuf = sendbuf;
   auto &rbuf = recvbuf;
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
 #if MPI_PARALLEL_ENABLED
   // Build metadata before packing so off-rank data is written straight into the
   // rank-packed aggregate buffer (fused pack/aggregate).
@@ -134,43 +135,57 @@ TaskStatus MeshBoundaryValuesFC::PackAndSendFC(DvceFaceFld4D<Real> &b,
         int dm = nghbr.d_view(m,n).gid - mbgid.d_view(0);
         int dn = nghbr.d_view(m,n).dest;
 
-        // copy field components directly into recv buffer if MeshBlocks on same rank
+        // Same-rank: write directly into destination face ghosts / coarse faces.
+        // Keep serial neighbor loop + IsActiveFCFace on dest coords (matches unpack).
         if (nghbr.d_view(m,n).rank == my_rank) {
-          // if neighbor is at same or finer level, load data from b0
-          if (nghbr.d_view(m,n).lev >= mblev.d_view(m)) {
-            Kokkos::parallel_for(Kokkos::TeamThreadRange<>(tmember, nkji),
-            [&](const int idx) {
-              int k = (idx)/nji;
-              int j = (idx - k*nji)/ni;
-              int i = (idx - k*nji - j*ni) + il;
-              k += kl;
-              j += jl;
-              if (v==0) {
-                rbuf[dn].vars(dm,i-il + ni*(j-jl + nj*(k-kl))) = b.x1f(m,k,j,i);
-              } else if (v==1) {
-                rbuf[dn].vars(dm,ndat*v + i-il + ni*(j-jl + nj*(k-kl))) = b.x2f(m,k,j,i);
-              } else if (v==2) {
-                rbuf[dn].vars(dm,ndat*v + i-il + ni*(j-jl + nj*(k-kl))) = b.x3f(m,k,j,i);
-              }
-            });
-          // if neighbor is at coarser level, load data from coarse_b0
+          int ild, jld, kld;
+          if (nghbr.d_view(m,n).lev == mblev.d_view(m)) {
+            ild = rbuf[dn].isame[v].bis;
+            jld = rbuf[dn].isame[v].bjs;
+            kld = rbuf[dn].isame[v].bks;
+          } else if (nghbr.d_view(m,n).lev < mblev.d_view(m)) {
+            ild = rbuf[dn].ifine[v].bis;
+            jld = rbuf[dn].ifine[v].bjs;
+            kld = rbuf[dn].ifine[v].bks;
           } else {
-            Kokkos::parallel_for(Kokkos::TeamThreadRange<>(tmember, nkji),
-            [&](const int idx) {
-              int k = (idx)/nji;
-              int j = (idx - k*nji)/ni;
-              int i = (idx - k*nji - j*ni) + il;
-              k += kl;
-              j += jl;
-              if (v==0) {
-                rbuf[dn].vars(dm,i-il + ni*(j-jl + nj*(k-kl))) = cb.x1f(m,k,j,i);
-              } else if (v==1) {
-                rbuf[dn].vars(dm,ndat*v + i-il + ni*(j-jl + nj*(k-kl))) = cb.x2f(m,k,j,i);
-              } else if (v==2) {
-                rbuf[dn].vars(dm,ndat*v + i-il + ni*(j-jl + nj*(k-kl))) = cb.x3f(m,k,j,i);
-              }
-            });
+            ild = rbuf[dn].icoar[v].bis;
+            jld = rbuf[dn].icoar[v].bjs;
+            kld = rbuf[dn].icoar[v].bks;
           }
+          Kokkos::parallel_for(Kokkos::TeamThreadRange<>(tmember, nkji),
+          [&](const int idx) {
+            int dk = (idx)/nji;
+            int dj = (idx - dk*nji)/ni;
+            int di = (idx - dk*nji - dj*ni);
+            int i = di + il;
+            int j = dj + jl;
+            int k = dk + kl;
+            int id = di + ild;
+            int jd = dj + jld;
+            int kd = dk + kld;
+            Real val;
+            if (nghbr.d_view(m,n).lev >= mblev.d_view(m)) {
+              if (v==0) { val = b.x1f(m,k,j,i); }
+              else if (v==1) { val = b.x2f(m,k,j,i); }
+              else { val = b.x3f(m,k,j,i); }
+            } else {
+              if (v==0) { val = cb.x1f(m,k,j,i); }
+              else if (v==1) { val = cb.x2f(m,k,j,i); }
+              else { val = cb.x3f(m,k,j,i); }
+            }
+            // Same/finer dest writes b0 and must skip active faces (shared faces).
+            // Coarser→finer packs into dest coarse_b0 (no active-face skip).
+            if (nghbr.d_view(m,n).lev <= mblev.d_view(m)) {
+              if (IsActiveFCFace(v, kd, jd, id, indcs)) return;
+              if (v==0) { b.x1f(dm,kd,jd,id) = val; }
+              else if (v==1) { b.x2f(dm,kd,jd,id) = val; }
+              else { b.x3f(dm,kd,jd,id) = val; }
+            } else {
+              if (v==0) { cb.x1f(dm,kd,jd,id) = val; }
+              else if (v==1) { cb.x2f(dm,kd,jd,id) = val; }
+              else { cb.x3f(dm,kd,jd,id) = val; }
+            }
+          });
 
         // else copy field components into send buffer for MPI communication below
         } else {
@@ -291,6 +306,7 @@ TaskStatus MeshBoundaryValuesFC::RecvAndUnpackFC(DvceFaceFld4D<Real> &b,
   // create local references for variables in kernel
   int nmb = pmy_pack->nmb_thispack;
   int nnghbr = pmy_pack->pmb->nnghbr;
+  int my_rank = global_variable::my_rank;
   auto &nghbr = pmy_pack->pmb->nghbr;
   auto &rbuf = recvbuf;
   auto &indcs = pmy_pack->pmesh->mb_indcs;
@@ -320,8 +336,7 @@ TaskStatus MeshBoundaryValuesFC::RecvAndUnpackFC(DvceFaceFld4D<Real> &b,
 
   //----- STEP 2: buffers have all completed, so unpack 3-components of field
   // Off-rank payloads are read directly from the rank-packed aggregate recv
-  // buffer (fuses the former RankUnpackScatter kernel); on-rank payloads sit in
-  // their per-neighbour recv buffers, written there directly by the sender.
+  // buffer. Same-rank face ghosts were already written by PackAndSendFC.
 
   auto &mblev = pmy_pack->pmb->mb_lev;
 #if MPI_PARALLEL_ENABLED
@@ -336,8 +351,8 @@ TaskStatus MeshBoundaryValuesFC::RecvAndUnpackFC(DvceFaceFld4D<Real> &b,
 
     // scalar loop over neighbors to prevent race condition in overlapping assignments
     for (int n=0; n<nnghbr; ++n) {
-      // only unpack buffers when neighbor exists
-      if (nghbr.d_view(m,n).gid >= 0) {
+      // only unpack when neighbor exists and is off-rank (same-rank done in pack)
+      if (nghbr.d_view(m,n).gid >= 0 && nghbr.d_view(m,n).rank != my_rank) {
         // if neighbor is at coarser level, use cindices to unpack buffer
         int il, iu, jl, ju, kl, ku, ndat;
         if (nghbr.d_view(m,n).lev < mblev.d_view(m)) {
@@ -372,7 +387,7 @@ TaskStatus MeshBoundaryValuesFC::RecvAndUnpackFC(DvceFaceFld4D<Real> &b,
         const int nk = ku - kl + 1;
         const int nkji = nk*nj*ni;
         const int nji  = nj*ni;
-        // base offset of this (m,n) payload in the aggregate buffer; -1 == on-rank
+        // base offset of this (m,n) payload in the aggregate buffer
 #if MPI_PARALLEL_ENABLED
         const int base = recvoff(m*nnghbr + n);
 #endif
@@ -391,7 +406,7 @@ TaskStatus MeshBoundaryValuesFC::RecvAndUnpackFC(DvceFaceFld4D<Real> &b,
             }
             const int bi = ndat*v + i-il + ni*(j-jl + nj*(k-kl));
 #if MPI_PARALLEL_ENABLED
-            const Real val = (base >= 0) ? aggrbuf(base + bi) : rbuf[n].vars(m, bi);
+            const Real val = aggrbuf(base + bi);
 #else
             const Real val = rbuf[n].vars(m, bi);
 #endif
@@ -414,7 +429,7 @@ TaskStatus MeshBoundaryValuesFC::RecvAndUnpackFC(DvceFaceFld4D<Real> &b,
             j += jl;
             const int bi = ndat*v + i-il + ni*(j-jl + nj*(k-kl));
 #if MPI_PARALLEL_ENABLED
-            const Real val = (base >= 0) ? aggrbuf(base + bi) : rbuf[n].vars(m, bi);
+            const Real val = aggrbuf(base + bi);
 #else
             const Real val = rbuf[n].vars(m, bi);
 #endif

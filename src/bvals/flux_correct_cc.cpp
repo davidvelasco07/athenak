@@ -73,6 +73,12 @@ TaskStatus MeshBoundaryValuesCC::PackAndSendFluxCC(DvceFaceFld5D<Real> &flx) {
 
     // only pack buffers when neighbor is at coarser level
     if ((nghbr.d_view(m,n).gid >=0) && (nghbr.d_view(m,n).lev < mblev.d_view(m))) {
+      // Dest recv indices (regular mesh on the coarser neighbor)
+      int ild = rbuf[dn].iflux_coar[0].bis;
+      int jld = rbuf[dn].iflux_coar[0].bjs;
+      int kld = rbuf[dn].iflux_coar[0].bks;
+      const bool on_rank = (nghbr.d_view(m,n).rank == my_rank);
+
       // x1faces
       if (n<8) {
         // i-index is fixed for flux correction on x1faces
@@ -92,10 +98,8 @@ TaskStatus MeshBoundaryValuesCC::PackAndSendFluxCC(DvceFaceFld5D<Real> &flx) {
             rflx = 0.25*(flx.x1f(m,v,fk  ,fj,fi) + flx.x1f(m,v,fk  ,fj+1,fi) +
                          flx.x1f(m,v,fk+1,fj,fi) + flx.x1f(m,v,fk+1,fj+1,fi));
           }
-          // copy directly into recv buffer if MeshBlocks on same rank
-          if (nghbr.d_view(m,n).rank == my_rank) {
-            rbuf[dn].flux(dm, (j-jl + nj*(k-kl + nk*v)) ) = rflx;
-          // else copy into send buffer for MPI communication below
+          if (on_rank) {
+            flx.x1f(dm,v, kld+(k-kl), jld+(j-jl), ild) = rflx;
           } else {
             sbuf[n].flux(m, (j-jl + nj*(k-kl + nk*v)) ) = rflx;
           }
@@ -118,10 +122,8 @@ TaskStatus MeshBoundaryValuesCC::PackAndSendFluxCC(DvceFaceFld5D<Real> &flx) {
             rflx = 0.25*(flx.x2f(m,v,fk  ,fj,fi) + flx.x2f(m,v,fk  ,fj,fi+1) +
                          flx.x2f(m,v,fk+1,fj,fi) + flx.x2f(m,v,fk+1,fj,fi+1));
           }
-          // copy directly into recv buffer if MeshBlocks on same rank
-          if (nghbr.d_view(m,n).rank == my_rank) {
-            rbuf[dn].flux(dm, (i-il + ni*(k-kl + nk*v)) ) = rflx;
-          // else copy into send buffer for MPI communication below
+          if (on_rank) {
+            flx.x2f(dm,v, kld+(k-kl), jld, ild+(i-il)) = rflx;
           } else {
             sbuf[n].flux(m, (i-il + ni*(k-kl + nk*v)) ) = rflx;
           }
@@ -139,10 +141,8 @@ TaskStatus MeshBoundaryValuesCC::PackAndSendFluxCC(DvceFaceFld5D<Real> &flx) {
           int fj = 2*j - cjs;
           Real rflx = 0.25*(flx.x3f(m,v,fk,fj  ,fi) + flx.x3f(m,v,fk,fj  ,fi+1) +
                             flx.x3f(m,v,fk,fj+1,fi) + flx.x3f(m,v,fk,fj+1,fi+1));
-          // copy directly into recv buffer if MeshBlocks on same rank
-          if (nghbr.d_view(m,n).rank == my_rank) {
-            rbuf[dn].flux(dm, (i-il + ni*(j-jl + nj*v)) ) = rflx;
-          // else copy into send buffer for MPI communication below
+          if (on_rank) {
+            flx.x3f(dm,v, kld, jld+(j-jl), ild+(i-il)) = rflx;
           } else {
             sbuf[n].flux(m, (i-il + ni*(j-jl + nj*v)) ) = rflx;
           }
@@ -200,6 +200,7 @@ TaskStatus MeshBoundaryValuesCC::RecvAndUnpackFluxCC(DvceFaceFld5D<Real> &flx) {
   // create local references for variables in kernel
   int nmb = pmy_pack->nmb_thispack;
   int nnghbr = pmy_pack->pmb->nnghbr;
+  int my_rank = global_variable::my_rank;
   auto &nghbr = pmy_pack->pmb->nghbr;
   auto &mblev = pmy_pack->pmb->mb_lev;
   auto &rbuf = recvbuf;
@@ -237,6 +238,7 @@ TaskStatus MeshBoundaryValuesCC::RecvAndUnpackFluxCC(DvceFaceFld5D<Real> &flx) {
 #endif
 
   //----- STEP 2: buffers have all completed, so unpack
+  // Same-rank flux corrections were written directly by PackAndSendFluxCC.
 
   int nvar = flx.x1f.extent_int(1); // TODO(@user): 2nd idx from L of in arr must be NVAR
 
@@ -261,8 +263,9 @@ TaskStatus MeshBoundaryValuesCC::RecvAndUnpackFluxCC(DvceFaceFld5D<Real> &flx) {
     const int nkj  = nk*nj;
     const int nki  = nk*ni;
 
-    // only unpack buffers for faces when neighbor is at finer level
-    if ((nghbr.d_view(m,n).gid >=0) && (nghbr.d_view(m,n).lev > mblev.d_view(m))) {
+    // only unpack buffers for faces when neighbor is at finer level and off-rank
+    if ((nghbr.d_view(m,n).gid >=0) && (nghbr.d_view(m,n).lev > mblev.d_view(m)) &&
+        (nghbr.d_view(m,n).rank != my_rank)) {
       //x1 faces
       if (n<8) {
         Kokkos::parallel_for(Kokkos::TeamThreadRange<>(tmember, nkj), [&](const int idx) {

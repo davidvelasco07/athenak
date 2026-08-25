@@ -2278,7 +2278,7 @@ TaskStatus MultigridBoundaryValues::PackAndSendMG(const DvceArray5D<Real> &u) {
     int ni = iu - il + 1;
     int nj = ju - jl + 1;
     int nk = ku - kl + 1;
-    int nkj = nk * nj;
+    int ncell = ni * nj * nk;
 
     int dm = nghbr.d_view(m, n).gid - mbgid.d_view(0);
     int dn = nghbr.d_view(m, n).dest;
@@ -2287,52 +2287,40 @@ TaskStatus MultigridBoundaryValues::PackAndSendMG(const DvceArray5D<Real> &u) {
       // Restricted data is pre-computed in coarse_buf_ by FillCoarseMG:
       //   face neighbors  -> face-aligned 2x2 avg in ghost cells
       //   edge/corner     -> volume 2x2x2 avg in interior cells
-      Kokkos::parallel_for(Kokkos::TeamThreadRange<>(tmember, nkj),
+      Kokkos::parallel_for(Kokkos::TeamThreadRange<>(tmember, ncell),
       [&](const int idx) {
-        int k = idx / nj;
-        int j = (idx - k * nj) + jl;
-        k += kl;
+        int i = idx % ni + il;
+        int q = idx / ni;
+        int j = q % nj + jl;
+        int k = q / nj + kl;
         if (nghbr.d_view(m, n).rank == my_rank) {
-          Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember, il, iu + 1),
-          [&](const int i) {
-            rbuf[dn].vars(dm, (i-il + ni*(j-jl + nj*(k-kl + nk*v))))
-                = cbuf(m, v, k, j, i);
-          });
+          rbuf[dn].vars(dm, idx + ncell*v) = cbuf(m, v, k, j, i);
         } else {
-          Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember, il, iu + 1),
-          [&](const int i) {
-            const int bi = (i-il + ni*(j-jl + nj*(k-kl + nk*v)));
-            if (urp) {
-              aggsbuf(soff(m*nnghbr + n) + bi) = cbuf(m, v, k, j, i);
-            } else {
-              sbuf[n].vars(m, bi) = cbuf(m, v, k, j, i);
-            }
-          });
+          const int bi = idx + ncell*v;
+          if (urp) {
+            aggsbuf(soff(m*nnghbr + n) + bi) = cbuf(m, v, k, j, i);
+          } else {
+            sbuf[n].vars(m, bi) = cbuf(m, v, k, j, i);
+          }
         }
       });
     } else {
-      Kokkos::parallel_for(Kokkos::TeamThreadRange<>(tmember, nkj),
+      Kokkos::parallel_for(Kokkos::TeamThreadRange<>(tmember, ncell),
       [&](const int idx) {
-        int k = idx / nj;
-        int j = (idx - k * nj) + jl;
-        k += kl;
+        int i = idx % ni + il;
+        int q = idx / ni;
+        int j = q % nj + jl;
+        int k = q / nj + kl;
 
         if (nghbr.d_view(m, n).rank == my_rank) {
-          Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember, il, iu + 1),
-          [&](const int i) {
-            rbuf[dn].vars(dm, (i-il + ni*(j-jl + nj*(k-kl + nk*v))))
-                = u(m, v, k, j, i);
-          });
+          rbuf[dn].vars(dm, idx + ncell*v) = u(m, v, k, j, i);
         } else {
-          Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember, il, iu + 1),
-          [&](const int i) {
-            const int bi = (i-il + ni*(j-jl + nj*(k-kl + nk*v)));
-            if (urp) {
-              aggsbuf(soff(m*nnghbr + n) + bi) = u(m, v, k, j, i);
-            } else {
-              sbuf[n].vars(m, bi) = u(m, v, k, j, i);
-            }
-          });
+          const int bi = idx + ncell*v;
+          if (urp) {
+            aggsbuf(soff(m*nnghbr + n) + bi) = u(m, v, k, j, i);
+          } else {
+            sbuf[n].vars(m, bi) = u(m, v, k, j, i);
+          }
         }
       });
     }
@@ -2481,35 +2469,31 @@ TaskStatus MultigridBoundaryValues::RecvAndUnpackMG(DvceArray5D<Real> &u) {
     int ni = iu - il + 1;
     int nj = ju - jl + 1;
     int nk = ku - kl + 1;
-    int nkj = nk * nj;
+    int ncell = ni * nj * nk;
 
     // base offset of this (m,n) payload in the aggregate recv buffer; -1 means
     // on-rank (data already sits in rbuf) or legacy (non-rank-packed) path.
     const int base = urp ? roff(m*nnghbr + n) : -1;
 
     if (from_coarser) {
-      Kokkos::parallel_for(Kokkos::TeamThreadRange<>(tmember, nkj),
+      Kokkos::parallel_for(Kokkos::TeamThreadRange<>(tmember, ncell),
       [&](const int idx) {
-        int k = idx / nj;
-        int j = (idx - k * nj) + jl;
-        k += kl;
-        Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember, il, iu + 1),
-        [&](const int i) {
-          const int bi = (i-il + ni*(j-jl + nj*(k-kl + nk*v)));
-          cbuf(m, v, k, j, i) = (base >= 0) ? aggrbuf(base + bi) : rbuf[n].vars(m, bi);
-        });
+        int i = idx % ni + il;
+        int q = idx / ni;
+        int j = q % nj + jl;
+        int k = q / nj + kl;
+        const int bi = idx + ncell*v;
+        cbuf(m, v, k, j, i) = (base >= 0) ? aggrbuf(base + bi) : rbuf[n].vars(m, bi);
       });
     } else {
-      Kokkos::parallel_for(Kokkos::TeamThreadRange<>(tmember, nkj),
+      Kokkos::parallel_for(Kokkos::TeamThreadRange<>(tmember, ncell),
       [&](const int idx) {
-        int k = idx / nj;
-        int j = (idx - k * nj) + jl;
-        k += kl;
-        Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember, il, iu + 1),
-        [&](const int i) {
-          const int bi = (i-il + ni*(j-jl + nj*(k-kl + nk*v)));
-          u(m, v, k, j, i) = (base >= 0) ? aggrbuf(base + bi) : rbuf[n].vars(m, bi);
-        });
+        int i = idx % ni + il;
+        int q = idx / ni;
+        int j = q % nj + jl;
+        int k = q / nj + kl;
+        const int bi = idx + ncell*v;
+        u(m, v, k, j, i) = (base >= 0) ? aggrbuf(base + bi) : rbuf[n].vars(m, bi);
       });
     }
     tmember.team_barrier();
