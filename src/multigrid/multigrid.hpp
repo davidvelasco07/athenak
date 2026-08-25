@@ -633,16 +633,22 @@ void Multigrid::Smooth(ViewType &u, const ViewType &src, const ViewType &coeff,
   int rlev_l = rlev;
   Real odiag = stencil.omega_over_diag;
   color ^= pmy_driver_->GetCoffset();
-  par_for("Multigrid::Smooth", ExeSpace(), 0, nmmb_-1, kl, ku, jl, ju,
-  KOKKOS_LAMBDA(const int m, const int k, const int j) {
+  // Flatten (m,k,j,i_rb) with i the fastest Kokkos index, matching hydro's 4D
+  // par_for. The previous (m,k,j) + serial stride-2 i loop mapped consecutive
+  // threads to consecutive j (stride nx1) and starved occupancy on large,
+  // few-block meshes (thread count ~ nmb*nx2*nx3). Red-black is preserved:
+  // i = il + ((color+k+j)&1) + 2*i_rb.
+  const int n_irb = (iu - il + 2) / 2;
+  par_for("Multigrid::Smooth", ExeSpace(), 0, nmmb_-1, kl, ku, jl, ju, 0, n_irb-1,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i_rb) {
     Real dx = (rlev_l <= 0) ? brdx(m) * static_cast<Real>(1<<(-rlev_l))
                             : brdx(m) / static_cast<Real>(1<<rlev_l);
     Real dx2 = dx * dx;
     const int c = (color + k + j) & 1;
-    for (int i = il + c; i <= iu; i += 2) {
-      Real lap = stencil.Apply(u, coeff, m, 0, k, j, i);
-      u(m,0,k,j,i) -= (lap - src(m,0,k,j,i)*dx2) * odiag;
-    }
+    const int i = il + c + 2*i_rb;
+    if (i > iu) return;
+    Real lap = stencil.Apply(u, coeff, m, 0, k, j, i);
+    u(m,0,k,j,i) -= (lap - src(m,0,k,j,i)*dx2) * odiag;
   });
 }
 
