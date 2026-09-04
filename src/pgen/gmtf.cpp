@@ -12,6 +12,7 @@
 #include <cmath>
 #include <cstdint>
 #include <algorithm>
+#include <string>
 #include <utility>
 #include <random>
 #include <vector>
@@ -461,6 +462,19 @@ std::uint64_t SplitMix64(std::uint64_t x) {
 //!   sink_mass    absolute mass override; used when > 0 (default -1, i.e. use sink_mass_cv)
 //!   sink_min_sep required separation in cells; 0 disables the check (default 6.0)
 //!   sink_jitter  lattice jitter as a fraction of the lattice spacing (default 0.2)
+//!   sink_placement  "random" (default) or "lattice"
+//!
+//! WHY "random" IS THE DEFAULT. The jittered lattice guarantees a separation cheaply, but it
+//! also fixes each sink's position RELATIVE TO THE MESHBLOCK GRID, and that controls
+//! something the benchmark cares about a great deal: whether a sink's control volume can
+//! reach a block face, which is the only way it ever emits a cross-rank record. Measured on
+//! a 256^3/64^3 mesh, the lattice for nsink = 64 (spacing 64 cells) puts every sink 19.2
+//! cells from the nearest face and the lattice for nsink = 4096 (spacing 16 cells) puts them
+//! 4.8 cells away -- so NEITHER ever emits, at any rank count, while nsink = 256 and 1024
+//! (spacings 36.6 and 23.3 cells) do. The measured ExchangeCVReset cost tracked that
+//! commensurability exactly and not the sink count at all. Worse, a scaling ladder built on
+//! such an nsink would report the cross-rank path as free however many ranks it ran on.
+//! Rejection sampling makes face proximity a property of the domain rather than of nsink.
 
 void SeedSinks(ParameterInput *pin, MeshBlockPack *pmbp) {
   const int nseed = pin->GetOrAddInteger("problem", "nsink_seed", 0);
@@ -507,7 +521,16 @@ void SeedSinks(ParameterInput *pin, MeshBlockPack *pmbp) {
   const Real dxmax = std::max(dx1, std::max(dx2, dx3));
   const Real sep_guar = std::min(s1, std::min(s2, s3))*(1.0 - 2.0*jit);
   const Real minsep = pin->GetOrAddReal("problem", "sink_min_sep", 6.0);
-  if (minsep > 0.0 && sep_guar < minsep*dxmax) {
+  const std::string placement = pin->GetOrAddString("problem", "sink_placement", "random");
+  if (placement != "random" && placement != "lattice") {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+              << "problem/sink_placement must be \"random\" or \"lattice\"; got \""
+              << placement << "\"" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  // The lattice inherits its separation from the spacing, so it must be checked up front.
+  // Rejection sampling enforces the same bound directly and fails loudly if it cannot.
+  if (placement == "lattice" && minsep > 0.0 && sep_guar < minsep*dxmax) {
     const Real lmin = std::min(L1, std::min(L2, L3));
     const int nmax = static_cast<int>(std::floor(lmin*(1.0 - 2.0*jit)/(minsep*dxmax)));
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
@@ -523,32 +546,70 @@ void SeedSinks(ParameterInput *pin, MeshBlockPack *pmbp) {
     std::exit(EXIT_FAILURE);
   }
 
-  // Deterministic spread subset: order lattice cells by a hash of their index and take the
-  // first nseed. Raster order would pack them into one corner slab and overload whichever
-  // ranks own it, which would show up as a load-imbalance artefact in the scaling curves.
-  std::vector<std::pair<std::uint64_t, std::int64_t>> ord;
-  ord.reserve(static_cast<std::size_t>(ncell));
-  for (std::int64_t c = 0; c < ncell; ++c) {
-    ord.emplace_back(SplitMix64(static_cast<std::uint64_t>(c) ^ 0x5EEDULL), c);
-  }
-  std::sort(ord.begin(), ord.end());
-
   std::vector<Real> sx(nseed), sy(nseed), sz(nseed);
-  for (int p = 0; p < nseed; ++p) {
-    const std::int64_t c = ord[p].second;
-    const int i = static_cast<int>(c % n);
-    const int j = static_cast<int>((c/n) % n);
-    const int k = static_cast<int>(c/(static_cast<std::int64_t>(n)*n));
-    const std::uint64_t hc = static_cast<std::uint64_t>(c);
-    // jitter each axis from an independent hash word; bounded by |jit| < 0.5 of the
-    // spacing, so a seed can never leave its own lattice cell and the separation bound
-    // above holds by construction
-    const Real u1 = Uniform11(SplitMix64(3*hc + 1));
-    const Real u2 = Uniform11(SplitMix64(3*hc + 2));
-    const Real u3 = Uniform11(SplitMix64(3*hc + 3));
-    sx[p] = x1min + (i + 0.5 + jit*u1)*s1;
-    sy[p] = x2min + (j + 0.5 + jit*u2)*s2;
-    sz[p] = x3min + (k + 0.5 + jit*u3)*s3;
+
+  if (placement == "lattice") {
+    // Deterministic spread subset: order lattice cells by a hash of their index and take the
+    // first nseed. Raster order would pack them into one corner slab and overload whichever
+    // ranks own it, which would show up as a load-imbalance artefact in the scaling curves.
+    std::vector<std::pair<std::uint64_t, std::int64_t>> ord;
+    ord.reserve(static_cast<std::size_t>(ncell));
+    for (std::int64_t c = 0; c < ncell; ++c) {
+      ord.emplace_back(SplitMix64(static_cast<std::uint64_t>(c) ^ 0x5EEDULL), c);
+    }
+    std::sort(ord.begin(), ord.end());
+    for (int p = 0; p < nseed; ++p) {
+      const std::int64_t c = ord[p].second;
+      const int i = static_cast<int>(c % n);
+      const int j = static_cast<int>((c/n) % n);
+      const int k = static_cast<int>(c/(static_cast<std::int64_t>(n)*n));
+      const std::uint64_t hc = static_cast<std::uint64_t>(c);
+      // jitter each axis from an independent hash word; bounded by |jit| < 0.5 of the
+      // spacing, so a seed can never leave its own lattice cell and the separation bound
+      // above holds by construction
+      const Real u1 = Uniform11(SplitMix64(3*hc + 1));
+      const Real u2 = Uniform11(SplitMix64(3*hc + 2));
+      const Real u3 = Uniform11(SplitMix64(3*hc + 3));
+      sx[p] = x1min + (i + 0.5 + jit*u1)*s1;
+      sy[p] = x2min + (j + 0.5 + jit*u2)*s2;
+      sz[p] = x3min + (k + 0.5 + jit*u3)*s3;
+    }
+  } else {
+    // Rejection sampling against the SAME separation requirement, so the constraint is
+    // enforced directly rather than inherited from a lattice -- and the resulting positions
+    // carry no fixed relationship to the MeshBlock grid.
+    const Real dmin = minsep*dxmax;
+    const Real d2   = dmin*dmin;
+    const std::int64_t maxtry = std::max<std::int64_t>(1000LL*nseed, 100000LL);
+    std::int64_t tries = 0;
+    int got = 0;
+    while (got < nseed && tries < maxtry) {
+      const std::uint64_t h = static_cast<std::uint64_t>(tries);
+      const Real cx = x1min + 0.5*(Uniform11(SplitMix64(3*h + 11)) + 1.0)*L1;
+      const Real cy = x2min + 0.5*(Uniform11(SplitMix64(3*h + 12)) + 1.0)*L2;
+      const Real cz = x3min + 0.5*(Uniform11(SplitMix64(3*h + 13)) + 1.0)*L3;
+      ++tries;
+      bool ok = true;
+      if (dmin > 0.0) {
+        for (int q = 0; q < got; ++q) {
+          // periodic minimum image: the box wraps, so two sinks either side of a face are
+          // neighbours and their control volumes really do overlap
+          Real ddx = cx - sx[q]; ddx -= L1*std::floor(ddx/L1 + 0.5);
+          Real ddy = cy - sy[q]; ddy -= L2*std::floor(ddy/L2 + 0.5);
+          Real ddz = cz - sz[q]; ddz -= L3*std::floor(ddz/L3 + 0.5);
+          if (ddx*ddx + ddy*ddy + ddz*ddz < d2) { ok = false; break; }
+        }
+      }
+      if (ok) { sx[got] = cx; sy[got] = cy; sz[got] = cz; ++got; }
+    }
+    if (got < nseed) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+                << "could not place " << nseed << " sinks at sink_min_sep = " << minsep
+                << " cells: placed " << got << " in " << tries << " attempts." << std::endl
+                << "  The domain is too full at this separation. Lower sink_min_sep, raise"
+                << " the resolution, or lower nsink_seed." << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
   }
 
   // Ownership: lower-inclusive containment, matching Particles::SetGIDFromPosition. PGID
@@ -572,6 +633,27 @@ void SeedSinks(ParameterInput *pin, MeshBlockPack *pmbp) {
     }
   }
 
+  // How many sinks sit close enough to a MeshBlock face that their control volume can
+  // reach across it? That is the ONLY population that ever emits a cross-rank record, so
+  // it is the population the ExchangeCVReset cost is proportional to. Reported because a
+  // seeding that silently drives it to zero makes the whole cross-rank path look free --
+  // which is exactly what the jittered lattice did (see the note on sink_placement).
+  int nface = 0;
+  {
+    const Real reach = 3.0;   // rctrl+1 read stencil, plus one cell of crossing slack
+    for (int p = 0; p < nseed; ++p) {
+      const int m = own[p];
+      if (m < 0) continue;
+      const Real dx[3] = {mbsz.h_view(m).dx1, mbsz.h_view(m).dx2, mbsz.h_view(m).dx3};
+      const Real lo[3] = {mbsz.h_view(m).x1min, mbsz.h_view(m).x2min, mbsz.h_view(m).x3min};
+      const Real hi[3] = {mbsz.h_view(m).x1max, mbsz.h_view(m).x2max, mbsz.h_view(m).x3max};
+      const Real q[3]  = {sx[p], sy[p], sz[p]};
+      for (int c = 0; c < 3; ++c) {
+        if (std::min(q[c] - lo[c], hi[c] - q[c]) < reach*dx[c]) { ++nface; break; }
+      }
+    }
+  }
+
   // Exact gate: every seed must be claimed by exactly one block, globally. A shortfall
   // means a seed fell through a block boundary (round-off at a face) or into a gap; a
   // surplus means two blocks claimed one. Either way the run would start with the wrong
@@ -579,6 +661,7 @@ void SeedSinks(ParameterInput *pin, MeshBlockPack *pmbp) {
   int nglob = nloc;
 #if MPI_PARALLEL_ENABLED
   MPI_Allreduce(MPI_IN_PLACE, &nglob, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+  MPI_Allreduce(MPI_IN_PLACE, &nface, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
 #endif
   if (nglob != nseed) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
@@ -638,6 +721,9 @@ void SeedSinks(ParameterInput *pin, MeshBlockPack *pmbp) {
               << (sep_guar >= 5.0*dxmax ? "(> 5 => one accretion colour, fully parallel)"
                                         : "(< 5 => colours > 1, accretion serializes)")
               << std::endl
+              << "###       placement = " << placement << "; " << nface << " of " << nseed
+              << " sink(s) (" << (100.0*nface)/nseed << "%) can reach a MeshBlock face"
+              << " => that is the cross-rank ExchangeCVReset population" << std::endl
               << "###       m_sink = " << msink << " each = " << msink/mcv
               << " x the control-volume gas mass; " << nseed*msink
               << " total = " << 100.0*fsink << "% of the initial gas mass" << std::endl;
