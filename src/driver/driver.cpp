@@ -481,6 +481,8 @@ void Driver::Finalize(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
   // every particle on the rank that owns its block. All ranks call it (MPI collectives).
   if (pmesh->pmb_pack->ppart != nullptr) {
     pmesh->pmb_pack->ppart->ReconcileOwnership(this, nexp_stages);
+    // host/MPI phase breakdown, when SINK_TIMERS is set (no-op otherwise)
+    pmesh->pmb_pack->ppart->ReportSinkTimers(pwall_clock_->seconds());
   }
 
   // cycle through output Types and load data / write files

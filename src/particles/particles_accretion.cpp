@@ -217,6 +217,7 @@ TaskStatus Particles::AccreteMass(Driver *pdriver, int stage) {
   //
   // Cost is O(N^2) on the host over the (few) sinks; fine into the hundreds. Past ~10^4
   // sinks this test itself would need a spatial hash.
+  const double _st_col = StBegin(ST_COLOUR);
   std::vector<int> corder;      // sink indices grouped by colour
   std::vector<int> coff(2, 0);  // [ncolours+1] offsets into corder
   {
@@ -279,6 +280,7 @@ TaskStatus Particles::AccreteMass(Driver *pdriver, int stage) {
   plist.template modify<HostMemSpace>();
   plist.template sync<DevExeSpace>();
   auto pl = plist.d_view;
+  StEnd(ST_COLOUR, _st_col);
 
   for (int c = 0; c + 1 < static_cast<int>(coff.size()); ++c) {
     const int c0 = coff[c];
@@ -652,7 +654,10 @@ TaskStatus Particles::AccreteMass(Driver *pdriver, int stage) {
   }
 
   // apply reset cells that landed in off-rank neighbour interiors (multi-rank only)
-  if (mpi_on) ExchangeCVReset();
+  if (mpi_on) {
+    SinkTimerScope _st(this, ST_CVRESET);
+    ExchangeCVReset();
+  }
 
   // report defensively skipped sinks. A skipped sink keeps attracting gas but never
   // removes it, so this must never pass unnoticed; rate-limited to a few messages.
@@ -784,7 +789,10 @@ void Particles::ExchangeCVReset() {
   std::vector<int> nsend(nranks, 0);
   for (int r : s_rank) nsend[r]++;
   std::vector<int> nrecv(nranks, 0);
-  MPI_Alltoall(nsend.data(), 1, MPI_INT, nrecv.data(), 1, MPI_INT, mpi_comm_cvscat_);
+  {
+    SinkTimerScope _st(this, ST_ALLTOALL);
+    MPI_Alltoall(nsend.data(), 1, MPI_INT, nrecv.data(), 1, MPI_INT, mpi_comm_cvscat_);
+  }
 
   // pack sends contiguously per destination rank (stable order: preserves the emit
   // order, so the old-CV overlap re-reset correctly supersedes the new-CV values)

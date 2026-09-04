@@ -87,6 +87,7 @@ constexpr int REC = 11;   // per-sink record: x,y,z,vx,vy,vz,m,dx1,dx2,dx3,tag
 TaskStatus Particles::MergeSinks(Driver *pdriver, int stage) {
   if (stage != pdriver->nexp_stages) return TaskStatus::complete;
   if (particle_type != ParticleType::sink || !merging) return TaskStatus::complete;
+  SinkTimerScope _st(this, ST_MERGE);
 
   const int nranks = global_variable::nranks;
   const int my_rank = global_variable::my_rank;

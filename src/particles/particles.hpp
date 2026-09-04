@@ -175,6 +175,39 @@ class Particles {
   ParticlesTaskIDs id;
 
   // functions...
+  // ---- host / MPI phase timers (env SINK_TIMERS) --------------------------------------
+  // Wall-clock accounting for the sink module's HOST and MPI regions -- precisely what a
+  // Kokkos profiler cannot see. kokkos-tools reports device kernels by label, but the
+  // per-step collectives, the host<->device particle mirrors and the host colouring loop
+  // are invisible to it, and those are the suspected cost at scale.
+  //
+  //   SINK_TIMERS=1  accumulate and report. Low perturbation, but Kokkos kernels are
+  //                  asynchronous, so a region can absorb the completion of work launched
+  //                  before it, charged at whatever call first synchronizes.
+  //   SINK_TIMERS=2  additionally Kokkos::fence() + MPI_Barrier before each region and
+  //                  account that separately as "wait". The region's own cost is then
+  //                  isolated, and "wait" is the load imbalance that a collective merely
+  //                  EXPOSES rather than causes. Perturbing by construction: an
+  //                  attribution run, never a timing run.
+  //
+  // ST_REFRESH is nested inside ST_CREATE and ST_MERGE, and ST_ALLTOALL inside ST_CVRESET,
+  // so those totals are INCLUSIVE -- do not add the column up.
+  enum SinkTimerId {ST_COLOUR=0, ST_CVRESET, ST_ALLTOALL, ST_CREATE, ST_MERGE, ST_REFRESH,
+                    ST_NUM};
+  int st_mode_ = 0;
+  double st_time_[ST_NUM] = {};
+  double st_wait_[ST_NUM] = {};
+  long long st_calls_[ST_NUM] = {};
+  double StBegin(int id);
+  void   StEnd(int id, double t0);
+  void   ReportSinkTimers(double wall_seconds);
+  // scope guard, so a region with several early returns still stops its timer
+  struct SinkTimerScope {
+    Particles *p; int id; double t0;
+    SinkTimerScope(Particles *pp, int i) : p(pp), id(i), t0(pp->StBegin(i)) {}
+    ~SinkTimerScope() { p->StEnd(id, t0); }
+  };
+
   void CreateParticleTags(ParameterInput *pin);
   void RefreshMeshParticleCounts();  // after pgen-side array resize
   // Resize the particle arrays to npart_new and, with them, every buffer that was sized

@@ -63,6 +63,7 @@ TaskStatus Particles::CreateSinks(Driver *pdriver, int stage) {
   if (pmy_pack->phydro == nullptr && pmy_pack->pmhd == nullptr) {
     return TaskStatus::complete;
   }
+  SinkTimerScope _st(this, ST_CREATE);
   const bool is_mhd = (pmy_pack->pmhd != nullptr);
   auto u0 = is_mhd ? pmy_pack->pmhd->u0 : pmy_pack->phydro->u0;
   auto phi = pmy_pack->pgrav->phi;

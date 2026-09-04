@@ -10,6 +10,9 @@
 #include <string>
 #include <algorithm>
 #include <limits>
+#include <chrono>
+#include <cstdlib>
+#include <cstdio>
 
 #include "athena.hpp"
 #include "globals.hpp"
@@ -25,6 +28,8 @@ namespace particles {
 
 Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     pmy_pack(ppack) {
+  // host/MPI phase timers, off unless SINK_TIMERS is set (see particles.hpp)
+  if (const char *e = std::getenv("SINK_TIMERS")) { st_mode_ = std::atoi(e); }
   // No particles yet => no particle timestep constraint. See the declaration in
   // particles.hpp: leaving this indeterminate makes Mesh::NewTimeStep collapse the global
   // dt to zero on any creation-driven run (ppc = 0), which hangs at t = 0.
@@ -160,6 +165,7 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
 //! nprtcl_eachrank) index past the resized arrays.
 
 void Particles::RefreshMeshParticleCounts() {
+  SinkTimerScope _st(this, ST_REFRESH);
   Mesh *pm = pmy_pack->pmesh;
   pm->nprtcl_thisrank = nprtcl_thispack;
   pm->nprtcl_eachrank[global_variable::my_rank] = nprtcl_thispack;
@@ -171,6 +177,81 @@ void Particles::RefreshMeshParticleCounts() {
   for (int n = 0; n < global_variable::nranks; ++n) {
     pm->nprtcl_total += pm->nprtcl_eachrank[n];
   }
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn double Particles::StBegin(int id) / void Particles::StEnd(int id, double t0)
+//! \brief start/stop one host-MPI phase timer. See the SINK_TIMERS block in particles.hpp
+//! for what the two modes mean and why mode 2 perturbs on purpose.
+
+double Particles::StBegin(int id) {
+  if (st_mode_ <= 0) return 0.0;
+  if (st_mode_ >= 2) {
+    // Isolate the region from work already in flight: fence the device, then barrier so
+    // every rank starts together. What the barrier absorbs is load imbalance -- charged
+    // to "wait", not to the region, because a collective exposes imbalance rather than
+    // creating it, and conflating the two is how a cheap collective gets blamed.
+    const double b = std::chrono::duration<double>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+    Kokkos::fence();
+#if MPI_PARALLEL_ENABLED
+    if (global_variable::nranks > 1) { MPI_Barrier(MPI_COMM_WORLD); }
+#endif
+    st_wait_[id] += std::chrono::duration<double>(
+        std::chrono::steady_clock::now().time_since_epoch()).count() - b;
+  }
+  return std::chrono::duration<double>(
+      std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
+void Particles::StEnd(int id, double t0) {
+  if (st_mode_ <= 0) return;
+  st_time_[id] += std::chrono::duration<double>(
+      std::chrono::steady_clock::now().time_since_epoch()).count() - t0;
+  st_calls_[id] += 1;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void Particles::ReportSinkTimers(double wall_seconds)
+//! \brief print the accumulated host/MPI phase times. Rank 0 prints; the max over ranks is
+//! what matters for a synchronous step, so both max and mean are shown.
+
+void Particles::ReportSinkTimers(double wall_seconds) {
+  if (st_mode_ <= 0) return;
+  const int n = ST_NUM;
+  const char *name[ST_NUM] = {"colour(host+mirror)", "cv_reset(total)",
+                              "  MPI_Alltoall", "create_sinks", "merge_sinks",
+                              "refresh_counts"};
+  double tmax[ST_NUM], tsum[ST_NUM], wmax[ST_NUM];
+  long long csum[ST_NUM];
+  for (int i = 0; i < n; ++i) {
+    tmax[i] = st_time_[i]; tsum[i] = st_time_[i];
+    wmax[i] = st_wait_[i]; csum[i] = st_calls_[i];
+  }
+#if MPI_PARALLEL_ENABLED
+  if (global_variable::nranks > 1) {
+    MPI_Allreduce(MPI_IN_PLACE, tmax, n, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, tsum, n, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, wmax, n, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, csum, n, MPI_LONG_LONG, MPI_SUM, MPI_COMM_WORLD);
+  }
+#endif
+  if (global_variable::my_rank != 0) return;
+  const int nr = global_variable::nranks;
+  std::printf("\n### SINK TIMERS  mode=%d  ranks=%d  wall=%.4f s"
+              "  (host/MPI regions only -- device kernels are kokkos-tools' job)\n",
+              st_mode_, nr, wall_seconds);
+  std::printf("###   ST_ALLTOALL is nested in ST_CVRESET, and refresh_counts in "
+              "create/merge: totals are INCLUSIVE, do not sum the column.\n");
+  std::printf("### %-20s %10s %12s %12s %12s %8s\n",
+              "region", "calls", "max_s", "mean_s", "wait_max_s", "%wall");
+  for (int i = 0; i < n; ++i) {
+    if (csum[i] == 0) continue;
+    std::printf("### %-20s %10lld %12.5f %12.5f %12.5f %7.2f%%\n",
+                name[i], csum[i]/nr, tmax[i], tsum[i]/nr, wmax[i],
+                (wall_seconds > 0.0) ? 100.0*tmax[i]/wall_seconds : 0.0);
+  }
+  std::printf("\n");
 }
 
 //----------------------------------------------------------------------------------------
