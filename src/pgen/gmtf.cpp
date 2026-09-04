@@ -10,6 +10,9 @@
 
 // C++ headers
 #include <cmath>
+#include <cstdint>
+#include <algorithm>
+#include <utility>
 #include <random>
 #include <vector>
 #include <iostream> // cout
@@ -32,6 +35,7 @@ Real sfe_term_ = -1.0;      // terminal star-formation efficiency; <= 0 disables
 Real mtot0_ = -1.0;         // initial gas mass, set on the first history call
 bool sfe_stop_announced_ = false;
 void GMTFHistory(HistoryData *pdata, Mesh *pm);
+void SeedSinks(ParameterInput *pin, MeshBlockPack *pmbp);
 }  // namespace
 
 #if MPI_PARALLEL_ENABLED
@@ -316,6 +320,9 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     u0(m,IM2,k,j,i) += mach/vrms*dv(m,1,k,j,i);
     u0(m,IM3,k,j,i) += mach/vrms*dv(m,2,k,j,i);
   });
+
+  // Optional seeded sink population (benchmark mode); no-op unless nsink_seed > 0.
+  SeedSinks(pin, pmbp);
 }
 
 namespace {
@@ -406,6 +413,250 @@ void GMTFHistory(HistoryData *pdata, Mesh *pm) {
     }
     // end the run at the close of this cycle, via the normal shutdown path
     pm->pmy_driver->tlim = pm->time;
+  }
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn Real Uniform11(std::uint64_t h)
+//! \brief a hash word mapped to [-1, 1), using the top 53 bits.
+
+Real Uniform11(std::uint64_t h) {
+  return 2.0*(static_cast<Real>(h >> 11)/9007199254740992.0) - 1.0;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn std::uint64_t SplitMix64(std::uint64_t x)
+//! \brief a fixed integer hash. Deterministic and platform-independent (no floating point,
+//! no library RNG whose stream could differ), which is what makes the seed positions
+//! identical on every rank and reproducible between runs and machines.
+
+std::uint64_t SplitMix64(std::uint64_t x) {
+  x += 0x9E3779B97F4A7C15ULL;
+  x = (x ^ (x >> 30))*0xBF58476D1CE4E5B9ULL;
+  x = (x ^ (x >> 27))*0x94D049BB133111EBULL;
+  return x ^ (x >> 31);
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void SeedSinks(ParameterInput *pin, MeshBlockPack *pmbp)
+//! \brief Lay down exactly <problem>/nsink_seed sink particles on a jittered cubic
+//! lattice. No-op unless nsink_seed > 0.
+//!
+//! WHY THIS EXISTS. Sinks normally form from the gas, and past the first creation the
+//! outcome is NOT decomposition-invariant: which cell first crosses the Larson-Penston
+//! threshold differs between rank counts, and a sink in a different cell is an O(1)
+//! change. A creation-driven scaling ladder therefore ends every rung with a different
+//! sink count, and its rungs cannot be compared. Seeding turns the sink count into an
+//! independent, controlled variable, which is what a cost model needs.
+//!
+//! Positions derive from GLOBAL quantities only -- the mesh bounds and a fixed integer
+//! hash -- so every rank builds the identical list and then keeps the seeds its own blocks
+//! contain. Deliberately NOT via ppc: ppc*(this rank's cells) rounds DOWN per rank, which
+//! yields zero particles per rank on any sufficiently fine decomposition.
+//!
+//! Inputs (all <problem>):
+//!   nsink_seed   number of sinks; <= 0 disables (default 0)
+//!   sink_mass_cv mass of each sink in units of the 27-cell control-volume gas mass
+//!                (default 10). Below 1 the accretion update is ill-posed -- see below.
+//!   sink_mass    absolute mass override; used when > 0 (default -1, i.e. use sink_mass_cv)
+//!   sink_min_sep required separation in cells; 0 disables the check (default 6.0)
+//!   sink_jitter  lattice jitter as a fraction of the lattice spacing (default 0.2)
+
+void SeedSinks(ParameterInput *pin, MeshBlockPack *pmbp) {
+  const int nseed = pin->GetOrAddInteger("problem", "nsink_seed", 0);
+  if (nseed <= 0) return;
+
+  if (pmbp->ppart == nullptr) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+              << "problem/nsink_seed > 0 requires a <particles> block" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (pmbp->ppart->particle_type != ParticleType::sink) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+              << "problem/nsink_seed > 0 requires particles/type = sink" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  Mesh *pm = pmbp->pmesh;
+  const Real x1min = pm->mesh_size.x1min, x2min = pm->mesh_size.x2min;
+  const Real x3min = pm->mesh_size.x3min;
+  const Real L1 = pm->mesh_size.x1max - x1min;
+  const Real L2 = pm->mesh_size.x2max - x2min;
+  const Real L3 = pm->mesh_size.x3max - x3min;
+
+  // smallest cubic lattice that holds nseed points
+  int n = 1;
+  while (static_cast<std::int64_t>(n)*n*n < nseed) { ++n; }
+  const std::int64_t ncell = static_cast<std::int64_t>(n)*n*n;
+  const Real s1 = L1/n, s2 = L2/n, s3 = L3/n;
+
+  const Real jit = pin->GetOrAddReal("problem", "sink_jitter", 0.2);
+  if (jit < 0.0 || jit >= 0.5) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+              << "problem/sink_jitter must be in [0, 0.5); got " << jit << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  // Separation guarantee. The accretion conflict radius is 5 cells (write half-width 2 +
+  // read half-width 3), so sinks closer than that are placed in different colours and
+  // AccreteMass serializes them. Which regime the run is in is a property of the
+  // measurement, so it must be stated and checked, not discovered afterwards.
+  const Real dx1 = L1/pm->mesh_indcs.nx1;
+  const Real dx2 = L2/pm->mesh_indcs.nx2;
+  const Real dx3 = L3/pm->mesh_indcs.nx3;
+  const Real dxmax = std::max(dx1, std::max(dx2, dx3));
+  const Real sep_guar = std::min(s1, std::min(s2, s3))*(1.0 - 2.0*jit);
+  const Real minsep = pin->GetOrAddReal("problem", "sink_min_sep", 6.0);
+  if (minsep > 0.0 && sep_guar < minsep*dxmax) {
+    const Real lmin = std::min(L1, std::min(L2, L3));
+    const int nmax = static_cast<int>(std::floor(lmin*(1.0 - 2.0*jit)/(minsep*dxmax)));
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+              << "problem/nsink_seed = " << nseed << " cannot honour sink_min_sep = "
+              << minsep << " cells." << std::endl
+              << "  guaranteed separation " << sep_guar/dxmax << " cells < required "
+              << minsep << std::endl
+              << "  at this resolution and jitter the maximum is nsink_seed = "
+              << (nmax > 0 ? nmax*nmax*nmax : 0)
+              << " (a " << nmax << "^3 lattice)." << std::endl
+              << "  Raise the resolution, lower sink_min_sep, or set sink_min_sep = 0 to"
+              << " measure the serialized-colour regime deliberately." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  // Deterministic spread subset: order lattice cells by a hash of their index and take the
+  // first nseed. Raster order would pack them into one corner slab and overload whichever
+  // ranks own it, which would show up as a load-imbalance artefact in the scaling curves.
+  std::vector<std::pair<std::uint64_t, std::int64_t>> ord;
+  ord.reserve(static_cast<std::size_t>(ncell));
+  for (std::int64_t c = 0; c < ncell; ++c) {
+    ord.emplace_back(SplitMix64(static_cast<std::uint64_t>(c) ^ 0x5EEDULL), c);
+  }
+  std::sort(ord.begin(), ord.end());
+
+  std::vector<Real> sx(nseed), sy(nseed), sz(nseed);
+  for (int p = 0; p < nseed; ++p) {
+    const std::int64_t c = ord[p].second;
+    const int i = static_cast<int>(c % n);
+    const int j = static_cast<int>((c/n) % n);
+    const int k = static_cast<int>(c/(static_cast<std::int64_t>(n)*n));
+    const std::uint64_t hc = static_cast<std::uint64_t>(c);
+    // jitter each axis from an independent hash word; bounded by |jit| < 0.5 of the
+    // spacing, so a seed can never leave its own lattice cell and the separation bound
+    // above holds by construction
+    const Real u1 = Uniform11(SplitMix64(3*hc + 1));
+    const Real u2 = Uniform11(SplitMix64(3*hc + 2));
+    const Real u3 = Uniform11(SplitMix64(3*hc + 3));
+    sx[p] = x1min + (i + 0.5 + jit*u1)*s1;
+    sy[p] = x2min + (j + 0.5 + jit*u2)*s2;
+    sz[p] = x3min + (k + 0.5 + jit*u3)*s3;
+  }
+
+  // Ownership: lower-inclusive containment, matching Particles::SetGIDFromPosition. PGID
+  // must name the block that actually holds the seed -- setting it to gids for every
+  // particle (the obvious shortcut) makes cycle 1 deposit into the wrong block, which
+  // injects a net momentum that is then conserved at the wrong value for the whole run.
+  const int nmb = pmbp->nmb_thispack;
+  const int gids = pmbp->gids;
+  auto &mbsz = pmbp->pmb->mb_size;
+  std::vector<int> own(nseed, -1);
+  int nloc = 0;
+  for (int p = 0; p < nseed; ++p) {
+    for (int m = 0; m < nmb; ++m) {
+      if (sx[p] >= mbsz.h_view(m).x1min && sx[p] < mbsz.h_view(m).x1max &&
+          sy[p] >= mbsz.h_view(m).x2min && sy[p] < mbsz.h_view(m).x2max &&
+          sz[p] >= mbsz.h_view(m).x3min && sz[p] < mbsz.h_view(m).x3max) {
+        own[p] = m;
+        ++nloc;
+        break;
+      }
+    }
+  }
+
+  // Exact gate: every seed must be claimed by exactly one block, globally. A shortfall
+  // means a seed fell through a block boundary (round-off at a face) or into a gap; a
+  // surplus means two blocks claimed one. Either way the run would start with the wrong
+  // number of sinks, which is precisely the variable this whole mode exists to control.
+  int nglob = nloc;
+#if MPI_PARALLEL_ENABLED
+  MPI_Allreduce(MPI_IN_PLACE, &nglob, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+#endif
+  if (nglob != nseed) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+              << "seeded sink ownership is inconsistent: " << nglob << " of " << nseed
+              << " seeds were claimed by exactly one MeshBlock." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  // Sink mass. The scale that matters is the gas mass inside the 27-cell control volume,
+  // NOT an absolute number: control-volume accretion computes dm as the difference between
+  // the CV integral and its post-reset extrapolation, so |dm| is set by the CV contents. A
+  // seeded sink does not sit at a density peak the way a created one does, so that
+  // difference can be NEGATIVE, and the momentum update v_new = (m*v + dM)/(m + dm)
+  // divides by m + dm. Once m is not comfortably larger than the CV mass the denominator
+  // becomes small, sinks acquire velocities far above the gas, and the particle CFL
+  // collapses dt -- which silently destroys any timing measurement. Hence a default
+  // expressed as a MULTIPLE of the CV mass, which also tracks resolution correctly.
+  const Real mcv = 27.0*dx1*dx2*dx3;   // gmtf initialises the gas at rho = 1
+  const Real fcv = pin->GetOrAddReal("problem", "sink_mass_cv", 10.0);
+  const Real mabs = pin->GetOrAddReal("problem", "sink_mass", -1.0);
+  const Real msink = (mabs > 0.0) ? mabs : fcv*mcv;
+  pmbp->ppart->ResizeForSeededParticles(nloc);
+
+  if (nloc > 0) {
+    auto pr_h = Kokkos::create_mirror_view(pmbp->ppart->prtcl_rdata);
+    auto pi_h = Kokkos::create_mirror_view(pmbp->ppart->prtcl_idata);
+    const bool has_prev = (pmbp->ppart->nrdata > IPX0);
+    int slot = 0;
+    for (int p = 0; p < nseed; ++p) {
+      if (own[p] < 0) continue;
+      pr_h(IPX, slot) = sx[p];   pr_h(IPVX, slot) = 0.0;
+      pr_h(IPY, slot) = sy[p];   pr_h(IPVY, slot) = 0.0;
+      pr_h(IPZ, slot) = sz[p];   pr_h(IPVZ, slot) = 0.0;
+      pr_h(IPM, slot) = msink;
+      pr_h(IPGX, slot) = 0.0; pr_h(IPGY, slot) = 0.0; pr_h(IPGZ, slot) = 0.0;
+      if (has_prev) {
+        pr_h(IPX0, slot) = sx[p]; pr_h(IPY0, slot) = sy[p]; pr_h(IPZ0, slot) = sz[p];
+      }
+      pi_h(PGID, slot) = gids + own[p];
+      // tag = index in the GLOBAL seed list, so tags are unique across ranks by
+      // construction. MergeSinks keys survivors by tag and FATALs on a duplicate.
+      pi_h(PTAG, slot) = p;
+      ++slot;
+    }
+    Kokkos::deep_copy(pmbp->ppart->prtcl_rdata, pr_h);
+    Kokkos::deep_copy(pmbp->ppart->prtcl_idata, pi_h);
+  }
+
+  // ---- report, and flag anything that would invalidate the measurement ---------------
+  if (global_variable::my_rank == 0) {
+    // gmtf initialises the gas at rho = 1, so the initial gas mass is just the volume
+    const Real mgas = L1*L2*L3;
+    const Real fsink = nseed*msink/mgas;
+    std::cout << "### GMTF: seeded " << nseed << " sink(s) on a " << n << "^3 lattice, "
+              << "spacing " << std::min(s1, std::min(s2, s3))/dxmax << " cells, "
+              << "guaranteed separation " << sep_guar/dxmax << " cells "
+              << (sep_guar >= 5.0*dxmax ? "(> 5 => one accretion colour, fully parallel)"
+                                        : "(< 5 => colours > 1, accretion serializes)")
+              << std::endl
+              << "###       m_sink = " << msink << " each = " << msink/mcv
+              << " x the control-volume gas mass; " << nseed*msink
+              << " total = " << 100.0*fsink << "% of the initial gas mass" << std::endl;
+    if (msink < mcv) {
+      std::cout << "### WARNING: m_sink is below the control-volume gas mass, so accretion"
+                << " is ill-posed for a seeded sink: dm can be negative and comparable to"
+                << " m, the velocity update divides by (m + dm), and the particle CFL will"
+                << " collapse dt. Raise problem/sink_mass_cv." << std::endl;
+    }
+    if (fsink > 0.1) {
+      std::cout << "### WARNING: seeded sinks hold more than 10% of the gas mass. They"
+                << " will dominate the potential and change the timestep, so runs with"
+                << " different nsink_seed are no longer comparable." << std::endl;
+    }
+    if (pmbp->ppart->creation || pmbp->ppart->merging) {
+      std::cout << "### WARNING: particles/creation or particles/merging is on with"
+                << " nsink_seed > 0, so the sink count will NOT stay at " << nseed << "."
+                << " A benchmark that varies N must set both to false." << std::endl;
+    }
   }
 }
 }  // namespace

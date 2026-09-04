@@ -177,6 +177,14 @@ class Particles {
   // functions...
   void CreateParticleTags(ParameterInput *pin);
   void RefreshMeshParticleCounts();  // after pgen-side array resize
+  // Resize the particle arrays to npart_new and, with them, every buffer that was sized
+  // from the ppc-derived count in the constructor, then refresh the Mesh's bookkeeping.
+  // A pgen that seeds MORE particles than ppc implied must use this rather than a bare
+  // Kokkos::resize: cvemit_ is allocated as nprtcl_thispack*64 records, so a ppc = 0
+  // (creation-mode) run that then seeds N sinks would leave the cross-rank control-volume
+  // staging buffer 64 records deep for every sink on the rank. The overflow is guarded and
+  // warned rather than silent, but the reset it drops is gas that never gets removed.
+  void ResizeForSeededParticles(int npart_new);
   void AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> tl);
   TaskStatus SetGIDFromPosition(Driver *pdriver, int stage);
   void ReconcileOwnership(Driver *pdriver, int stage);  // setgid + cross-rank migration

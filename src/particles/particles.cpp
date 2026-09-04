@@ -174,6 +174,34 @@ void Particles::RefreshMeshParticleCounts() {
 }
 
 //----------------------------------------------------------------------------------------
+//! \fn void Particles::ResizeForSeededParticles(int npart_new)
+//! \brief Resize the particle arrays to npart_new, grow the buffers that were sized from
+//! the ppc-derived count, and refresh the Mesh's global particle bookkeeping.
+//!
+//! The constructor sizes cvemit_ (the cross-rank control-volume reset staging buffer) as
+//! max(1, nprtcl_thispack)*64 records, from the count ppc implied BEFORE the pgen runs. A
+//! benchmark or IC that seeds sinks explicitly typically runs with ppc = 0, so that buffer
+//! would hold 64 records total no matter how many sinks are seeded. Grow it here, so a
+//! pgen only has to state how many particles it wants.
+
+void Particles::ResizeForSeededParticles(int npart_new) {
+  Kokkos::resize(prtcl_rdata, nrdata, npart_new);
+  Kokkos::resize(prtcl_idata, nidata, npart_new);
+  nprtcl_thispack = npart_new;
+
+  // grow-only: never shrink below what a previous sizing already allocated
+  if (particle_type == ParticleType::sink && accretion) {
+    const int need = std::max(1, npart_new)*64;
+    if (need > cvemit_max_) {
+      cvemit_max_ = need;
+      Kokkos::realloc(cvemit_, cvemit_max_, NCVEMIT);
+    }
+  }
+
+  RefreshMeshParticleCounts();
+}
+
+//----------------------------------------------------------------------------------------
 // destructor
 
 Particles::~Particles() {
