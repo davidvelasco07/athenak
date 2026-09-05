@@ -175,14 +175,37 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   Real x2size = pmbp->pmesh->mesh_size.x2max - pmbp->pmesh->mesh_size.x2min;
   Real x3size = pmbp->pmesh->mesh_size.x3max - pmbp->pmesh->mesh_size.x3min;
 
-  if (!(x1size == x2size && x1size == x3size)) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl
-              << "this problem assumes cubic domain" << std::endl;
+  // The requirement is CUBIC CELLS, not a cubic domain. The multigrid solver separately
+  // requires logically cubic MeshBlocks (multigrid.cpp:52), and with cubic cells a cubic
+  // MeshBlock is also cubic in physical size -- but the global mesh may be any shape. That
+  // matters for weak scaling: holding zones/GPU fixed on a cubic mesh forces the rank count
+  // to be a perfect cube, so 128 and 256 GPUs are unreachable, while 2048x1024x1024 and
+  // 2048x2048x1024 reach them exactly.
+  Real dx1 = x1size/static_cast<Real>(pmbp->pmesh->mesh_indcs.nx1);
+  Real dx2 = x2size/static_cast<Real>(pmbp->pmesh->mesh_indcs.nx2);
+  Real dx3 = x3size/static_cast<Real>(pmbp->pmesh->mesh_indcs.nx3);
+  if (!(dx1 == dx2 && dx1 == dx3)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+              << "this problem requires CUBIC CELLS: dx1,dx2,dx3 = " << dx1 << ", " << dx2
+              << ", " << dx3 << std::endl
+              << "  Scale the domain in the same ratio as the mesh, e.g. a 2048x1024x1024"
+              << " mesh needs a 2:1:1 box." << std::endl;
     std::exit(EXIT_FAILURE);
   }
 
-  Real dk = 2.0*M_PI/x1size;
+  // Per-axis fundamental wavenumbers. The driving band is defined against the SHORTEST box
+  // dimension, so nlow..nhigh always name the same PHYSICAL wavelengths whatever the aspect
+  // ratio; on a cubic box every dk below is equal and this reduces exactly to the old code.
+  const Real dkx = 2.0*M_PI/x1size;
+  const Real dky = 2.0*M_PI/x2size;
+  const Real dkz = 2.0*M_PI/x3size;
+  const Real dk  = 2.0*M_PI/std::min(x1size, std::min(x2size, x3size));
+  // widen the index ranges so |k| can still reach nhigh*dk along an elongated axis
+  const int nix = static_cast<int>(std::ceil(nhigh*dk/dkx));
+  const int niy = static_cast<int>(std::ceil(nhigh*dk/dky));
+  const int niz = static_cast<int>(std::ceil(nhigh*dk/dkz));
+  // exactly 1.0 on a cubic box, since dk is then the same expression as dkx/dky/dkz
+  const Real rx = dkx/dk, ry = dky/dk, rz = dkz/dk;
 
   std::mt19937_64 gen(rseed);
   std::normal_distribution<Real> gauss(0.0, 1.0);
@@ -195,21 +218,28 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   // The points symmetric with respect to the origin are complex conjugates,
   // so we only need to keep one of them. Also, we discard DC component, i.e.,
   // kx=ky=kz=0, to avoid adding a net bulk velocity.
-  for (int nkx = 0; nkx <= nhigh; ++nkx) {
-    for (int nky = -nhigh; nky <= nhigh; ++nky) {
-      for (int nkz = -nhigh; nkz <= nhigh; ++nkz) {
+  for (int nkx = 0; nkx <= nix; ++nkx) {
+    for (int nky = -niy; nky <= niy; ++nky) {
+      for (int nkz = -niz; nkz <= niz; ++nkz) {
         if (nkx == 0) {
           // We are on the kx=0 plane
           if (nky < 0) continue;
           if (nky == 0 && nkz <= 0) continue;
         }
 
-        Real kx = dk*static_cast<Real>(nkx);
-        Real ky = dk*static_cast<Real>(nky);
-        Real kz = dk*static_cast<Real>(nkz);
+        Real kx = dkx*static_cast<Real>(nkx);
+        Real ky = dky*static_cast<Real>(nky);
+        Real kz = dkz*static_cast<Real>(nkz);
         Real kmag = std::sqrt(SQR(kx) + SQR(ky) + SQR(kz));
-        int nmag2 = SQR(nkx) + SQR(nky) + SQR(nkz);
-        if ( (SQR(nlow) <= nmag2) && (nmag2 <= SQR(nhigh)) ) {
+        // Select on PHYSICAL |k| measured in units of dk. Formed from the per-axis RATIOS
+        // rather than as SQR(kmag/dk): on a cubic box rx = ry = rz = 1.0 exactly, so this
+        // evaluates to nkx^2 + nky^2 + nkz^2 in exact integer-valued doubles and reproduces
+        // the integer test it replaces bit-for-bit. Going through sqrt and back would let
+        // rounding move a mode across the band edge and silently change the mode set.
+        Real nmag2 = SQR(rx*static_cast<Real>(nkx)) + SQR(ry*static_cast<Real>(nky))
+                   + SQR(rz*static_cast<Real>(nkz));
+        if ( (SQR(static_cast<Real>(nlow)) <= nmag2) &&
+             (nmag2 <= SQR(static_cast<Real>(nhigh))) ) {
           host_kx.push_back(kx);
           host_ky.push_back(ky);
           host_kz.push_back(kz);
