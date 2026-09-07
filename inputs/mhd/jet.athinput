@@ -1,0 +1,86 @@
+# AthenaK input file for the underdense Mach-10 MHD jet
+#
+# Ported from Athena++ inputs/hydro/athinput.jet, run with magnetic fields on.
+# Ambient: d=1, p=6e-3, gamma=5/3 => c_s = 0.1.  Beam: d=0.1 (eta=0.1) at vx=1,
+# i.e. Mach 10 w.r.t. the ambient sound speed.  Axial field bx=0.1 in both the
+# beam and the ambient gives beta = 2p/B^2 = 1.2, and (being uniform) keeps the
+# inflow face divergence-free.
+
+<comment>
+problem   = underdense Mach-10 magnetized jet
+reference = Athena++ src/pgen/jet.cpp
+
+<job>
+basename  = jet
+
+<mesh>
+nghost    = 3         # overridden per scheme
+nx1       = 300       # Number of zones in X1-direction
+x1min     = 0.0
+x1max     = 60.0
+ix1_bc    = user      # jet inflow
+ox1_bc    = outflow
+
+nx2       = 250       # Number of zones in X2-direction
+x2min     = -25.0
+x2max     = 25.0
+ix2_bc    = outflow
+ox2_bc    = outflow
+
+nx3       = 1
+x3min     = -25.0
+x3max     = 25.0
+ix3_bc    = outflow
+ox3_bc    = outflow
+
+<meshblock>
+nx1       = 300
+nx2       = 250
+nx3       = 1
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.3
+nlim       = -1
+tlim       = 300.0
+ndiag      = 100
+
+<mhd>
+eos         = ideal
+reconstruct = plm
+rsolver     = hlld
+emf         = uct_hlld
+gamma       = 1.666666666667
+
+<problem>
+d     = 1.0           # ambient density
+p     = 6.0e-3        # ambient pressure
+vx    = 0.0
+vy    = 0.0
+vz    = 0.0
+bx    = 0.1           # ambient axial field
+by    = 0.0
+bz    = 0.0
+
+djet  = 0.1           # beam density (underdense, eta = 0.1)
+pjet  = 6.0e-3        # pressure-matched beam
+vxjet = 1.0           # Mach 10 w.r.t. ambient c_s = 0.1
+vyjet = 0.0
+vzjet = 0.0
+bxjet = 0.1           # must equal bx to keep the inflow face divergence-free
+byjet = 0.0
+bzjet = 0.0
+
+rjet  = 1.0           # beam radius
+
+<output1>
+file_type   = vtk
+variable    = mhd_w_bcc
+data_format = %12.5e
+dt          = 5.0
+
+<output2>
+file_type   = log
+data_format = %12.5e
+dcycle      = 1

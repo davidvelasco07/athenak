@@ -943,6 +943,8 @@ void ProblemGenerator::CallProblemGenerator(ParameterInput *pin, bool is_restart
     RadiationBeam(pin, is_restart);
   } else if (pgen_fun_name.compare("shock_tube") == 0) {
     ShockTube(pin, is_restart);
+  } else if (pgen_fun_name.compare("shu_osher") == 0) {
+    ShuOsher(pin, is_restart);
   } else if (pgen_fun_name.compare("shwave") == 0) {
     Shwave(pin, is_restart);
   } else if (pgen_fun_name.compare("z4c_boosted_puncture") == 0) {

@@ -1,0 +1,88 @@
+# Magnetized Kelvin-Helmholtz of Rueda-Ramirez, Hindenlang, Chan & Gassner 2022
+# (arXiv:2203.06062) section 5.2, "Entropy-Stable Gauss Collocation Methods for
+# Ideal MHD".  The setup is taken from Mignone et al.
+#
+# Chosen over the Lecoanet MHD KH because:
+#   * the perturbation is a SINGLE DETERMINISTIC MODE,
+#       v_y = 0.01 sin(2 pi x) exp(-y^2 / 0.1^2),
+#     so there is no random seed to reproduce across schemes or decompositions;
+#   * the shear width y0 = 1/20 is resolved (~6 cells at 128x256).
+#
+# rho = 1, p = 1/gamma (so c_s = 1), M = 1, ca = 0.1, theta = pi/3, and
+# B = ca (cos theta, 0, sin theta) -- the TOROIDAL Bz is nonzero, so the Lorentz
+# force acts on the z-momentum and the run is genuinely pseudo-2D.
+#
+# Paper resolutions 64x128, 128x256, 256x512; reference times t = 5, 8, 12, 20.
+# Reference diagnostics (their eqs. 100/101, from Mignone et al.):
+#   <B_p^2>(t)   poloidal magnetic energy, normalised to its t=0 value
+#   dv_y(t)      growth rate, (max v_y - min v_y)/2
+
+<comment>
+problem   = magnetized Kelvin-Helmholtz (RR22 sec 5.2)
+reference = arXiv:2203.06062
+
+<job>
+basename  = kh_rr22
+
+<mesh>
+nghost    = 3         # overridden per scheme
+nx1       = 128
+x1min     = 0.0
+x1max     = 1.0
+ix1_bc    = periodic
+ox1_bc    = periodic
+
+nx2       = 256
+x2min     = -1.0
+x2max     = 1.0
+ix2_bc    = reflect   # perfectly conducting slip walls
+ox2_bc    = reflect
+
+nx3       = 1
+x3min     = -0.5
+x3max     = 0.5
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 128
+nx2       = 256
+nx3       = 1
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.3
+nlim       = -1
+tlim       = 20.0
+ndiag      = 100
+
+<mhd>
+eos         = ideal
+reconstruct = plm
+rsolver     = hlld
+emf         = uct_hlld
+gamma       = 1.6666666666667
+nscalars    = 1
+
+<problem>
+iprob   = 5
+rho0    = 1.0                  # rho
+press   = 0.6                  # p = 1/gamma for gamma = 5/3  => c_s = 1
+vshear  = 1.0                  # M, the sonic Mach number (v_x = 0.5 M tanh(y/y0))
+a_char  = 0.05                 # y0 = 1/20, the shear-layer width
+amp     = 0.01                 # single-mode perturbation amplitude
+sigma   = 0.1                  # perturbation width in y
+b0      = 0.05                 # ca cos(theta) = 0.1*cos(pi/3), poloidal Bx
+b0z     = 0.08660254037844387  # ca sin(theta) = 0.1*sin(pi/3), toroidal Bz
+
+<output1>
+file_type   = vtk
+variable    = mhd_w_bcc
+data_format = %12.5e
+dt          = 4.0
+
+<output2>
+file_type   = log
+data_format = %12.5e
+dcycle      = 1

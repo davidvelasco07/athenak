@@ -1,0 +1,126 @@
+# Ha et al. high-Mach astrophysical jet -- the pure-hydro hypersonic jet.
+#
+# Ha, Gardner, Gelb & Shu, J. Sci. Comput. 24, 29 (2005), as run in
+# Rueda-Ramirez, Bolm, Kuzmin & Gassner 2023 (arXiv:2303.00374) section 3.5.
+#
+# WHY THIS JET IS HERE.  It is the same class as the Athena++ underdense jet --
+# a hypersonic beam into a quiescent medium -- but RR23 publish the actual
+# NUMBERS (their table 5), so it can pass or fail against a paper rather than
+# against an impression.  Balsara's MHD jet panel cannot be read
+# quantitatively: through its own printed colourbar the undisturbed ambient
+# comes out at rho = 0.010 where the stated initial condition fixes 0.14.
+#
+# Domain [-0.5,0.5]^2, gamma = 5/3, t = 1e-3.  Ambient rho = 0.5, p = 0.4127 at
+# rest.  The inlet occupies |y| < 0.05 of the LEFT face and injects rho = 5 at
+# v_x = 800: Mach 2156.91 w.r.t. the JET sound speed, 682.08 w.r.t. the AMBIENT
+# (the two differ by sqrt(rho_jet/rho_amb) since both gases are at one pressure).
+#
+# GATE ON rho_MAX, NOT rho_min.  RR23 table 5, t = 1e-3, 1024^2 DoF:
+#     FCT/IDP  CFL 0.9    rho [4.43e-03, 32.15]
+#     FCT/IDP  CFL 0.09   rho [7.11e-04, 40.67]
+#     MCL      CFL 0.9    rho [1.07e-02, 24.71]
+#     MCL      CFL 0.225  rho [7.40e-03, 23.85]
+# Across limiter and CFL, in ONE code at ONE resolution, their rho_min spans 19x
+# and they explain why: less dissipation lowers rho_min, which raises the sound
+# speed, which cuts dt, which cuts dissipation again.  rho_max is steady at
+# 23.85-40.67 across all eight of their configurations, so that is the gate.
+#
+# BOUNDARIES.  RR23 use periodic top/bottom and characteristics-based
+# inflow/outflow left/right.  This deck uses the prescribed nozzle on x-min with
+# `inflow_outside = reservoir` -- Fu (2019) sec 4.3.4 states that choice
+# outright, "(rho,u,p) = (5,0,0,0.4127) otherwise", i.e. the JET density at rest
+# outside the nozzle -- and plain outflow on x-max.  The absence of a
+# characteristic BC is a real difference from the paper, and is the reason the
+# gate is rho_max rather than the cocoon minimum.
+
+# TIMESTEP AT STARTUP -- why `seed_nozzle` and CFL 0.4.  AthenaK's NewTimeStep
+# scans ACTIVE cells only.  At t = 0 the beam exists nowhere but in the x-min
+# ghost zones, so the first dt is set by the ambient sound speed c_a = 1.173
+# while material enters at v_j = 800.  The injected gas therefore crosses
+# CFL*v_j/c_a ~ 273 cells in step one: a CFL violation of the inflow by a factor
+# of 682, not a failure of any limiter.  That is what previously destroyed this
+# run at every CFL down to ~1.5e-3, and it is why an earlier version of this
+# battery recorded the Mach-2000 jet as unreachable "without an
+# invariant-domain-preserving limiter".  It needs no IDP limiter.  Seeding the
+# first active column with the inlet state (`seed_nozzle = true`) lets dt see
+# the beam: the first dt drops from 6.7e-04 to 9.76e-07 and the run completes at
+# the papers' CFL 0.4, both schemes inside the RR23 gate (PLM+FOFC rho_max 25.00,
+# PPM+MOOD 28.74).  PLM+FOFC takes NO EOS event of any kind; PPM+MOOD takes ONE
+# energy-floor event in 3.8e8 cell-updates.  The seeding touches one column for
+# one step, and it is not manufacturing the answer: at CFL 0.1 (a 4x change, and
+# RR23's own rho_max is steady across their CFL range) the two answers move by
+# +0.1% and -1.2% and MOOD's single floor event disappears.
+
+<comment>
+problem   = Ha et al. hypersonic hydrodynamic jet
+reference = Ha+ 2005; Rueda-Ramirez+ 2023 (arXiv:2303.00374) sec 3.5
+
+<job>
+basename  = ha_jet
+
+<mesh>
+nghost    = 3         # overridden per scheme
+nx1       = 512
+x1min     = -0.5
+x1max     = 0.5
+ix1_bc    = user      # prescribed nozzle
+ox1_bc    = outflow
+
+nx2       = 512
+x2min     = -0.5
+x2max     = 0.5
+ix2_bc    = periodic  # RR23: periodic top and bottom
+ox2_bc    = periodic
+
+nx3       = 1
+x3min     = -0.5
+x3max     = 0.5
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 512
+nx2       = 512
+nx3       = 1
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.4        # Fu 2019 / RR23 both run 0.4
+nlim       = -1
+tlim       = 0.001
+ndiag      = 200
+
+<hydro>
+eos         = ideal
+reconstruct = plm
+rsolver     = hllc
+gamma       = 1.6666666666666667
+
+<problem>
+d     = 0.5           # ambient density
+p     = 0.4127        # pressure, ambient and jet alike
+vx    = 0.0
+vy    = 0.0
+vz    = 0.0
+
+djet  = 5.0           # jet density
+pjet  = 0.4127
+vxjet = 800.0         # Mach 682 w.r.t. the ambient sound speed
+vyjet = 0.0
+vzjet = 0.0
+
+rjet  = 0.05          # nozzle half-width
+seed_nozzle = true    # let the FIRST dt see the beam (see header)
+inflow_outside = reservoir   # Fu 2019 sec 4.3.4
+
+<output1>
+file_type   = vtk
+variable    = hydro_w
+data_format = %12.5e
+dt          = 0.00025        # 4 frames to t = 1e-3
+
+<output2>
+file_type   = log
+data_format = %12.5e
+dcycle      = 1

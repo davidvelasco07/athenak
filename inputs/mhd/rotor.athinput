@@ -1,0 +1,75 @@
+# AthenaK input file for the MHD rotor test
+#
+# Balsara & Spicer (1999) rotor in the form used by Toth (2000) and
+# Stone et al. (2008) section 5.5.  A dense disk rotating rigidly inside a
+# low-beta magnetized ambient (beta = 2*p0/b0^2 = 0.32 at these parameters).
+# The wound-up field launches torsional Alfven waves and squeezes the rotor
+# into an oblate shape by t = 0.15.
+
+<comment>
+problem   = MHD rotor
+reference = Balsara & Spicer 1999; Toth 2000; Stone et al. 2008 sec 5.5
+
+<job>
+basename  = rotor
+
+<mesh>
+nghost    = 3         # overridden per scheme
+nx1       = 400
+x1min     = -0.5
+x1max     = 0.5
+ix1_bc    = outflow
+ox1_bc    = outflow
+
+nx2       = 400
+x2min     = -0.5
+x2max     = 0.5
+ix2_bc    = outflow
+ox2_bc    = outflow
+
+nx3       = 1
+x3min     = -0.5
+x3max     = 0.5
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 400
+nx2       = 400
+nx3       = 1
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.3
+nlim       = -1
+tlim       = 0.15
+ndiag      = 100
+
+<mhd>
+eos         = ideal
+reconstruct = plm
+rsolver     = hlld
+emf         = uct_hlld
+gamma       = 1.4
+
+<problem>
+d0     = 10.0         # disk density
+damb   = 1.0          # ambient density
+p0     = 1.0          # uniform pressure
+omega  = 20.0         # rigid-body angular velocity (v0 = omega*r0 = 2)
+r0     = 0.1          # disk radius
+r1     = 0.115        # outer radius of the linear taper
+b0     = 1.4104739588693909   # = 5/sqrt(4*pi), uniform Bx
+taper  = true         # Toth linear taper; false = sharp discontinuous edge
+
+<output1>
+file_type   = vtk
+variable    = mhd_w_bcc
+data_format = %12.5e
+dt          = 0.15
+
+<output2>
+file_type   = log
+data_format = %12.5e
+dcycle      = 1

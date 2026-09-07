@@ -156,6 +156,13 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   Real prat = pin->GetReal("problem", "prat");
   Real drat = pin->GetOrAddReal("problem", "drat", 1.0);
   Real b_amb = pin->GetOrAddReal("problem", "b_amb", 0.1);
+  // Field direction in the x1-x2 plane, degrees from the x1 axis.  Stone et al.
+  // (2008) sec 8.4 inclines the field at 45 deg to the grid,
+  // B = (B0/sqrt2, B0/sqrt2), specifically so the test is not grid-aligned; a
+  // purely axial field lets a code hide grid-direction errors.  Az = B0*(cos*y
+  // - sin*x) gives Bx = dAz/dy = B0 cos, By = -dAz/dx = B0 sin.
+  Real b_ang = pin->GetOrAddReal("problem", "b_angle", 0.0)*(M_PI/180.0);
+  Real b_cos = std::cos(b_ang), b_sin = std::sin(b_ang);
   std::string coords = pin->GetOrAddString("problem", "coordinates", "cartesian");
   bool warp = false;
   bool snake = false;
@@ -350,7 +357,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
         GetCartesianFromRipple(x, y, x1f, x2f, A_snake, k_snake);
       }
 
-      a3(m,k,j,i) = b_amb*y;
+      a3(m,k,j,i) = b_amb*(b_cos*y - b_sin*x1f);
     });
 
 

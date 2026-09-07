@@ -41,6 +41,14 @@ reconstruct = ppmx    # spatial reconstruction method
 rsolver     = llf     # Riemann-solver to be used
 gamma       = 1.4     # gamma = C_p/C_v
 
+<meshblock>
+nx1       = 400
+nx2       = 1
+nx3       = 1
+
+<problem>
+pgen_name = shu_osher
+
 <output1>
 file_type   = tab       # Tabular data dump
 variable    = hydro_w   # variables to be output

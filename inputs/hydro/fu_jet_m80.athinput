@@ -1,0 +1,111 @@
+# 2D high-Mach-number astrophysical jet, Mach 80.
+#
+# L. Fu, "A very-high-order TENO scheme for all-speed gas dynamics and
+# turbulence", Computer Physics Communications 244 (2019) 117-131, section
+# 4.3.4, figure 13 (left panel).
+#
+# Setup, verbatim from the paper:
+#   domain            [0, 2] x [-0.5, 0.5]
+#   ambient           (rho, u, v, p) = (0.5, 0, 0, 0.4127)
+#   left boundary     (5, 30, 0, 0.4127)  for y in [-0.05, 0.05]
+#                     (5,  0, 0, 0.4127)  otherwise
+#   right/top/bottom  outflow
+#   resolution        448 x 224   (the paper's Mach-80 grid; 800 x 400 is its
+#                                  Mach-2000 grid)
+#   gamma             5/3
+#
+# The Mach number is w.r.t. the JET sound speed: c_jet = sqrt(g p/rho) =
+# sqrt(5/3 * 0.4127/5) = 0.3709, so u/c = 30/0.3709 = 80.9.
+#
+# The "otherwise" state is the JET density at rest, not the ambient -- this is
+# the `reservoir` inlet, and this paper is the reference that states it
+# outright, which is why jet.cpp carries the option.
+#
+# WHY MACH 80 FIRST: it is the same problem family as the Mach-2000 jet (Fu's
+# second case, == Wu+ Example 4.9 == Zhang-Shu), which this battery had recorded
+# as unreachable.  Running the milder member first is what exposed the real
+# cause -- a startup CFL violation of the ghost-zone inflow, documented in the
+# ha_jet.athinput header -- rather than a missing invariant-domain-preserving
+# limiter.  Both jets run at the paper's CFL 0.4 once `seed_nozzle` lets the
+# first timestep see the beam.
+#
+# FINAL TIME: the paper does not state one for the jets.  t = 0.07 is used
+# here.  The beam is OVERDENSE (rho_jet/rho_amb = 10), so the working surface
+# advances at v_j/(1 + sqrt(rho_a/rho_j)) = 30/(1+sqrt(0.1)) = 22.8, crossing
+# the length-2 box at t = 0.088; t = 0.07 puts the head near x = 1.6, well
+# inside.  Running past breakout would measure decayed chaos instead of the
+# jet, which is a mistake this battery has already made once.
+
+<comment>
+problem   = Fu 2019 astrophysical jet, Mach 80
+reference = L. Fu, Comput. Phys. Commun. 244 (2019) 117-131, sec 4.3.4, fig 13
+
+<job>
+basename  = fu_jet_m80
+
+<mesh>
+nghost    = 3         # overridden per scheme
+nx1       = 448
+x1min     = 0.0
+x1max     = 2.0
+ix1_bc    = user      # prescribed nozzle + reservoir
+ox1_bc    = outflow
+
+nx2       = 224
+x2min     = -0.5
+x2max     = 0.5
+ix2_bc    = outflow
+ox2_bc    = outflow
+
+nx3       = 1
+x3min     = -0.5
+x3max     = 0.5
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 448
+nx2       = 224
+nx3       = 1
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.4        # the paper's value for every simulation
+nlim       = -1
+tlim       = 0.07
+ndiag      = 200
+
+<hydro>
+eos         = ideal
+reconstruct = plm
+rsolver     = hllc
+gamma       = 1.6666666666666667
+
+<problem>
+d     = 0.5           # ambient density
+p     = 0.4127        # pressure, ambient / jet / reservoir alike
+vx    = 0.0
+vy    = 0.0
+vz    = 0.0
+
+djet  = 5.0           # jet density
+pjet  = 0.4127
+vxjet = 30.0          # Mach 80.9 w.r.t. the jet sound speed
+vyjet = 0.0
+vzjet = 0.0
+
+rjet  = 0.05          # nozzle half-width, |y| < 0.05
+inflow_outside = reservoir   # (5, 0, 0, 0.4127) outside the nozzle
+seed_nozzle = true           # let the FIRST dt see the beam (see ha_jet header)
+
+<output1>
+file_type   = vtk
+variable    = hydro_w
+data_format = %12.5e
+dt          = 0.0175         # 4 frames to t = 0.07
+
+<output2>
+file_type   = log
+data_format = %12.5e
+dcycle      = 1

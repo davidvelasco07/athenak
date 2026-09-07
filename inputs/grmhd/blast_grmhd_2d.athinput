@@ -1,0 +1,87 @@
+# Relativistic magnetized blast on a fixed Minkowski background, 2D.
+#
+# Komissarov / Mignone & Bodo spherical blast, taken from the stock 3D AMR deck
+# inputs/grmhd/blast_grmhd_amr.athinput but reduced to a uniform 2D slice so the
+# four schemes are compared on identical grids with no AMR in the way.  This is
+# the in-repo, reproducible replacement for the Apollo ~/srmhd_blast figures.
+#
+# Hard test: the ambient is cold and strongly magnetized (d=1e-4, p=3e-5,
+# B=0.1 => beta ~ 6e-3) with a pressure ratio of 3.3e4 across the blast, so a
+# small overshoot in the conserved energy drives the primitive solve negative.
+#
+# GR MHD stays on ct_contact and hlle -- UCT and hlld are Newtonian-only.
+
+<comment>
+problem   = relativistic magnetized blast (Minkowski)
+reference = Komissarov; Mignone & Bodo
+
+<job>
+basename  = blast_grmhd
+
+<mesh>
+nghost    = 4          # overridden per scheme
+nx1       = 256
+x1min     = -6.0
+x1max     = 6.0
+ix1_bc    = periodic
+ox1_bc    = periodic
+
+nx2       = 256
+x2min     = -6.0
+x2max     = 6.0
+ix2_bc    = periodic
+ox2_bc    = periodic
+
+nx3       = 1
+x3min     = -6.0
+x3max     = 6.0
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 256
+nx2       = 256
+nx3       = 1
+
+<mesh_refinement>
+refinement = none
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.3
+nlim       = -1
+tlim       = 4.0
+ndiag      = 100
+
+<coord>
+general_rel = true
+minkowski   = true
+
+<mhd>
+eos         = ideal
+reconstruct = plm
+rsolver     = hlle
+gamma       = 1.3333333
+dfloor      = 1.0e-10
+pfloor      = 1.0e-10
+
+<problem>
+di_amb        = 1.0e-4     # ambient density
+pi_amb        = 3.0e-5     # ambient pressure
+bamb          = 0.1        # ambient B-field
+prat          = 33333.333  # pressure ratio
+drat          = 100.       # density ratio
+inner_radius  = 0.8
+outer_radius  = 1.0
+
+<output1>
+file_type   = vtk
+variable    = mhd_w_bcc
+data_format = %12.5e
+dt          = 4.0
+
+<output2>
+file_type   = log
+data_format = %12.5e
+dcycle      = 1

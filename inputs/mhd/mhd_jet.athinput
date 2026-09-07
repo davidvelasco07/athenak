@@ -1,0 +1,90 @@
+# Astrophysical MHD jet with huge Mach number.
+#
+# Wu, Zhang & Shu (arXiv:2512.09116) Example 6.3, following Balsara and
+# co-workers.  That review states the initial condition explicitly, which is why
+# it is the reference used here: the original paper's density panel cannot be
+# read quantitatively -- through its own printed colourbar the undisturbed
+# ambient comes out near 0.010 where the stated IC fixes 0.1*gamma = 0.14.
+#
+# Ambient over [-1/2,1/2] x [0,3/2]:  (rho, v, B, p) = (0.14, 0, (0,2e5,0), 1)
+# Jet at x in [-0.05,0.05], y = 0, injected in +y through the bottom boundary:
+#                                   (rho, v, B, p) = (1.4, (0,1e6,0), (0,2e5,0), 1)
+# The paper computes the symmetric HALF domain [0,1/2] x [0,3/2] on 200 x 600,
+# REFLECTING at x = 0 and outflow on the others.  Final time t = 1.8e-6.
+#
+# WHY IT IS HARD: with p = 1 and B = 2e5 the ambient plasma beta is
+# 2p/B^2 = 5e-11, and the beam is sonic-Mach ~3e5.  The paper reaches it with
+# invariant-domain-preserving DG and finite-volume schemes; nothing in this code
+# is IDP, so a failure here is an expected result rather than a surprise.
+#
+# DIV-B: the field is uniform (0,B0,0) in both the ambient and the beam, so the
+# nozzle introduces no jump in By and CT stays at round-off div(B).
+
+<comment>
+problem   = astrophysical MHD jet, huge Mach number
+reference = Wu, Zhang & Shu arXiv:2512.09116 Example 6.3; Balsara et al.
+
+<job>
+basename  = mhd_jet
+
+<mesh>
+nghost    = 3         # overridden per scheme
+nx1       = 200
+x1min     = 0.0       # symmetry axis; reflecting
+x1max     = 0.5
+ix1_bc    = reflect
+ox1_bc    = outflow
+
+nx2       = 600
+x2min     = 0.0
+x2max     = 1.5
+ix2_bc    = user      # the nozzle
+ox2_bc    = outflow
+
+nx3       = 1
+x3min     = -0.5
+x3max     = 0.5
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 200
+nx2       = 600
+nx3       = 1
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.3
+nlim       = -1
+tlim       = 1.8e-6
+ndiag      = 500
+
+<mhd>
+eos         = ideal
+reconstruct = plm
+rsolver     = hlld
+emf         = uct_hlld
+gamma       = 1.4
+
+<problem>
+d_amb  = 0.14         # 0.1*gamma
+p_amb  = 1.0
+by_amb = 2.0e5        # beta_amb = 2p/B^2 = 5e-11
+d_jet  = 1.4          # gamma
+p_jet  = 1.0
+vy_jet = 1.0e6
+by_jet = 2.0e5
+r_jet  = 0.05         # nozzle half-width
+x_axis = 0.0          # the reflecting boundary is the jet axis
+
+<output1>
+file_type   = vtk
+variable    = mhd_w_bcc
+data_format = %12.5e
+dt          = 4.5e-7         # 4 frames to t = 1.8e-6
+
+<output2>
+file_type   = log
+data_format = %12.5e
+dcycle      = 1

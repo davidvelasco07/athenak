@@ -10,6 +10,7 @@
 //    - iprob=2 : double tanh profile with a single mode perturbation
 //    - iprob=3 : sinusoidal velocity with random perturbations
 //    - iprob=4 : Lecoanet test problem ICs
+//    - iprob=5 : Rueda-Ramirez+ 2022 (arXiv:2203.06062) sec 5.2 magnetized KH
 
 #include <iostream>
 #include <sstream>
@@ -50,6 +51,11 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   Real drho_rho0 = pin->GetOrAddReal("problem", "drho_rho0", 0.0);
 
   //user_hist_func = KHHistory;
+
+  // domain geometry needed inside the kernels (pmy_mesh_ is a HOST pointer and
+  // must not be dereferenced on device)
+  Real x2c_ = 0.5*(pmy_mesh_->mesh_size.x2max + pmy_mesh_->mesh_size.x2min);
+  Real x1l_ = (pmy_mesh_->mesh_size.x1max - pmy_mesh_->mesh_size.x1min);
 
   // capture variables for kernel
   auto &indcs = pmy_mesh_->mb_indcs;
@@ -174,6 +180,30 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
             (exp(-(SQR(x2v + 0.5))/(sigma*sigma)) + exp(-(SQR(x2v - 0.5))/(sigma*sigma)));
       scal = 0.5*(tanh((x2v + 0.5)/a) - tanh((x2v - 0.5)/a) + 2.0);
       vz = 0.0;
+    } else if (iprob == 5) {
+      // Rueda-Ramirez, Hindenlang, Chan & Gassner (2022), arXiv:2203.06062
+      // section 5.2 ("Entropy-Stable Gauss Collocation Methods for Ideal MHD"),
+      // whose setup is taken from Mignone et al.
+      //
+      // Single shear layer with a SINGLE DETERMINISTIC perturbation mode (no
+      // random seed to reproduce) and a shear width y0 = 1/20 that is actually
+      // resolved (~6 cells at 128x256).  The field is tilted in the xz plane,
+      //     B = ca (cos(theta), 0, sin(theta)),
+      // so the TOROIDAL Bz is nonzero and the Lorentz force acts on the
+      // z-momentum: the run is genuinely pseudo-2D, not planar.
+      //
+      // Paper values: rho=1, p=1/gamma (c_s=1), M=1, ca=0.1, theta=pi/3,
+      // y0=1/20, perturbation amplitude 0.01 with width sigma=0.1, on
+      // x in [0,1] cross y in [-1,1]; periodic in x, conducting slip walls in y.
+      // Reference diagnostics are the poloidal magnetic energy <B_p^2>(t)
+      // normalised to t=0, and the growth rate (max v_y - min v_y)/2.
+      Real yr = x2v - x2c_;
+      pres = p_in;
+      dens = rho0;
+      vx   = 0.5*vshear*tanh(yr/a_char);
+      vy   = amp*sin(2.0*M_PI*x1v/x1l_)*exp(-(yr*yr)/(sigma*sigma));
+      vz   = 0.0;
+      scal = 0.5*(1.0 + tanh(yr/a_char));
     }
 
     // set primitives in both newtonian and SR hydro
@@ -194,19 +224,22 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   if (pmbp->pmhd != nullptr) {
     // Read magnetic field strength
     Real bx = pin->GetReal("problem","b0");
+    // RR22 (iprob=5) tilts the field in the xz plane, so a uniform toroidal
+    // component is needed as well; defaults to zero for every other iprob.
+    Real bz = pin->GetOrAddReal("problem","b0z",0.0);
     auto &b0 = pmbp->pmhd->b0;
     auto &bcc0 = pmbp->pmhd->bcc0;
     par_for("pgen_b0", DevExeSpace(), 0,(pmbp->nmb_thispack-1),ks,ke,js,je,is,ie,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
       b0.x1f(m,k,j,i) = bx;
       b0.x2f(m,k,j,i) = 0.0;
-      b0.x3f(m,k,j,i) = 0.0;
+      b0.x3f(m,k,j,i) = bz;
       if (i==ie) b0.x1f(m,k,j,i+1) = bx;
       if (j==je) b0.x2f(m,k,j+1,i) = 0.0;
-      if (k==ke) b0.x3f(m,k+1,j,i) = 0.0;
+      if (k==ke) b0.x3f(m,k+1,j,i) = bz;
       bcc0(m,IBX,k,j,i) = bx;
       bcc0(m,IBY,k,j,i) = 0.0;
-      bcc0(m,IBZ,k,j,i) = 0.0;
+      bcc0(m,IBZ,k,j,i) = bz;
     });
   }
 
