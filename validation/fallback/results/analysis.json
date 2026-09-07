@@ -1,0 +1,7628 @@
+{
+  "n_records": 762,
+  "linear": [
+    {
+      "case": "gr_hydro",
+      "physics": "grhydro",
+      "dim": "1d",
+      "scheme": "plm",
+      "wave": "0",
+      "wave_name": "left-going acoustic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        6.533478e-08,
+        1.789548e-08,
+        4.538511e-09,
+        1.099402e-09
+      ],
+      "orders": [
+        1.8682559527041152,
+        1.9793042816606796,
+        2.0455000450664027
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_hydro",
+      "physics": "grhydro",
+      "dim": "1d",
+      "scheme": "plm",
+      "wave": "3",
+      "wave_name": "transverse shear z",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        4.969357e-07,
+        1.545163e-07,
+        3.829434e-08,
+        9.014784e-09
+      ],
+      "orders": [
+        1.6853001524648181,
+        2.0125559577072636,
+        2.0867663446556266
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_hydro",
+      "physics": "grhydro",
+      "dim": "1d",
+      "scheme": "plm",
+      "wave": "4",
+      "wave_name": "right-going acoustic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        5.111366e-08,
+        1.398699e-08,
+        3.541906e-09,
+        8.684197e-10
+      ],
+      "orders": [
+        1.8696233714382149,
+        1.981487698482764,
+        2.0280615655553054
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_hydro",
+      "physics": "grhydro",
+      "dim": "1d",
+      "scheme": "ppm_fb",
+      "wave": "0",
+      "wave_name": "left-going acoustic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        4.112083e-10,
+        3.748047e-11,
+        1.406945e-11,
+        1.26141e-11
+      ],
+      "orders": [
+        3.455658435361775,
+        1.4135731121666464,
+        0.1575286566146863
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": true,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_hydro",
+      "physics": "grhydro",
+      "dim": "1d",
+      "scheme": "ppm_fb",
+      "wave": "3",
+      "wave_name": "transverse shear z",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        1.775971e-09,
+        1.112486e-10,
+        7.129609e-12,
+        3.325364e-12
+      ],
+      "orders": [
+        3.996748938161308,
+        3.963820411510801,
+        1.1003106898544905
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": true,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_hydro",
+      "physics": "grhydro",
+      "dim": "1d",
+      "scheme": "ppm_fb",
+      "wave": "4",
+      "wave_name": "right-going acoustic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        3.053158e-10,
+        1.044881e-11,
+        8.026519e-12,
+        9.192933e-12
+      ],
+      "orders": [
+        4.868891700203857,
+        0.3804922953333575,
+        -0.19575078123826753
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": true,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_hydro",
+      "physics": "grhydro",
+      "dim": "1d",
+      "scheme": "teno",
+      "wave": "0",
+      "wave_name": "left-going acoustic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        4.871147e-11,
+        1.272821e-11,
+        1.250791e-11,
+        1.251677e-11
+      ],
+      "orders": [
+        1.9362319773564056,
+        0.025188800115596734,
+        -0.0010215737900642
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_hydro",
+      "physics": "grhydro",
+      "dim": "1d",
+      "scheme": "teno",
+      "wave": "3",
+      "wave_name": "transverse shear z",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        6.798986e-10,
+        2.141293e-11,
+        1.789371e-12,
+        3.298609e-12
+      ],
+      "orders": [
+        4.988765476091168,
+        3.580957772519648,
+        -0.8824052382554416
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_hydro",
+      "physics": "grhydro",
+      "dim": "1d",
+      "scheme": "teno",
+      "wave": "4",
+      "wave_name": "right-going acoustic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        3.293826e-11,
+        9.288335e-12,
+        9.260005e-12,
+        9.272032e-12
+      ],
+      "orders": [
+        1.826272433549567,
+        0.004407033976145603,
+        -0.0018725729603046412
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_hydro",
+      "physics": "grhydro",
+      "dim": "1d",
+      "scheme": "wenoz",
+      "wave": "0",
+      "wave_name": "left-going acoustic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        4.872138e-11,
+        1.272762e-11,
+        1.250662e-11,
+        1.251813e-11
+      ],
+      "orders": [
+        1.936592329332262,
+        0.025270723916314273,
+        -0.0013271198386866287
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_hydro",
+      "physics": "grhydro",
+      "dim": "1d",
+      "scheme": "wenoz",
+      "wave": "3",
+      "wave_name": "transverse shear z",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        6.798791e-10,
+        2.141209e-11,
+        1.786088e-12,
+        3.302021e-12
+      ],
+      "orders": [
+        4.988780693992,
+        3.5835505533028136,
+        -0.8865461321018548
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_hydro",
+      "physics": "grhydro",
+      "dim": "1d",
+      "scheme": "wenoz",
+      "wave": "4",
+      "wave_name": "right-going acoustic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        3.295011e-11,
+        9.288243e-12,
+        9.257088e-12,
+        9.271985e-12
+      ],
+      "orders": [
+        1.826805659755388,
+        0.004847280027746214,
+        -0.002319795777670912
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_hydro",
+      "physics": "grhydro",
+      "dim": "2d",
+      "scheme": "plm",
+      "wave": "0",
+      "wave_name": "left-going acoustic",
+      "resolutions": [
+        32,
+        64,
+        128
+      ],
+      "l1": [
+        1.333078e-07,
+        4.922751e-08,
+        1.351972e-08
+      ],
+      "orders": [
+        1.437224523831983,
+        1.8643994947660398
+      ],
+      "nmood": [
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_hydro",
+      "physics": "grhydro",
+      "dim": "2d",
+      "scheme": "plm",
+      "wave": "4",
+      "wave_name": "right-going acoustic",
+      "resolutions": [
+        32,
+        64,
+        128
+      ],
+      "l1": [
+        1.545553e-07,
+        5.797503e-08,
+        1.623479e-08
+      ],
+      "orders": [
+        1.414619561319085,
+        1.8363429381959278
+      ],
+      "nmood": [
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_hydro",
+      "physics": "grhydro",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "wave": "0",
+      "wave_name": "left-going acoustic",
+      "resolutions": [
+        32,
+        64,
+        128
+      ],
+      "l1": [
+        3.998264e-09,
+        2.524439e-10,
+        1.528824e-11
+      ],
+      "orders": [
+        3.9853390124920396,
+        4.045468580201447
+      ],
+      "nmood": [
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": true,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_hydro",
+      "physics": "grhydro",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "wave": "4",
+      "wave_name": "right-going acoustic",
+      "resolutions": [
+        32,
+        64,
+        128
+      ],
+      "l1": [
+        5.749211e-09,
+        3.558924e-10,
+        1.426472e-11
+      ],
+      "orders": [
+        4.013850949753927,
+        4.640917790886658
+      ],
+      "nmood": [
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": true,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_hydro",
+      "physics": "grhydro",
+      "dim": "2d",
+      "scheme": "teno",
+      "wave": "0",
+      "wave_name": "left-going acoustic",
+      "resolutions": [
+        32,
+        64,
+        128
+      ],
+      "l1": [
+        9.139456e-10,
+        3.675726e-11,
+        2.215331e-12
+      ],
+      "orders": [
+        4.636007162748256,
+        4.052435049798316
+      ],
+      "nmood": [
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_hydro",
+      "physics": "grhydro",
+      "dim": "2d",
+      "scheme": "teno",
+      "wave": "4",
+      "wave_name": "right-going acoustic",
+      "resolutions": [
+        32,
+        64,
+        128
+      ],
+      "l1": [
+        1.239016e-09,
+        4.134159e-11,
+        8.710016e-12
+      ],
+      "orders": [
+        4.905457131610272,
+        2.2468466018466975
+      ],
+      "nmood": [
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_hydro",
+      "physics": "grhydro",
+      "dim": "2d",
+      "scheme": "wenoz",
+      "wave": "0",
+      "wave_name": "left-going acoustic",
+      "resolutions": [
+        32,
+        64,
+        128
+      ],
+      "l1": [
+        9.314796e-10,
+        3.675873e-11,
+        2.215358e-12
+      ],
+      "orders": [
+        4.66336534552603,
+        4.052475161884098
+      ],
+      "nmood": [
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_hydro",
+      "physics": "grhydro",
+      "dim": "2d",
+      "scheme": "wenoz",
+      "wave": "4",
+      "wave_name": "right-going acoustic",
+      "resolutions": [
+        32,
+        64,
+        128
+      ],
+      "l1": [
+        1.266632e-09,
+        4.134632e-11,
+        8.71163e-12
+      ],
+      "orders": [
+        4.93709469372642,
+        2.2467443426750053
+      ],
+      "nmood": [
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_hydro",
+      "physics": "grhydro",
+      "dim": "3d",
+      "scheme": "plm",
+      "wave": "0",
+      "wave_name": "left-going acoustic",
+      "resolutions": [
+        32,
+        64
+      ],
+      "l1": [
+        1.722712e-07,
+        6.227724e-08
+      ],
+      "orders": [
+        1.4679046208195399
+      ],
+      "nmood": [
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_hydro",
+      "physics": "grhydro",
+      "dim": "3d",
+      "scheme": "plm",
+      "wave": "4",
+      "wave_name": "right-going acoustic",
+      "resolutions": [
+        32,
+        64
+      ],
+      "l1": [
+        1.891147e-07,
+        6.453648e-08
+      ],
+      "orders": [
+        1.5510747127408577
+      ],
+      "nmood": [
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_hydro",
+      "physics": "grhydro",
+      "dim": "3d",
+      "scheme": "ppm_fb",
+      "wave": "0",
+      "wave_name": "left-going acoustic",
+      "resolutions": [
+        32,
+        64
+      ],
+      "l1": [
+        4.839447e-09,
+        3.043753e-10
+      ],
+      "orders": [
+        3.9909190069665224
+      ],
+      "nmood": [
+        0,
+        0
+      ],
+      "zero_demotions_pass": true,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_hydro",
+      "physics": "grhydro",
+      "dim": "3d",
+      "scheme": "ppm_fb",
+      "wave": "4",
+      "wave_name": "right-going acoustic",
+      "resolutions": [
+        32,
+        64
+      ],
+      "l1": [
+        5.669446e-09,
+        3.683656e-10
+      ],
+      "orders": [
+        3.9439975204858917
+      ],
+      "nmood": [
+        0,
+        0
+      ],
+      "zero_demotions_pass": true,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_hydro",
+      "physics": "grhydro",
+      "dim": "3d",
+      "scheme": "teno",
+      "wave": "0",
+      "wave_name": "left-going acoustic",
+      "resolutions": [
+        32,
+        64
+      ],
+      "l1": [
+        1.530405e-09,
+        6.745318e-11
+      ],
+      "orders": [
+        4.503883223101276
+      ],
+      "nmood": [
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_hydro",
+      "physics": "grhydro",
+      "dim": "3d",
+      "scheme": "teno",
+      "wave": "4",
+      "wave_name": "right-going acoustic",
+      "resolutions": [
+        32,
+        64
+      ],
+      "l1": [
+        1.687267e-09,
+        5.922496e-11
+      ],
+      "orders": [
+        4.832339160320181
+      ],
+      "nmood": [
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_hydro",
+      "physics": "grhydro",
+      "dim": "3d",
+      "scheme": "wenoz",
+      "wave": "0",
+      "wave_name": "left-going acoustic",
+      "resolutions": [
+        32,
+        64
+      ],
+      "l1": [
+        1.559583e-09,
+        6.745222e-11
+      ],
+      "orders": [
+        4.531150597626014
+      ],
+      "nmood": [
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_hydro",
+      "physics": "grhydro",
+      "dim": "3d",
+      "scheme": "wenoz",
+      "wave": "4",
+      "wave_name": "right-going acoustic",
+      "resolutions": [
+        32,
+        64
+      ],
+      "l1": [
+        1.724929e-09,
+        5.922592e-11
+      ],
+      "orders": [
+        4.864164465863731
+      ],
+      "nmood": [
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_mhd",
+      "physics": "grmhd",
+      "dim": "1d",
+      "scheme": "plm",
+      "wave": "0",
+      "wave_name": "left-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        1.957289e-07,
+        5.394227e-08,
+        1.381209e-08,
+        3.423236e-09
+      ],
+      "orders": [
+        1.8593686507501654,
+        1.9654845944014903,
+        2.0124989788050827
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_mhd",
+      "physics": "grmhd",
+      "dim": "1d",
+      "scheme": "plm",
+      "wave": "1",
+      "wave_name": "left-going Alfv\u00e9n",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        1.489333e-07,
+        4.110538e-08,
+        1.061639e-08,
+        2.616156e-09
+      ],
+      "orders": [
+        1.8572672264126464,
+        1.9530339555436746,
+        2.020772799479403
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_mhd",
+      "physics": "grmhd",
+      "dim": "1d",
+      "scheme": "plm",
+      "wave": "2",
+      "wave_name": "left-going slow magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        5.40879e-08,
+        1.54349e-08,
+        3.862582e-09,
+        9.296152e-10
+      ],
+      "orders": [
+        1.8091097489332493,
+        1.9985586701226778,
+        2.054859997440625
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_mhd",
+      "physics": "grmhd",
+      "dim": "1d",
+      "scheme": "plm",
+      "wave": "3",
+      "wave_name": "entropy/contact",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        8.623284e-08,
+        3.144205e-08,
+        7.526707e-09,
+        1.747433e-09
+      ],
+      "orders": [
+        1.4555421112476357,
+        2.0626045670115225,
+        2.1067816703510167
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_mhd",
+      "physics": "grmhd",
+      "dim": "1d",
+      "scheme": "plm",
+      "wave": "4",
+      "wave_name": "right-going slow magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        1.206146e-07,
+        3.877741e-08,
+        9.582678e-09,
+        2.24418e-09
+      ],
+      "orders": [
+        1.6371161992296894,
+        2.016715650235982,
+        2.0942404960927155
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_mhd",
+      "physics": "grmhd",
+      "dim": "1d",
+      "scheme": "plm",
+      "wave": "5",
+      "wave_name": "right-going Alfv\u00e9n",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        2.006092e-07,
+        5.712225e-08,
+        1.428933e-08,
+        3.450078e-09
+      ],
+      "orders": [
+        1.8122630576991519,
+        1.9991145343533887,
+        2.050237388655333
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_mhd",
+      "physics": "grmhd",
+      "dim": "1d",
+      "scheme": "plm",
+      "wave": "6",
+      "wave_name": "right-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        7.592427e-08,
+        2.089043e-08,
+        5.342421e-09,
+        1.325635e-09
+      ],
+      "orders": [
+        1.8617189436212016,
+        1.9672766139644549,
+        2.0108100706279046
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_mhd",
+      "physics": "grmhd",
+      "dim": "1d",
+      "scheme": "ppm_fb",
+      "wave": "0",
+      "wave_name": "left-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        2.366556e-09,
+        4.850629e-10,
+        1.21135e-10,
+        5.183825e-11
+      ],
+      "orders": [
+        2.2865453166443657,
+        2.001556070655348,
+        1.2245268482500173
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": true,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_mhd",
+      "physics": "grmhd",
+      "dim": "1d",
+      "scheme": "ppm_fb",
+      "wave": "1",
+      "wave_name": "left-going Alfv\u00e9n",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        4.351e-09,
+        1.09692e-09,
+        2.809844e-10,
+        8.109603e-11
+      ],
+      "orders": [
+        1.9878887051864564,
+        1.9648963710348692,
+        1.7927868403974676
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": true,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_mhd",
+      "physics": "grmhd",
+      "dim": "1d",
+      "scheme": "ppm_fb",
+      "wave": "2",
+      "wave_name": "left-going slow magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        3.201476e-10,
+        5.202993e-11,
+        1.41082e-11,
+        7.79768e-12
+      ],
+      "orders": [
+        2.6213235233233614,
+        1.8828078334563911,
+        0.8554170769228212
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": true,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_mhd",
+      "physics": "grmhd",
+      "dim": "1d",
+      "scheme": "ppm_fb",
+      "wave": "3",
+      "wave_name": "entropy/contact",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        2.204065e-10,
+        1.375846e-11,
+        3.206119e-12,
+        6.375936e-12
+      ],
+      "orders": [
+        4.001775869302313,
+        2.101419117160764,
+        -0.9918091736860044
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": true,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_mhd",
+      "physics": "grmhd",
+      "dim": "1d",
+      "scheme": "ppm_fb",
+      "wave": "4",
+      "wave_name": "right-going slow magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        4.644411e-10,
+        1.063633e-10,
+        2.878355e-11,
+        8.389354e-12
+      ],
+      "orders": [
+        2.1264952032463413,
+        1.8856840016846053,
+        1.7786129077438357
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": true,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_mhd",
+      "physics": "grmhd",
+      "dim": "1d",
+      "scheme": "ppm_fb",
+      "wave": "5",
+      "wave_name": "right-going Alfv\u00e9n",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        3.028051e-09,
+        8.236782e-10,
+        1.989422e-10,
+        4.455398e-11
+      ],
+      "orders": [
+        1.8782367931060262,
+        2.049731470059704,
+        2.1587231175287873
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": true,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_mhd",
+      "physics": "grmhd",
+      "dim": "1d",
+      "scheme": "ppm_fb",
+      "wave": "6",
+      "wave_name": "right-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        1.865918e-09,
+        4.393356e-10,
+        1.085103e-10,
+        3.284096e-11
+      ],
+      "orders": [
+        2.086490273673517,
+        2.0174914153632284,
+        1.7242637870716957
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": true,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_mhd",
+      "physics": "grmhd",
+      "dim": "1d",
+      "scheme": "teno",
+      "wave": "0",
+      "wave_name": "left-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        2.016387e-09,
+        4.7901e-10,
+        1.222384e-10,
+        5.207129e-11
+      ],
+      "orders": [
+        2.0736448785283095,
+        1.9703582096216763,
+        1.2311375117010255
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_mhd",
+      "physics": "grmhd",
+      "dim": "1d",
+      "scheme": "teno",
+      "wave": "1",
+      "wave_name": "left-going Alfv\u00e9n",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        4.499077e-09,
+        1.10871e-09,
+        2.820236e-10,
+        8.121331e-11
+      ],
+      "orders": [
+        2.020747002343037,
+        1.9749942570991603,
+        1.7960277994394636
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_mhd",
+      "physics": "grmhd",
+      "dim": "1d",
+      "scheme": "teno",
+      "wave": "2",
+      "wave_name": "left-going slow magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        1.862082e-10,
+        4.757176e-11,
+        1.357918e-11,
+        7.743036e-12
+      ],
+      "orders": [
+        1.9687392994532233,
+        1.8087090384810838,
+        0.8104251079591646
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_mhd",
+      "physics": "grmhd",
+      "dim": "1d",
+      "scheme": "teno",
+      "wave": "3",
+      "wave_name": "entropy/contact",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        1.675232e-10,
+        5.449093e-12,
+        3.158093e-12,
+        6.335483e-12
+      ],
+      "orders": [
+        4.942200981849265,
+        0.7869624571627989,
+        -1.004400954181269
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_mhd",
+      "physics": "grmhd",
+      "dim": "1d",
+      "scheme": "teno",
+      "wave": "4",
+      "wave_name": "right-going slow magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        5.685317e-10,
+        1.177798e-10,
+        2.95952e-11,
+        8.438445e-12
+      ],
+      "orders": [
+        2.2711486638443072,
+        1.99265701737384,
+        1.8103141313758995
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_mhd",
+      "physics": "grmhd",
+      "dim": "1d",
+      "scheme": "teno",
+      "wave": "5",
+      "wave_name": "right-going Alfv\u00e9n",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        3.596101e-09,
+        8.600235e-10,
+        2.008116e-10,
+        4.454113e-11
+      ],
+      "orders": [
+        2.0639855540475898,
+        2.098533471934822,
+        2.1726325452205395
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_mhd",
+      "physics": "grmhd",
+      "dim": "1d",
+      "scheme": "teno",
+      "wave": "6",
+      "wave_name": "right-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        1.760367e-09,
+        4.358137e-10,
+        1.086093e-10,
+        3.290605e-11
+      ],
+      "orders": [
+        2.01409277815818,
+        2.0045639053746696,
+        1.72272288085308
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_mhd",
+      "physics": "grmhd",
+      "dim": "1d",
+      "scheme": "wenoz",
+      "wave": "0",
+      "wave_name": "left-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        2.016519e-09,
+        4.790075e-10,
+        1.222416e-10,
+        5.20704e-11
+      ],
+      "orders": [
+        2.073746849068583,
+        1.9703129131497361,
+        1.2311999372723352
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_mhd",
+      "physics": "grmhd",
+      "dim": "1d",
+      "scheme": "wenoz",
+      "wave": "1",
+      "wave_name": "left-going Alfv\u00e9n",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        4.4991e-09,
+        1.108712e-09,
+        2.820268e-10,
+        8.121487e-11
+      ],
+      "orders": [
+        2.020751775138917,
+        1.9749804900270889,
+        1.7960164569915757
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_mhd",
+      "physics": "grmhd",
+      "dim": "1d",
+      "scheme": "wenoz",
+      "wave": "2",
+      "wave_name": "left-going slow magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        1.862018e-10,
+        4.757062e-11,
+        1.358348e-11,
+        7.740979e-12
+      ],
+      "orders": [
+        1.96872428585064,
+        1.8082176923300743,
+        0.8112651957425846
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_mhd",
+      "physics": "grmhd",
+      "dim": "1d",
+      "scheme": "wenoz",
+      "wave": "3",
+      "wave_name": "entropy/contact",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        1.675319e-10,
+        5.435736e-12,
+        3.162858e-12,
+        6.319949e-12
+      ],
+      "orders": [
+        4.9458166274814745,
+        0.781246603820641,
+        -0.9986841304308475
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_mhd",
+      "physics": "grmhd",
+      "dim": "1d",
+      "scheme": "wenoz",
+      "wave": "4",
+      "wave_name": "right-going slow magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        5.686853e-10,
+        1.177877e-10,
+        2.959675e-11,
+        8.433607e-12
+      ],
+      "orders": [
+        2.271441619045585,
+        1.9926782251124995,
+        1.8112170633928413
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_mhd",
+      "physics": "grmhd",
+      "dim": "1d",
+      "scheme": "wenoz",
+      "wave": "5",
+      "wave_name": "right-going Alfv\u00e9n",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        3.596424e-09,
+        8.600214e-10,
+        2.008115e-10,
+        4.454403e-11
+      ],
+      "orders": [
+        2.0641186531461835,
+        2.098530667599101,
+        2.1725378983355066
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_mhd",
+      "physics": "grmhd",
+      "dim": "1d",
+      "scheme": "wenoz",
+      "wave": "6",
+      "wave_name": "right-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        1.760384e-09,
+        4.35812e-10,
+        1.086108e-10,
+        3.290819e-11
+      ],
+      "orders": [
+        2.014112337910974,
+        2.004538352888767,
+        1.7226489850862698
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_mhd",
+      "physics": "grmhd",
+      "dim": "2d",
+      "scheme": "plm",
+      "wave": "0",
+      "wave_name": "left-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128
+      ],
+      "l1": [
+        4.162179e-07,
+        1.600233e-07,
+        4.470755e-08
+      ],
+      "orders": [
+        1.3790570291292628,
+        1.83969158965834
+      ],
+      "nmood": [
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_mhd",
+      "physics": "grmhd",
+      "dim": "2d",
+      "scheme": "plm",
+      "wave": "6",
+      "wave_name": "right-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128
+      ],
+      "l1": [
+        1.889327e-07,
+        7.179574e-08,
+        1.988208e-08
+      ],
+      "orders": [
+        1.3959022719980767,
+        1.8524295493180682
+      ],
+      "nmood": [
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_mhd",
+      "physics": "grmhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "wave": "0",
+      "wave_name": "left-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128
+      ],
+      "l1": [
+        3.264186e-08,
+        5.937112e-09,
+        1.369417e-09
+      ],
+      "orders": [
+        2.4588900333295354,
+        2.11619950159558
+      ],
+      "nmood": [
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": true,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_mhd",
+      "physics": "grmhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "wave": "6",
+      "wave_name": "right-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128
+      ],
+      "l1": [
+        2.723821e-08,
+        5.584326e-09,
+        1.320045e-09
+      ],
+      "orders": [
+        2.286176827278286,
+        2.080796053665495
+      ],
+      "nmood": [
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": true,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_mhd",
+      "physics": "grmhd",
+      "dim": "2d",
+      "scheme": "teno",
+      "wave": "0",
+      "wave_name": "left-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128
+      ],
+      "l1": [
+        2.239184e-08,
+        5.336833e-09,
+        1.334266e-09
+      ],
+      "orders": [
+        2.06891731096025,
+        1.999937555598579
+      ],
+      "nmood": [
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_mhd",
+      "physics": "grmhd",
+      "dim": "2d",
+      "scheme": "teno",
+      "wave": "6",
+      "wave_name": "right-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128
+      ],
+      "l1": [
+        2.110973e-08,
+        5.196686e-09,
+        1.295627e-09
+      ],
+      "orders": [
+        2.0222443316743153,
+        2.0039414511400775
+      ],
+      "nmood": [
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_mhd",
+      "physics": "grmhd",
+      "dim": "2d",
+      "scheme": "wenoz",
+      "wave": "0",
+      "wave_name": "left-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128
+      ],
+      "l1": [
+        2.239619e-08,
+        5.336791e-09,
+        1.334265e-09
+      ],
+      "orders": [
+        2.0692089058804277,
+        1.9999272830460006
+      ],
+      "nmood": [
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_mhd",
+      "physics": "grmhd",
+      "dim": "2d",
+      "scheme": "wenoz",
+      "wave": "6",
+      "wave_name": "right-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128
+      ],
+      "l1": [
+        2.111334e-08,
+        5.196688e-09,
+        1.295628e-09
+      ],
+      "orders": [
+        2.022490472337057,
+        2.003940892865869
+      ],
+      "nmood": [
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_mhd",
+      "physics": "grmhd",
+      "dim": "3d",
+      "scheme": "plm",
+      "wave": "0",
+      "wave_name": "left-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64
+      ],
+      "l1": [
+        5.379163e-07,
+        1.948717e-07
+      ],
+      "orders": [
+        1.4648571140801299
+      ],
+      "nmood": [
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_mhd",
+      "physics": "grmhd",
+      "dim": "3d",
+      "scheme": "plm",
+      "wave": "6",
+      "wave_name": "right-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64
+      ],
+      "l1": [
+        2.345901e-07,
+        8.528868e-08
+      ],
+      "orders": [
+        1.4597159544399518
+      ],
+      "nmood": [
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_mhd",
+      "physics": "grmhd",
+      "dim": "3d",
+      "scheme": "ppm_fb",
+      "wave": "0",
+      "wave_name": "left-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64
+      ],
+      "l1": [
+        1.125475e-07,
+        2.408413e-08
+      ],
+      "orders": [
+        2.224379295820487
+      ],
+      "nmood": [
+        0,
+        0
+      ],
+      "zero_demotions_pass": true,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_mhd",
+      "physics": "grmhd",
+      "dim": "3d",
+      "scheme": "ppm_fb",
+      "wave": "6",
+      "wave_name": "right-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64
+      ],
+      "l1": [
+        4.973567e-08,
+        1.075696e-08
+      ],
+      "orders": [
+        2.209010492895677
+      ],
+      "nmood": [
+        0,
+        0
+      ],
+      "zero_demotions_pass": true,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_mhd",
+      "physics": "grmhd",
+      "dim": "3d",
+      "scheme": "teno",
+      "wave": "0",
+      "wave_name": "left-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64
+      ],
+      "l1": [
+        9.454132e-08,
+        2.293793e-08
+      ],
+      "orders": [
+        2.043209804639808
+      ],
+      "nmood": [
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_mhd",
+      "physics": "grmhd",
+      "dim": "3d",
+      "scheme": "teno",
+      "wave": "6",
+      "wave_name": "right-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64
+      ],
+      "l1": [
+        4.170499e-08,
+        1.022882e-08
+      ],
+      "orders": [
+        2.027580287474914
+      ],
+      "nmood": [
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_mhd",
+      "physics": "grmhd",
+      "dim": "3d",
+      "scheme": "wenoz",
+      "wave": "0",
+      "wave_name": "left-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64
+      ],
+      "l1": [
+        9.454077e-08,
+        2.293787e-08
+      ],
+      "orders": [
+        2.043205185388787
+      ],
+      "nmood": [
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "gr_mhd",
+      "physics": "grmhd",
+      "dim": "3d",
+      "scheme": "wenoz",
+      "wave": "6",
+      "wave_name": "right-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64
+      ],
+      "l1": [
+        4.171245e-08,
+        1.022883e-08
+      ],
+      "orders": [
+        2.0278369167403483
+      ],
+      "nmood": [
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_hydro",
+      "physics": "hydro",
+      "dim": "1d",
+      "scheme": "plm",
+      "wave": "0",
+      "wave_name": "left-going acoustic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        7.024433e-08,
+        1.939828e-08,
+        4.970739e-09,
+        1.228225e-09
+      ],
+      "orders": [
+        1.8564530405046826,
+        1.964396479312127,
+        2.016885479331361
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_hydro",
+      "physics": "hydro",
+      "dim": "1d",
+      "scheme": "plm",
+      "wave": "3",
+      "wave_name": "transverse shear z",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        3.242974e-08,
+        8.888175e-09,
+        2.259008e-09,
+        5.517613e-10
+      ],
+      "orders": [
+        1.8673583298154186,
+        1.9761978424788325,
+        2.033573203739968
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_hydro",
+      "physics": "hydro",
+      "dim": "1d",
+      "scheme": "plm",
+      "wave": "4",
+      "wave_name": "right-going acoustic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        7.024433e-08,
+        1.939828e-08,
+        4.970739e-09,
+        1.228227e-09
+      ],
+      "orders": [
+        1.8564530405046826,
+        1.964396479312127,
+        2.0168831300975216
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_hydro",
+      "physics": "hydro",
+      "dim": "1d",
+      "scheme": "ppm_fb",
+      "wave": "0",
+      "wave_name": "left-going acoustic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        4.099149e-10,
+        2.700017e-11,
+        5.666061e-12,
+        5.497869e-12
+      ],
+      "orders": [
+        3.924284035463861,
+        2.252550452122822,
+        0.04347360207890106
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": true,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_hydro",
+      "physics": "hydro",
+      "dim": "1d",
+      "scheme": "ppm_fb",
+      "wave": "3",
+      "wave_name": "transverse shear z",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        1.974874e-10,
+        1.237077e-11,
+        7.812039e-13,
+        1.808209e-13
+      ],
+      "orders": [
+        3.9967534034545573,
+        3.9850923396686366,
+        2.1111377117701013
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": true,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_hydro",
+      "physics": "hydro",
+      "dim": "1d",
+      "scheme": "ppm_fb",
+      "wave": "4",
+      "wave_name": "right-going acoustic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        4.09915e-10,
+        2.700014e-11,
+        5.665762e-12,
+        5.498177e-12
+      ],
+      "orders": [
+        3.9242859903989955,
+        2.2526249826629745,
+        0.043316648580043284
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": true,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_hydro",
+      "physics": "hydro",
+      "dim": "1d",
+      "scheme": "teno",
+      "wave": "0",
+      "wave_name": "left-going acoustic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        1.097326e-10,
+        1.00709e-11,
+        5.55584e-12,
+        5.497859e-12
+      ],
+      "orders": [
+        3.4457276709967055,
+        0.8581156600167,
+        0.015135144960007322
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_hydro",
+      "physics": "hydro",
+      "dim": "1d",
+      "scheme": "teno",
+      "wave": "3",
+      "wave_name": "transverse shear z",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        2.355735e-11,
+        1.139299e-12,
+        1.222603e-13,
+        1.79895e-13
+      ],
+      "orders": [
+        4.369958931727948,
+        3.220118503236317,
+        -0.5571990766163301
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_hydro",
+      "physics": "hydro",
+      "dim": "1d",
+      "scheme": "teno",
+      "wave": "4",
+      "wave_name": "right-going acoustic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        1.097327e-10,
+        1.007133e-11,
+        5.555868e-12,
+        5.497667e-12
+      ],
+      "orders": [
+        3.445667387899286,
+        0.8581699870580536,
+        0.015192799417178661
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_hydro",
+      "physics": "hydro",
+      "dim": "1d",
+      "scheme": "wenoz",
+      "wave": "0",
+      "wave_name": "left-going acoustic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        1.097318e-10,
+        1.007115e-11,
+        5.555872e-12,
+        5.497803e-12
+      ],
+      "orders": [
+        3.4456813400486554,
+        0.8581431635567325,
+        0.015158149487859795
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_hydro",
+      "physics": "hydro",
+      "dim": "1d",
+      "scheme": "wenoz",
+      "wave": "3",
+      "wave_name": "transverse shear z",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        2.355709e-11,
+        1.139303e-12,
+        1.229606e-13,
+        1.849777e-13
+      ],
+      "orders": [
+        4.369937943572672,
+        3.2118834707570434,
+        -0.5891552470691807
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_hydro",
+      "physics": "hydro",
+      "dim": "1d",
+      "scheme": "wenoz",
+      "wave": "4",
+      "wave_name": "right-going acoustic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        1.097318e-10,
+        1.007095e-11,
+        5.555982e-12,
+        5.497693e-12
+      ],
+      "orders": [
+        3.4457099903888078,
+        0.858085949764522,
+        0.01521557865993705
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_hydro",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "plm",
+      "wave": "0",
+      "wave_name": "left-going acoustic",
+      "resolutions": [
+        32,
+        64,
+        128
+      ],
+      "l1": [
+        1.686729e-07,
+        6.45887e-08,
+        1.802754e-08
+      ],
+      "orders": [
+        1.38487451221481,
+        1.8410792397909421
+      ],
+      "nmood": [
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_hydro",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "plm",
+      "wave": "4",
+      "wave_name": "right-going acoustic",
+      "resolutions": [
+        32,
+        64,
+        128
+      ],
+      "l1": [
+        1.686729e-07,
+        6.45887e-08,
+        1.802754e-08
+      ],
+      "orders": [
+        1.38487451221481,
+        1.8410792397909421
+      ],
+      "nmood": [
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_hydro",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "wave": "0",
+      "wave_name": "left-going acoustic",
+      "resolutions": [
+        32,
+        64,
+        128
+      ],
+      "l1": [
+        5.19781e-09,
+        3.443779e-10,
+        2.838798e-11
+      ],
+      "orders": [
+        3.915839430950532,
+        3.600640462489859
+      ],
+      "nmood": [
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": true,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_hydro",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "wave": "4",
+      "wave_name": "right-going acoustic",
+      "resolutions": [
+        32,
+        64,
+        128
+      ],
+      "l1": [
+        5.19781e-09,
+        3.443779e-10,
+        2.838823e-11
+      ],
+      "orders": [
+        3.915839430950532,
+        3.6006277573881897
+      ],
+      "nmood": [
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": true,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_hydro",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "teno",
+      "wave": "0",
+      "wave_name": "left-going acoustic",
+      "resolutions": [
+        32,
+        64,
+        128
+      ],
+      "l1": [
+        1.897099e-09,
+        1.337497e-10,
+        1.462483e-11
+      ],
+      "orders": [
+        3.8261874069986366,
+        3.1930438956359577
+      ],
+      "nmood": [
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_hydro",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "teno",
+      "wave": "4",
+      "wave_name": "right-going acoustic",
+      "resolutions": [
+        32,
+        64,
+        128
+      ],
+      "l1": [
+        1.897099e-09,
+        1.337498e-10,
+        1.462488e-11
+      ],
+      "orders": [
+        3.8261863283461226,
+        3.193040041948832
+      ],
+      "nmood": [
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_hydro",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "wenoz",
+      "wave": "0",
+      "wave_name": "left-going acoustic",
+      "resolutions": [
+        32,
+        64,
+        128
+      ],
+      "l1": [
+        1.920663e-09,
+        1.337497e-10,
+        1.462479e-11
+      ],
+      "orders": [
+        3.843996844912235,
+        3.193047841519811
+      ],
+      "nmood": [
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_hydro",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "wenoz",
+      "wave": "4",
+      "wave_name": "right-going acoustic",
+      "resolutions": [
+        32,
+        64,
+        128
+      ],
+      "l1": [
+        1.920663e-09,
+        1.337497e-10,
+        1.462486e-11
+      ],
+      "orders": [
+        3.843996844912235,
+        3.19304093623015
+      ],
+      "nmood": [
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_hydro",
+      "physics": "hydro",
+      "dim": "3d",
+      "scheme": "plm",
+      "wave": "0",
+      "wave_name": "left-going acoustic",
+      "resolutions": [
+        32,
+        64
+      ],
+      "l1": [
+        2.221688e-07,
+        7.883148e-08
+      ],
+      "orders": [
+        1.4948124624763748
+      ],
+      "nmood": [
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_hydro",
+      "physics": "hydro",
+      "dim": "3d",
+      "scheme": "plm",
+      "wave": "4",
+      "wave_name": "right-going acoustic",
+      "resolutions": [
+        32,
+        64
+      ],
+      "l1": [
+        2.221688e-07,
+        7.883148e-08
+      ],
+      "orders": [
+        1.4948124624763748
+      ],
+      "nmood": [
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_hydro",
+      "physics": "hydro",
+      "dim": "3d",
+      "scheme": "ppm_fb",
+      "wave": "0",
+      "wave_name": "left-going acoustic",
+      "resolutions": [
+        32,
+        64
+      ],
+      "l1": [
+        5.782611e-09,
+        4.202752e-10
+      ],
+      "orders": [
+        3.782314822163909
+      ],
+      "nmood": [
+        0,
+        0
+      ],
+      "zero_demotions_pass": true,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_hydro",
+      "physics": "hydro",
+      "dim": "3d",
+      "scheme": "ppm_fb",
+      "wave": "4",
+      "wave_name": "right-going acoustic",
+      "resolutions": [
+        32,
+        64
+      ],
+      "l1": [
+        5.782612e-09,
+        4.202752e-10
+      ],
+      "orders": [
+        3.782315071652404
+      ],
+      "nmood": [
+        0,
+        0
+      ],
+      "zero_demotions_pass": true,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_hydro",
+      "physics": "hydro",
+      "dim": "3d",
+      "scheme": "teno",
+      "wave": "0",
+      "wave_name": "left-going acoustic",
+      "resolutions": [
+        32,
+        64
+      ],
+      "l1": [
+        3.513015e-09,
+        2.894962e-10
+      ],
+      "orders": [
+        3.6010934203723743
+      ],
+      "nmood": [
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_hydro",
+      "physics": "hydro",
+      "dim": "3d",
+      "scheme": "teno",
+      "wave": "4",
+      "wave_name": "right-going acoustic",
+      "resolutions": [
+        32,
+        64
+      ],
+      "l1": [
+        3.513015e-09,
+        2.894963e-10
+      ],
+      "orders": [
+        3.6010929220256633
+      ],
+      "nmood": [
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_hydro",
+      "physics": "hydro",
+      "dim": "3d",
+      "scheme": "wenoz",
+      "wave": "0",
+      "wave_name": "left-going acoustic",
+      "resolutions": [
+        32,
+        64
+      ],
+      "l1": [
+        3.550051e-09,
+        2.894976e-10
+      ],
+      "orders": [
+        3.616216457398445
+      ],
+      "nmood": [
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_hydro",
+      "physics": "hydro",
+      "dim": "3d",
+      "scheme": "wenoz",
+      "wave": "4",
+      "wave_name": "right-going acoustic",
+      "resolutions": [
+        32,
+        64
+      ],
+      "l1": [
+        3.550051e-09,
+        2.894978e-10
+      ],
+      "orders": [
+        3.616215460710015
+      ],
+      "nmood": [
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_mhd",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "plm",
+      "wave": "0",
+      "wave_name": "left-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        8.375698e-08,
+        2.313553e-08,
+        5.930161e-09,
+        1.465093e-09
+      ],
+      "orders": [
+        1.8560992751463128,
+        1.9639669705988936,
+        2.0170790277370654
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_mhd",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "plm",
+      "wave": "1",
+      "wave_name": "left-going Alfv\u00e9n",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        4.580331e-08,
+        1.25661e-08,
+        3.19442e-09,
+        7.800619e-10
+      ],
+      "orders": [
+        1.865914893104429,
+        1.975911051272827,
+        2.0338934943628817
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_mhd",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "plm",
+      "wave": "2",
+      "wave_name": "left-going slow magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        5.340763e-08,
+        1.463347e-08,
+        3.753193e-09,
+        9.08071e-10
+      ],
+      "orders": [
+        1.8677739521804713,
+        1.9630815281121798,
+        2.04724147159592
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_mhd",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "plm",
+      "wave": "3",
+      "wave_name": "entropy/contact",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        4.820751e-08,
+        1.319104e-08,
+        3.347996e-09,
+        8.15686e-10
+      ],
+      "orders": [
+        1.8696996008387907,
+        1.9781886038138083,
+        2.037212008477455
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_mhd",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "plm",
+      "wave": "4",
+      "wave_name": "right-going slow magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        5.340763e-08,
+        1.463347e-08,
+        3.753136e-09,
+        9.080688e-10
+      ],
+      "orders": [
+        1.8677739521804713,
+        1.963103438587282,
+        2.047223056368364
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_mhd",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "plm",
+      "wave": "5",
+      "wave_name": "right-going Alfv\u00e9n",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        4.580331e-08,
+        1.25661e-08,
+        3.194419e-09,
+        7.800627e-10
+      ],
+      "orders": [
+        1.865914893104429,
+        1.9759115029026273,
+        2.0338915631640355
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_mhd",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "plm",
+      "wave": "6",
+      "wave_name": "right-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        8.375698e-08,
+        2.313553e-08,
+        5.930161e-09,
+        1.465099e-09
+      ],
+      "orders": [
+        1.8560992751463128,
+        1.9639669705988936,
+        2.0170731194755964
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_mhd",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "ppm_fb",
+      "wave": "0",
+      "wave_name": "left-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        8.279463e-10,
+        1.667409e-10,
+        4.053583e-11,
+        1.009797e-11
+      ],
+      "orders": [
+        2.3119291711207937,
+        2.040338438783942,
+        2.005132387167793
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": true,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_mhd",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "ppm_fb",
+      "wave": "1",
+      "wave_name": "left-going Alfv\u00e9n",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        2.790654e-10,
+        1.74913e-11,
+        1.107977e-12,
+        3.122887e-13
+      ],
+      "orders": [
+        3.9958938392576115,
+        3.9806376796339396,
+        1.826975661170316
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": true,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_mhd",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "ppm_fb",
+      "wave": "2",
+      "wave_name": "left-going slow magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        3.093142e-10,
+        1.946025e-11,
+        3.941248e-12,
+        3.846367e-12
+      ],
+      "orders": [
+        3.990470916987158,
+        2.3038058061881066,
+        0.03515610923083048
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": true,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_mhd",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "ppm_fb",
+      "wave": "3",
+      "wave_name": "entropy/contact",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        2.963525e-10,
+        1.856295e-11,
+        1.180518e-12,
+        5.821247e-13
+      ],
+      "orders": [
+        3.9968163229603393,
+        3.9749340555118784,
+        1.0200199006296977
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": true,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_mhd",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "ppm_fb",
+      "wave": "4",
+      "wave_name": "right-going slow magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        3.093146e-10,
+        1.945931e-11,
+        3.940488e-12,
+        3.846872e-12
+      ],
+      "orders": [
+        3.9905424716928093,
+        2.3040143422102544,
+        0.034688481243027064
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": true,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_mhd",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "ppm_fb",
+      "wave": "5",
+      "wave_name": "right-going Alfv\u00e9n",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        2.790653e-10,
+        1.74913e-11,
+        1.107521e-12,
+        3.100634e-13
+      ],
+      "orders": [
+        3.995893322283705,
+        3.9812315587057645,
+        1.8366989095139954
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": true,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_mhd",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "ppm_fb",
+      "wave": "6",
+      "wave_name": "right-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        8.279468e-10,
+        1.66741e-10,
+        4.053561e-11,
+        1.009795e-11
+      ],
+      "orders": [
+        2.3119291771383024,
+        2.0403471339714554,
+        2.0051274146106715
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": true,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_mhd",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "teno",
+      "wave": "0",
+      "wave_name": "left-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        6.971918e-10,
+        1.646718e-10,
+        4.051447e-11,
+        1.009767e-11
+      ],
+      "orders": [
+        2.081962086258358,
+        2.0230843422572455,
+        2.0044148328871056
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_mhd",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "teno",
+      "wave": "1",
+      "wave_name": "left-going Alfv\u00e9n",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        3.328915e-11,
+        1.613281e-12,
+        1.944479e-13,
+        3.092695e-13
+      ],
+      "orders": [
+        4.36698238043002,
+        3.0525421887147495,
+        -0.6694809085682264
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_mhd",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "teno",
+      "wave": "2",
+      "wave_name": "left-going slow magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        3.870818e-11,
+        3.934796e-12,
+        3.829903e-12,
+        3.846018e-12
+      ],
+      "orders": [
+        3.2982777298129973,
+        0.038980987505351894,
+        -0.006057661286845311
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_mhd",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "teno",
+      "wave": "3",
+      "wave_name": "entropy/contact",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        3.085099e-11,
+        1.162972e-12,
+        2.769487e-13,
+        5.548657e-13
+      ],
+      "orders": [
+        4.729428518153539,
+        2.0701256909438657,
+        -1.0025198565198243
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_mhd",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "teno",
+      "wave": "4",
+      "wave_name": "right-going slow magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        3.870808e-11,
+        3.933847e-12,
+        3.830955e-12,
+        3.845343e-12
+      ],
+      "orders": [
+        3.298621996021743,
+        0.038236768281602454,
+        -0.005408211238400723
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_mhd",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "teno",
+      "wave": "5",
+      "wave_name": "right-going Alfv\u00e9n",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        3.328911e-11,
+        1.613246e-12,
+        1.95518e-13,
+        3.092114e-13
+      ],
+      "orders": [
+        4.367011946388154,
+        3.0445931105754656,
+        -0.6612920768215663
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_mhd",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "teno",
+      "wave": "6",
+      "wave_name": "right-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        6.97192e-10,
+        1.646712e-10,
+        4.051464e-11,
+        1.009797e-11
+      ],
+      "orders": [
+        2.081967756746421,
+        2.02307303204658,
+        2.0043780248892533
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_mhd",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "wenoz",
+      "wave": "0",
+      "wave_name": "left-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        6.971904e-10,
+        1.646716e-10,
+        4.051469e-11,
+        1.009762e-11
+      ],
+      "orders": [
+        2.081960941451007,
+        2.0230747560079263,
+        2.004429810649148
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_mhd",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "wenoz",
+      "wave": "1",
+      "wave_name": "left-going Alfv\u00e9n",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        3.328893e-11,
+        1.613302e-12,
+        1.957072e-13,
+        3.089875e-13
+      ],
+      "orders": [
+        4.366954066604689,
+        3.0432477889189586,
+        -0.6588516423081203
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_mhd",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "wenoz",
+      "wave": "2",
+      "wave_name": "left-going slow magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        3.870609e-11,
+        3.934015e-12,
+        3.830545e-12,
+        3.844766e-12
+      ],
+      "orders": [
+        3.298486213673576,
+        0.03845278881722843,
+        -0.005346125949560485
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_mhd",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "wenoz",
+      "wave": "3",
+      "wave_name": "entropy/contact",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        3.085139e-11,
+        1.16314e-12,
+        2.774098e-13,
+        5.552948e-13
+      ],
+      "orders": [
+        4.729238830331553,
+        2.067934096110571,
+        -1.0012351316680599
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_mhd",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "wenoz",
+      "wave": "4",
+      "wave_name": "right-going slow magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        3.870638e-11,
+        3.933739e-12,
+        3.830752e-12,
+        3.845515e-12
+      ],
+      "orders": [
+        3.2985982420121096,
+        0.03827360949546443,
+        -0.005549190289402555
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_mhd",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "wenoz",
+      "wave": "5",
+      "wave_name": "right-going Alfv\u00e9n",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        3.328889e-11,
+        1.613204e-12,
+        1.954964e-13,
+        3.096604e-13
+      ],
+      "orders": [
+        4.367039972205632,
+        3.0447149419282136,
+        -0.6635448590038419
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_mhd",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "wenoz",
+      "wave": "6",
+      "wave_name": "right-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "l1": [
+        6.971907e-10,
+        1.646713e-10,
+        4.051498e-11,
+        1.009759e-11
+      ],
+      "orders": [
+        2.0819641905558455,
+        2.02306180106617,
+        2.0044444235246655
+      ],
+      "nmood": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_mhd",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "plm",
+      "wave": "0",
+      "wave_name": "left-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128
+      ],
+      "l1": [
+        1.96998e-07,
+        7.538118e-08,
+        2.15449e-08
+      ],
+      "orders": [
+        1.3859046990425015,
+        1.806857976563449
+      ],
+      "nmood": [
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_mhd",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "plm",
+      "wave": "6",
+      "wave_name": "right-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128
+      ],
+      "l1": [
+        1.969915e-07,
+        7.53781e-08,
+        2.154531e-08
+      ],
+      "orders": [
+        1.3859160444488483,
+        1.8067715740130372
+      ],
+      "nmood": [
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_mhd",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "wave": "0",
+      "wave_name": "left-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128
+      ],
+      "l1": [
+        1.142549e-08,
+        1.852053e-09,
+        4.075089e-10
+      ],
+      "orders": [
+        2.6250587490931316,
+        2.1842219113565022
+      ],
+      "nmood": [
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": true,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_mhd",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "wave": "6",
+      "wave_name": "right-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128
+      ],
+      "l1": [
+        1.142549e-08,
+        1.852053e-09,
+        4.075083e-10
+      ],
+      "orders": [
+        2.6250587490931316,
+        2.18422403552523
+      ],
+      "nmood": [
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": true,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_mhd",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "teno",
+      "wave": "0",
+      "wave_name": "left-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128
+      ],
+      "l1": [
+        5.953159e-09,
+        1.474094e-09,
+        3.659035e-10
+      ],
+      "orders": [
+        2.0138269019958144,
+        2.0102934043599068
+      ],
+      "nmood": [
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_mhd",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "teno",
+      "wave": "6",
+      "wave_name": "right-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128
+      ],
+      "l1": [
+        5.953158e-09,
+        1.474095e-09,
+        3.659036e-10
+      ],
+      "orders": [
+        2.01382568095555,
+        2.0102939887761844
+      ],
+      "nmood": [
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_mhd",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "wenoz",
+      "wave": "0",
+      "wave_name": "left-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128
+      ],
+      "l1": [
+        5.951633e-09,
+        1.474085e-09,
+        3.659036e-10
+      ],
+      "orders": [
+        2.01346585040882,
+        2.010284201754762
+      ],
+      "nmood": [
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_mhd",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "wenoz",
+      "wave": "6",
+      "wave_name": "right-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64,
+        128
+      ],
+      "l1": [
+        5.951633e-09,
+        1.474085e-09,
+        3.659035e-10
+      ],
+      "orders": [
+        2.01346585040882,
+        2.0102845960376383
+      ],
+      "nmood": [
+        0,
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_mhd",
+      "physics": "mhd",
+      "dim": "3d",
+      "scheme": "plm",
+      "wave": "0",
+      "wave_name": "left-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64
+      ],
+      "l1": [
+        2.387668e-07,
+        8.882641e-08
+      ],
+      "orders": [
+        1.426541657268405
+      ],
+      "nmood": [
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_mhd",
+      "physics": "mhd",
+      "dim": "3d",
+      "scheme": "plm",
+      "wave": "6",
+      "wave_name": "right-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64
+      ],
+      "l1": [
+        2.387662e-07,
+        8.882653e-08
+      ],
+      "orders": [
+        1.426536082890987
+      ],
+      "nmood": [
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_mhd",
+      "physics": "mhd",
+      "dim": "3d",
+      "scheme": "ppm_fb",
+      "wave": "0",
+      "wave_name": "left-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64
+      ],
+      "l1": [
+        1.179737e-08,
+        1.811124e-09
+      ],
+      "orders": [
+        2.70350804391145
+      ],
+      "nmood": [
+        0,
+        0
+      ],
+      "zero_demotions_pass": true,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_mhd",
+      "physics": "mhd",
+      "dim": "3d",
+      "scheme": "ppm_fb",
+      "wave": "6",
+      "wave_name": "right-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64
+      ],
+      "l1": [
+        1.179737e-08,
+        1.811123e-09
+      ],
+      "orders": [
+        2.703508840486085
+      ],
+      "nmood": [
+        0,
+        0
+      ],
+      "zero_demotions_pass": true,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_mhd",
+      "physics": "mhd",
+      "dim": "3d",
+      "scheme": "teno",
+      "wave": "0",
+      "wave_name": "left-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64
+      ],
+      "l1": [
+        6.433851e-09,
+        1.410097e-09
+      ],
+      "orders": [
+        2.1898881169081847
+      ],
+      "nmood": [
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_mhd",
+      "physics": "mhd",
+      "dim": "3d",
+      "scheme": "teno",
+      "wave": "6",
+      "wave_name": "right-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64
+      ],
+      "l1": [
+        6.433851e-09,
+        1.410097e-09
+      ],
+      "orders": [
+        2.1898881169081847
+      ],
+      "nmood": [
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_mhd",
+      "physics": "mhd",
+      "dim": "3d",
+      "scheme": "wenoz",
+      "wave": "0",
+      "wave_name": "left-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64
+      ],
+      "l1": [
+        6.443417e-09,
+        1.410101e-09
+      ],
+      "orders": [
+        2.192027464076915
+      ],
+      "nmood": [
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    },
+    {
+      "case": "nr_mhd",
+      "physics": "mhd",
+      "dim": "3d",
+      "scheme": "wenoz",
+      "wave": "6",
+      "wave_name": "right-going fast magnetosonic",
+      "resolutions": [
+        32,
+        64
+      ],
+      "l1": [
+        6.443417e-09,
+        1.410101e-09
+      ],
+      "orders": [
+        2.192027464076915
+      ],
+      "nmood": [
+        0,
+        0
+      ],
+      "zero_demotions_pass": null,
+      "completed": true,
+      "usable": true
+    }
+  ],
+  "shocks": [
+    {
+      "case": "mb2_gr",
+      "physics": "grhydro",
+      "dim": "1d",
+      "scheme": "plm",
+      "nx1": 256,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 5.976938486099243
+    },
+    {
+      "case": "mb2_gr",
+      "physics": "grhydro",
+      "dim": "1d",
+      "scheme": "plm",
+      "nx1": 512,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 5.3372015953063965
+    },
+    {
+      "case": "mb2_gr",
+      "physics": "grhydro",
+      "dim": "1d",
+      "scheme": "plm",
+      "nx1": 1024,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 6.497895002365112
+    },
+    {
+      "case": "mb2_gr",
+      "physics": "grhydro",
+      "dim": "1d",
+      "scheme": "ppm_fb",
+      "nx1": 256,
+      "rc": 0,
+      "nmood": 13397,
+      "wall_s": 5.236825466156006
+    },
+    {
+      "case": "mb2_gr",
+      "physics": "grhydro",
+      "dim": "1d",
+      "scheme": "ppm_fb",
+      "nx1": 512,
+      "rc": 0,
+      "nmood": 25142,
+      "wall_s": 6.132622480392456
+    },
+    {
+      "case": "mb2_gr",
+      "physics": "grhydro",
+      "dim": "1d",
+      "scheme": "ppm_fb",
+      "nx1": 1024,
+      "rc": 0,
+      "nmood": 44057,
+      "wall_s": 7.560010671615601
+    },
+    {
+      "case": "mb2_gr",
+      "physics": "grhydro",
+      "dim": "1d",
+      "scheme": "teno",
+      "nx1": 256,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 5.054182767868042
+    },
+    {
+      "case": "mb2_gr",
+      "physics": "grhydro",
+      "dim": "1d",
+      "scheme": "teno",
+      "nx1": 512,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 5.706254482269287
+    },
+    {
+      "case": "mb2_gr",
+      "physics": "grhydro",
+      "dim": "1d",
+      "scheme": "teno",
+      "nx1": 1024,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 6.717432022094727
+    },
+    {
+      "case": "mb2_gr",
+      "physics": "grhydro",
+      "dim": "1d",
+      "scheme": "wenoz",
+      "nx1": 256,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 5.083803415298462
+    },
+    {
+      "case": "mb2_gr",
+      "physics": "grhydro",
+      "dim": "1d",
+      "scheme": "wenoz",
+      "nx1": 512,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 5.588774919509888
+    },
+    {
+      "case": "mb2_gr",
+      "physics": "grhydro",
+      "dim": "1d",
+      "scheme": "wenoz",
+      "nx1": 1024,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 6.645209789276123
+    },
+    {
+      "case": "mub1_gr",
+      "physics": "grmhd",
+      "dim": "1d",
+      "scheme": "plm",
+      "nx1": 256,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 5.131254196166992
+    },
+    {
+      "case": "mub1_gr",
+      "physics": "grmhd",
+      "dim": "1d",
+      "scheme": "plm",
+      "nx1": 512,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 5.699239015579224
+    },
+    {
+      "case": "mub1_gr",
+      "physics": "grmhd",
+      "dim": "1d",
+      "scheme": "plm",
+      "nx1": 1024,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 7.1900458335876465
+    },
+    {
+      "case": "mub1_gr",
+      "physics": "grmhd",
+      "dim": "1d",
+      "scheme": "ppm_fb",
+      "nx1": 256,
+      "rc": 0,
+      "nmood": 18875,
+      "wall_s": 5.615639686584473
+    },
+    {
+      "case": "mub1_gr",
+      "physics": "grmhd",
+      "dim": "1d",
+      "scheme": "ppm_fb",
+      "nx1": 512,
+      "rc": 0,
+      "nmood": 49559,
+      "wall_s": 6.514868259429932
+    },
+    {
+      "case": "mub1_gr",
+      "physics": "grmhd",
+      "dim": "1d",
+      "scheme": "ppm_fb",
+      "nx1": 1024,
+      "rc": 0,
+      "nmood": 137084,
+      "wall_s": 8.86355972290039
+    },
+    {
+      "case": "mub1_gr",
+      "physics": "grmhd",
+      "dim": "1d",
+      "scheme": "teno",
+      "nx1": 256,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 5.354448318481445
+    },
+    {
+      "case": "mub1_gr",
+      "physics": "grmhd",
+      "dim": "1d",
+      "scheme": "teno",
+      "nx1": 512,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 6.118960380554199
+    },
+    {
+      "case": "mub1_gr",
+      "physics": "grmhd",
+      "dim": "1d",
+      "scheme": "teno",
+      "nx1": 1024,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 7.702042102813721
+    },
+    {
+      "case": "mub1_gr",
+      "physics": "grmhd",
+      "dim": "1d",
+      "scheme": "wenoz",
+      "nx1": 256,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 5.251308441162109
+    },
+    {
+      "case": "mub1_gr",
+      "physics": "grmhd",
+      "dim": "1d",
+      "scheme": "wenoz",
+      "nx1": 512,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 6.196975946426392
+    },
+    {
+      "case": "mub1_gr",
+      "physics": "grmhd",
+      "dim": "1d",
+      "scheme": "wenoz",
+      "nx1": 1024,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 7.92611837387085
+    },
+    {
+      "case": "shu_osher",
+      "physics": "hydro",
+      "dim": "1d",
+      "scheme": "plm",
+      "nx1": 256,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 4.85801362991333
+    },
+    {
+      "case": "shu_osher",
+      "physics": "hydro",
+      "dim": "1d",
+      "scheme": "plm",
+      "nx1": 512,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 5.158158779144287
+    },
+    {
+      "case": "shu_osher",
+      "physics": "hydro",
+      "dim": "1d",
+      "scheme": "plm",
+      "nx1": 1024,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 6.00898551940918
+    },
+    {
+      "case": "shu_osher",
+      "physics": "hydro",
+      "dim": "1d",
+      "scheme": "ppm_fb",
+      "nx1": 256,
+      "rc": 0,
+      "nmood": 27576,
+      "wall_s": 6.583750009536743
+    },
+    {
+      "case": "shu_osher",
+      "physics": "hydro",
+      "dim": "1d",
+      "scheme": "ppm_fb",
+      "nx1": 512,
+      "rc": 0,
+      "nmood": 67195,
+      "wall_s": 8.699394702911377
+    },
+    {
+      "case": "shu_osher",
+      "physics": "hydro",
+      "dim": "1d",
+      "scheme": "ppm_fb",
+      "nx1": 1024,
+      "rc": 0,
+      "nmood": 150202,
+      "wall_s": 12.121439456939697
+    },
+    {
+      "case": "shu_osher",
+      "physics": "hydro",
+      "dim": "1d",
+      "scheme": "teno",
+      "nx1": 256,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 5.015064477920532
+    },
+    {
+      "case": "shu_osher",
+      "physics": "hydro",
+      "dim": "1d",
+      "scheme": "teno",
+      "nx1": 512,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 5.576136589050293
+    },
+    {
+      "case": "shu_osher",
+      "physics": "hydro",
+      "dim": "1d",
+      "scheme": "teno",
+      "nx1": 1024,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 6.819214582443237
+    },
+    {
+      "case": "shu_osher",
+      "physics": "hydro",
+      "dim": "1d",
+      "scheme": "wenoz",
+      "nx1": 256,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 4.977221250534058
+    },
+    {
+      "case": "shu_osher",
+      "physics": "hydro",
+      "dim": "1d",
+      "scheme": "wenoz",
+      "nx1": 512,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 5.588316202163696
+    },
+    {
+      "case": "shu_osher",
+      "physics": "hydro",
+      "dim": "1d",
+      "scheme": "wenoz",
+      "nx1": 1024,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 6.855767488479614
+    },
+    {
+      "case": "sod",
+      "physics": "hydro",
+      "dim": "1d",
+      "scheme": "plm",
+      "nx1": 256,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 4.611562728881836
+    },
+    {
+      "case": "sod",
+      "physics": "hydro",
+      "dim": "1d",
+      "scheme": "plm",
+      "nx1": 512,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 4.9116575717926025
+    },
+    {
+      "case": "sod",
+      "physics": "hydro",
+      "dim": "1d",
+      "scheme": "plm",
+      "nx1": 1024,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 5.254113435745239
+    },
+    {
+      "case": "sod",
+      "physics": "hydro",
+      "dim": "1d",
+      "scheme": "ppm_fb",
+      "nx1": 256,
+      "rc": 0,
+      "nmood": 22045,
+      "wall_s": 6.614264249801636
+    },
+    {
+      "case": "sod",
+      "physics": "hydro",
+      "dim": "1d",
+      "scheme": "ppm_fb",
+      "nx1": 512,
+      "rc": 0,
+      "nmood": 48894,
+      "wall_s": 6.407215118408203
+    },
+    {
+      "case": "sod",
+      "physics": "hydro",
+      "dim": "1d",
+      "scheme": "ppm_fb",
+      "nx1": 1024,
+      "rc": 0,
+      "nmood": 105257,
+      "wall_s": 8.302880048751831
+    },
+    {
+      "case": "sod",
+      "physics": "hydro",
+      "dim": "1d",
+      "scheme": "teno",
+      "nx1": 256,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 4.681830883026123
+    },
+    {
+      "case": "sod",
+      "physics": "hydro",
+      "dim": "1d",
+      "scheme": "teno",
+      "nx1": 512,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 4.949263095855713
+    },
+    {
+      "case": "sod",
+      "physics": "hydro",
+      "dim": "1d",
+      "scheme": "teno",
+      "nx1": 1024,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 5.4772748947143555
+    },
+    {
+      "case": "sod",
+      "physics": "hydro",
+      "dim": "1d",
+      "scheme": "wenoz",
+      "nx1": 256,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 4.689580202102661
+    },
+    {
+      "case": "sod",
+      "physics": "hydro",
+      "dim": "1d",
+      "scheme": "wenoz",
+      "nx1": 512,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 4.921968936920166
+    },
+    {
+      "case": "sod",
+      "physics": "hydro",
+      "dim": "1d",
+      "scheme": "wenoz",
+      "nx1": 1024,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 5.66727352142334
+    },
+    {
+      "case": "bw",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "plm",
+      "nx1": 256,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 4.831498384475708
+    },
+    {
+      "case": "bw",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "plm",
+      "nx1": 512,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 5.09998893737793
+    },
+    {
+      "case": "bw",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "plm",
+      "nx1": 1024,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 5.740323543548584
+    },
+    {
+      "case": "bw",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "ppm_fb",
+      "nx1": 256,
+      "rc": 0,
+      "nmood": 15620,
+      "wall_s": 5.455307722091675
+    },
+    {
+      "case": "bw",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "ppm_fb",
+      "nx1": 512,
+      "rc": 0,
+      "nmood": 46976,
+      "wall_s": 6.407660722732544
+    },
+    {
+      "case": "bw",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "ppm_fb",
+      "nx1": 1024,
+      "rc": 0,
+      "nmood": 139286,
+      "wall_s": 8.186083555221558
+    },
+    {
+      "case": "bw",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "teno",
+      "nx1": 256,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 4.895114898681641
+    },
+    {
+      "case": "bw",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "teno",
+      "nx1": 512,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 5.3945393562316895
+    },
+    {
+      "case": "bw",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "teno",
+      "nx1": 1024,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 6.336426734924316
+    },
+    {
+      "case": "bw",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "wenoz",
+      "nx1": 256,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 5.056381940841675
+    },
+    {
+      "case": "bw",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "wenoz",
+      "nx1": 512,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 5.467697620391846
+    },
+    {
+      "case": "bw",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "wenoz",
+      "nx1": 1024,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 6.279923915863037
+    },
+    {
+      "case": "rj2a",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "plm",
+      "nx1": 256,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 4.898343086242676
+    },
+    {
+      "case": "rj2a",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "plm",
+      "nx1": 512,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 5.323077917098999
+    },
+    {
+      "case": "rj2a",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "plm",
+      "nx1": 1024,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 6.295633792877197
+    },
+    {
+      "case": "rj2a",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "ppm_fb",
+      "nx1": 256,
+      "rc": 0,
+      "nmood": 44934,
+      "wall_s": 6.194762706756592
+    },
+    {
+      "case": "rj2a",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "ppm_fb",
+      "nx1": 512,
+      "rc": 0,
+      "nmood": 160045,
+      "wall_s": 7.311729192733765
+    },
+    {
+      "case": "rj2a",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "ppm_fb",
+      "nx1": 1024,
+      "rc": 0,
+      "nmood": 530082,
+      "wall_s": 10.259937524795532
+    },
+    {
+      "case": "rj2a",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "teno",
+      "nx1": 256,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 5.098629713058472
+    },
+    {
+      "case": "rj2a",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "teno",
+      "nx1": 512,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 5.725203275680542
+    },
+    {
+      "case": "rj2a",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "teno",
+      "nx1": 1024,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 7.114076614379883
+    },
+    {
+      "case": "rj2a",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "wenoz",
+      "nx1": 256,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 5.156071424484253
+    },
+    {
+      "case": "rj2a",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "wenoz",
+      "nx1": 512,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 5.787648439407349
+    },
+    {
+      "case": "rj2a",
+      "physics": "mhd",
+      "dim": "1d",
+      "scheme": "wenoz",
+      "nx1": 1024,
+      "rc": 0,
+      "nmood": 0,
+      "wall_s": 7.087417125701904
+    }
+  ],
+  "stress": [
+    {
+      "case": "blast_grmhd",
+      "physics": "grmhd",
+      "dim": "2d",
+      "scheme": "plm_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 4.175511837005615,
+      "health": "non-finite",
+      "floors": 16821395
+    },
+    {
+      "case": "blast_grmhd",
+      "physics": "grmhd",
+      "dim": "2d",
+      "scheme": "plm",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 4.899155616760254,
+      "health": "floored",
+      "floors": 3352
+    },
+    {
+      "case": "blast_grmhd",
+      "physics": "grmhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "returncode": 0,
+      "nmood_total": 12660580,
+      "wall_s": 4.9667067527771,
+      "health": "floored",
+      "floors": 1994
+    },
+    {
+      "case": "blast_grmhd",
+      "physics": "grmhd",
+      "dim": "2d",
+      "scheme": "teno_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 4.27195143699646,
+      "health": "non-finite",
+      "floors": 29086371
+    },
+    {
+      "case": "blast_grmhd",
+      "physics": "grmhd",
+      "dim": "2d",
+      "scheme": "teno",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 4.7388060092926025,
+      "health": "floored",
+      "floors": 3469
+    },
+    {
+      "case": "blast_grmhd_uct",
+      "physics": "grmhd",
+      "dim": "2d",
+      "scheme": "plm_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 5.430624723434448,
+      "health": "floored",
+      "floors": 10671
+    },
+    {
+      "case": "blast_grmhd_uct",
+      "physics": "grmhd",
+      "dim": "2d",
+      "scheme": "plm",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 4.817351579666138,
+      "health": "floored",
+      "floors": 12069
+    },
+    {
+      "case": "blast_grmhd_uct",
+      "physics": "grmhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "returncode": 0,
+      "nmood_total": 11926124,
+      "wall_s": 10.237368106842041,
+      "health": "floored",
+      "floors": 25241
+    },
+    {
+      "case": "blast_grmhd_uct",
+      "physics": "grmhd",
+      "dim": "2d",
+      "scheme": "teno_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 5.322360277175903,
+      "health": "non-finite",
+      "floors": 41912775
+    },
+    {
+      "case": "blast_grmhd_uct",
+      "physics": "grmhd",
+      "dim": "2d",
+      "scheme": "teno",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 4.985810995101929,
+      "health": "non-finite",
+      "floors": 5805290
+    },
+    {
+      "case": "blast_grmhd_uct",
+      "physics": "grmhd",
+      "dim": "2d",
+      "scheme": "wenoz_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 5.430042505264282,
+      "health": "non-finite",
+      "floors": 38741085
+    },
+    {
+      "case": "blast_grmhd_uct",
+      "physics": "grmhd",
+      "dim": "2d",
+      "scheme": "wenoz",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 5.521485805511475,
+      "health": "floored",
+      "floors": 17339
+    },
+    {
+      "case": "blast_grmhd",
+      "physics": "grmhd",
+      "dim": "2d",
+      "scheme": "wenoz_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 5.316668272018433,
+      "health": "floored",
+      "floors": 97
+    },
+    {
+      "case": "blast_grmhd",
+      "physics": "grmhd",
+      "dim": "2d",
+      "scheme": "wenoz",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 4.378544807434082,
+      "health": "floored",
+      "floors": 97
+    },
+    {
+      "case": "blast_hydro",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "plm_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 5.4710853099823,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "blast_hydro",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "plm",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 6.202395915985107,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "blast_hydro",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "returncode": 0,
+      "nmood_total": 22573532,
+      "wall_s": 20.653642892837524,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "blast_hydro",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "teno_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 6.968309640884399,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "blast_hydro",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "teno",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 7.053554058074951,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "blast_hydro",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "wenoz_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 6.358892917633057,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "blast_hydro",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "wenoz",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 7.719371795654297,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "blast_mhd_lowbeta",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "plm_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 9.197941303253174,
+      "health": "floored",
+      "floors": 21837
+    },
+    {
+      "case": "blast_mhd_lowbeta",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "plm",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 8.389042139053345,
+      "health": "floored",
+      "floors": 9244
+    },
+    {
+      "case": "blast_mhd_lowbeta",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "returncode": 0,
+      "nmood_total": 107223730,
+      "wall_s": 25.202003955841064,
+      "health": "floored",
+      "floors": 10956
+    },
+    {
+      "case": "blast_mhd_lowbeta",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "teno_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 586.9671671390533,
+      "health": "non-finite",
+      "floors": 318248
+    },
+    {
+      "case": "blast_mhd_lowbeta",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "teno",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 15.562714338302612,
+      "health": "floored",
+      "floors": 747673
+    },
+    {
+      "case": "blast_mhd_lowbeta",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "wenoz_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 14.398079633712769,
+      "health": "floored",
+      "floors": 987790
+    },
+    {
+      "case": "blast_mhd_lowbeta",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "wenoz",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 16.307144165039062,
+      "health": "floored",
+      "floors": 831319
+    },
+    {
+      "case": "blast_mhd",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "plm_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 11.2309250831604,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "blast_mhd",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "plm",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 12.885554313659668,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "blast_mhd",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "returncode": 0,
+      "nmood_total": 95416781,
+      "wall_s": 58.25843954086304,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "blast_mhd",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "teno_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 15.08973503112793,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "blast_mhd",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "teno",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 17.54408073425293,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "blast_mhd",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "wenoz_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 15.569182634353638,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "blast_mhd",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "wenoz",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 17.858931064605713,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "current_sheet_n1024",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "plm_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 40.5736882686615,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "current_sheet_n1024",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "plm",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 46.522233963012695,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "current_sheet_n1024",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "returncode": 0,
+      "nmood_total": 2957138485,
+      "wall_s": 195.962327003479,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "current_sheet_n1024",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "teno_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 24.36186718940735,
+      "health": "non-finite",
+      "floors": 3720
+    },
+    {
+      "case": "current_sheet_n1024",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "teno",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 67.9896035194397,
+      "health": "non-finite",
+      "floors": 1111726
+    },
+    {
+      "case": "current_sheet_n1024",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "wenoz_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 71.32430768013,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "current_sheet_n1024",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "wenoz",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 80.9039614200592,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "current_sheet_n512",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "plm_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 13.270320415496826,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "current_sheet_n512",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "plm",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 15.058834075927734,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "current_sheet_n512",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "returncode": 0,
+      "nmood_total": 530494387,
+      "wall_s": 47.54116702079773,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "current_sheet_n512",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "teno_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 11.721870183944702,
+      "health": "non-finite",
+      "floors": 7684
+    },
+    {
+      "case": "current_sheet_n512",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "teno",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 21.670106410980225,
+      "health": "non-finite",
+      "floors": 79200
+    },
+    {
+      "case": "current_sheet_n512",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "wenoz_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 15.769938707351685,
+      "health": "non-finite",
+      "floors": 747
+    },
+    {
+      "case": "current_sheet_n512",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "wenoz",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 22.84101390838623,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "current_sheet",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "plm_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 7.15811824798584,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "current_sheet",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "plm",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 9.257392644882202,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "current_sheet",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "returncode": 0,
+      "nmood_total": 105619933,
+      "wall_s": 22.879512548446655,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "current_sheet",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "teno_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 6.885414123535156,
+      "health": "non-finite",
+      "floors": 5784
+    },
+    {
+      "case": "current_sheet",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "teno",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 425.61244440078735,
+      "health": "non-finite",
+      "floors": 57853
+    },
+    {
+      "case": "current_sheet",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "wenoz_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 9.1358163356781,
+      "health": "floored",
+      "floors": 642
+    },
+    {
+      "case": "current_sheet",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "wenoz",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 11.465545654296875,
+      "health": "floored",
+      "floors": 642
+    },
+    {
+      "case": "fu_jet_m80",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "plm_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 4.022455453872681,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "fu_jet_m80",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "plm",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 5.153618574142456,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "fu_jet_m80",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "returncode": 0,
+      "nmood_total": 8001988,
+      "wall_s": 10.29435920715332,
+      "health": "floored",
+      "floors": 1
+    },
+    {
+      "case": "fu_jet_m80",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "teno_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 3.842344045639038,
+      "health": "non-finite",
+      "floors": 42
+    },
+    {
+      "case": "fu_jet_m80",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "teno",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 163.77474737167358,
+      "health": "non-finite",
+      "floors": 165
+    },
+    {
+      "case": "fu_jet_m80",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "wenoz_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 4.33439826965332,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "fu_jet_m80",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "wenoz",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 5.095012187957764,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "ha_jet",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "plm_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 4.523331165313721,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "ha_jet",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "plm",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 5.7679603099823,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "ha_jet",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "returncode": 0,
+      "nmood_total": 8495421,
+      "wall_s": 10.488210439682007,
+      "health": "floored",
+      "floors": 6
+    },
+    {
+      "case": "ha_jet",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "teno_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 4.037832021713257,
+      "health": "non-finite",
+      "floors": 34
+    },
+    {
+      "case": "ha_jet",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "teno",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 5.158279895782471,
+      "health": "non-finite",
+      "floors": 38
+    },
+    {
+      "case": "ha_jet",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "wenoz_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 5.599099159240723,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "ha_jet",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "wenoz",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 6.697075605392456,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "implode_hydro",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "plm_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 7.516884088516235,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "implode_hydro",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "plm",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 9.043246746063232,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "implode_hydro",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "returncode": 0,
+      "nmood_total": 175861689,
+      "wall_s": 31.760163068771362,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "implode_hydro",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "teno_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 9.638213634490967,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "implode_hydro",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "teno",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 10.908190488815308,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "implode_hydro",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "wenoz_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 10.161576509475708,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "implode_hydro",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "wenoz",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 11.987500667572021,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "jet_n600",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "plm_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 14.938365697860718,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "jet_n600",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "plm",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 17.870752334594727,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "jet_n600",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "returncode": 0,
+      "nmood_total": 174181722,
+      "wall_s": 72.20312070846558,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "jet_n600",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "teno_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 18.94264030456543,
+      "health": "non-finite",
+      "floors": 346
+    },
+    {
+      "case": "jet_n600",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "teno",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 27.83327007293701,
+      "health": "floored",
+      "floors": 1559
+    },
+    {
+      "case": "jet_n600",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "wenoz_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 17.767769813537598,
+      "health": "non-finite",
+      "floors": 513
+    },
+    {
+      "case": "jet_n600",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "wenoz",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 29.2946674823761,
+      "health": "floored",
+      "floors": 1085
+    },
+    {
+      "case": "jet",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "plm_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 10.734564304351807,
+      "health": "floored",
+      "floors": 18217
+    },
+    {
+      "case": "jet",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "plm",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 12.166862487792969,
+      "health": "floored",
+      "floors": 15207
+    },
+    {
+      "case": "jet",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "returncode": 0,
+      "nmood_total": 31582594,
+      "wall_s": 25.100942850112915,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "jet",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "teno_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 10.917438268661499,
+      "health": "floored",
+      "floors": 1562
+    },
+    {
+      "case": "jet",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "teno",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 12.244779109954834,
+      "health": "floored",
+      "floors": 1018
+    },
+    {
+      "case": "jet",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "wenoz_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 10.928439617156982,
+      "health": "floored",
+      "floors": 892
+    },
+    {
+      "case": "jet",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "wenoz",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 12.993719577789307,
+      "health": "floored",
+      "floors": 892
+    },
+    {
+      "case": "kh_rr22_n256",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "plm_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 55.350093841552734,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "kh_rr22_n256",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "plm",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 40.601829051971436,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "kh_rr22_n256",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "returncode": 0,
+      "nmood_total": 565704741,
+      "wall_s": 148.76915740966797,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "kh_rr22_n256",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "teno_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 56.66392111778259,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "kh_rr22_n256",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "teno",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 65.65192127227783,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "kh_rr22_n256",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "wenoz_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 57.97780466079712,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "kh_rr22_n256",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "wenoz",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 64.64863204956055,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "kh_rr22",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "plm_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 16.769900798797607,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "kh_rr22",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "plm",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 19.217286586761475,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "kh_rr22",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "returncode": 0,
+      "nmood_total": 91187458,
+      "wall_s": 73.33564639091492,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "kh_rr22",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "teno_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 23.64289689064026,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "kh_rr22",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "teno",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 28.076272010803223,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "kh_rr22",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "wenoz_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 23.739564895629883,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "kh_rr22",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "wenoz",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 28.012728691101074,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "mhd_jet",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "plm_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 10.679098844528198,
+      "health": "floored",
+      "floors": 11902795
+    },
+    {
+      "case": "mhd_jet",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "plm",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 15.476367235183716,
+      "health": "floored",
+      "floors": 7129272
+    },
+    {
+      "case": "mhd_jet",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "returncode": 0,
+      "nmood_total": 80757710,
+      "wall_s": 15.537095069885254,
+      "health": "non-finite",
+      "floors": 241541
+    },
+    {
+      "case": "mhd_jet_revs4",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "plm_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 9.94114351272583,
+      "health": "floored",
+      "floors": 11902795
+    },
+    {
+      "case": "mhd_jet_revs4",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "plm",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 11.332451343536377,
+      "health": "floored",
+      "floors": 7129272
+    },
+    {
+      "case": "mhd_jet_revs4",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "returncode": 0,
+      "nmood_total": 164123198,
+      "wall_s": 26.95353078842163,
+      "health": "floored",
+      "floors": 64076053
+    },
+    {
+      "case": "mhd_jet_revs4",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "teno_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 8.749964952468872,
+      "health": "non-finite",
+      "floors": 9484175
+    },
+    {
+      "case": "mhd_jet_revs4",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "teno",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 12.801611423492432,
+      "health": "floored",
+      "floors": 10538414
+    },
+    {
+      "case": "mhd_jet_revs4",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "wenoz_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 25.062954902648926,
+      "health": "non-finite",
+      "floors": 50526442
+    },
+    {
+      "case": "mhd_jet_revs4",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "wenoz",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 13.831437110900879,
+      "health": "floored",
+      "floors": 11532463
+    },
+    {
+      "case": "mhd_jet",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "teno_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 9.069286108016968,
+      "health": "non-finite",
+      "floors": 9484175
+    },
+    {
+      "case": "mhd_jet",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "teno",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 18.397409439086914,
+      "health": "floored",
+      "floors": 10538414
+    },
+    {
+      "case": "mhd_jet",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "wenoz_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 33.40688419342041,
+      "health": "non-finite",
+      "floors": 50526442
+    },
+    {
+      "case": "mhd_jet",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "wenoz",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 14.960851192474365,
+      "health": "floored",
+      "floors": 11532463
+    },
+    {
+      "case": "orszag_tang",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "plm_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 10.16148591041565,
+      "health": "floored",
+      "floors": 1
+    },
+    {
+      "case": "orszag_tang",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "plm",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 11.835667848587036,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "orszag_tang",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "returncode": 0,
+      "nmood_total": 92770841,
+      "wall_s": 27.372113943099976,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "orszag_tang",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "teno_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 17.624778270721436,
+      "health": "floored",
+      "floors": 3
+    },
+    {
+      "case": "orszag_tang",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "teno",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 16.059730052947998,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "orszag_tang",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "wenoz_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 14.3320951461792,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "orszag_tang",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "wenoz",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 15.153056859970093,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "rotor",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "plm_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 4.272541284561157,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "rotor",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "plm",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 4.542306423187256,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "rotor",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "returncode": 0,
+      "nmood_total": 19741585,
+      "wall_s": 7.5611584186553955,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "rotor",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "teno_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 4.730059385299683,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "rotor",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "teno",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 5.228531360626221,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "rotor",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "wenoz_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 4.712350130081177,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "rotor",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "wenoz",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 5.013249397277832,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "slotted_cyl",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "plm_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 4.174513816833496,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "slotted_cyl",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "plm",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 4.381020545959473,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "slotted_cyl",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "returncode": 0,
+      "nmood_total": 2440854,
+      "wall_s": 11.137042045593262,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "slotted_cyl",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "teno_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 4.457943916320801,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "slotted_cyl",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "teno",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 5.551639795303345,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "slotted_cyl",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "wenoz_bare",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 6.035802125930786,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "slotted_cyl",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "wenoz",
+      "returncode": 0,
+      "nmood_total": 0,
+      "wall_s": 4.628018140792847,
+      "health": "clean",
+      "floors": 0
+    }
+  ],
+  "tolerance": [
+    {
+      "case": "blast_grmhd",
+      "physics": "grmhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 0.01,
+      "nx1": 256,
+      "returncode": 0,
+      "nmood_total": 9932282,
+      "wall_s": 5.566143989562988,
+      "plot_field": "dens"
+    },
+    {
+      "case": "blast_grmhd",
+      "physics": "grmhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 0.001,
+      "nx1": 256,
+      "returncode": 0,
+      "nmood_total": 10647492,
+      "wall_s": 5.20865797996521,
+      "plot_field": "dens"
+    },
+    {
+      "case": "blast_grmhd",
+      "physics": "grmhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 0.0001,
+      "nx1": 256,
+      "returncode": 0,
+      "nmood_total": 12020211,
+      "wall_s": 4.732102870941162,
+      "plot_field": "dens"
+    },
+    {
+      "case": "blast_grmhd",
+      "physics": "grmhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 1e-05,
+      "nx1": 256,
+      "returncode": 0,
+      "nmood_total": 12660580,
+      "wall_s": 5.900129079818726,
+      "plot_field": "dens"
+    },
+    {
+      "case": "blast_grmhd",
+      "physics": "grmhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 1e-06,
+      "nx1": 256,
+      "returncode": 0,
+      "nmood_total": 13523525,
+      "wall_s": 4.647405385971069,
+      "plot_field": "dens"
+    },
+    {
+      "case": "blast_hydro",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 0.01,
+      "nx1": 200,
+      "returncode": 0,
+      "nmood_total": 7647640,
+      "wall_s": 16.249534606933594,
+      "plot_field": "dens"
+    },
+    {
+      "case": "blast_hydro",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 0.001,
+      "nx1": 200,
+      "returncode": 0,
+      "nmood_total": 16134404,
+      "wall_s": 17.240208387374878,
+      "plot_field": "dens"
+    },
+    {
+      "case": "blast_hydro",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 0.0001,
+      "nx1": 200,
+      "returncode": 0,
+      "nmood_total": 21485584,
+      "wall_s": 14.453444242477417,
+      "plot_field": "dens"
+    },
+    {
+      "case": "blast_hydro",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 1e-05,
+      "nx1": 200,
+      "returncode": 0,
+      "nmood_total": 22573532,
+      "wall_s": 14.552955150604248,
+      "plot_field": "dens"
+    },
+    {
+      "case": "blast_hydro",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 1e-06,
+      "nx1": 200,
+      "returncode": 0,
+      "nmood_total": 22947472,
+      "wall_s": 15.483547925949097,
+      "plot_field": "dens"
+    },
+    {
+      "case": "blast_mhd",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 0.01,
+      "nx1": 200,
+      "returncode": 0,
+      "nmood_total": 41460902,
+      "wall_s": 59.82132530212402,
+      "plot_field": "dens"
+    },
+    {
+      "case": "blast_mhd",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 0.001,
+      "nx1": 200,
+      "returncode": 0,
+      "nmood_total": 80533475,
+      "wall_s": 55.520235776901245,
+      "plot_field": "dens"
+    },
+    {
+      "case": "blast_mhd",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 0.0001,
+      "nx1": 200,
+      "returncode": 0,
+      "nmood_total": 92965009,
+      "wall_s": 57.27581071853638,
+      "plot_field": "dens"
+    },
+    {
+      "case": "blast_mhd",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 1e-05,
+      "nx1": 200,
+      "returncode": 0,
+      "nmood_total": 95416781,
+      "wall_s": 59.123695611953735,
+      "plot_field": "dens"
+    },
+    {
+      "case": "blast_mhd",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 1e-06,
+      "nx1": 200,
+      "returncode": 0,
+      "nmood_total": 96365791,
+      "wall_s": 56.92161178588867,
+      "plot_field": "dens"
+    },
+    {
+      "case": "blast_mhd_lowbeta",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 0.01,
+      "nx1": 200,
+      "returncode": 0,
+      "nmood_total": 12307882,
+      "wall_s": 25.77090311050415,
+      "plot_field": "dens"
+    },
+    {
+      "case": "blast_mhd_lowbeta",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 0.001,
+      "nx1": 200,
+      "returncode": 0,
+      "nmood_total": 64423083,
+      "wall_s": 20.240992307662964,
+      "plot_field": "dens"
+    },
+    {
+      "case": "blast_mhd_lowbeta",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 0.0001,
+      "nx1": 200,
+      "returncode": 0,
+      "nmood_total": 101089350,
+      "wall_s": 20.909144401550293,
+      "plot_field": "dens"
+    },
+    {
+      "case": "blast_mhd_lowbeta",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 1e-05,
+      "nx1": 200,
+      "returncode": 0,
+      "nmood_total": 107223730,
+      "wall_s": 21.437143325805664,
+      "plot_field": "dens"
+    },
+    {
+      "case": "blast_mhd_lowbeta",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 1e-06,
+      "nx1": 200,
+      "returncode": 0,
+      "nmood_total": 109024155,
+      "wall_s": 21.419799089431763,
+      "plot_field": "dens"
+    },
+    {
+      "case": "current_sheet",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 0.01,
+      "nx1": 256,
+      "returncode": 0,
+      "nmood_total": 44046017915,
+      "wall_s": 785.6429033279419,
+      "plot_field": "dens"
+    },
+    {
+      "case": "current_sheet",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 0.001,
+      "nx1": 256,
+      "returncode": 0,
+      "nmood_total": 35391283,
+      "wall_s": 19.716842889785767,
+      "plot_field": "dens"
+    },
+    {
+      "case": "current_sheet",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 0.0001,
+      "nx1": 256,
+      "returncode": 0,
+      "nmood_total": 72434550,
+      "wall_s": 19.29183053970337,
+      "plot_field": "dens"
+    },
+    {
+      "case": "current_sheet",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 1e-05,
+      "nx1": 256,
+      "returncode": 0,
+      "nmood_total": 105619933,
+      "wall_s": 19.570242881774902,
+      "plot_field": "dens"
+    },
+    {
+      "case": "current_sheet",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 1e-06,
+      "nx1": 256,
+      "returncode": 0,
+      "nmood_total": 111274060,
+      "wall_s": 19.358506441116333,
+      "plot_field": "dens"
+    },
+    {
+      "case": "fu_jet_m80",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 0.01,
+      "nx1": 448,
+      "returncode": 0,
+      "nmood_total": 335018083,
+      "wall_s": 95.79762291908264,
+      "plot_field": "dens"
+    },
+    {
+      "case": "fu_jet_m80",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 0.001,
+      "nx1": 448,
+      "returncode": 0,
+      "nmood_total": 220484524,
+      "wall_s": 11.463873147964478,
+      "plot_field": "dens"
+    },
+    {
+      "case": "fu_jet_m80",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 0.0001,
+      "nx1": 448,
+      "returncode": 0,
+      "nmood_total": 4394821,
+      "wall_s": 6.799262046813965,
+      "plot_field": "dens"
+    },
+    {
+      "case": "fu_jet_m80",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 1e-05,
+      "nx1": 448,
+      "returncode": 0,
+      "nmood_total": 8001988,
+      "wall_s": 7.364190101623535,
+      "plot_field": "dens"
+    },
+    {
+      "case": "fu_jet_m80",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 1e-06,
+      "nx1": 448,
+      "returncode": 0,
+      "nmood_total": 9063204,
+      "wall_s": 6.811092376708984,
+      "plot_field": "dens"
+    },
+    {
+      "case": "ha_jet",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 0.01,
+      "nx1": 512,
+      "returncode": 0,
+      "nmood_total": 546496233,
+      "wall_s": 36.643460750579834,
+      "plot_field": "dens"
+    },
+    {
+      "case": "ha_jet",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 0.001,
+      "nx1": 512,
+      "returncode": 0,
+      "nmood_total": 555526671,
+      "wall_s": 16.449207544326782,
+      "plot_field": "dens"
+    },
+    {
+      "case": "ha_jet",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 0.0001,
+      "nx1": 512,
+      "returncode": 0,
+      "nmood_total": 4762453,
+      "wall_s": 7.930532217025757,
+      "plot_field": "dens"
+    },
+    {
+      "case": "ha_jet",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 1e-05,
+      "nx1": 512,
+      "returncode": 0,
+      "nmood_total": 8495421,
+      "wall_s": 8.638962268829346,
+      "plot_field": "dens"
+    },
+    {
+      "case": "ha_jet",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 1e-06,
+      "nx1": 512,
+      "returncode": 0,
+      "nmood_total": 10291043,
+      "wall_s": 7.9528727531433105,
+      "plot_field": "dens"
+    },
+    {
+      "case": "implode_hydro",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 0.01,
+      "nx1": 200,
+      "returncode": 0,
+      "nmood_total": 62205225,
+      "wall_s": 34.349257469177246,
+      "plot_field": "dens"
+    },
+    {
+      "case": "implode_hydro",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 0.001,
+      "nx1": 200,
+      "returncode": 0,
+      "nmood_total": 159450725,
+      "wall_s": 33.01205110549927,
+      "plot_field": "dens"
+    },
+    {
+      "case": "implode_hydro",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 0.0001,
+      "nx1": 200,
+      "returncode": 0,
+      "nmood_total": 174105603,
+      "wall_s": 34.09156346321106,
+      "plot_field": "dens"
+    },
+    {
+      "case": "implode_hydro",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 1e-05,
+      "nx1": 200,
+      "returncode": 0,
+      "nmood_total": 175861689,
+      "wall_s": 30.102568864822388,
+      "plot_field": "dens"
+    },
+    {
+      "case": "implode_hydro",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 1e-06,
+      "nx1": 200,
+      "returncode": 0,
+      "nmood_total": 176301945,
+      "wall_s": 30.58934187889099,
+      "plot_field": "dens"
+    },
+    {
+      "case": "jet",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 0.01,
+      "nx1": 300,
+      "returncode": 0,
+      "nmood_total": 45108683,
+      "wall_s": 12.802889108657837,
+      "plot_field": "dens"
+    },
+    {
+      "case": "jet",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 0.001,
+      "nx1": 300,
+      "returncode": 0,
+      "nmood_total": 30322796,
+      "wall_s": 42.533358573913574,
+      "plot_field": "dens"
+    },
+    {
+      "case": "jet",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 0.0001,
+      "nx1": 300,
+      "returncode": 0,
+      "nmood_total": 23932782,
+      "wall_s": 22.538772583007812,
+      "plot_field": "dens"
+    },
+    {
+      "case": "jet",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 1e-05,
+      "nx1": 300,
+      "returncode": 0,
+      "nmood_total": 31582594,
+      "wall_s": 22.658840894699097,
+      "plot_field": "dens"
+    },
+    {
+      "case": "jet",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 1e-06,
+      "nx1": 300,
+      "returncode": 0,
+      "nmood_total": 35280279,
+      "wall_s": 22.491897106170654,
+      "plot_field": "dens"
+    },
+    {
+      "case": "kh_rr22",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 0.01,
+      "nx1": 128,
+      "returncode": 0,
+      "nmood_total": 30040095,
+      "wall_s": 65.42592692375183,
+      "plot_field": "dens"
+    },
+    {
+      "case": "kh_rr22",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 0.001,
+      "nx1": 128,
+      "returncode": 0,
+      "nmood_total": 63342024,
+      "wall_s": 61.91054105758667,
+      "plot_field": "dens"
+    },
+    {
+      "case": "kh_rr22",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 0.0001,
+      "nx1": 128,
+      "returncode": 0,
+      "nmood_total": 82938962,
+      "wall_s": 59.110140562057495,
+      "plot_field": "dens"
+    },
+    {
+      "case": "kh_rr22",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 1e-05,
+      "nx1": 128,
+      "returncode": 0,
+      "nmood_total": 91187458,
+      "wall_s": 59.15301704406738,
+      "plot_field": "dens"
+    },
+    {
+      "case": "kh_rr22",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 1e-06,
+      "nx1": 128,
+      "returncode": 0,
+      "nmood_total": 96318115,
+      "wall_s": 57.75718927383423,
+      "plot_field": "dens"
+    },
+    {
+      "case": "mhd_jet",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 0.01,
+      "nx1": 200,
+      "returncode": 0,
+      "nmood_total": 78186664,
+      "wall_s": 16.2451274394989,
+      "plot_field": "dens"
+    },
+    {
+      "case": "mhd_jet",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 0.001,
+      "nx1": 200,
+      "returncode": 0,
+      "nmood_total": 127717420380,
+      "wall_s": 769.9116103649139,
+      "plot_field": "dens"
+    },
+    {
+      "case": "mhd_jet",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 0.0001,
+      "nx1": 200,
+      "returncode": 0,
+      "nmood_total": 86188129480,
+      "wall_s": 881.3024089336395,
+      "plot_field": "dens"
+    },
+    {
+      "case": "mhd_jet",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 1e-05,
+      "nx1": 200,
+      "returncode": 0,
+      "nmood_total": 80757710,
+      "wall_s": 6.728329181671143,
+      "plot_field": "dens"
+    },
+    {
+      "case": "mhd_jet",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 1e-06,
+      "nx1": 200,
+      "returncode": 0,
+      "nmood_total": 80709679,
+      "wall_s": 7.2623443603515625,
+      "plot_field": "dens"
+    },
+    {
+      "case": "orszag_tang",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 0.01,
+      "nx1": 400,
+      "returncode": 0,
+      "nmood_total": 35082072,
+      "wall_s": 52.33875870704651,
+      "plot_field": "dens"
+    },
+    {
+      "case": "orszag_tang",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 0.001,
+      "nx1": 400,
+      "returncode": 0,
+      "nmood_total": 71550770,
+      "wall_s": 69.57169914245605,
+      "plot_field": "dens"
+    },
+    {
+      "case": "orszag_tang",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 0.0001,
+      "nx1": 400,
+      "returncode": 0,
+      "nmood_total": 90149247,
+      "wall_s": 70.223468542099,
+      "plot_field": "dens"
+    },
+    {
+      "case": "orszag_tang",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 1e-05,
+      "nx1": 400,
+      "returncode": 0,
+      "nmood_total": 92770841,
+      "wall_s": 67.65663146972656,
+      "plot_field": "dens"
+    },
+    {
+      "case": "orszag_tang",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 1e-06,
+      "nx1": 400,
+      "returncode": 0,
+      "nmood_total": 93295438,
+      "wall_s": 75.0028989315033,
+      "plot_field": "dens"
+    },
+    {
+      "case": "rotor",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 0.01,
+      "nx1": 400,
+      "returncode": 0,
+      "nmood_total": 2578886,
+      "wall_s": 11.084071636199951,
+      "plot_field": "dens"
+    },
+    {
+      "case": "rotor",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 0.001,
+      "nx1": 400,
+      "returncode": 0,
+      "nmood_total": 16793705,
+      "wall_s": 7.936384201049805,
+      "plot_field": "dens"
+    },
+    {
+      "case": "rotor",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 0.0001,
+      "nx1": 400,
+      "returncode": 0,
+      "nmood_total": 18826349,
+      "wall_s": 7.726302623748779,
+      "plot_field": "dens"
+    },
+    {
+      "case": "rotor",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 1e-05,
+      "nx1": 400,
+      "returncode": 0,
+      "nmood_total": 19741585,
+      "wall_s": 7.76148247718811,
+      "plot_field": "dens"
+    },
+    {
+      "case": "rotor",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 1e-06,
+      "nx1": 400,
+      "returncode": 0,
+      "nmood_total": 20492178,
+      "wall_s": 8.162254095077515,
+      "plot_field": "dens"
+    },
+    {
+      "case": "slotted_cyl",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 0.01,
+      "nx1": 200,
+      "returncode": 0,
+      "nmood_total": 61122,
+      "wall_s": 7.023053169250488,
+      "plot_field": "s_00"
+    },
+    {
+      "case": "slotted_cyl",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 0.001,
+      "nx1": 200,
+      "returncode": 0,
+      "nmood_total": 650314,
+      "wall_s": 7.488023281097412,
+      "plot_field": "s_00"
+    },
+    {
+      "case": "slotted_cyl",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 0.0001,
+      "nx1": 200,
+      "returncode": 0,
+      "nmood_total": 1410463,
+      "wall_s": 7.728758811950684,
+      "plot_field": "s_00"
+    },
+    {
+      "case": "slotted_cyl",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 1e-05,
+      "nx1": 200,
+      "returncode": 0,
+      "nmood_total": 2440854,
+      "wall_s": 8.23508334159851,
+      "plot_field": "s_00"
+    },
+    {
+      "case": "slotted_cyl",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "ppm_fb",
+      "rtol": 1e-06,
+      "nx1": 200,
+      "returncode": 0,
+      "nmood_total": 3129071,
+      "wall_s": 7.633999824523926,
+      "plot_field": "s_00"
+    }
+  ],
+  "gates": {
+    "ppm_fb_linear_zero_demotions": true,
+    "ppm_fb_linear_completed": true,
+    "all_completed": true
+  }
+}

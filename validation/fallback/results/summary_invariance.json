@@ -1,0 +1,62 @@
+[
+  {
+    "suite": "invariance",
+    "id": "rj2a_decomp",
+    "parts": [
+      128,
+      128
+    ],
+    "rc": 0,
+    "wall_s": 2.0169882774353027,
+    "tab_sha": "619626aeb9b90e9b",
+    "outdir": "/Users/velasco/athenak/.claude/worktrees/fallback-validation/validation/fallback/results/invariance/inv_rj2a_decomp_ppm_fb_128_128"
+  },
+  {
+    "suite": "invariance",
+    "id": "rj2a_decomp",
+    "parts": [
+      256
+    ],
+    "rc": 0,
+    "wall_s": 2.0691568851470947,
+    "tab_sha": "e795dbb9864106ba",
+    "outdir": "/Users/velasco/athenak/.claude/worktrees/fallback-validation/validation/fallback/results/invariance/inv_rj2a_decomp_ppm_fb_256"
+  },
+  {
+    "suite": "invariance",
+    "id": "sod_decomp",
+    "parts": [
+      128,
+      128
+    ],
+    "rc": 0,
+    "wall_s": 1.930293083190918,
+    "tab_sha": "d1324341ba8eb0a3",
+    "outdir": "/Users/velasco/athenak/.claude/worktrees/fallback-validation/validation/fallback/results/invariance/inv_sod_decomp_ppm_fb_128_128"
+  },
+  {
+    "suite": "invariance",
+    "id": "sod_decomp",
+    "parts": [
+      256
+    ],
+    "rc": 0,
+    "wall_s": 1.9567019939422607,
+    "tab_sha": "03f584e938f0acc6",
+    "outdir": "/Users/velasco/athenak/.claude/worktrees/fallback-validation/validation/fallback/results/invariance/inv_sod_decomp_ppm_fb_256"
+  },
+  {
+    "suite": "invariance",
+    "id": "sod_decomp",
+    "parts": [
+      64,
+      64,
+      64,
+      64
+    ],
+    "rc": 0,
+    "wall_s": 2.035910129547119,
+    "tab_sha": "778ef733b951e035",
+    "outdir": "/Users/velasco/athenak/.claude/worktrees/fallback-validation/validation/fallback/results/invariance/inv_sod_decomp_ppm_fb_64_64_64_64"
+  }
+]

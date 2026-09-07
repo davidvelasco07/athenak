@@ -1,0 +1,33 @@
+# Keep summaries and provenance; ignore bulky raw dumps
+results/**/bin/
+results/**/tab/
+results/**/*.vtk
+results/**/*.rst
+results/**/run.log
+results/_smoke_*/
+scripts/__pycache__/
+report/*.pdf
+report/*.synctex*
+.mplcache/
+
+# Machine-generated bulk that must not enter the history.
+# (vendor/, results/*/ and report/ are handled by the repo-root .gitignore.)
+# NB: .gitignore has no trailing-comment syntax -- a comment after a pattern becomes
+# part of the pattern.  Keep every comment on its own line.
+
+
+# superseded figure sets, kept locally for diffing only
+figures_old/
+figures_h/
+
+
+# per-cycle EOS event logs: regenerable, and large on long runs
+results/**/*_smoke/*.log
+results/**/*_rtol_*/*.log
+.mplconfig/
+
+# 9 MB build product, and stale relative to the .md; regenerate from the .tex
+FALLBACK_VALIDATION.pdf
+
+# 25 MB of report figures: regenerable from results/ via scripts/plot_*.py (see README)
+figures/

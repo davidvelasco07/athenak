@@ -1,0 +1,831 @@
+# MOOD fallback validation matrix
+# Schemes compared (fixed within each test: RS, CFL, EOS, grid, tlim):
+#   ppm_fb  = reconstruct=ppm + mood=true + rk3
+#   plm     = reconstruct=plm + mood=false + rk2
+#   wenoz   = reconstruct=wenoz + mood=false + rk3
+#   teno    = reconstruct=teno + mood=false + rk3
+#
+# Physics blocks in the report: hydro | mhd | grhydro | grmhd
+# Each physics covers 1D / 2D / 3D linear waves (+ 1D shocks, multi-D stress).
+
+schemes:
+  ppm_fb:
+    fofc: false         # mutually exclusive with mood=true
+    integrator: rk3
+    reconstruct: ppm
+    mood: true
+    nghost_hydro: 5
+    nghost_mhd_uct: 6
+  plm:
+    fofc: true          # a-posteriori counterpart of MOOD (see scheme_overrides)
+    integrator: rk2
+    reconstruct: plm
+    mood: false
+    # 3, not 2: FOFC + PLM requires at least 3 ghost zones
+    nghost_hydro: 3
+    nghost_mhd_uct: 3
+  wenoz:
+    fofc: true          # a-posteriori counterpart of MOOD (see scheme_overrides)
+    integrator: rk3
+    reconstruct: wenoz
+    mood: false
+    # 4, not 3: FOFC with a +-2-stencil reconstruction needs one more ghost
+    nghost_hydro: 4
+    nghost_mhd_uct: 5
+  teno:
+    fofc: true          # a-posteriori counterpart of MOOD (see scheme_overrides)
+    integrator: rk3
+    reconstruct: teno
+    mood: false
+    # 4, not 3: FOFC with a +-2-stencil reconstruction needs one more ghost
+    nghost_hydro: 4
+    nghost_mhd_uct: 5
+
+  # --- unprotected variants -------------------------------------------------------
+  # Same base schemes with their a-posteriori safety net switched OFF.  Not the
+  # like-for-like comparison (PPM cannot be run bare -- unlimited PPM requires
+  # mood=true), but they show how load-bearing FOFC actually is for each scheme:
+  # where bare and protected agree, FOFC never fired and the run is bit-identical.
+  # Ghost counts revert to the non-FOFC requirement.
+  plm_bare:
+    fofc: false
+    integrator: rk2
+    reconstruct: plm
+    mood: false
+    nghost_hydro: 2
+    nghost_mhd_uct: 3
+  wenoz_bare:
+    fofc: false
+    integrator: rk3
+    reconstruct: wenoz
+    mood: false
+    nghost_hydro: 3
+    nghost_mhd_uct: 5
+  teno_bare:
+    fofc: false
+    integrator: rk3
+    reconstruct: teno
+    mood: false
+    nghost_hydro: 3
+    nghost_mhd_uct: 5
+
+defaults:
+  cfl: 0.3
+  hydro_rsolver: hlle
+  mhd_rsolver: hlld
+  gr_rsolver: hlle
+  mood_nad_scale: gcfl
+  mood_rtol: 1.0e-5
+  mood_sed: true
+  # Velocity NAD is too aggressive for transverse MHD Alfvén/entropy waves at amp=1e-6;
+  # density/energy/B NAD plus PAD remain active.
+  mood_nad_v: "off"
+  mood_nad_b: comps
+
+linear_waves:
+  amp: 1.0e-6
+  tlim_periods: 1.0
+  require_zero_demotions_for: [ppm_fb]
+  # Grid setup by dimension (diagonal wavevector in 2D/3D when along_x1=false)
+  dimensions:
+    "1d":
+      resolutions: [32, 64, 128, 256]
+      along_x1: true
+      nx2_factor: 0
+      nx3_factor: 0
+    "2d":
+      resolutions: [32, 64, 128]
+      along_x1: false
+      nx2_factor: 0.5
+      nx3_factor: 0
+    "3d":
+      resolutions: [32, 64]
+      along_x1: false
+      nx2_factor: 0.5
+      nx3_factor: 0.5
+  cases:
+    - id: nr_hydro
+      physics: hydro
+      input: tst/inputs/lwave_hydro.athinput
+      soe: hydro
+      waves_1d: ["0", "3", "4"]
+      waves_2d: ["0", "4"]
+      waves_3d: ["0", "4"]
+      special_rel: false
+      general_rel: false
+    - id: nr_mhd
+      physics: mhd
+      input: tst/inputs/lwave_mhd.athinput
+      soe: mhd
+      waves_1d: ["0", "1", "2", "3", "4", "5", "6"]
+      waves_2d: ["0", "6"]
+      waves_3d: ["0", "6"]
+      special_rel: false
+      general_rel: false
+    - id: gr_hydro
+      physics: grhydro
+      input: tst/inputs/lwave_relhydro.athinput
+      soe: hydro
+      waves_1d: ["0", "3", "4"]
+      waves_2d: ["0", "4"]
+      waves_3d: ["0", "4"]
+      special_rel: false
+      general_rel: true
+    - id: gr_mhd
+      physics: grmhd
+      input: tst/inputs/lwave_relmhd.athinput
+      soe: mhd
+      waves_1d: ["0", "1", "2", "3", "4", "5", "6"]
+      waves_2d: ["0", "6"]
+      waves_3d: ["0", "6"]
+      special_rel: false
+      general_rel: true
+
+shocks:
+  resolutions: [256, 512, 1024]
+  cases:
+    - id: sod
+      physics: hydro
+      dim: "1d"
+      input: tst/inputs/sod.athinput
+      soe: hydro
+      analytic: sod
+      special_rel: false
+      general_rel: false
+      rsolver: hlle
+      tlim: 0.25
+    - id: shu_osher
+      physics: hydro
+      dim: "1d"
+      input: inputs/hydro/shu_osher.athinput
+      soe: hydro
+      analytic: null
+      reference_scheme: wenoz
+      special_rel: false
+      general_rel: false
+      rsolver: hlle
+      tlim: 0.47
+    - id: rj2a
+      physics: mhd
+      dim: "1d"
+      input: tst/inputs/rj2a.athinput
+      soe: mhd
+      analytic: rj2a
+      special_rel: false
+      general_rel: false
+      rsolver: hlld
+      tlim: 0.2
+    - id: bw
+      physics: mhd
+      dim: "1d"
+      input: inputs/mhd/bw.athinput
+      soe: mhd
+      analytic: null
+      reference_scheme: wenoz
+      special_rel: false
+      general_rel: false
+      rsolver: hlld
+      tlim: 0.1
+    - id: mb2_gr
+      physics: grhydro
+      dim: "1d"
+      input: tst/inputs/mb2.athinput
+      soe: hydro
+      analytic: null
+      reference_scheme: wenoz
+      special_rel: false
+      general_rel: true
+      rsolver: hlle
+      tlim: 0.4
+    - id: mub1_gr
+      physics: grmhd
+      dim: "1d"
+      input: tst/inputs/mub1.athinput
+      soe: mhd
+      analytic: null
+      reference_scheme: wenoz
+      special_rel: false
+      general_rel: true
+      rsolver: hlle
+      tlim: 0.4
+
+invariance:
+  - id: sod_decomp
+    base: sod
+    partitions: [[256], [128, 128], [64, 64, 64, 64]]
+  - id: rj2a_decomp
+    base: rj2a
+    partitions: [[256], [128, 128]]
+
+# Accuracy/robustness sensitivity of PPM+MOOD to the relaxed-DMP tolerance.
+# The Liska--Wendroff implosion is used because all compared methods remain finite,
+# while its interacting shocks and contacts produce a meaningful demotion response.
+tolerance:
+  # Sweep the relaxed-DMP tolerance on every stress problem, not just two.  The
+  # configs are pulled from stress.local_smoke so grid/tlim/solver stay in step.
+  default_rtols: [1.0e-2, 1.0e-3, 1.0e-4, 1.0e-5, 1.0e-6]
+  include_stress:
+    - current_sheet
+    - jet
+    - rotor
+    - kh_rr22
+    - orszag_tang
+    - blast_mhd
+    - blast_mhd_lowbeta
+    - blast_hydro
+    - blast_grmhd
+    - mhd_jet
+    - ha_jet
+    - fu_jet_m80
+  cases:
+    - id: implode_hydro
+      physics: hydro
+      dim: "2d"
+      input: inputs/hydro/lw_implode.athinput
+      soe: hydro
+      nx: 200
+      tlim: 2.5
+      plot_field: dens
+      rtols: [1.0e-2, 1.0e-3, 1.0e-4, 1.0e-5, 1.0e-6]
+      overrides:
+        - "time/nlim=-1"
+    - id: slotted_cyl
+      physics: hydro
+      dim: "2d"
+      input: inputs/hydro/slotted_cyl.athinput
+      soe: hydro
+      binary: build_slotted/src/athena
+      nx: 200
+      tlim: 1.0
+      cfl: 0.4
+      plot_field: s_00
+      rtols: [1.0e-2, 1.0e-3, 1.0e-4, 1.0e-5, 1.0e-6]
+      overrides:
+        - "time/evolution=kinematic"
+        - "hydro/nscalars=1"
+        - "hydro/rsolver=advect"
+        - "hydro/eos=isothermal"
+        - "mesh/x1min=-0.5"
+        - "mesh/x1max=0.5"
+        - "mesh/x2min=-0.5"
+        - "mesh/x2max=0.5"
+
+# Current-sheet resolution sweep (cluster).  The Harris half-width a0=0.05 on a
+# 6.0 domain spans only ~2 cells at 256^2, so this separates "underresolved sheet"
+# from "detector gap".  The static-equilibrium residual (epsb=epsv=0, ideal MHD)
+# converges 8.1e-2 -> 2.5e-2 -> 8.0e-3 over N = 128 -> 256 -> 512, confirming the
+# corrected IC is a genuine discrete equilibrium.
+sheet_sweep:
+  case: current_sheet
+  resolutions: [256, 512, 1024]
+  note: "Run on Horizon (GB200); 1024^2 x t=5 is the expensive point."
+
+stress:
+  local_smoke:
+    # --- Hydro 2D (paper-typical grids; run on Apollo A100s) ---
+    - id: slotted_cyl
+      physics: hydro
+      dim: "2d"
+      input: inputs/hydro/slotted_cyl.athinput
+      soe: hydro
+      binary: build_slotted/src/athena
+      # Zalesak / Colella: one full rotation; 200² is a common paper mesh
+      nx: 200
+      tlim: 1.0
+      cfl: 0.4
+      plot_field: s_00
+      overrides:
+        - "time/evolution=kinematic"
+        - "hydro/nscalars=1"
+        - "hydro/rsolver=advect"
+        - "hydro/eos=isothermal"
+        - "mesh/x1min=-0.5"
+        - "mesh/x1max=0.5"
+        - "mesh/x2min=-0.5"
+        - "mesh/x2max=0.5"
+    - id: implode_hydro
+      physics: hydro
+      dim: "2d"
+      input: inputs/hydro/lw_implode.athinput
+      soe: hydro
+      # Stock / Liska–Wendroff paper resolution
+      nx: 200
+      tlim: 2.5
+      plot_field: dens
+      overrides:
+        - "time/nlim=-1"
+    # --- MHD 2D ---
+    - id: orszag_tang
+      physics: mhd
+      dim: "2d"
+      input: inputs/mhd/orszag_tang.athinput
+      soe: mhd
+      # Classic Athena OT at 400², evolved to the requested t=1 snapshot.
+      nx: 400
+      tlim: 1.0
+      plot_field: dens
+      overrides:
+        - "time/nlim=-1"
+    - id: current_sheet
+      physics: mhd
+      dim: "2d"
+      input: inputs/mhd/current_sheet.athinput
+      soe: mhd
+      binary: build_current_sheet/src/athena
+      # Double Harris sheet, t=5 (a few Alfven times, t_A = L_y/V_A ~ 1.9) so tearing
+      # islands have formed.  eta=1e-3 keeps S ~ 2e4.
+      #
+      # NOTE (2026-09-05): the earlier collapse of every high-order scheme here was an
+      # INITIAL CONDITION bug, not a detector gap -- current_sheet.cpp wrote primitives
+      # into the conserved array (momenta as velocity, IEN missing B^2/2), leaving 95.8%
+      # of cells on the pressure floor at t=0.  With the corrected pgen the emergency
+      # scheme_overrides (mood_rtol=1e-6, mood_max_revs=3, nghost=7, fofc on the others)
+      # are no longer needed and have been removed -- all schemes run at suite defaults.
+      nx: 256
+      tlim: 5.0
+      nlim: 200000
+      plot_field: dens
+      overrides:
+        - "mhd/resistivity=ohmic"
+        - "mhd/eta_ohm=1.0e-3"
+        - "output1/dt=1.0"
+        # Enable the pgen's tearing seed (magnetic + velocity), two wavelengths
+        # along y in [-3, 3].
+        - "problem/epsb=0.05"
+        - "problem/epsv=0.01"
+        - "problem/kval=2.0943951023931953"
+        # d0 = gamma*b0^2/2 makes the Harris sheet uniform-temperature
+        - "problem/d0=70.0"
+    - id: jet
+      physics: mhd
+      dim: "2d"
+      input: inputs/mhd/jet.athinput
+      soe: mhd
+      binary: build_jet/src/athena
+      # Underdense Mach-10 magnetized jet (Athena++ jet.cpp port).  eta = 0.1 so the
+      # working surface advances at v_jet*sqrt(eta)/(1+sqrt(eta)) = 0.24; tlim=300
+      # carries the head to x ~ 72 > x1max, i.e. the beam crosses the full box.
+      # Stresses strong bow/terminal shocks, KH along the beam and a magnetized cocoon.
+      nx1: 300
+      nx2: 250
+      # t=200, NOT the deck's 300: the working surface advances at
+      # v_jet*sqrt(eta)/(1+sqrt(eta)) = 0.24, so it leaves a 60-long box at
+      # t=250.  Past breakout the cocoon fills the domain and the comparison
+      # measures decayed chaos rather than the schemes.  At t=200 the head sits
+      # near x=48 with beam, cocoon and bow shock all still inside.
+      tlim: 200.0
+      output_dt: 25.0
+      plot_field: dens
+      plot_log: true      # four decades of density; a linear norm shows four black squares
+      overrides:
+        - "time/nlim=-1"
+        - "mesh/x1min=0.0"
+        - "mesh/x1max=60.0"
+        - "mesh/x2min=-25.0"
+        - "mesh/x2max=25.0"
+        - "mesh/ix1_bc=user"
+        - "mesh/ox1_bc=outflow"
+        - "mesh/ix2_bc=outflow"
+        - "mesh/ox2_bc=outflow"
+    - id: current_sheet_n512
+      physics: mhd
+      dim: "2d"
+      input: inputs/mhd/current_sheet.athinput
+      soe: mhd
+      binary: build_current_sheet/src/athena
+      # Resolution-sweep companion to `current_sheet` (a0=0.05 spans
+      # ~4 cells at 512^2). Cluster-scale; run on Horizon.
+      nx: 512
+      tlim: 5.0
+      nlim: 200000
+      plot_field: dens
+      overrides:
+        - "mhd/resistivity=ohmic"
+        - "mhd/eta_ohm=1.0e-3"
+        - "output1/dt=1.0"
+        # Enable the pgen's tearing seed (magnetic + velocity), two wavelengths
+        # along y in [-3, 3].
+        - "problem/epsb=0.05"
+        - "problem/epsv=0.01"
+        - "problem/kval=2.0943951023931953"
+        # d0 = gamma*b0^2/2 makes the Harris sheet uniform-temperature
+        - "problem/d0=70.0"
+    - id: current_sheet_n1024
+      physics: mhd
+      dim: "2d"
+      input: inputs/mhd/current_sheet.athinput
+      soe: mhd
+      binary: build_current_sheet/src/athena
+      # Resolution-sweep companion to `current_sheet` (a0=0.05 spans
+      # ~9 cells at 1024^2). Cluster-scale; run on Horizon.
+      nx: 1024
+      tlim: 5.0
+      nlim: 200000
+      plot_field: dens
+      overrides:
+        - "mhd/resistivity=ohmic"
+        - "mhd/eta_ohm=1.0e-3"
+        - "output1/dt=1.0"
+        # Enable the pgen's tearing seed (magnetic + velocity), two wavelengths
+        # along y in [-3, 3].
+        - "problem/epsb=0.05"
+        - "problem/epsv=0.01"
+        - "problem/kval=2.0943951023931953"
+        # d0 = gamma*b0^2/2 makes the Harris sheet uniform-temperature
+        - "problem/d0=70.0"
+    - id: jet_n600
+      physics: mhd
+      dim: "2d"
+      input: inputs/mhd/jet.athinput
+      soe: mhd
+      binary: build_jet/src/athena
+      # Underdense Mach-10 magnetized jet (Athena++ jet.cpp port).  eta = 0.1 so the
+      # working surface advances at v_jet*sqrt(eta)/(1+sqrt(eta)) = 0.24; tlim=300
+      # carries the head to x ~ 72 > x1max, i.e. the beam crosses the full box.
+      # Stresses strong bow/terminal shocks, KH along the beam and a magnetized cocoon.
+      nx1: 600
+      nx2: 500
+      # t=200, NOT the deck's 300: the working surface advances at
+      # v_jet*sqrt(eta)/(1+sqrt(eta)) = 0.24, so it leaves a 60-long box at
+      # t=250.  Past breakout the cocoon fills the domain and the comparison
+      # measures decayed chaos rather than the schemes.  At t=200 the head sits
+      # near x=48 with beam, cocoon and bow shock all still inside.
+      tlim: 200.0
+      output_dt: 25.0
+      plot_field: dens
+      plot_log: true      # four decades of density; a linear norm shows four black squares
+      overrides:
+        - "time/nlim=-1"
+        - "mesh/x1min=0.0"
+        - "mesh/x1max=60.0"
+        - "mesh/x2min=-25.0"
+        - "mesh/x2max=25.0"
+        - "mesh/ix1_bc=user"
+        - "mesh/ox1_bc=outflow"
+        - "mesh/ix2_bc=outflow"
+        - "mesh/ox2_bc=outflow"
+    - id: blast_hydro
+      physics: hydro
+      dim: "2d"
+      input: inputs/hydro/blast_hydro.athinput
+      soe: hydro
+      binary: build_blast/src/athena
+      # Stone et al. 2008 (arXiv:0804.0402) sec 8.4, figures 28-29.
+      # RECTANGULAR domain (Lx,Ly) = (1, 3/2) on a 200x300 grid, PERIODIC -- the
+      # paper chooses periodic on purpose: "the flow becomes more complex as the
+      # outgoing blast wave re-enters the grid on the opposite side, and interacts
+      # with the contact discontinuity that bounds the evacuated bubble at the
+      # centre."  Figure 28 is t=0.2, figure 29 is t=1; the unmagnetized run grows
+      # Richtmyer-Meshkov fingers on that contact, which the field then suppresses.
+      # (An earlier version of this manifest overrode the domain to 1x1, which
+      # discards the aspect ratio the paper deliberately uses.)
+      nx1: 200
+      nx2: 300
+      # RUN PAST THE PAPER.  Stone+08 stop at t=1, but the interesting structure is
+      # later: the wrapped fronts keep colliding and the central contact goes
+      # Richtmyer-Meshkov -> Kelvin-Helmholtz.  tlim=3 with output_dt=0.2 keeps BOTH
+      # published reference times as dumps (0.2 = fig 28, 1.0 = fig 29) and adds the
+      # late-time evolution.  The magnetized run is extended to the same time so the
+      # 'the field suppresses the fingers' comparison stays like-for-like.
+      tlim: 3.0
+      output_dt: 0.2
+      plot_field: dens
+      overrides:
+        - "time/nlim=-1"
+        - "mesh/x1min=-0.5"
+        - "mesh/x1max=0.5"
+        - "mesh/x2min=-0.75"
+        - "mesh/x2max=0.75"
+    - id: blast_mhd
+      physics: mhd
+      dim: "2d"
+      input: inputs/mhd/blast_mhd.athinput
+      soe: mhd
+      binary: build_blast/src/athena
+      # Same test with the field on: Stone et al. 2008 figures 28 (t=0.2) and
+      # 29 (t=1).  Field inclined 45 deg to the grid, B = (B0/sqrt2, B0/sqrt2)
+      # with B0 = 1, so beta = 2P/B^2 = 2 in the external medium.  The 45 deg
+      # inclination is the point -- a grid-aligned field hides grid-direction
+      # errors.  ICs follow Londrillo & Del Zanna (2000).
+      nx1: 200
+      nx2: 300
+      # RUN PAST THE PAPER.  Stone+08 stop at t=1, but the interesting structure is
+      # later: the wrapped fronts keep colliding and the central contact goes
+      # Richtmyer-Meshkov -> Kelvin-Helmholtz.  tlim=3 with output_dt=0.2 keeps BOTH
+      # published reference times as dumps (0.2 = fig 28, 1.0 = fig 29) and adds the
+      # late-time evolution.  The magnetized run is extended to the same time so the
+      # 'the field suppresses the fingers' comparison stays like-for-like.
+      tlim: 3.0
+      output_dt: 0.2
+      plot_field: dens
+      overrides:
+        - "time/nlim=-1"
+        - "mesh/x1min=-0.5"
+        - "mesh/x1max=0.5"
+        - "mesh/x2min=-0.75"
+        - "mesh/x2max=0.75"
+        - "problem/b_amb=1.0"
+        - "problem/b_angle=45.0"
+    - id: blast_mhd_lowbeta
+      physics: mhd
+      dim: "2d"
+      input: inputs/mhd/blast_mhd.athinput
+      soe: mhd
+      binary: build_blast/src/athena
+      # Stone et al. 2008 figure 30's strongly magnetized case: B0 = 10, so
+      # beta = 2P/B^2 = 0.02.  The paper's point is that CTU+CT stays robust at
+      # low beta; here it is the sharpest positivity test in the set, since the
+      # thermal pressure is 1/50 of the magnetic.
+      nx1: 200
+      nx2: 300
+      tlim: 0.2
+      plot_field: dens
+      overrides:
+        - "time/nlim=-1"
+        - "mesh/x1min=-0.5"
+        - "mesh/x1max=0.5"
+        - "mesh/x2min=-0.75"
+        - "mesh/x2max=0.75"
+        - "problem/b_amb=10.0"
+        - "problem/b_angle=45.0"
+    - id: rotor
+      physics: mhd
+      dim: "2d"
+      input: inputs/mhd/rotor.athinput
+      soe: mhd
+      binary: build_rotor/src/athena
+      # Balsara & Spicer rotor (Toth 2000 / Stone+ 2008 sec 5.5).  Low ambient
+      # beta (0.32) makes a total-energy overshoot drive p<0, so this is the
+      # sharpest positivity test in the MHD set.
+      nx1: 400
+      nx2: 400
+      tlim: 0.15
+      plot_field: dens
+      overrides:
+        - "time/nlim=-1"
+    - id: mhd_jet
+      physics: mhd
+      dim: "2d"
+      input: inputs/mhd/mhd_jet.athinput
+      soe: mhd
+      binary: build_mjet/src/athena
+      # Wu, Zhang & Shu (arXiv:2512.09116) Example 6.3, after Balsara et al.
+      # Ambient (rho,v,B,p) = (0.1*gamma, 0, (0,2e5,0), 1) on the symmetric half
+      # domain [0,1/2]x[0,3/2] at 200x600, reflecting at the axis, jet injected in
+      # +y with rho=gamma, v_y=1e6.  Ambient beta = 2p/B^2 = 5e-11 and the beam is
+      # sonic-Mach ~3e5, so the strong field pinches it into a collimated pencil --
+      # a different regime from the beta~1 underdense jet, which spreads a cocoon.
+      # The review states the IC explicitly, which is why it is the reference here:
+      # the original paper's density panel is not quantitatively readable (its
+      # colourbar puts the ambient near 0.010 where the IC fixes 0.14).
+      nx1: 200
+      nx2: 600
+      tlim: 1.8e-6
+      output_dt: 4.5e-7
+      plot_field: dens
+      plot_log: true      # four decades of density; a linear norm shows four black squares
+      overrides:
+        - "time/nlim=-1"
+        - "mesh/x1min=0.0"
+        - "mesh/x1max=0.5"
+        - "mesh/x2min=0.0"
+        - "mesh/x2max=1.5"
+        - "mesh/ix1_bc=reflect"
+        - "mesh/ox1_bc=outflow"
+        - "mesh/ix2_bc=user"
+        - "mesh/ox2_bc=outflow"
+    - id: mhd_jet_revs4
+      physics: mhd
+      dim: "2d"
+      input: inputs/mhd/mhd_jet.athinput
+      soe: mhd
+      binary: build_mjet/src/athena
+      # Wu, Zhang & Shu (arXiv:2512.09116) Example 6.3, after Balsara et al.
+      # Ambient (rho,v,B,p) = (0.1*gamma, 0, (0,2e5,0), 1) on the symmetric half
+      # domain [0,1/2]x[0,3/2] at 200x600, reflecting at the axis, jet injected in
+      # +y with rho=gamma, v_y=1e6.  Ambient beta = 2p/B^2 = 5e-11 and the beam is
+      # sonic-Mach ~3e5, so the strong field pinches it into a collimated pencil --
+      # a different regime from the beta~1 underdense jet, which spreads a cocoon.
+      # The review states the IC explicitly, which is why it is the reference here:
+      # the original paper's density panel is not quantitatively readable (its
+      # colourbar puts the ambient near 0.010 where the IC fixes 0.14).
+      nx1: 200
+      nx2: 600
+      tlim: 1.8e-6
+      output_dt: 4.5e-7
+      plot_field: dens
+      plot_log: true      # four decades of density; a linear norm shows four black squares
+      # THE DEPTH FINDING.  At the default cascade depth (mood_max_revs=2) PPM+MOOD
+      # goes NaN on this problem; at 3 it finishes "finite" but with rho_max = 1.2e12
+      # and |By|/B0 = 7e19, i.e. meaningless; at 4 it survives and agrees with the
+      # PLM reference to 11% in density and 1.3% in By.  Each extra pass widens the
+      # detection halo, hence nghost = 9.  The companion `mhd_jet` case keeps the
+      # default-depth failure in the matrix, since the contrast is the result.
+      scheme_overrides:
+        ppm_fb:
+          - "mhd/mood_max_revs=4"
+          - "mesh/nghost=9"
+      overrides:
+        - "time/nlim=-1"
+        - "mesh/x1min=0.0"
+        - "mesh/x1max=0.5"
+        - "mesh/x2min=0.0"
+        - "mesh/x2max=1.5"
+        - "mesh/ix1_bc=reflect"
+        - "mesh/ox1_bc=outflow"
+        - "mesh/ix2_bc=user"
+        - "mesh/ox2_bc=outflow"
+    - id: ha_jet
+      physics: hydro
+      dim: "2d"
+      input: inputs/hydro/ha_jet.athinput
+      soe: hydro
+      binary: build_jet/src/athena
+      # Wu, Zhang & Shu Example 4.9 == the Zhang-Shu/Ha et al. Mach-2000 jet
+      # (ambient p = 0.4127, beam v_x = 800 into rho=5, so M = 2156 w.r.t. the jet
+      # sound speed).  RR23 table 5 gives the gate: rho_max = 23.85-40.67, steady
+      # across eight limiter/CFL configurations (their rho_min spans 19x and is
+      # NOT gateable).
+      #
+      # THIS CASE WAS A RECORDED FAILURE AND IS NOT ONE.  It was run unseeded, so
+      # the first timestep was set by the ambient sound speed while the beam
+      # entered at v = 800 through the ghost zones -- a 682x CFL violation of the
+      # inflow on step one, which no limiter can undo and which lowering CFL
+      # cannot cure (it fails at 1.5e-3).  With `seed_nozzle` in the deck the run
+      # completes at the paper's CFL 0.4 with both PLM+FOFC and PPM+MOOD inside
+      # the RR23 gate (25.00 and 28.74) -- PLM+FOFC with no EOS event of any kind,
+      # PPM+MOOD with ONE energy-floor event in 3.8e8 cell-updates.  Cross-checked
+      # at CFL 0.1: rho_max moves +0.1% / -1.2%, MOOD's one event disappears.  The earlier reading -- that AthenaK cannot reach this
+      # jet for want of an invariant-domain-preserving limiter -- was wrong; the
+      # review's positivity warning is about the physics being hard, not about
+      # this particular failure mode.
+      #
+      # 512^2 now that the timestep is sane: 1331 (PLM) / 1463 (MOOD) cycles,
+      # ~90 s / ~220 s on one CPU core.
+      nx1: 512
+      nx2: 512
+      # The papers run CFL 0.4 (Fu 2019 states it for every simulation; RR23's
+      # table 5 spans 0.09-0.9).  The battery default is 0.3, so these two cases
+      # override it: reaching the published CFL is the whole point of the
+      # `seed_nozzle` finding, and a run at 0.3 would not test it.
+      cfl: 0.4
+      tlim: 0.001
+      output_dt: 0.00025
+      plot_field: dens
+      plot_log: true      # four decades of density; a linear norm shows four black squares
+      overrides:
+        - "time/nlim=-1"
+        - "mesh/ix1_bc=user"
+        - "mesh/ox1_bc=outflow"
+        - "mesh/ix2_bc=periodic"
+        - "mesh/ox2_bc=periodic"
+    - id: fu_jet_m80
+      physics: hydro
+      dim: "2d"
+      input: inputs/hydro/fu_jet_m80.athinput
+      soe: hydro
+      binary: build_jet/src/athena
+      # Fu 2019 (Comput. Phys. Commun. 244, 117) sec 4.3.4, fig 13 left: the
+      # milder member of the same jet family as `ha_jet` -- beam speed 30 instead
+      # of 800, overdense by 10, into the same p = 0.4127 ambient.  Added because
+      # running the milder case is what isolated the startup CFL violation that
+      # `ha_jet` was mistakenly attributing to a missing IDP limiter: Mach 80
+      # survives unseeded only below CFL ~ 0.039 = c_ambient/v_jet, which is a
+      # ratio, not a stability limit.  Seeded, it runs at the paper's CFL 0.4.
+      # No published point value to gate on, so the gate is the working-surface
+      # position against the converged CFL-0.03 reference (x_head = 1.713).
+      nx1: 448
+      nx2: 224
+      # The papers run CFL 0.4 (Fu 2019 states it for every simulation; RR23's
+      # table 5 spans 0.09-0.9).  The battery default is 0.3, so these two cases
+      # override it: reaching the published CFL is the whole point of the
+      # `seed_nozzle` finding, and a run at 0.3 would not test it.
+      cfl: 0.4
+      tlim: 0.07
+      output_dt: 0.0175
+      plot_field: dens
+      plot_log: true      # four decades of density; a linear norm shows four black squares
+      overrides:
+        - "time/nlim=-1"
+        - "mesh/ix1_bc=user"
+        - "mesh/ox1_bc=outflow"
+        - "mesh/ix2_bc=outflow"
+        - "mesh/ox2_bc=outflow"
+    - id: kh_rr22
+      physics: mhd
+      dim: "2d"
+      input: inputs/mhd/kh_rr22.athinput
+      soe: mhd
+      binary: build_kh/src/athena
+      # Rueda-Ramirez+ 2022 (arXiv:2203.06062) sec 5.2 magnetized KH.  Replaces
+      # the Lecoanet MHD KH: single deterministic perturbation mode (no random
+      # seed to reproduce) and a resolved shear layer.  Tilted field with a
+      # nonzero toroidal Bz, so the run is genuinely pseudo-2D.
+      nx1: 128
+      nx2: 256
+      tlim: 20.0
+      # the paper compares at t = 5, 8, 12, 20; dump every unit and select those
+      output_dt: 1.0
+      plot_field: dens
+      overrides:
+        - "time/nlim=-1"
+    - id: kh_rr22_n256
+      physics: mhd
+      dim: "2d"
+      input: inputs/mhd/kh_rr22.athinput
+      soe: mhd
+      binary: build_kh/src/athena
+      # Rueda-Ramirez+ 2022 (arXiv:2203.06062) sec 5.2 magnetized KH.  Replaces
+      # the Lecoanet MHD KH: single deterministic perturbation mode (no random
+      # seed to reproduce) and a resolved shear layer.  Tilted field with a
+      # nonzero toroidal Bz, so the run is genuinely pseudo-2D.
+      nx1: 256
+      nx2: 512
+      tlim: 20.0
+      # the paper compares at t = 5, 8, 12, 20; dump every unit and select those
+      output_dt: 1.0
+      plot_field: dens
+      overrides:
+        - "time/nlim=-1"
+    - id: blast_grmhd
+      physics: grmhd
+      dim: "2d"
+      input: inputs/grmhd/blast_grmhd_2d.athinput
+      soe: mhd
+      binary: build_blast/src/athena
+      # must be a CASE key: the harness uses it to pick the GR Riemann solver
+      # and to keep GR MHD off UCT (hlld/uct are Newtonian-only)
+      general_rel: true
+      # Relativistic magnetized blast on a fixed Minkowski background, 2D slice
+      # at uniform resolution so the four schemes are compared on identical
+      # grids (the stock deck is 3D AMR).  This replaces the Apollo
+      # ~/srmhd_blast figures with an in-repo, reproducible run.
+      # GR MHD keeps ct_contact -- UCT is Newtonian-only.
+      nx1: 256
+      nx2: 256
+      tlim: 4.0
+      plot_field: dens
+      plot_log: true      # rho spans ~2 decades; linear crushes the bubble interior
+      overrides:
+        - "time/nlim=-1"
+    - id: blast_grmhd_uct
+      physics: grmhd
+      dim: "2d"
+      input: inputs/grmhd/blast_grmhd_2d.athinput
+      soe: mhd
+      binary: build_blast/src/athena
+      # must be a CASE key: the harness uses it to pick the GR Riemann solver
+      # and to keep GR MHD off UCT (hlld/uct are Newtonian-only)
+      general_rel: true
+      # Relativistic magnetized blast on a fixed Minkowski background, 2D slice
+      # at uniform resolution so the four schemes are compared on identical
+      # grids (the stock deck is 3D AMR).  This replaces the Apollo
+      # ~/srmhd_blast figures with an in-repo, reproducible run.
+      #
+      # SAME PROBLEM, UCT EMF -- the paired half of blast_grmhd, identical in grid,
+      # tlim, solver and CFL and differing only in the EMF, so the two are directly
+      # comparable.  Relativistic UCT was impossible until the four relativistic
+      # Riemann solvers were fixed to hand the corner-EMF composition the coordinate
+      # transport velocity v^i = u^i/u^0 rather than the spatial four-velocity; with
+      # the four-velocity it drove the entire domain to the density floor.  uct_hll,
+      # not uct_hlld: the latter requires rsolver=hlld, which GR rejects outright.
+      emf: uct_hll
+      nx1: 256
+      nx2: 256
+      tlim: 4.0
+      plot_field: dens
+      plot_log: true      # rho spans ~2 decades; linear crushes the bubble interior
+      overrides:
+        - "time/nlim=-1"
+  cluster:
+    - id: ringing_128
+      physics: mhd
+      dim: "3d"
+      input: inputs/mhd/turb_ringing_ppm_fb_128.athinput
+      soe: mhd
+      note: "Strong guide-field ringing; requires -DPROBLEM=fluids/turb"
+    - id: blast_grmhd_minkowski
+      physics: grmhd
+      dim: "3d"
+      input: inputs/grmhd/blast_grmhd_amr.athinput
+      soe: mhd
+      note: "Requires -DPROBLEM=fluids/blast; Minkowski general_rel=true"
+
+# Single Apollo ringing mosaic used in the PDF (latest UCT-HLLD 256³)
+apollo_ringing_figure: figures/apollo_ringing/mosaic_uct_hlld_256_t1p5.png
+
+# Apollo GR multi-D blast (SRMHD) with PPM+MOOD — movies + exact final frames
+apollo_grmhd_blast:
+  dir: figures/apollo_grmhd
+  mosaic: figures/apollo_grmhd/srmhd_blast_final_mosaic.png
+  final_frames:
+    - figures/apollo_grmhd/plm_final.png
+    - figures/apollo_grmhd/wenoz_final.png
+    - figures/apollo_grmhd/ppm_fb_final.png
+    - figures/apollo_grmhd/ppm_fb_fields_final.png
+  movies:
+    - figures/apollo_grmhd/ppm_fb.mp4
+    - figures/apollo_grmhd/ppm_fb_fields.mp4
+    - figures/apollo_grmhd/plm.mp4
+    - figures/apollo_grmhd/wenoz.mp4
+  source: "~/srmhd_blast on Apollo (ppm_fb vs plm/wenoz/ppmx/dc)"

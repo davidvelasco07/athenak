@@ -24,3 +24,12 @@ Lorene
 
 # python cache
 __pycache__/
+# fallback validation local deps/results
+validation/fallback/vendor/
+# Exclude the per-run output directories, NOT the aggregated summaries that sit
+# directly in results/.  Git cannot re-include a file whose parent DIRECTORY is
+# excluded, so this must be `results/*/` rather than `results/` + a negation.
+validation/fallback/results/*/
+validation/fallback/report/
+validation/fallback/.venv/
+
