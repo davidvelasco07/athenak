@@ -31,7 +31,16 @@ void HLLE_GR(const EOS_Data &eos, const RegionIndcs &indcs,
              const DvceArray5D<Real> &bl, const DvceArray5D<Real> &br,
              const DvceArray4D<Real> &bx,
              const DvceArray5D<Real> &flx,
-             const DvceArray4D<Real> &ey, const DvceArray4D<Real> &ez) {
+             const DvceArray4D<Real> &ey, const DvceArray4D<Real> &ez,
+             const int uct_flag = 0,
+            const DvceArray4D<Real> &uct_aL = {}, const DvceArray4D<Real> &uct_dL = {},
+             const DvceArray4D<Real> &uct_dR = {}, const DvceArray4D<Real> &uct_vt1 = {},
+             const DvceArray4D<Real> &uct_vt2 = {}) {
+  // NB: gate on the flag, NOT uct_aL.is_allocated().  The UCT arrays are
+  // constructed (1,1,1,1) and only realloc'd to full size when emf is
+  // uct_hll/uct_hlld, so is_allocated() is TRUE even with ct_contact and
+  // every uct_* write would land outside a 1x1x1x1 View (heap corruption).
+  const bool compute_uct = (uct_flag > 0);
   constexpr int ivy = IVX + ((ivx-IVX)+1)%3;
   constexpr int ivz = IVX + ((ivx-IVX)+2)%3;
   constexpr int iby = ((ivx-IVX) + 1)%3;
@@ -274,6 +283,29 @@ void HLLE_GR(const EOS_Data &eos, const RegionIndcs &indcs,
 
   // We evolve tau = T^t_t + D
   flx(m,IEN,k,j,i) += flx(m,IDN,k,j,i);
+
+  // UCT coefficients for GR HLLE
+  if (compute_uct) {
+    Real alpha_r = fmax(0.0, lambda_r);
+    Real alpha_l = fmax(0.0, -lambda_l);
+    Real isum = 1.0/(alpha_r + alpha_l);
+    uct_aL(m,k,j,i)  = alpha_r * isum;
+    Real dval = alpha_r * alpha_l * isum;
+    uct_dL(m,k,j,i)  = dval;
+    uct_dR(m,k,j,i)  = dval;
+    // TRANSPORT VELOCITY, NOT FOUR-VELOCITY.  The UCT composition in mhd_corner_e.cpp
+    // forms E = -v x B from these, and the relativistic induction equation
+    //     d_t B^i + d_j ( v^j B^i - v^i B^j ) = 0
+    // transports with the COORDINATE three-velocity v^i = u^i/u^0 (Mignone & Del Zanna
+    // 2021 sec. 5, the RMHD case PLUTO implements).  The primitive w(IVX..IVZ) here is
+    // the spatial four-velocity, larger by the Lorentz factor and, in GR, missing the
+    // lapse/shift.  Feeding it in unchanged is what made emf=uct_hll drive the whole
+    // domain to the density floor; the composition itself was always fine.
+    const Real vyl = uul[ivy]/uul[0], vzl = uul[ivz]/uul[0];
+    const Real vyr = uur[ivy]/uur[0], vzr = uur[ivz]/uur[0];
+    uct_vt1(m,k,j,i) = (alpha_r*vyl + alpha_l*vyr)*isum;
+    uct_vt2(m,k,j,i) = (alpha_r*vzl + alpha_l*vzr)*isum;
+  }
 }
 } // namespace mhd
 #endif // MHD_RSOLVERS_HLLE_GRMHD_HPP_

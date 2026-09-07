@@ -27,7 +27,16 @@ void LLF(const EOS_Data &eos,
          const DvceArray5D<Real> &bl, const DvceArray5D<Real> &br,
          const DvceArray4D<Real> &bx,
          const DvceArray5D<Real> &flx,
-         const DvceArray4D<Real> &ey, const DvceArray4D<Real> &ez) {
+         const DvceArray4D<Real> &ey, const DvceArray4D<Real> &ez,
+         const int uct_flag = 0,
+         const DvceArray4D<Real> &uct_aL = {}, const DvceArray4D<Real> &uct_dL = {},
+         const DvceArray4D<Real> &uct_dR = {}, const DvceArray4D<Real> &uct_vt1 = {},
+         const DvceArray4D<Real> &uct_vt2 = {}) {
+  // NB: gate on the flag, NOT uct_aL.is_allocated().  The UCT arrays are
+  // constructed (1,1,1,1) and only realloc'd to full size when emf is
+  // uct_hll/uct_hlld, so is_allocated() is TRUE even with ct_contact and
+  // every uct_* write would land outside a 1x1x1x1 View (heap corruption).
+  const bool compute_uct = (uct_flag > 0);
   constexpr int ivy = IVX + ((ivx-IVX) + 1)%3;
   constexpr int ivz = IVX + ((ivx-IVX) + 2)%3;
   constexpr int iby = ((ivx-IVX) + 1)%3;
@@ -70,6 +79,26 @@ void LLF(const EOS_Data &eos,
   if (eos.is_ideal) {flx(m,IEN,k,j,i) = flux.e;}
   ey(m,k,j,i) = flux.by;
   ez(m,k,j,i) = flux.bz;
+
+  // Compute UCT coefficients for LLF (Rusanov): alpha_L = alpha_R = lambda_max
+  if (compute_uct) {
+    Real qa, qb;
+    if (eos.is_ideal) {
+      Real pl = eos.IdealGasPressure(wli.e);
+      Real pr = eos.IdealGasPressure(wri.e);
+      qa = eos.IdealMHDFastSpeed(wli.d, pl, bxi, wli.by, wli.bz);
+      qb = eos.IdealMHDFastSpeed(wri.d, pr, bxi, wri.by, wri.bz);
+    } else {
+      qa = eos.IdealMHDFastSpeed(wli.d, bxi, wli.by, wli.bz);
+      qb = eos.IdealMHDFastSpeed(wri.d, bxi, wri.by, wri.bz);
+    }
+    Real lmax = fmax((fabs(wli.vx) + qa), (fabs(wri.vx) + qb));
+    uct_aL(m,k,j,i)  = 0.5;
+    uct_dL(m,k,j,i)  = 0.5*lmax;
+    uct_dR(m,k,j,i)  = 0.5*lmax;
+    uct_vt1(m,k,j,i) = 0.5*(wli.vy + wri.vy);
+    uct_vt2(m,k,j,i) = 0.5*(wli.vz + wri.vz);
+  }
 }
 } // namespace mhd
 #endif // MHD_RSOLVERS_LLF_MHD_HPP_

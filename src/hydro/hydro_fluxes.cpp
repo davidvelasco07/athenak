@@ -20,54 +20,9 @@
 #include "hydro.hpp"
 #include "eos/eos.hpp"
 #include "reconstruct/recon.hpp"
-#include "hydro/rsolvers/advect_hyd.hpp"
-#include "hydro/rsolvers/llf_hyd.hpp"
-#include "hydro/rsolvers/hlle_hyd.hpp"
-#include "hydro/rsolvers/hllc_hyd.hpp"
-#include "hydro/rsolvers/roe_hyd.hpp"
-#include "hydro/rsolvers/llf_srhyd.hpp"
-#include "hydro/rsolvers/hlle_srhyd.hpp"
-#include "hydro/rsolvers/hllc_srhyd.hpp"
-#include "hydro/rsolvers/llf_grhyd.hpp"
-#include "hydro/rsolvers/hlle_grhyd.hpp"
+#include "hydro/rsolvers/solve_face_hyd.hpp"
 
 namespace hydro {
-
-//----------------------------------------------------------------------------------------
-//! \fn SolveFace<ivx>()
-//! \brief Dispatch the (compile-time) Riemann solver for a single face.  Capturing the
-//! solver inputs into locals before the constexpr-if is required for CUDA 11.6+.
-template <Hydro_RSolver rsolver_method_, int ivx>
-KOKKOS_INLINE_FUNCTION
-void SolveFace(const EOS_Data &eos, const RegionIndcs &indcs,
-               const DualArray1D<RegionSize> &size, const CoordData &coord,
-               const int m, const int k, const int j, const int i,
-               const int is, const int js, const int ks,
-               const DvceArray5D<Real> &wl,
-               const DvceArray5D<Real> &wr,
-               const DvceArray5D<Real> &flx) {
-  if constexpr (rsolver_method_ == Hydro_RSolver::advect) {
-    Advect<ivx>(eos, m, k, j, i, is, js, ks, wl, wr, flx);
-  } else if constexpr (rsolver_method_ == Hydro_RSolver::llf) {
-    LLF<ivx>(eos, m, k, j, i, is, js, ks, wl, wr, flx);
-  } else if constexpr (rsolver_method_ == Hydro_RSolver::hlle) {
-    HLLE<ivx>(eos, m, k, j, i, is, js, ks, wl, wr, flx);
-  } else if constexpr (rsolver_method_ == Hydro_RSolver::hllc) {
-    HLLC<ivx>(eos, m, k, j, i, is, js, ks, wl, wr, flx);
-  } else if constexpr (rsolver_method_ == Hydro_RSolver::roe) {
-    Roe<ivx>(eos, m, k, j, i, is, js, ks, wl, wr, flx);
-  } else if constexpr (rsolver_method_ == Hydro_RSolver::llf_sr) {
-    LLF_SR<ivx>(eos, m, k, j, i, is, js, ks, wl, wr, flx);
-  } else if constexpr (rsolver_method_ == Hydro_RSolver::hlle_sr) {
-    HLLE_SR<ivx>(eos, m, k, j, i, is, js, ks, wl, wr, flx);
-  } else if constexpr (rsolver_method_ == Hydro_RSolver::hllc_sr) {
-    HLLC_SR<ivx>(eos, m, k, j, i, is, js, ks, wl, wr, flx);
-  } else if constexpr (rsolver_method_ == Hydro_RSolver::llf_gr) {
-    LLF_GR<ivx>(eos, indcs, size, coord, m, k, j, i, is, js, ks, wl, wr, flx);
-  } else if constexpr (rsolver_method_ == Hydro_RSolver::hlle_gr) {
-    HLLE_GR<ivx>(eos, indcs, size, coord, m, k, j, i, is, js, ks, wl, wr, flx);
-  }
-}
 
 //----------------------------------------------------------------------------------------
 //! \fn void Hydro::CalculateFluxes
@@ -86,18 +41,23 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
   int nmb1 = pmy_pack->nmb_thispack - 1;
   const auto recon_method_ = recon_method;
 
-  // Face-normal and transverse flux ranges.  With FOFC the first-order flux correction
-  // reads the main fluxes one cell beyond the active domain in every dimension, so the
-  // reconstruction/solve ranges are extended by one cell on both sides when FOFC is on.
+  // Face-normal and transverse flux ranges.  With FOFC/MOOD the correction algorithms
+  // read the main fluxes beyond the active domain in every dimension (to build the
+  // candidate update in a ghost halo for cross-block detection consistency), so the
+  // reconstruction/solve ranges are extended on both sides: by one cell for FOFC, and
+  // by mood_max_revs cells for MOOD (each revision iteration shrinks the halo of ghost
+  // cells whose candidate is consistent with the neighbor block by one — the
+  // parallel-MOOD "light cone").
   int il1 = is, iu1 = ie+1, jl2 = js, ju2 = je+1, kl3 = ks, ku3 = ke+1;
   int itl = is, itu = ie, jtl = js, jtu = je, ktl = ks, ktu = ke;
-  if (use_fofc) {
-    il1 = is-1; iu1 = ie+2;
-    jl2 = js-1; ju2 = je+2;
-    kl3 = ks-1; ku3 = ke+2;
-    itl = is-1; itu = ie+1;
-    if (pmy_pack->pmesh->multi_d) { jtl = js-1; jtu = je+1; }
-    if (pmy_pack->pmesh->three_d) { ktl = ks-1; ktu = ke+1; }
+  if (use_fofc || use_mood) {
+    const int ext = (use_mood) ? mood_max_revs : 1;
+    il1 = is-ext; iu1 = ie+1+ext;
+    jl2 = js-ext; ju2 = je+1+ext;
+    kl3 = ks-ext; ku3 = ke+1+ext;
+    itl = is-ext; itu = ie+ext;
+    if (pmy_pack->pmesh->multi_d) { jtl = js-ext; jtu = je+ext; }
+    if (pmy_pack->pmesh->three_d) { ktl = ks-ext; ktu = ke+ext; }
   }
 
   auto &eos_ = peos->eos_data;

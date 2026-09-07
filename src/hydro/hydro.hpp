@@ -128,6 +128,22 @@ class Hydro {
   bool use_fofc = false;   // flag to enable FOFC
   DvceArray5D<Real> utest;  // scratch array for FOFC
 
+  // following used for the MOOD a-posteriori fallback ("FB") scheme.  Shares the
+  // fofc/utest arrays: fofc marks cells flagged (newly demoted) in the current
+  // revision iteration, utest holds the candidate update.
+  bool use_mood = false;    // flag to enable MOOD fallback
+  int mood_max_revs = 1;    // max revision iterations per RK stage
+  int mood_nad_scale;       // NAD tolerance scale: 0=relative(|bound|), 1=grange, 2=gdu, 3=gcfl
+  Real mood_nad_theta;      // grange Mach-softening: eps = rtol*G^theta*|bound|^(1-theta)
+  bool mood_nad_energy;     // include the energy variable in NAD (density always on)
+  bool mood_nad_scalars;    // include passive-scalar concentrations in NAD
+  Real mood_rtol;           // NAD tolerance as a fraction of the selected scale
+  Real mood_eps0;           // round-off floor (relative to the violated bound)
+  Real mood_atol;           // absolute floor of the NAD tolerance
+  bool mood_sed;            // exempt smooth extrema from NAD detection
+  int n_fb_tiers;           // # of fallback tiers below base scheme (2, or 1 if base=plm)
+  DvceArray4D<int> fb_level;    // per-cell cascade level (0=base, 1=plm, 2=dc)
+
   // container to hold names of TaskIDs
   HydroTaskIDs id;
 
@@ -168,6 +184,11 @@ class Hydro {
 
   // first-order flux correction
   void FOFC(Driver *d, int stage);
+
+  // MOOD a-posteriori fallback, templated over Riemann solver (fallback tiers re-solve
+  // flagged faces with the same solver as the base scheme)
+  template <Hydro_RSolver T>
+  void MOODLoop(Driver *d, int stage);
 
  private:
   void AddSelectedDiffusionFluxes(parabolic::DiffusionSelection selection);

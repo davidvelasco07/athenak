@@ -41,6 +41,7 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
     wr3d("wr3d",1,1,1,1,1),
     fofc("fofc",1,1,1,1),
     utest("utest",1,1,1,1,1),
+    fb_level("fb_level",1,1,1,1),
     pmy_pack(ppack) {
   // Total number of MeshBlocks on this rank to be used in array dimensioning
   int nmb = std::max((ppack->nmb_thispack), (ppack->pmesh->nmb_maxperrank));
@@ -179,10 +180,60 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
     // (hydro_fofc.cpp) has the fluxes it needs over the [is-1,ie+2] etc. range.
     use_fofc = pin->GetOrAddBoolean("hydro","fofc",false);
 
+    // MOOD a-posteriori fallback (hydro_mood.cpp).  Requires a flux-range extension of
+    // mood_max_revs cells (see hydro_fluxes.cpp).  Mutually exclusive with FOFC.
+    use_mood = pin->GetOrAddBoolean("hydro","mood",false);
+    std::string nadsc = pin->GetOrAddString("hydro","mood_nad_scale","gcfl");
+    if (nadsc.compare("relative") == 0) {
+      mood_nad_scale = 0;
+    } else if (nadsc.compare("grange") == 0) {
+      mood_nad_scale = 1;
+    } else if (nadsc.compare("gdu") == 0) {
+      mood_nad_scale = 2;
+    } else if (nadsc.compare("gcfl") == 0) {
+      mood_nad_scale = 3;
+    } else {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+        << std::endl << "<hydro> mood_nad_scale = '" << nadsc
+        << "' not implemented (relative|grange|gdu|gcfl)" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    mood_eps0  = pin->GetOrAddReal("hydro","mood_eps0",1.0e-12);
+    mood_rtol = pin->GetOrAddReal("hydro","mood_rtol",1.0e-5);
+    mood_atol = pin->GetOrAddReal("hydro","mood_atol",0.0);
+    mood_nad_theta = pin->GetOrAddReal("hydro","mood_nad_theta",1.0);
+    mood_nad_energy = pin->GetOrAddBoolean("hydro","mood_nad_energy",true);
+    mood_nad_scalars = pin->GetOrAddBoolean("hydro","mood_nad_scalars",true);
+    if (mood_nad_theta < 0.0 || mood_nad_theta > 1.0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+        << std::endl << "<hydro> mood_nad_theta must be in [0,1]" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    mood_sed = pin->GetOrAddBoolean("hydro","mood_sed",true);
+    if (use_mood && use_fofc) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+        << std::endl << "<hydro> mood=true and fofc=true cannot be used together"
+        << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (use_mood && pmy_pack->pcoord->is_general_relativistic &&
+        pmy_pack->pcoord->coord_data.bh_excise) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+        << std::endl << "<hydro> mood=true does not support BH excision (use fofc)"
+        << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+
     // select reconstruction method (default PLM)
     std::string xorder = pin->GetOrAddString("hydro","reconstruct","plm");
     if (xorder.compare("dc") == 0) {
       recon_method = ReconstructionMethod::dc;
+      if (use_mood) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+          << std::endl << "<hydro> mood=true cannot be used with dc reconstruction "
+          << "(no fallback tier below first order)" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
     } else if (xorder.compare("plm") == 0) {
       recon_method = ReconstructionMethod::plm;
       // check that nghost > 2 with PLM+FOFC (FOFC extends recon by one cell)
@@ -196,7 +247,8 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
     } else if (xorder.compare("ppm4") == 0 ||
                xorder.compare("ppmx") == 0 ||
                xorder.compare("teno") == 0 ||
-               xorder.compare("wenoz") == 0) {
+               xorder.compare("wenoz") == 0 ||
+               xorder.compare("ppm") == 0) {
       // check that nghost > 2 (the +/-2 stencil requires at least 3 ghost zones)
       auto &indcs = pmy_pack->pmesh->mb_indcs;
       if (indcs.ng < 3) {
@@ -220,12 +272,41 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
         recon_method = ReconstructionMethod::wenoz;
       } else if (xorder.compare("teno") == 0) {
         recon_method = ReconstructionMethod::teno;
+      } else if (xorder.compare("ppm") == 0) {
+        recon_method = ReconstructionMethod::ppm;
+        if (!use_mood) {
+          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+            << std::endl << "<hydro> reconstruct=ppm (unlimited) requires "
+            << "mood=true" << std::endl;
+          std::exit(EXIT_FAILURE);
+        }
       }
     } else {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "<hydro> reconstruct = '" << xorder << "' not implemented"
                 << std::endl;
       std::exit(EXIT_FAILURE);
+    }
+
+    // MOOD cascade: base -> plm -> dc, or plm -> dc if the base scheme is already PLM.
+    if (use_mood) {
+      n_fb_tiers = (recon_method == ReconstructionMethod::plm) ? 1 : 2;
+      mood_max_revs = pin->GetOrAddInteger("hydro","mood_max_revs",n_fb_tiers);
+      if (mood_max_revs < 1) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+          << std::endl << "<hydro> mood_max_revs must be >= 1" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      int ng_need = ((recon_method == ReconstructionMethod::plm) ? 2 : 3)
+                    + mood_max_revs;
+      auto &indcs = pmy_pack->pmesh->mb_indcs;
+      if (indcs.ng < ng_need) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+          << std::endl << "MOOD with " << xorder << " reconstruction and mood_max_revs="
+          << mood_max_revs << " requires at least " << ng_need
+          << " ghost zones, but <mesh>/nghost=" << indcs.ng << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
     }
 
     // select Riemann solver (no default).  Test for compatibility of options
@@ -329,6 +410,18 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
       // cell range (including ghost zones) in every dimension.
       Kokkos::realloc(wl3d, nmb, (nhydro+nscalars), ncells3, ncells2, ncells1);
       Kokkos::realloc(wr3d, nmb, (nhydro+nscalars), ncells3, ncells2, ncells1);
+
+      // allocate arrays of flags/candidate state used with FOFC and MOOD
+      if (use_fofc || use_mood) {
+        // MOOD tests passive scalars too, so the candidate must carry them
+        int ntest = (use_mood && mood_nad_scalars) ? (nhydro + nscalars) : nhydro;
+        Kokkos::realloc(fofc,  nmb, ncells3, ncells2, ncells1);
+        Kokkos::realloc(utest, nmb, ntest, ncells3, ncells2, ncells1);
+        Kokkos::deep_copy(fofc, false);
+      }
+      if (use_mood) {
+        Kokkos::realloc(fb_level, nmb, ncells3, ncells2, ncells1);
+      }
     }
   }
 }

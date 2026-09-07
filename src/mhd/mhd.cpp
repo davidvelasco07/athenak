@@ -45,6 +45,7 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
     b_sts1("b_sts1",1,1,1,1),
     b_sts2("b_sts2",1,1,1,1),
     b_sts_rhs("b_sts_rhs",1,1,1,1),
+    b0_test("B_fc_test",1,1,1,1),
     uflx("uflx",1,1,1,1,1),
     efld("efld",1,1,1,1),
     e3x1("e3x1",1,1,1,1),
@@ -53,6 +54,21 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
     e3x2("e3x2",1,1,1,1),
     e2x3("e2x3",1,1,1,1),
     e1x3("e1x3",1,1,1,1),
+    aL_x1f("aL_x1f",1,1,1,1),
+    dL_x1f("dL_x1f",1,1,1,1),
+    dR_x1f("dR_x1f",1,1,1,1),
+    vy_x1f("vy_x1f",1,1,1,1),
+    vz_x1f("vz_x1f",1,1,1,1),
+    aL_x2f("aL_x2f",1,1,1,1),
+    dL_x2f("dL_x2f",1,1,1,1),
+    dR_x2f("dR_x2f",1,1,1,1),
+    vx_x2f("vx_x2f",1,1,1,1),
+    vz_x2f("vz_x2f",1,1,1,1),
+    aL_x3f("aL_x3f",1,1,1,1),
+    dL_x3f("dL_x3f",1,1,1,1),
+    dR_x3f("dR_x3f",1,1,1,1),
+    vx_x3f("vx_x3f",1,1,1,1),
+    vy_x3f("vy_x3f",1,1,1,1),
     wl3d("wl3d",1,1,1,1,1),
     wr3d("wr3d",1,1,1,1,1),
     bl3d("bl3d",1,1,1,1,1),
@@ -63,10 +79,17 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
     fofc_scal("fofc_scal",1,1,1,1,1),
     utest("utest",1,1,1,1,1),
     bcctest("bcctest",1,1,1,1,1),
+    fb_level("fb_level",1,1,1,1),
+    bmag_ref("bmag_ref",1,1,1,1),
     pmy_pack(ppack),
     e1_cc("e1_cc",1,1,1,1),
     e2_cc("e2_cc",1,1,1,1),
     e3_cc("e3_cc",1,1,1,1) {
+  // defaults for members not always assigned in stationary path
+  emf_method = MHD_EMF::ct_contact;
+  uct_diag = false;
+  mood_edge_flag = 0;
+
   // Total number of MeshBlocks on this rank to be used in array dimensioning
   int nmb = std::max((ppack->nmb_thispack), (ppack->pmesh->nmb_maxperrank));
 
@@ -244,10 +267,106 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
     // needs over [is-1,ie+2] etc.
     use_fofc = pin->GetOrAddBoolean("mhd","fofc",false);
 
+    // MOOD a-posteriori fallback (mhd_mood.cpp).
+    use_mood = pin->GetOrAddBoolean("mhd","mood",false);
+    std::string nadsc = pin->GetOrAddString("mhd","mood_nad_scale","gcfl");
+    if (nadsc.compare("relative") == 0) {
+      mood_nad_scale = 0;
+    } else if (nadsc.compare("grange") == 0) {
+      mood_nad_scale = 1;
+    } else if (nadsc.compare("gdu") == 0) {
+      mood_nad_scale = 2;
+    } else if (nadsc.compare("gcfl") == 0) {
+      mood_nad_scale = 3;
+    } else {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+        << std::endl << "<mhd> mood_nad_scale = '" << nadsc
+        << "' not implemented (relative|grange|gdu|gcfl)" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    mood_eps0  = pin->GetOrAddReal("mhd","mood_eps0",1.0e-12);
+    mood_rtol = pin->GetOrAddReal("mhd","mood_rtol",1.0e-5);
+    mood_atol = pin->GetOrAddReal("mhd","mood_atol",0.0);
+    mood_nad_theta = pin->GetOrAddReal("mhd","mood_nad_theta",1.0);
+    mood_nad_energy = pin->GetOrAddBoolean("mhd","mood_nad_energy",true);
+    mood_nad_scalars = pin->GetOrAddBoolean("mhd","mood_nad_scalars",true);
+    if (mood_nad_theta < 0.0 || mood_nad_theta > 1.0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+        << std::endl << "<mhd> mood_nad_theta must be in [0,1]" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    std::string nadb = pin->GetOrAddString("mhd","mood_nad_b","comps");
+    if (nadb.compare("mag") == 0) {
+      mood_nad_b = 0;
+    } else if (nadb.compare("comps") == 0) {
+      mood_nad_b = 1;
+    } else {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+        << std::endl << "<mhd> mood_nad_b = '" << nadb << "' not implemented (mag|comps)"
+        << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    std::string nadv = pin->GetOrAddString("mhd","mood_nad_v","comps");
+    if (nadv.compare("off") == 0) {
+      mood_nad_v = 0;
+    } else if (nadv.compare("mag") == 0) {
+      mood_nad_v = 1;
+    } else if (nadv.compare("comps") == 0) {
+      mood_nad_v = 2;
+    } else {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+        << std::endl << "<mhd> mood_nad_v = '" << nadv
+        << "' not implemented (off|mag|comps)" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    uct_diag = pin->GetOrAddBoolean("mhd","uct_diag",false);
+    // "auto": flag for UCT, blend for ct_contact (resolved after emf is known)
+    std::string medge = pin->GetOrAddString("mhd","mood_edge","auto");
+    if (medge.compare("auto") == 0) {
+      mood_edge_flag = -1;
+    } else if (medge.compare("blend") == 0) {
+      mood_edge_flag = 0;
+    } else if (medge.compare("flag") == 0) {
+      mood_edge_flag = 1;
+    } else {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+        << std::endl << "<mhd> mood_edge = '" << medge
+        << "' not implemented (auto|blend|flag)" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    mood_sed = pin->GetOrAddBoolean("mhd","mood_sed",true);
+    if (use_mood && use_fofc) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+        << std::endl << "<mhd> mood=true and fofc=true are mutually exclusive"
+        << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+
     // select reconstruction method (default PLM)
     std::string xorder = pin->GetOrAddString("mhd","reconstruct","plm");
     if (xorder.compare("dc") == 0) {
       recon_method = ReconstructionMethod::dc;
+      if (use_mood) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+          << std::endl << "MOOD with dc reconstruction has no fallback tier"
+          << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+    } else if (xorder.compare("ppm") == 0) {
+      recon_method = ReconstructionMethod::ppm;
+      if (!use_mood) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+          << std::endl << "reconstruct=ppm has no built-in limiting and "
+          << "requires <mhd>/mood=true" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      auto &indcs = pmy_pack->pmesh->mb_indcs;
+      if (indcs.ng < 3) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+          << std::endl << xorder << " reconstruction requires at least 3 ghost zones, "
+          << "but <mesh>/nghost=" << indcs.ng << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
     } else if (xorder.compare("plm") == 0) {
       recon_method = ReconstructionMethod::plm;
       // check that nghost > 2 with PLM+FOFC
@@ -369,6 +488,117 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
       }
     }
 
+    // select EMF averaging method (default ct_contact).  uct_hll works for Newtonian,
+    // SR and GR; uct_hlld is Newtonian-only because it needs rsolver=hlld.
+    std::string emf_str = pin->GetOrAddString("mhd","emf","ct_contact");
+    if (emf_str.compare("ct_contact") == 0) {
+      emf_method = MHD_EMF::ct_contact;
+    } else if (emf_str.compare("uct_hll") == 0) {
+      emf_method = MHD_EMF::uct_hll;
+    } else if (emf_str.compare("uct_hlld") == 0) {
+      if (rsolver_method != MHD_RSolver::hlld) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "<mhd>/emf = 'uct_hlld' requires rsolver = 'hlld'"
+                  << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      emf_method = MHD_EMF::uct_hlld;
+    } else {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "<mhd>/emf = '" << emf_str << "' not implemented"
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    // uct_hll now works for SR and GR.  It previously drove the ENTIRE domain to the
+    // density floor (measured: 27.2M floor hits on the 400^2 Minkowski magnetized
+    // blast) because the relativistic Riemann solvers fed the UCT composition the
+    // spatial FOUR-velocity where the induction equation needs the coordinate
+    // transport velocity v^i = u^i/u^0 -- too large by the Lorentz factor and, in GR,
+    // missing the lapse and shift.  See the note in each of the four relativistic
+    // solvers' uct blocks.  The composition itself (Mignone & Del Zanna 2021 Eq. 33,
+    // the form PLUTO uses for RMHD) needs no relativistic modification: the CT
+    // machinery, the staggered B and the characteristic speeds are all already in the
+    // coordinate frame, exactly as the ct_contact path assumes.
+    //
+    // uct_hlld remains Newtonian-only, and not by choice: it requires rsolver=hlld,
+    // which is rejected outright for SR/GR dynamics.
+    if (emf_method == MHD_EMF::uct_hlld &&
+        (pmy_pack->pcoord->is_special_relativistic ||
+         pmy_pack->pcoord->is_general_relativistic)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "<mhd>/emf = 'uct_hlld' is Newtonian-only (it needs"
+                << " rsolver = 'hlld'); use 'uct_hll' or 'ct_contact' with SR/GR"
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    // Ghost-zone requirements for UCT
+    if (emf_method != MHD_EMF::ct_contact) {
+      bool ho = !(recon_method == ReconstructionMethod::dc ||
+                  recon_method == ReconstructionMethod::plm);
+      int ng_need = ho ? 5 : 3;
+      if (pmy_pack->pmesh->mb_indcs.ng < ng_need) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "UCT EMF with " << (ho ? "high-order" : "dc/plm")
+                  << " reconstruction requires at least " << ng_need
+                  << " ghost zones, but <mesh>/nghost="
+                  << pmy_pack->pmesh->mb_indcs.ng << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+    }
+
+    // MOOD cascade / ghost requirements (ct_contact: h_f=1; UCT: wider)
+    if (use_mood) {
+      const bool is_uct = (emf_method != MHD_EMF::ct_contact);
+      if (mood_edge_flag == -1) {
+        mood_edge_flag = is_uct ? 1 : 0;
+      } else if (mood_edge_flag == 1 && !is_uct) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+          << std::endl << "<mhd> mood_edge=flag requires a UCT emf method (ct_contact "
+          << "has no edge reconstruction to demote; use mood_edge=blend or auto)"
+          << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      if (pmy_pack->pcoord->is_general_relativistic &&
+          pmy_pack->pcoord->coord_data.bh_excise) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+          << std::endl << "MOOD with BH excision is not supported" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      n_fb_tiers = (recon_method == ReconstructionMethod::plm) ? 1 : 2;
+      mood_max_revs = pin->GetOrAddInteger("mhd","mood_max_revs",n_fb_tiers);
+      if (mood_max_revs < 1) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+          << std::endl << "<mhd> mood_max_revs must be >= 1" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      int h_f = 1;
+      if (emf_method != MHD_EMF::ct_contact) {
+        if (recon_method == ReconstructionMethod::dc) {
+          h_f = 1;
+        } else if (recon_method == ReconstructionMethod::plm ||
+                   recon_method == ReconstructionMethod::ppm) {
+          h_f = 2;
+        } else {
+          h_f = 3;  // wenoz/ppm4/ppmx/teno
+        }
+      }
+      mood_halo0 = h_f + mood_max_revs - 1;
+      int stencil = 2;
+      if (recon_method == ReconstructionMethod::plm && !mood_sed) { stencil = 1; }
+      int ng_need = mood_halo0 + 1 + stencil;
+      auto &indcs = pmy_pack->pmesh->mb_indcs;
+      if (indcs.ng < ng_need) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+          << std::endl << "MHD MOOD with " << xorder << " reconstruction, emf="
+          << emf_str << " and mood_max_revs=" << mood_max_revs << " requires at least "
+          << ng_need << " ghost zones, but <mesh>/nghost=" << indcs.ng << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+    } else {
+      mood_halo0 = 0;
+      if (mood_edge_flag == -1) { mood_edge_flag = 0; }
+    }
+
     // Final memory allocations
     {
       // allocate second registers
@@ -429,9 +659,31 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
       Kokkos::realloc(bl3d, nmb, 3, ncells3, ncells2, ncells1);
       Kokkos::realloc(br3d, nmb, 3, ncells3, ncells2, ncells1);
 
-      // allocate array of flags used with FOFC
-      if (use_fofc) {
-        int nvars = (pmy_pack->pcoord->is_dynamical_relativistic) ? nmhd+nscalars : nmhd;
+      // allocate UCT arrays if UCT method is selected
+      if (emf_method == MHD_EMF::uct_hll || emf_method == MHD_EMF::uct_hlld) {
+        Kokkos::realloc(aL_x1f, nmb, ncells3, ncells2, ncells1);
+        Kokkos::realloc(dL_x1f, nmb, ncells3, ncells2, ncells1);
+        Kokkos::realloc(dR_x1f, nmb, ncells3, ncells2, ncells1);
+        Kokkos::realloc(vy_x1f, nmb, ncells3, ncells2, ncells1);
+        Kokkos::realloc(vz_x1f, nmb, ncells3, ncells2, ncells1);
+        Kokkos::realloc(aL_x2f, nmb, ncells3, ncells2, ncells1);
+        Kokkos::realloc(dL_x2f, nmb, ncells3, ncells2, ncells1);
+        Kokkos::realloc(dR_x2f, nmb, ncells3, ncells2, ncells1);
+        Kokkos::realloc(vx_x2f, nmb, ncells3, ncells2, ncells1);
+        Kokkos::realloc(vz_x2f, nmb, ncells3, ncells2, ncells1);
+        Kokkos::realloc(aL_x3f, nmb, ncells3, ncells2, ncells1);
+        Kokkos::realloc(dL_x3f, nmb, ncells3, ncells2, ncells1);
+        Kokkos::realloc(dR_x3f, nmb, ncells3, ncells2, ncells1);
+        Kokkos::realloc(vx_x3f, nmb, ncells3, ncells2, ncells1);
+        Kokkos::realloc(vy_x3f, nmb, ncells3, ncells2, ncells1);
+      }
+
+      // allocate arrays of flags/candidate state used with FOFC and MOOD
+      if (use_fofc || use_mood) {
+        // MOOD tests passive scalars too, so the candidate must carry them
+        bool with_scalars = pmy_pack->pcoord->is_dynamical_relativistic ||
+                            (use_mood && mood_nad_scalars);
+        int nvars = (with_scalars) ? nmhd+nscalars : nmhd;
         Kokkos::realloc(fofc,    nmb, ncells3, ncells2, ncells1);
         Kokkos::realloc(utest,   nmb, nvars, ncells3, ncells2, ncells1);
         Kokkos::realloc(bcctest, nmb, 3,    ncells3, ncells2, ncells1);
@@ -439,6 +691,17 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
         if (nscalars > 0) {
           Kokkos::realloc(fofc_scal,    nmb, nscalars, ncells3, ncells2, ncells1);
           Kokkos::deep_copy(fofc_scal, false);
+        }
+      }
+      if (use_mood) {
+        Kokkos::realloc(fb_level, nmb, ncells3, ncells2, ncells1);
+        if (mood_nad_b == 0) {
+          Kokkos::realloc(bmag_ref, nmb, ncells3, ncells2, ncells1);
+        }
+        if (emf_method == MHD_EMF::uct_hll || emf_method == MHD_EMF::uct_hlld) {
+          Kokkos::realloc(b0_test.x1f, nmb, ncells3, ncells2, ncells1+1);
+          Kokkos::realloc(b0_test.x2f, nmb, ncells3, ncells2+1, ncells1);
+          Kokkos::realloc(b0_test.x3f, nmb, ncells3+1, ncells2, ncells1);
         }
       }
     }

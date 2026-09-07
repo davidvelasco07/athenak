@@ -94,6 +94,33 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
   int &i_dv = out_params.i_derived;
   int &n_dv = out_params.n_derived;
 
+  // Per-cell MOOD cascade level retained after the final RK stage:
+  // 0 = base reconstruction, 1 = PLM, 2 = DC.
+  if (name.compare("hydro_fb_level") == 0) {
+    if (derived_var.extent(4) <= 1) {
+      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+    }
+    auto dv = derived_var;
+    auto fb_level = pm->pmb_pack->phydro->fb_level;
+    par_for("hydro_fb_level", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      dv(m,i_dv,k,j,i) = static_cast<Real>(fb_level(m,k,j,i));
+    });
+    i_dv += 1;
+  }
+  if (name.compare("mhd_fb_level") == 0) {
+    if (derived_var.extent(4) <= 1) {
+      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+    }
+    auto dv = derived_var;
+    auto fb_level = pm->pmb_pack->pmhd->fb_level;
+    par_for("mhd_fb_level", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      dv(m,i_dv,k,j,i) = static_cast<Real>(fb_level(m,k,j,i));
+    });
+    i_dv += 1;
+  }
+
   // specific internal energy proxy = eint / density
   if (name.compare("temperature") == 0) {
     if (derived_var.extent(4) <= 1)

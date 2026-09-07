@@ -7,8 +7,8 @@
 //========================================================================================
 //! \file recon.hpp
 //! \brief Per-cell reconstruction supporting every reconstruction method (DC, PLM, PPM4,
-//! PPMX, WENOZ).  Each cell produces ql at its right face and qr at its left face,
-//! written to the global per-face L/R buffers.  Templated on direction
+//! PPMX, WENOZ, TENO, PPM=unlimited).  Each cell produces ql at its right face and qr at
+//! its left face, written to the global per-face L/R buffers.  Templated on direction
 //! (ivx = IVX|IVY|IVZ); the method is selected at runtime via a grid-uniform branch
 //! (coherent across threads, so effectively branch-free on GPU).
 
@@ -107,6 +107,23 @@ void ReconCellT(const EOS_Data &eos, const bool apply_floors,
         ql_val = fmax(ql_val, efloor); qr_val = fmax(qr_val, efloor);
       }
     }
+  } else if constexpr (recon == ReconstructionMethod::ppm) {
+    // Unlimited 4th-order interface interpolation.  Both cells sharing a face get
+    // the same interpolated value (wl = wr there), so the Riemann solver returns
+    // the pure physical flux: no upwind dissipation.  Stability relies entirely on
+    // the MOOD a-posteriori fallback (enforced in the Hydro/MHD constructor).
+    ql_val = (7.0*(q(m, n, k,      j,      i     ) + q(m, n, k+dk,   j+dj,   i+di  ))
+                 - (q(m, n, k-dk,   j-dj,   i-di  ) + q(m, n, k+2*dk, j+2*dj, i+2*di)))
+             /12.0;
+    qr_val = (7.0*(q(m, n, k-dk,   j-dj,   i-di  ) + q(m, n, k,      j,      i     ))
+                 - (q(m, n, k-2*dk, j-2*dj, i-2*di) + q(m, n, k+dk,   j+dj,   i+di  )))
+             /12.0;
+    if (apply_floors) {
+      if (n == IDN) { ql_val = fmax(ql_val, dfloor); qr_val = fmax(qr_val, dfloor); }
+      if (eos.is_ideal && n == IEN) {
+        ql_val = fmax(ql_val, efloor); qr_val = fmax(qr_val, efloor);
+      }
+    }
   } else {
     ql_val = q(m, n, k, j, i);
     qr_val = q(m, n, k, j, i);
@@ -173,6 +190,13 @@ inline void ReconDispatch(ReconstructionMethod recon, const char *name, int nmb1
               eos, apply_floors, m, n, k, j, i, q, ql, qr);
         });
       break;
+    case ReconstructionMethod::ppm:
+      par_for(name, DevExeSpace(), 0, nmb1, 0, nvars-1, kl, ku, jl, ju, il, iu,
+        KOKKOS_LAMBDA(int m, int n, int k, int j, int i) {
+          ReconCellT<ReconstructionMethod::ppm, ivx>(
+              eos, apply_floors, m, n, k, j, i, q, ql, qr);
+        });
+      break;
     case ReconstructionMethod::dc:
     default:
       par_for(name, DevExeSpace(), 0, nmb1, 0, nvars-1, kl, ku, jl, ju, il, iu,
@@ -181,6 +205,53 @@ inline void ReconDispatch(ReconstructionMethod recon, const char *name, int nmb1
               eos, apply_floors, m, n, k, j, i, q, ql, qr);
         });
       break;
+  }
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn ReconFace<ivx>()
+//! \brief Single-FACE reconstruction: computes the L state (from the cell on the left of
+//! the face) and R state (from the cell on the right) of face (m,k,j,i) in direction
+//! `ivx`, writing ONLY that face's slots wl(...,i) and wr(...,i).  Used by the MOOD
+//! fallback to revise individual faces at a lower-order method without the write races
+//! that per-cell ReconCellT would cause when driven from a face-indexed kernel (two
+//! adjacent faces would both write the shared cell's other-face slot).
+//! Only the fallback-tier methods (dc, plm) are supported; anything else falls back
+//! to dc.
+template <int ivx>
+KOKKOS_INLINE_FUNCTION
+void ReconFace(const ReconstructionMethod recon,
+               const int m, const int k, const int j, const int i,
+               const int nvars,
+               const DvceArray5D<Real> &q,
+               const DvceArray5D<Real> &wl,
+               const DvceArray5D<Real> &wr) {
+  constexpr int di = (ivx == IVX) ? 1 : 0;
+  constexpr int dj = (ivx == IVY) ? 1 : 0;
+  constexpr int dk = (ivx == IVZ) ? 1 : 0;
+
+  for (int n = 0; n < nvars; ++n) {
+    Real wl_val, wr_val;
+    if (recon == ReconstructionMethod::plm) {
+      Real ql, qr;
+      // L state of face i = right-face value (ql) of cell i-1
+      PLM(q(m, n, k - 2*dk, j - 2*dj, i - 2*di),
+          q(m, n, k -   dk, j -   dj, i -   di),
+          q(m, n, k,        j,        i),
+          ql, qr);
+      wl_val = ql;
+      // R state of face i = left-face value (qr) of cell i
+      PLM(q(m, n, k -   dk, j -   dj, i -   di),
+          q(m, n, k,        j,        i),
+          q(m, n, k +   dk, j +   dj, i +   di),
+          ql, qr);
+      wr_val = qr;
+    } else {  // donor cell
+      wl_val = q(m, n, k - dk, j - dj, i - di);
+      wr_val = q(m, n, k, j, i);
+    }
+    wl(m, n, k, j, i) = wl_val;
+    wr(m, n, k, j, i) = wr_val;
   }
 }
 

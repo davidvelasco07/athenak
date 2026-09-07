@@ -258,8 +258,26 @@ TaskStatus MHD::Fluxes(Driver *pdrive, int stage) {
   // STS-selected diffusion is advanced only in the parabolic half-sweeps.
   AddSelectedDiffusionFluxes(parabolic::DiffusionSelection::explicit_only);
 
-  // call FOFC if necessary
-  if (use_fofc) {
+  // call the MOOD fallback or FOFC if necessary
+  if (use_mood) {
+    if (rsolver_method == MHD_RSolver::advect) {
+      MOODLoop<MHD_RSolver::advect>(pdrive, stage);
+    } else if (rsolver_method == MHD_RSolver::llf) {
+      MOODLoop<MHD_RSolver::llf>(pdrive, stage);
+    } else if (rsolver_method == MHD_RSolver::hlle) {
+      MOODLoop<MHD_RSolver::hlle>(pdrive, stage);
+    } else if (rsolver_method == MHD_RSolver::hlld) {
+      MOODLoop<MHD_RSolver::hlld>(pdrive, stage);
+    } else if (rsolver_method == MHD_RSolver::llf_sr) {
+      MOODLoop<MHD_RSolver::llf_sr>(pdrive, stage);
+    } else if (rsolver_method == MHD_RSolver::hlle_sr) {
+      MOODLoop<MHD_RSolver::hlle_sr>(pdrive, stage);
+    } else if (rsolver_method == MHD_RSolver::llf_gr) {
+      MOODLoop<MHD_RSolver::llf_gr>(pdrive, stage);
+    } else if (rsolver_method == MHD_RSolver::hlle_gr) {
+      MOODLoop<MHD_RSolver::hlle_gr>(pdrive, stage);
+    }
+  } else if (use_fofc) {
     FOFC(pdrive, stage);
   } else if (pmy_pack->pcoord->is_general_relativistic) {
     if (pmy_pack->pcoord->coord_data.bh_excise) {

@@ -68,6 +68,7 @@ add_executable(
         hydro/hydro.cpp
         hydro/hydro_fluxes.cpp
         hydro/hydro_fofc.cpp
+        hydro/hydro_mood.cpp
         hydro/hydro_newdt.cpp
         hydro/hydro_sts.cpp
         hydro/hydro_tasks.cpp
@@ -95,6 +96,7 @@ add_executable(
         mhd/mhd_ct.cpp
         mhd/mhd_fluxes.cpp
         mhd/mhd_fofc.cpp
+        mhd/mhd_mood.cpp
         mhd/mhd_newdt.cpp
         mhd/mhd_sts.cpp
         mhd/mhd_tasks.cpp
@@ -134,6 +136,7 @@ add_executable(
         pgen/tests/orszag_tang.cpp
         pgen/tests/mri3d.cpp
         pgen/tests/shock_tube.cpp
+        pgen/tests/shu_osher.cpp
         pgen/tests/shwave.cpp
         pgen/tests/rad_beam.cpp
         pgen/tests/rad_linear_wave.cpp

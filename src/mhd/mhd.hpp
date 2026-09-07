@@ -41,6 +41,9 @@ enum class MHD_RSolver {advect, llf, hlle, hlld, roe,   // non-relativistic
                         llf_sr, hlle_sr,                // SR
                         llf_gr, hlle_gr};                       // GR
 
+// constants that enumerate EMF (corner electric field) averaging options
+enum class MHD_EMF {ct_contact, uct_hll, uct_hlld};
+
 //----------------------------------------------------------------------------------------
 //! \struct MHDTaskIDs
 //  \brief container to hold TaskIDs of all mhd tasks
@@ -93,6 +96,7 @@ class MHD {
   // data
   ReconstructionMethod recon_method;
   MHD_RSolver rsolver_method;
+  MHD_EMF emf_method;
   EquationOfState *peos;   // chosen EOS
 
   int nmhd;                // number of mhd variables (5/4 for ideal/isothermal EOS)
@@ -134,12 +138,18 @@ class MHD {
   DvceFaceFld4D<Real> b_sts1;  // previous STS stage fields
   DvceFaceFld4D<Real> b_sts2;  // second previous STS stage fields
   DvceFaceFld4D<Real> b_sts_rhs;  // cached first-stage RKL2 operator contribution
+  // candidate face-centered B for MHD MOOD+UCT detector (genuine staggered CT update)
+  DvceFaceFld4D<Real> b0_test;
   DvceFaceFld5D<Real> uflx;   // fluxes of conserved quantities on cell faces
   DvceEdgeFld4D<Real> efld;   // edge-centered electric fields (fluxes of B)
   // temporary variables used to store face-centered electric fields returned by RS
   DvceArray4D<Real> e3x1, e2x1;
   DvceArray4D<Real> e1x2, e3x2;
   DvceArray4D<Real> e2x3, e1x3;
+  // UCT data stored at cell faces by Riemann solvers (only allocated when UCT is used)
+  DvceArray4D<Real> aL_x1f, dL_x1f, dR_x1f, vy_x1f, vz_x1f;
+  DvceArray4D<Real> aL_x2f, dL_x2f, dR_x2f, vx_x2f, vz_x2f;
+  DvceArray4D<Real> aL_x3f, dL_x3f, dR_x3f, vx_x3f, vy_x3f;
   // global per-face L/R buffers for the split-kernel flux path: primitives (nmhd+nscalars
   // components) and reconstructed cell-centered B-field (3 components)
   DvceArray5D<Real> wl3d, wr3d;
@@ -155,6 +165,26 @@ class MHD {
   DvceArray4D<bool> fofc;  // flag for each cell to indicate if FOFC is needed
   DvceArray5D<bool> fofc_scal;  // flag to indicate if FOFC for scalar is needed
   bool use_fofc = false;   // flag to enable FOFC
+
+  // MOOD a-posteriori fallback ("FB"). Shares fofc/utest/bcctest arrays.
+  bool use_mood = false;
+  int mood_max_revs = 1;
+  int mood_nad_scale;
+  Real mood_nad_theta;
+  bool mood_nad_energy;
+  bool mood_nad_scalars;    // include passive-scalar concentrations in NAD
+  int mood_nad_b;           // 0=|B|, 1=components
+  int mood_nad_v;           // 0=off, 1=|v|, 2=components
+  bool uct_diag;            // print max|d| (UCT dissipation) + EMF-NaN diagnostic
+  int mood_edge_flag;       // 1: demote UCT edge recon at demoted cells; 0: blend only
+  Real mood_rtol;
+  Real mood_eps0;
+  Real mood_atol;
+  bool mood_sed;
+  int n_fb_tiers;
+  int mood_halo0;
+  DvceArray4D<int> fb_level;
+  DvceArray4D<Real> bmag_ref;
 
   bool has_explicit_viscosity = false;
   bool has_explicit_conduction = false;
@@ -192,6 +222,9 @@ class MHD {
   TaskStatus SendU_Shr(Driver *d, int stage);
   TaskStatus RecvU_Shr(Driver *d, int stage);
   TaskStatus CornerE(Driver *d, int stage);
+  // Compose edge-centered corner EMFs from face-centered E and UCT face coefficients
+  // over [il,iu]x[jl,ju]x[kl,ku]. Newtonian UCT path (also used by MOOD candidate B).
+  void ComposeCornerEMF(int il, int iu, int jl, int ju, int kl, int ku);
   TaskStatus EField(Driver *d, int stage);
   TaskStatus SendE(Driver *d, int stage);
   TaskStatus RecvE(Driver *d, int stage);
@@ -225,6 +258,10 @@ class MHD {
 
   // first-order flux correction
   void FOFC(Driver *d, int stage);
+
+  // MOOD a-posteriori fallback (same Riemann solver as base scheme)
+  template <MHD_RSolver T>
+  void MOODLoop(Driver *d, int stage);
 
   DvceArray5D<Real> utest, bcctest;  // scratch arrays for FOFC
 

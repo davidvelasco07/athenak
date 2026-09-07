@@ -30,7 +30,16 @@ void HLLE(const EOS_Data &eos,
           const DvceArray5D<Real> &bl, const DvceArray5D<Real> &br,
           const DvceArray4D<Real> &bx,
           const DvceArray5D<Real> &flx,
-          const DvceArray4D<Real> &ey, const DvceArray4D<Real> &ez) {
+          const DvceArray4D<Real> &ey, const DvceArray4D<Real> &ez,
+          const int uct_flag = 0,
+          const DvceArray4D<Real> &uct_aL = {}, const DvceArray4D<Real> &uct_dL = {},
+          const DvceArray4D<Real> &uct_dR = {}, const DvceArray4D<Real> &uct_vt1 = {},
+          const DvceArray4D<Real> &uct_vt2 = {}) {
+  // NB: gate on the flag, NOT uct_aL.is_allocated().  The UCT arrays are
+  // constructed (1,1,1,1) and only realloc'd to full size when emf is
+  // uct_hll/uct_hlld, so is_allocated() is TRUE even with ct_contact and
+  // every uct_* write would land outside a 1x1x1x1 View (heap corruption).
+  const bool compute_uct = (uct_flag > 0);
   constexpr int ivy = IVX + ((ivx-IVX)+1)%3;
   constexpr int ivz = IVX + ((ivx-IVX)+2)%3;
   constexpr int iby = ((ivx-IVX) + 1)%3;
@@ -176,6 +185,19 @@ void HLLE(const EOS_Data &eos,
   if (eos.is_ideal) flx(m,IEN,k,j,i) = 0.5*(fl.e + fr.e ) + (fl.e - fr.e)*tmp;
   ey(m,k,j,i) = -0.5*(fl.by + fr.by) - (fl.by - fr.by)*tmp;
   ez(m,k,j,i) =  0.5*(fl.bz + fr.bz) + (fl.bz - fr.bz)*tmp;
+
+  //--- Step 7.  Compute UCT coefficients (Mignone & Del Zanna 2021, Eq. 29, 32)
+  if (compute_uct) {
+    Real alpha_r = bp;   // max(0, ar) already enforced above
+    Real alpha_l = -bm;  // max(0, -al) already enforced above
+    Real isum = 1.0/(alpha_r + alpha_l);
+    uct_aL(m,k,j,i)  = alpha_r * isum;
+    Real dval = alpha_r * alpha_l * isum;
+    uct_dL(m,k,j,i)  = dval;
+    uct_dR(m,k,j,i)  = dval;
+    uct_vt1(m,k,j,i) = (alpha_r*wl_ivy + alpha_l*wr_ivy)*isum;
+    uct_vt2(m,k,j,i) = (alpha_r*wl_ivz + alpha_l*wr_ivz)*isum;
+  }
 }
 } // namespace mhd
 #endif // MHD_RSOLVERS_HLLE_MHD_HPP_

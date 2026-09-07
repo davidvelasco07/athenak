@@ -717,6 +717,31 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
     outvars.emplace_back("pdens",0,&(derived_var));
   }
 
+  // Hydro/MHD MOOD fallback level: 0=base, 1=PLM, 2=DC. This is the level retained
+  // after the final RK stage at the output time.
+  if (out_params.variable.compare("hydro_fb_level") == 0) {
+    if (pm->pmb_pack->phydro == nullptr || !(pm->pmb_pack->phydro->use_mood)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Output variable 'hydro_fb_level' requires "
+                << "<hydro>/mood=true" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    out_params.contains_derived = true;
+    out_params.n_derived += 1;
+    outvars.emplace_back("fb_level", out_params.i_derived, &(derived_var));
+  }
+  if (out_params.variable.compare("mhd_fb_level") == 0) {
+    if (pm->pmb_pack->pmhd == nullptr || !(pm->pmb_pack->pmhd->use_mood)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Output variable 'mhd_fb_level' requires <mhd>/mood=true"
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    out_params.contains_derived = true;
+    out_params.n_derived += 1;
+    outvars.emplace_back("fb_level", out_params.i_derived, &(derived_var));
+  }
+
   // initialize vector containing number of output MBs per rank
   noutmbs.assign(global_variable::nranks, 0);
 }
