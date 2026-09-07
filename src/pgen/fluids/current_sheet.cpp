@@ -84,17 +84,23 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
       Real x3v = CellCenterX(k-ks, nx3, x3min, x3max);
 
       // compute cell-centered conserved variables
-      u0(m,IDN,k,j,i) = (d0/(pow(cosh((x1v+x01)/a0),2.0)) +
-                         d0/(pow(cosh((x1v-x01)/a0),2.0)) + ng);
-      u0(m,IM1,k,j,i) = (epsv*sin(kval*x2v)*(exp(-1.0*pow((x1v+x01)/a0,2.0)) +
-                         exp(-1.0*pow((x1v-x01)/a0,2.0))));
-      u0(m,IM2,k,j,i) = (epsv*-2.0*cos(kval*x2v)*
-                         (exp(-1.0*pow((x1v+x01)/a0,2.0))*(x1v+x01) +
-                          exp(-1.0*pow((x1v-x01)/a0,2.0))*(x1v-x01))/(kval*a0*a0));
+      Real den = (d0/(pow(cosh((x1v+x01)/a0),2.0)) +
+                  d0/(pow(cosh((x1v-x01)/a0),2.0)) + ng);
+      // divergence-free velocity seed v = curl(psi zhat)
+      Real vx = (epsv*sin(kval*x2v)*(exp(-1.0*pow((x1v+x01)/a0,2.0)) +
+                 exp(-1.0*pow((x1v-x01)/a0,2.0))));
+      Real vy = (epsv*-2.0*cos(kval*x2v)*
+                 (exp(-1.0*pow((x1v+x01)/a0,2.0))*(x1v+x01) +
+                  exp(-1.0*pow((x1v-x01)/a0,2.0))*(x1v-x01))/(kval*a0*a0));
+
+      u0(m,IDN,k,j,i) = den;
+      u0(m,IM1,k,j,i) = den*vx;
+      u0(m,IM2,k,j,i) = den*vy;
       u0(m,IM3,k,j,i) = 0.0;
 
       if (eos.is_ideal) {
-        u0(m,IEN,k,j,i) = p0/gm1 * u0(m,IDN,k,j,i);
+        // total energy = internal + kinetic
+        u0(m,IEN,k,j,i) = p0*den/gm1 + 0.5*den*(SQR(vx) + SQR(vy));
       }
     });
   }  // End initialization Hydro variables
@@ -125,18 +131,19 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
       Real x3v = CellCenterX(k-ks, nx3, x3min, x3max);
 
       // compute cell-centered conserved variables
-      u0(m,IDN,k,j,i) = (d0/(pow(cosh((x1v+x01)/a0),2.0)) +
-                         d0/(pow(cosh((x1v-x01)/a0),2.0))+ng);
-      u0(m,IM1,k,j,i) = (epsv*sin(kval*x2v)*(exp(-1.0*pow((x1v+x01)/a0,2.0)) +
-                         exp(-1.0*pow((x1v-x01)/a0,2.0))));
-      u0(m,IM2,k,j,i) = (epsv*-2.0*cos(kval*x2v)*
-                         (exp(-1.0*pow((x1v+x01)/a0,2.0))*(x1v+x01) +
-                          exp(-1.0*pow((x1v-x01)/a0,2.0))*(x1v-x01))/(kval*a0*a0));
-      u0(m,IM3,k,j,i) = 0.0;
+      Real den = (d0/(pow(cosh((x1v+x01)/a0),2.0)) +
+                  d0/(pow(cosh((x1v-x01)/a0),2.0))+ng);
+      // divergence-free velocity seed v = curl(psi zhat)
+      Real vx = (epsv*sin(kval*x2v)*(exp(-1.0*pow((x1v+x01)/a0,2.0)) +
+                 exp(-1.0*pow((x1v-x01)/a0,2.0))));
+      Real vy = (epsv*-2.0*cos(kval*x2v)*
+                 (exp(-1.0*pow((x1v+x01)/a0,2.0))*(x1v+x01) +
+                  exp(-1.0*pow((x1v-x01)/a0,2.0))*(x1v-x01))/(kval*a0*a0));
 
-      if (eos.is_ideal) {
-        u0(m,IEN,k,j,i) = p0/gm1 * u0(m,IDN,k,j,i);
-      }
+      u0(m,IDN,k,j,i) = den;
+      u0(m,IM1,k,j,i) = den*vx;
+      u0(m,IM2,k,j,i) = den*vy;
+      u0(m,IM3,k,j,i) = 0.0;
 
       // Compute face-centered fields
       Real x1f   = LeftEdgeX(i  -is, nx1, size.d_view(m).x1min, size.d_view(m).x1max);
@@ -175,6 +182,36 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
         b0.x3f(m,k+1,j,i) = bg;
       }
     });
+
+    // Initialize total energy.  Must be a separate kernel: the cell-centered field
+    // needs every face of the block to have been set first.
+    //
+    // The gas pressure is set from transverse force balance against the unperturbed
+    // reconnecting field By = bb0*(tanh((x+x01)/a0) - tanh((x-x01)/a0) - 1), i.e.
+    //   p + By^2/2 = const   =>   p(x) = p0*ng + (bb0^2/2)*(sech^2_+ + sech^2_-)
+    // so the double Harris sheet is an exact equilibrium for ANY d0 and gamma.  It
+    // reduces to the uniform-temperature form p = p0*rho when d0 = gamma*bb0^2/2.
+    // The uniform guide field bg and the epsb/epsv tearing seed are deliberately
+    // excluded from the balance -- they are the perturbation.
+    if (eos.is_ideal) {
+      par_for("pgen_mhd_e", DevExeSpace(), 0,(pmbp->nmb_thispack-1),ks,ke,js,je,is,ie,
+      KOKKOS_LAMBDA(int m, int k, int j, int i) {
+        Real &x1min = size.d_view(m).x1min;
+        Real &x1max = size.d_view(m).x1max;
+        int nx1 = indcs.nx1;
+        Real x1v = CellCenterX(i-is, nx1, x1min, x1max);
+
+        Real pgas = p0*ng + 0.5*SQR(bb0)*(1.0/SQR(cosh((x1v+x01)/a0)) +
+                                          1.0/SQR(cosh((x1v-x01)/a0)));
+
+        u0(m,IEN,k,j,i) = pgas/gm1 +
+            (0.5/u0(m,IDN,k,j,i))*(SQR(u0(m,IM1,k,j,i)) + SQR(u0(m,IM2,k,j,i)) +
+                                   SQR(u0(m,IM3,k,j,i))) +
+            0.5*(SQR(0.5*(b0.x1f(m,k,j,i) + b0.x1f(m,k,j,i+1))) +
+                 SQR(0.5*(b0.x2f(m,k,j,i) + b0.x2f(m,k,j+1,i))) +
+                 SQR(0.5*(b0.x3f(m,k,j,i) + b0.x3f(m,k+1,j,i))));
+      });
+    }
   }  // End initialization MHD variables
 
   return;

@@ -48,7 +48,8 @@ rsolver     = hlld     # Riemann-solver to be used
 gamma       = 1.4      # gamma = C_p/C_v
 
 <problem>
-d0 = 50.0                 # Amplitude of sheet density (should be b0^2/2)
+d0 = 70.0                 # Amplitude of sheet density; = gamma*b0^2/2 makes T uniform
+                          # (pressure is force-balanced for any d0)
 ng = 10.0                 # background density
 b0 = 10.0                 # Amplitude of reconnecting field
 a0 = 0.05                 # Width of current sheet
