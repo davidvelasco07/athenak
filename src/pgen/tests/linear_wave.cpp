@@ -36,6 +36,7 @@
 #include "dyn_grmhd/dyn_grmhd.hpp"
 #include "driver/driver.hpp"
 #include "pgen/pgen.hpp"
+#include "hydro/well_balance.hpp"
 
 //----------------------------------------------------------------------------------------
 //! \struct LinWaveVariables
@@ -68,6 +69,22 @@ void RelMHDPerturbations(LinWaveVariables lwv, Real u[4], Real b[4],
 namespace {
 // global variable to control computation of initial conditions versus errors
 bool set_initial_conditions = true;
+
+// well-balanced hydro: the equilibrium is the uniform background at rest
+struct LinWaveEq {
+  Real d0, e0;
+  KOKKOS_INLINE_FUNCTION
+  void operator()(const Real x1, const Real x2, const Real x3, Real w[]) const {
+    w[IDN] = d0;
+    w[IVX] = 0.0; w[IVY] = 0.0; w[IVZ] = 0.0;
+    w[IEN] = e0;
+  }
+};
+LinWaveEq lw_eq;
+void LinWaveEquilibrium(Mesh *pm) {
+  auto *ph = pm->pmb_pack->phydro;
+  wellbalance::FillEquilibriumCellAverages(pm->pmb_pack, ph->w_eq, ph->nhydro, lw_eq);
+}
 
 //----------------------------------------------------------------------------------------
 //! \fn Real A1(const Real x1,const Real x2,const Real x3)
@@ -244,6 +261,14 @@ void QuarticRoots(Real a3, Real a2, Real a1, Real a0, Real *px1, Real *px2,
 void ProblemGenerator::LinearWave(ParameterInput *pin, const bool restart) {
   // set linear wave errors function
   pgen_final_func = LinearWaveErrors;
+  // well-balanced hydro (static background only: vx0 must be 0)
+  auto *phyd = pmy_mesh_->pmb_pack->phydro;
+  if (phyd != nullptr && (phyd->well_balanced || phyd->wb_diagnostics)) {
+    lw_eq.d0 = pin->GetReal("problem", "dens");
+    lw_eq.e0 = phyd->peos->eos_data.is_ideal ?
+               pin->GetReal("problem", "pgas")/(phyd->peos->eos_data.gamma - 1.0) : 0.0;
+    user_eq_func = LinWaveEquilibrium;
+  }
   if (restart) return;
 
   // Read and/or calculate direction of wavevector

@@ -711,6 +711,9 @@ void ProblemGenerator::OutputErrors(ParameterInput *pin, Mesh *pm) {
     auto &is_ideal_ = pmbp->phydro->peos->eos_data.is_ideal;
     auto &u0_ = pmbp->phydro->u0;
     auto &u1_ = pmbp->phydro->u1;
+    // well-balanced hydro: u0 holds the perturbation; compare the full state U'+U_eq
+    const bool wb_ = pmbp->phydro->well_balanced;
+    auto &ueq_ = pmbp->phydro->u_eq;
 
     const int nmkji = (pmbp->nmb_thispack)*nx3*nx2*nx1;
     const int nkji = nx3*nx2*nx1;
@@ -730,16 +733,21 @@ void ProblemGenerator::OutputErrors(ParameterInput *pin, Mesh *pm) {
 
       // conserved variables:
       array_sum::GlobalSum evars;
-      evars.the_array[IDN] = vol*fabs(u0_(m,IDN,k,j,i) - u1_(m,IDN,k,j,i));
+      evars.the_array[IDN] = vol*fabs((wb_ ? (u0_(m,IDN,k,j,i) + ueq_(m,IDN,k,j,i))
+                                        : u0_(m,IDN,k,j,i)) - u1_(m,IDN,k,j,i));
       max_err = fmax(max_err, evars.the_array[IDN]);
-      evars.the_array[IM1] = vol*fabs(u0_(m,IM1,k,j,i) - u1_(m,IM1,k,j,i));
+      evars.the_array[IM1] = vol*fabs((wb_ ? (u0_(m,IM1,k,j,i) + ueq_(m,IM1,k,j,i))
+                                        : u0_(m,IM1,k,j,i)) - u1_(m,IM1,k,j,i));
       max_err = fmax(max_err, evars.the_array[IM1]);
-      evars.the_array[IM2] = vol*fabs(u0_(m,IM2,k,j,i) - u1_(m,IM2,k,j,i));
+      evars.the_array[IM2] = vol*fabs((wb_ ? (u0_(m,IM2,k,j,i) + ueq_(m,IM2,k,j,i))
+                                        : u0_(m,IM2,k,j,i)) - u1_(m,IM2,k,j,i));
       max_err = fmax(max_err, evars.the_array[IM2]);
-      evars.the_array[IM3] = vol*fabs(u0_(m,IM3,k,j,i) - u1_(m,IM3,k,j,i));
+      evars.the_array[IM3] = vol*fabs((wb_ ? (u0_(m,IM3,k,j,i) + ueq_(m,IM3,k,j,i))
+                                        : u0_(m,IM3,k,j,i)) - u1_(m,IM3,k,j,i));
       max_err = fmax(max_err, evars.the_array[IM3]);
       if (is_ideal_) {
-        evars.the_array[IEN] = vol*fabs(u0_(m,IEN,k,j,i) - u1_(m,IEN,k,j,i));
+        evars.the_array[IEN] = vol*fabs((wb_ ? (u0_(m,IEN,k,j,i) + ueq_(m,IEN,k,j,i))
+                                        : u0_(m,IEN,k,j,i)) - u1_(m,IEN,k,j,i));
         max_err = fmax(max_err, evars.the_array[IEN]);
       }
 

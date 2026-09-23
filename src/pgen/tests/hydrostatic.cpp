@@ -280,7 +280,8 @@ void ProblemGenerator::Hydrostatic(ParameterInput *pin, const bool restart) {
       pp.c3 = pin->GetOrAddReal("problem", "pulse_x3", 0.3);
       const Real w2 = pin->GetOrAddReal("problem", "pulse_w2", 0.01);
       const Real gmag = std::sqrt(SQR(gv[0]) + SQR(gv[1]) + SQR(gv[2]));
-      pp.k2 = exp_atm.rho0*gmag/(exp_atm.p0*w2);
+      // width rho0|g|/(p0 w2) as in the paper; pulse_k2 overrides it (e.g. for g = 0)
+      pp.k2 = pin->GetOrAddReal("problem", "pulse_k2", exp_atm.rho0*gmag/(exp_atm.p0*w2));
       pp.gm1 = gm1;
       pp.multi_d = pmy_mesh_->multi_d;
       pp.three_d = pmy_mesh_->three_d;
