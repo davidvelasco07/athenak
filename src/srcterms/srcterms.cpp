@@ -45,12 +45,22 @@ SourceTerms::SourceTerms(std::string block, MeshBlockPack *pp, ParameterInput *p
 
   // (1) read data for (constant) gravitational acceleration
   if (const_accel) {
-    const_accel_val = pin->GetReal(block, "const_accel_val");
     const_accel_dir = pin->GetInteger(block, "const_accel_dir");
-    if (const_accel_dir < 1 || const_accel_dir > 3) {
-      std::cout << "### FATAL ERROR in "<< __FILE__ <<" at line " << __LINE__ << std::endl
-                << "const_accle_dir must be 1,2, or 3" << std::endl;
-      std::exit(EXIT_FAILURE);
+    if (const_accel_dir == 0) {
+      // vector form: g = (const_accel_x1, const_accel_x2, const_accel_x3)
+      const_accel_val = 0.0;
+      const_accel_vec[0] = pin->GetOrAddReal(block, "const_accel_x1", 0.0);
+      const_accel_vec[1] = pin->GetOrAddReal(block, "const_accel_x2", 0.0);
+      const_accel_vec[2] = pin->GetOrAddReal(block, "const_accel_x3", 0.0);
+    } else {
+      const_accel_val = pin->GetReal(block, "const_accel_val");
+      if (const_accel_dir < 1 || const_accel_dir > 3) {
+        std::cout << "### FATAL ERROR in "<< __FILE__ <<" at line " << __LINE__
+                  << std::endl << "const_accel_dir must be 0 (vector), 1, 2, or 3"
+                  << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      const_accel_vec[const_accel_dir-1] = const_accel_val;
     }
   }
 
@@ -121,13 +131,33 @@ void SourceTerms::ConstantAccel(const DvceArray5D<Real> &w0, const EOS_Data &eos
   Real &g = const_accel_val;
   int &dir = const_accel_dir;
 
-  par_for("const_acc", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
-  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-    Real src = bdt*g*w0(m,IDN,k,j,i);
-    u0(m,dir,k,j,i) += src;
-    if (eos_data.is_ideal) { u0(m,IEN,k,j,i) += src*w0(m,dir,k,j,i); }
-  });
+  if (pwb_pert == nullptr && dir != 0) {
+    par_for("const_acc", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
+    KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      Real src = bdt*g*w0(m,IDN,k,j,i);
+      u0(m,dir,k,j,i) += src;
+      if (eos_data.is_ideal) { u0(m,IEN,k,j,i) += src*w0(m,dir,k,j,i); }
+    });
+    return;
+  }
 
+  // Vector form and/or well-balanced hydro.  Momentum: rho*g, or rho'*g with the
+  // well-balanced scheme (rho' = U'_rho of the stage-input state).  Energy: the full
+  // rho v.g in both cases, since the equilibrium is static (m_eq = 0).
+  const Real g1 = const_accel_vec[0], g2 = const_accel_vec[1], g3 = const_accel_vec[2];
+  const bool wb = (pwb_pert != nullptr);
+  const DvceArray5D<Real> rho_src = wb ? *pwb_pert : w0;
+  par_for("const_acc_vec", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    const Real dr = bdt*rho_src(m,IDN,k,j,i);
+    u0(m,IM1,k,j,i) += dr*g1;
+    u0(m,IM2,k,j,i) += dr*g2;
+    u0(m,IM3,k,j,i) += dr*g3;
+    if (eos_data.is_ideal) {
+      u0(m,IEN,k,j,i) += bdt*w0(m,IDN,k,j,i)*(g1*w0(m,IVX,k,j,i) + g2*w0(m,IVY,k,j,i)
+                                              + g3*w0(m,IVZ,k,j,i));
+    }
+  });
   return;
 }
 

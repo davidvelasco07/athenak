@@ -158,6 +158,14 @@ void MeshRefinement::AdaptiveMeshRefinement(Driver *pdriver, ParameterInput *pin
     // Mark one mesh-topology update event (AMR and any resulting load balancing).
     pmy_mesh->MarkMeshUpdated();
 
+    // well-balanced hydro: blocks moved/appeared, so rebuild the equilibrium (it is never
+    // communicated; u0 = U' was restricted/prolongated like any conserved variable)
+    if (pmy_mesh->pmb_pack->phydro != nullptr &&
+        (pmy_mesh->pmb_pack->phydro->well_balanced ||
+         pmy_mesh->pmb_pack->phydro->wb_diagnostics)) {
+      pmy_mesh->pmb_pack->phydro->WBSetEquilibrium();
+    }
+
     pdriver->InitBoundaryValuesAndPrimitives(pmy_mesh);
 
     MeshBlockPack* pmbp = pmy_mesh->pmb_pack;

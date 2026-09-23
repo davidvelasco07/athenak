@@ -49,6 +49,16 @@ void EquationOfState::ConsToPrim(DvceArray5D<Real> &cons, const DvceFaceFld4D<Re
                 "  If using DynGRMHD, use the functions exposed in DynGRMHD instead.\n");
 }
 
+void EquationOfState::ConsToPrimWB(DvceArray5D<Real> &cons,
+                                   const DvceArray5D<Real> &ueq,
+                                   DvceArray5D<Real> &prim,
+                                   const bool only_testfloors,
+                                   const int il, const int iu, const int jl, const int ju,
+                                   const int kl, const int ku) {
+  Kokkos::abort("NoOp well-balanced hydro ConsToPrim called.\n"
+                "  The well-balanced scheme supports only non-relativistic hydro.\n");
+}
+
 //----------------------------------------------------------------------------------------
 //! \fn void PrimToCon()
 //! \brief No-Op versions of hydro and MHD primitive to conservative functions.

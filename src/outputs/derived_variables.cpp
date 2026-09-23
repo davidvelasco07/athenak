@@ -94,6 +94,50 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
   int &i_dv = out_params.i_derived;
   int &n_dv = out_params.n_derived;
 
+  // Well-balanced hydro: full conserved state U' + U_eq for the hydro_u outputs, and the
+  // primitive perturbation W - W_eq for hydro_wpert (both formed in double precision).
+  {
+    auto *ph = pm->pmb_pack->phydro;
+    const char *uvars[5] = {"hydro_u_d", "hydro_u_m1", "hydro_u_m2", "hydro_u_m3",
+                            "hydro_u_e"};
+    const bool is_u = (name.compare("hydro_u") == 0);
+    bool want_u = false;
+    for (int n=0; n<5; ++n) {if (name.compare(uvars[n]) == 0) want_u = true;}
+    if (ph != nullptr && ph->well_balanced && (is_u || want_u)) {
+      if (derived_var.extent(4) <= 1) {
+        Kokkos::realloc(derived_var, nmb_alloc, n_dv, n3, n2, n1);
+      }
+      auto dv = derived_var;
+      auto u0 = ph->u0;
+      auto ueq = ph->u_eq;
+      for (int n=0; n<ph->nhydro; ++n) {
+        if (!(is_u || name.compare(uvars[n]) == 0)) continue;
+        const int idv = i_dv;
+        par_for("hydro_u_wb", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
+        KOKKOS_LAMBDA(int m, int k, int j, int i) {
+          dv(m,idv,k,j,i) = u0(m,n,k,j,i) + ueq(m,n,k,j,i);
+        });
+        i_dv += 1;
+      }
+    }
+    if (name.compare("hydro_wpert") == 0) {
+      if (derived_var.extent(4) <= 1) {
+        Kokkos::realloc(derived_var, nmb_alloc, n_dv, n3, n2, n1);
+      }
+      auto dv = derived_var;
+      auto w0 = ph->w0;
+      auto weq = ph->w_eq;
+      for (int n=0; n<ph->nhydro; ++n) {
+        const int idv = i_dv;
+        par_for("hydro_wpert", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
+        KOKKOS_LAMBDA(int m, int k, int j, int i) {
+          dv(m,idv,k,j,i) = w0(m,n,k,j,i) - weq(m,n,k,j,i);
+        });
+        i_dv += 1;
+      }
+    }
+  }
+
   // Per-cell MOOD cascade level retained after the final RK stage:
   // 0 = base reconstruction, 1 = PLM, 2 = DC.
   if (name.compare("hydro_fb_level") == 0) {

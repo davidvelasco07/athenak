@@ -42,6 +42,11 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
     fofc("fofc",1,1,1,1),
     utest("utest",1,1,1,1,1),
     fb_level("fb_level",1,1,1,1),
+    u_eq("u_eq",1,1,1,1,1),
+    w_eq("w_eq",1,1,1,1,1),
+    w_pert("w_pert",1,1,1,1,1),
+    w_eq_face("w_eq_face",1,1,1,1,1),
+    f_eq("f_eq",1,1,1,1,1),
     pmy_pack(ppack) {
   // Total number of MeshBlocks on this rank to be used in array dimensioning
   int nmb = std::max((ppack->nmb_thispack), (ppack->pmesh->nmb_maxperrank));
@@ -205,6 +210,7 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
       std::exit(EXIT_FAILURE);
     }
     mood_eps0  = pin->GetOrAddReal("hydro","mood_eps0",1.0e-12);
+    mood_eps0_eq = pin->GetOrAddReal("hydro","mood_eps0_eq",mood_eps0);
     // the default rtol follows the scale: rcfl is calibrated at 1e-4, the range-based
     // scales (gcfl etc.) at 1e-5, so an explicit gcfl without mood_rtol is unchanged
     mood_rtol = pin->GetOrAddReal("hydro","mood_rtol",
@@ -236,6 +242,36 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
         << std::endl << "<hydro> mood=true and fofc=true cannot be used together"
         << std::endl;
       std::exit(EXIT_FAILURE);
+    }
+
+    // Well-balanced scheme (hydro_wb.cpp): evolve the perturbation over a static
+    // equilibrium supplied by the problem generator.  Only the modules whose meaning is
+    // unchanged when u0 holds a perturbation are allowed; the others are rejected here
+    // or in WBInitialize() (modules constructed after Hydro).
+    well_balanced = pin->GetOrAddBoolean("hydro","well_balanced",false);
+    wb_diagnostics = pin->GetOrAddBoolean("hydro","wb_diagnostics",false);
+    if (well_balanced) {
+      std::string wb_err;
+      if (pmy_pack->pcoord->is_special_relativistic ||
+          pmy_pack->pcoord->is_general_relativistic) {
+        wb_err = "is implemented only for non-relativistic hydro";
+      } else if (evolution_t.compare("dynamic") != 0) {
+        wb_err = "requires <time>/evolution=dynamic";
+      } else if (pcond != nullptr) {
+        wb_err = "cannot be used with thermal conduction (the equilibrium would conduct)";
+      } else if (pin->DoesBlockExist("shearing_box")) {
+        wb_err = "cannot be used with the shearing box / orbital advection";
+      } else if (psrc != nullptr &&
+                 (psrc->self_gravity || psrc->ism_cooling || psrc->rel_cooling)) {
+        wb_err = "supports only const_accel source terms (not self-gravity or cooling)";
+      }
+      if (!wb_err.empty()) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+          << std::endl << "<hydro> well_balanced=true " << wb_err << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      // constant gravity acts on the perturbation density
+      if (psrc != nullptr) psrc->pwb_pert = &w_pert;
     }
 
     // select reconstruction method (default PLM)
@@ -467,6 +503,23 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
       }
       if (use_mood) {
         Kokkos::realloc(fb_level, nmb, ncells3, ncells2, ncells1);
+      }
+      // well-balanced equilibrium and perturbation arrays.  u_eq/w_eq carry the scalar
+      // slots (always zero) so the standard EOS kernels can be applied to them.
+      if (well_balanced || wb_diagnostics) {
+        Kokkos::realloc(u_eq,   nmb, (nhydro+nscalars), ncells3, ncells2, ncells1);
+        Kokkos::realloc(w_eq,   nmb, (nhydro+nscalars), ncells3, ncells2, ncells1);
+        Kokkos::deep_copy(u_eq, 0.0);
+        Kokkos::deep_copy(w_eq, 0.0);
+      }
+      if (well_balanced) {
+        Kokkos::realloc(w_pert, nmb, (nhydro+nscalars), ncells3, ncells2, ncells1);
+        Kokkos::realloc(w_eq_face.x1f, nmb, nhydro, ncells3, ncells2, ncells1);
+        Kokkos::realloc(w_eq_face.x2f, nmb, nhydro, ncells3, ncells2, ncells1);
+        Kokkos::realloc(w_eq_face.x3f, nmb, nhydro, ncells3, ncells2, ncells1);
+        Kokkos::realloc(f_eq.x1f, nmb, nhydro, ncells3, ncells2, ncells1);
+        Kokkos::realloc(f_eq.x2f, nmb, nhydro, ncells3, ncells2, ncells1);
+        Kokkos::realloc(f_eq.x3f, nmb, nhydro, ncells3, ncells2, ncells1);
       }
     }
   }

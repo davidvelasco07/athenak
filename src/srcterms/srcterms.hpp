@@ -41,7 +41,12 @@ class SourceTerms {
 
   // data for constant accel
   Real const_accel_val;   // magnitude of accn
-  int const_accel_dir;    // direction of accn
+  int const_accel_dir;    // direction of accn (1,2,3), or 0 for the vector form below
+  Real const_accel_vec[3] = {0.0, 0.0, 0.0};  // (g1,g2,g3) when const_accel_dir=0
+  // well-balanced hydro: perturbation primitives (w_pert of the owning Hydro).  When set,
+  // the momentum source acts on rho' = rho - rho_eq (the equilibrium's own gravity is
+  // part of the equilibrium residual the scheme drops).
+  const DvceArray5D<Real> *pwb_pert = nullptr;
 
   // data for ISM cooling
   Real hrate;

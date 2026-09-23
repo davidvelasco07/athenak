@@ -51,6 +51,12 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm) :
   // second argument false since this IS NOT a restart
   CallProblemGenerator(pin, false);
 
+  // well-balanced hydro: build the equilibrium, convert u0 to the perturbation U'
+  if (pm->pmb_pack->phydro != nullptr && (pm->pmb_pack->phydro->well_balanced ||
+                                          pm->pmb_pack->phydro->wb_diagnostics)) {
+    pm->pmb_pack->phydro->WBInitialize(this, false);
+  }
+
   // Check that user defined BCs were enrolled if needed
   if (user_bcs) {
     if (user_bcs_func == nullptr) {
@@ -630,6 +636,11 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
   // call problem generator again to re-initialize data, fn ptrs, as needed
   // second argument true since this IS a restart
   CallProblemGenerator(pin, true);
+
+  // well-balanced hydro: the restart file holds the perturbation U'; rebuild U_eq only
+  if (phydro != nullptr && (phydro->well_balanced || phydro->wb_diagnostics)) {
+    phydro->WBInitialize(this, true);
+  }
 
   // Check that user defined BCs were enrolled if needed
   if (user_bcs) {

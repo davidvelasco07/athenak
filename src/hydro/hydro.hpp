@@ -27,6 +27,8 @@ class SourceTerms;
 class OrbitalAdvectionCC;
 class ShearingBoxCC;
 class Driver;
+class Mesh;
+class ProblemGenerator;
 
 // constants that enumerate Hydro Riemann Solver options
 enum class Hydro_RSolver {advect, llf, hlle, hllc, lhllc, roe,    // non-relativistic
@@ -143,10 +145,26 @@ class Hydro {
                             // (negative control for the cascade; see hydro.cpp)
   Real mood_rtol;           // NAD tolerance as a fraction of the selected scale
   Real mood_eps0;           // round-off floor (relative to the violated bound)
+  Real mood_eps0_eq;        // well-balanced: round-off floor relative to the equilibrium
   Real mood_atol;           // absolute floor of the NAD tolerance
   bool mood_sed;            // exempt smooth extrema from NAD detection
   int n_fb_tiers;           // # of fallback tiers below base scheme (2, or 1 if base=plm)
   DvceArray4D<int> fb_level;    // per-cell cascade level (0=base, 1=plm, 2=dc)
+
+  // following used for the well-balanced (WB) scheme (hydro_wb.cpp).  With
+  // well_balanced=true, u0 holds the PERTURBATION U' = U - U_eq over a static equilibrium
+  // supplied by the problem generator (user_eq_func); w0 holds the primitives of the
+  // FULL state.  Passive scalars carry no equilibrium (they stay full in u0).
+  bool well_balanced = false;
+  // build u_eq/w_eq WITHOUT changing the scheme, so hydro_wpert can measure a non-WB run
+  // against the same equilibrium (the negative control of the well-balanced tests)
+  bool wb_diagnostics = false;
+  DvceArray5D<Real> u_eq;         // equilibrium conserved cell averages (incl. ghosts)
+  DvceArray5D<Real> w_eq;         // = ConsToPrim(u_eq), so w0 == w_eq bitwise at U'=0
+  DvceArray5D<Real> w_pert;       // perturbation primitives W' (+ full scalars), per stage
+  DvceFaceFld5D<Real> w_eq_face;  // single-valued equilibrium primitive state on faces
+  DvceFaceFld5D<Real> f_eq;       // RS(w_eq_face, w_eq_face) with this Riemann solver
+  void (*wb_eq_func)(Mesh *pm) = nullptr;  // the pgen's user_eq_func (set by WBInitialize)
 
   // container to hold names of TaskIDs
   HydroTaskIDs id;
@@ -193,6 +211,17 @@ class Hydro {
   // flagged faces with the same solver as the base scheme)
   template <Hydro_RSolver T>
   void MOODLoop(Driver *d, int stage);
+
+  // well-balanced scheme
+  // after the pgen: build equilibrium, shift u0.  Called from the ProblemGenerator
+  // constructor, i.e. before Mesh::pgen is assigned, hence the explicit pointer.
+  void WBInitialize(ProblemGenerator *ppgen, bool restart);
+  void WBSetEquilibrium();           // (re)build u_eq..f_eq (start-up, restart, AMR)
+  void WBFormPerturbation();         // w_pert from u0/w0, once per stage before fluxes
+  template <Hydro_RSolver T>
+  void WBEquilibriumFluxes();        // f_eq = RS(w_eq_face, w_eq_face)
+  template <Hydro_RSolver T>
+  void WBCalculateFluxes(Driver *d, int stage);  // WB counterpart of CalculateFluxes
 
  private:
   void AddSelectedDiffusionFluxes(parabolic::DiffusionSelection selection);

@@ -191,7 +191,38 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
   }
 
 
+  // Well-balanced hydro: u0 holds the perturbation U', so the conserved outputs are
+  // formed as derived variables U' + U_eq (the full state users expect).
+  const bool wb_u = (pm->pmb_pack->phydro != nullptr &&
+                     pm->pmb_pack->phydro->well_balanced);
   for (const auto& variable : variables) {
+    if (wb_u && (variable.compare("hydro_u") == 0 ||
+                 variable.compare("hydro_u_d") == 0 || variable.compare("hydro_u_m1") == 0 ||
+                 variable.compare("hydro_u_m2") == 0 || variable.compare("hydro_u_m3") == 0 ||
+                 variable.compare("hydro_u_e") == 0)) {
+      const char *names[5] = {"dens", "mom1", "mom2", "mom3", "ener"};
+      const char *vars[5] = {"hydro_u_d", "hydro_u_m1", "hydro_u_m2", "hydro_u_m3",
+                             "hydro_u_e"};
+      const int nhyd = pm->pmb_pack->phydro->nhydro;
+      for (int n=0; n<nhyd; ++n) {
+        if (variable.compare("hydro_u") == 0 || variable.compare(vars[n]) == 0) {
+          out_params.contains_derived = true;
+          out_params.n_derived += 1;
+          outvars.emplace_back(names[n], out_params.n_derived - 1, &(derived_var));
+        }
+      }
+      if (variable.compare("hydro_u") == 0) {   // scalars carry no equilibrium
+        for (int n=nhyd; n<(nhyd+pm->pmb_pack->phydro->nscalars); ++n) {
+          char number[3];
+          std::snprintf(number, sizeof(number), "%02d", n - nhyd);
+          std::string vname;
+          vname.assign("s_");
+          vname.append(number);
+          outvars.emplace_back(vname, n, &(pm->pmb_pack->phydro->u0));
+        }
+      }
+      continue;
+    }
     // hydro (lab-frame) density
     if (variable.compare("hydro_u_d") == 0 ||
         variable.compare("hydro_u") == 0 ||
@@ -715,6 +746,24 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
     out_params.contains_derived = true;
     out_params.n_derived += 1;
     outvars.emplace_back("pdens",0,&(derived_var));
+  }
+
+  // Well-balanced diagnostics: primitive perturbation W - W_eq (formed in double
+  // precision, so tiny perturbations survive the single-precision output formats)
+  if (out_params.variable.compare("hydro_wpert") == 0) {
+    auto *ph = pm->pmb_pack->phydro;
+    if (ph == nullptr || !(ph->well_balanced || ph->wb_diagnostics)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Output variable 'hydro_wpert' requires <hydro>/"
+                << "well_balanced=true or wb_diagnostics=true" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    const char *names[5] = {"dpert", "vxpert", "vypert", "vzpert", "epert"};
+    for (int n=0; n<ph->nhydro; ++n) {
+      out_params.contains_derived = true;
+      out_params.n_derived += 1;
+      outvars.emplace_back(names[n], out_params.n_derived - 1, &(derived_var));
+    }
   }
 
   // Hydro/MHD MOOD fallback level: 0=base, 1=PLM, 2=DC. This is the level retained

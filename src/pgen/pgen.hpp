@@ -20,6 +20,11 @@ using UserBoundaryFnPtr = void (*)(Mesh* pm);
 using UserSrctermFnPtr = void (*)(Mesh* pm, const Real bdt);
 using UserRefinementFnPtr = void (*)(MeshBlockPack* pmbp);
 using UserHistoryFnPtr = void (*)(HistoryData *pdata, Mesh *pm);
+// Well-balanced equilibrium: fills the primitive cell averages of the equilibrium in
+// phydro->w_eq over the FULL array (ghost zones included), usually through
+// FillEquilibriumCellAverages() in hydro/well_balance.hpp.  Called at start-up, on
+// restart and after every mesh refinement (see hydro_wb.cpp).
+using UserEquilibriumFnPtr = void (*)(Mesh* pm);
 
 //----------------------------------------------------------------------------------------
 //! \class ProblemGenerator
@@ -53,6 +58,9 @@ class ProblemGenerator {
   UserSrctermFnPtr user_srcs_func=nullptr;
   UserRefinementFnPtr user_ref_func=nullptr;
   UserHistoryFnPtr user_hist_func=nullptr;
+  // function pointer for the well-balanced equilibrium (<hydro>/well_balanced=true).
+  // Enroll it BEFORE any `if (restart) return;` in the pgen: it is needed on restart.
+  UserEquilibriumFnPtr user_eq_func=nullptr;
 
   // predefined problem generator functions (default test suite)
   void CallProblemGenerator(ParameterInput *pin, bool is_restart);

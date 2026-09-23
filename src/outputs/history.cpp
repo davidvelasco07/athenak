@@ -109,6 +109,10 @@ void HistoryOutput::LoadHydroHistoryData(HistoryData *pdata, Mesh *pm) {
   auto &u0_ = pm->pmb_pack->phydro->u0;
   auto &size = pm->pmb_pack->pmb->mb_size;
   int &nhist_ = pdata->nhist;
+  // well-balanced hydro: u0 holds the perturbation, so add the equilibrium back to
+  // report full-state totals (and a kinetic energy divided by the FULL density)
+  const bool wb_ = pm->pmb_pack->phydro->well_balanced;
+  auto &ueq_ = pm->pmb_pack->phydro->u_eq;
 
   // loop over all MeshBlocks in this pack
   auto &indcs = pm->pmb_pack->pmesh->mb_indcs;
@@ -132,19 +136,24 @@ void HistoryOutput::LoadHydroHistoryData(HistoryData *pdata, Mesh *pm) {
     Real vol = size.d_view(m).dx1*size.d_view(m).dx2*size.d_view(m).dx3;
 
     // Hydro conserved variables:
+    const Real ud  = wb_ ? (u0_(m,IDN,k,j,i) + ueq_(m,IDN,k,j,i)) : u0_(m,IDN,k,j,i);
+    const Real um1 = wb_ ? (u0_(m,IM1,k,j,i) + ueq_(m,IM1,k,j,i)) : u0_(m,IM1,k,j,i);
+    const Real um2 = wb_ ? (u0_(m,IM2,k,j,i) + ueq_(m,IM2,k,j,i)) : u0_(m,IM2,k,j,i);
+    const Real um3 = wb_ ? (u0_(m,IM3,k,j,i) + ueq_(m,IM3,k,j,i)) : u0_(m,IM3,k,j,i);
     array_sum::GlobalSum hvars;
-    hvars.the_array[IDN] = vol*u0_(m,IDN,k,j,i);
-    hvars.the_array[IM1] = vol*u0_(m,IM1,k,j,i);
-    hvars.the_array[IM2] = vol*u0_(m,IM2,k,j,i);
-    hvars.the_array[IM3] = vol*u0_(m,IM3,k,j,i);
+    hvars.the_array[IDN] = vol*ud;
+    hvars.the_array[IM1] = vol*um1;
+    hvars.the_array[IM2] = vol*um2;
+    hvars.the_array[IM3] = vol*um3;
     if (eos_data.is_ideal) {
-      hvars.the_array[IEN] = vol*u0_(m,IEN,k,j,i);
+      hvars.the_array[IEN] = vol*(wb_ ? (u0_(m,IEN,k,j,i) + ueq_(m,IEN,k,j,i))
+                                      : u0_(m,IEN,k,j,i));
     }
 
     // Hydro KE
-    hvars.the_array[nhydro_  ] = vol*0.5*SQR(u0_(m,IM1,k,j,i))/u0_(m,IDN,k,j,i);
-    hvars.the_array[nhydro_+1] = vol*0.5*SQR(u0_(m,IM2,k,j,i))/u0_(m,IDN,k,j,i);
-    hvars.the_array[nhydro_+2] = vol*0.5*SQR(u0_(m,IM3,k,j,i))/u0_(m,IDN,k,j,i);
+    hvars.the_array[nhydro_  ] = vol*0.5*SQR(um1)/ud;
+    hvars.the_array[nhydro_+1] = vol*0.5*SQR(um2)/ud;
+    hvars.the_array[nhydro_+2] = vol*0.5*SQR(um3)/ud;
 
     // Scalar masses
     for (int s=0; s<nscalars_; ++s) {

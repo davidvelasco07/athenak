@@ -221,6 +221,13 @@ class EquationOfState {
                           const bool only_testfloors,
                           const int il, const int iu, const int jl, const int ju,
                           const int kl, const int ku);
+  // well-balanced hydro: cons holds the perturbation U' and ueq the equilibrium U_eq.
+  // The primitives of the FULL state U'+U_eq are written to prim; where a floor fires
+  // the corrected full state is written back to cons as a perturbation.
+  virtual void ConsToPrimWB(DvceArray5D<Real> &cons, const DvceArray5D<Real> &ueq,
+                            DvceArray5D<Real> &prim, const bool only_testfloors,
+                            const int il, const int iu, const int jl, const int ju,
+                            const int kl, const int ku);
 
   // virtual functions to convert prim to cons in either Hydro or MHD (depending on
   // arguments), overwritten in derived eos classes.
@@ -247,6 +254,10 @@ class IsothermalHydro : public EquationOfState {
                   const bool only_testfloors,
                   const int il, const int iu, const int jl, const int ju,
                   const int kl, const int ku) override;
+  void ConsToPrimWB(DvceArray5D<Real> &cons, const DvceArray5D<Real> &ueq,
+                    DvceArray5D<Real> &prim, const bool only_testfloors,
+                    const int il, const int iu, const int jl, const int ju,
+                    const int kl, const int ku) override;
   void PrimToCons(const DvceArray5D<Real> &prim, DvceArray5D<Real> &cons,
                   const int il, const int iu, const int jl, const int ju,
                   const int kl, const int ku) override;
@@ -267,6 +278,10 @@ class IdealHydro : public EquationOfState {
                   const bool only_testfloors,
                   const int il, const int iu, const int jl, const int ju,
                   const int kl, const int ku) override;
+  void ConsToPrimWB(DvceArray5D<Real> &cons, const DvceArray5D<Real> &ueq,
+                    DvceArray5D<Real> &prim, const bool only_testfloors,
+                    const int il, const int iu, const int jl, const int ju,
+                    const int kl, const int ku) override;
   void PrimToCons(const DvceArray5D<Real> &prim, DvceArray5D<Real> &cons,
                   const int il, const int iu, const int jl, const int ju,
                   const int kl, const int ku) override;

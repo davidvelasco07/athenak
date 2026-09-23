@@ -115,6 +115,95 @@ void IdealHydro::ConsToPrim(DvceArray5D<Real> &cons, DvceArray5D<Real> &prim,
 }
 
 //----------------------------------------------------------------------------------------
+//! \fn void ConsToPrimWB()
+//! \brief Well-balanced version of ConsToPrim: cons holds the perturbation U' and ueq the
+//! equilibrium, so the inversion is done on the full state U'+U_eq (formed in registers,
+//! never stored, so U' keeps its full precision).  Primitives of the FULL state are
+//! written to prim.  Where a floor fires, the corrected full state is written back to
+//! cons as a perturbation.  Passive scalars carry no equilibrium (ueq(n)=0 for n>=nhyd),
+//! so cons(n) is already the full scalar density.
+
+void IdealHydro::ConsToPrimWB(DvceArray5D<Real> &cons, const DvceArray5D<Real> &ueq,
+                              DvceArray5D<Real> &prim, const bool only_testfloors,
+                              const int il, const int iu, const int jl, const int ju,
+                              const int kl, const int ku) {
+  int &nhyd  = pmy_pack->phydro->nhydro;
+  int &nscal = pmy_pack->phydro->nscalars;
+  int &nmb = pmy_pack->nmb_thispack;
+  auto &eos = eos_data;
+  auto &fofc_ = pmy_pack->phydro->fofc;
+
+  const int ni   = (iu - il + 1);
+  const int nji  = (ju - jl + 1)*ni;
+  const int nkji = (ku - kl + 1)*nji;
+  const int nmkji = nmb*nkji;
+
+  int nfloord_=0, nfloore_=0, nfloort_=0;
+  Kokkos::parallel_reduce("hyd_c2p_wb",Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+  KOKKOS_LAMBDA(const int &idx, int &sumd, int &sume, int &sumt) {
+    int m = (idx)/nkji;
+    int k = (idx - m*nkji)/nji;
+    int j = (idx - m*nkji - k*nji)/ni;
+    int i = (idx - m*nkji - k*nji - j*ni) + il;
+    j += jl;
+    k += kl;
+
+    // full state = perturbation + equilibrium
+    HydCons1D u;
+    u.d  = cons(m,IDN,k,j,i) + ueq(m,IDN,k,j,i);
+    u.mx = cons(m,IM1,k,j,i) + ueq(m,IM1,k,j,i);
+    u.my = cons(m,IM2,k,j,i) + ueq(m,IM2,k,j,i);
+    u.mz = cons(m,IM3,k,j,i) + ueq(m,IM3,k,j,i);
+    u.e  = cons(m,IEN,k,j,i) + ueq(m,IEN,k,j,i);
+
+    HydPrim1D w;
+    bool dfloor_used=false, efloor_used=false, tfloor_used=false;
+    SingleC2P_IdealHyd(u, eos, w, dfloor_used, efloor_used, tfloor_used);
+
+    if (only_testfloors) {
+      if (dfloor_used || efloor_used || tfloor_used) {
+        fofc_(m,k,j,i) = true;
+        sumd++;  // use dfloor as counter for when either is true
+      }
+    } else {
+      // update counter, reset conserved (as a perturbation) if floor was hit
+      if (dfloor_used) {
+        cons(m,IDN,k,j,i) = u.d - ueq(m,IDN,k,j,i);
+        sumd++;
+      }
+      if (efloor_used) {
+        cons(m,IEN,k,j,i) = u.e - ueq(m,IEN,k,j,i);
+        sume++;
+      }
+      if (tfloor_used) {
+        cons(m,IEN,k,j,i) = u.e - ueq(m,IEN,k,j,i);
+        sumt++;
+      }
+      prim(m,IDN,k,j,i) = w.d;
+      prim(m,IVX,k,j,i) = w.vx;
+      prim(m,IVY,k,j,i) = w.vy;
+      prim(m,IVZ,k,j,i) = w.vz;
+      prim(m,IEN,k,j,i) = w.e;
+      for (int n=nhyd; n<(nhyd+nscal); ++n) {
+        if (cons(m,n,k,j,i) < 0.0) {
+          cons(m,n,k,j,i) = 0.0;
+        }
+        prim(m,n,k,j,i) = cons(m,n,k,j,i)/u.d;
+      }
+    }
+  }, Kokkos::Sum<int>(nfloord_), Kokkos::Sum<int>(nfloore_), Kokkos::Sum<int>(nfloort_));
+
+  if (only_testfloors) {
+    pmy_pack->pmesh->ecounter.nfofc += nfloord_;
+  } else {
+    pmy_pack->pmesh->ecounter.neos_dfloor += nfloord_;
+    pmy_pack->pmesh->ecounter.neos_efloor += nfloore_;
+    pmy_pack->pmesh->ecounter.neos_tfloor += nfloort_;
+  }
+  return;
+}
+
+//----------------------------------------------------------------------------------------
 //! \fn void PrimToCons()
 //! \brief Converts primitive into conserved variables. Operates over range of cells given
 //! in argument list.  Floors never needed.

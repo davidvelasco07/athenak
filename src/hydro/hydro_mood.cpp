@@ -38,6 +38,7 @@
 #include "eos/eos.hpp"
 #include "reconstruct/recon.hpp"
 #include "hydro/rsolvers/solve_face_hyd.hpp"
+#include "hydro/well_balance.hpp"
 #include "hydro.hpp"
 
 #if MPI_PARALLEL_ENABLED
@@ -146,6 +147,18 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
   auto flx2 = uflx.x2f;
   auto flx3 = uflx.x3f;
 
+  // Well-balanced scheme (hydro_wb.cpp): u0/u1/utest and the fluxes are PERTURBATION
+  // quantities.  Following the paper (sec. 2.4.4) NAD/SED and their global scales act on
+  // the perturbation (rho', e' = e - e_eq), PAD on the full state, and revised faces go
+  // through the face equilibrium exactly like the base fluxes.
+  const bool wb = well_balanced;
+  auto &ueq_ = u_eq;
+  auto &weq_ = w_eq;
+  const DvceArray5D<Real> wnad_ = wb ? w_pert : w0;   // NAD reference primitives
+  auto weqf1 = w_eq_face.x1f, weqf2 = w_eq_face.x2f, weqf3 = w_eq_face.x3f;
+  auto feq1 = f_eq.x1f, feq2 = f_eq.x2f, feq3 = f_eq.x3f;
+  const Real eps0_eq = mood_eps0_eq;
+
   const bool use_sed = mood_sed;
   const Real eps0  = mood_eps0;
   const Real rtol = mood_rtol;
@@ -232,9 +245,9 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
       int j = (idx - m*nkji - k*nji)/ni;
       int i = (idx - m*nkji - k*nji - j*ni) + is;
       j += js; k += ks;
-      Real d = w0_(m,IDN,k,j,i);
+      Real d = wnad_(m,IDN,k,j,i);
       dmn = fmin(dmn, d); dmx = fmax(dmx, d);
-      if (ideal) { Real e = w0_(m,IEN,k,j,i); emn = fmin(emn,e); emx = fmax(emx,e); }
+      if (ideal) { Real e = wnad_(m,IEN,k,j,i); emn = fmin(emn,e); emx = fmax(emx,e); }
       if (want_v) {
         Real v = fmax(fabs(w0_(m,IVX,k,j,i)),
                  fmax(fabs(w0_(m,IVY,k,j,i)), fabs(w0_(m,IVZ,k,j,i))));
@@ -407,7 +420,13 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
         if (isfinite(d)) dd = fmax(dd, d);
         if (ideal) {
           Real enew, eold;
-          if (newt) {
+          if (newt && wb) {
+            Real dtst = utest_(m,IDN,k,j,i) + ueq_(m,IDN,k,j,i);
+            enew = (dtst > 0.0) ?
+                   (utest_(m,IEN,k,j,i) + ueq_(m,IEN,k,j,i)) - 0.5*(SQR(utest_(m,IM1,k,j,i))
+                   + SQR(utest_(m,IM2,k,j,i)) + SQR(utest_(m,IM3,k,j,i)))/dtst : 0.0;
+            eold = (dtst > 0.0) ? w0_(m,IEN,k,j,i) : 0.0;
+          } else if (newt) {
             Real dtst = utest_(m,IDN,k,j,i);
             enew = (dtst > 0.0) ?
                    utest_(m,IEN,k,j,i) - 0.5*(SQR(utest_(m,IM1,k,j,i))
@@ -421,7 +440,8 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
           if (isfinite(e)) de = fmax(de, e);
         }
         if (do_s) {
-          const Real dtst = utest_(m,IDN,k,j,i);
+          const Real dtst = wb ? (utest_(m,IDN,k,j,i) + ueq_(m,IDN,k,j,i))
+                               : utest_(m,IDN,k,j,i);
           if (dtst > 0.0) {
             for (int n=nlo; n<=nhi; ++n) {
               Real s = fabs(utest_(m,n,k,j,i)/dtst - w0_(m,n,k,j,i));
@@ -443,7 +463,11 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
     //------------------------------------------------------------------------------------
     // (2) PAD: flag cells where conversion to primitives would require floors
     // (sets fofc; b0/w0 passed but not used/changed)
-    peos->ConsToPrim(utest_, w0_, true, il, iu, jl, ju, kl, ku);
+    if (wb) {
+      peos->ConsToPrimWB(utest_, u_eq, w0_, true, il, iu, jl, ju, kl, ku);
+    } else {
+      peos->ConsToPrim(utest_, w0_, true, il, iu, jl, ju, kl, ku);
+    }
 
     //------------------------------------------------------------------------------------
     // (3) NaN + NAD detection; combine with PAD; filter out cells that cannot descend
@@ -515,13 +539,18 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
           if (!newtonian) {
             q_new = utest_(m,n,k,j,i);            // conserved density / energy
           } else if (n == IDN) {
-            q_new = dtst;                         // density
+            q_new = dtst;                         // density (WB: rho' = U'_rho)
+          } else if (wb) {                        // WB: e' = e(U'+U_eq) - e_eq
+            const Real dfull = dtst + ueq_(m,IDN,k,j,i);
+            q_new = ((utest_(m,IEN,k,j,i) + ueq_(m,IEN,k,j,i)) - 0.5*(SQR(utest_(m,IM1,k,j,i))
+                  + SQR(utest_(m,IM2,k,j,i)) + SQR(utest_(m,IM3,k,j,i)))/dfull)
+                  - weq_(m,IEN,k,j,i);
           } else {                                // internal energy density
             q_new = utest_(m,IEN,k,j,i) - 0.5*(SQR(utest_(m,IM1,k,j,i))
                   + SQR(utest_(m,IM2,k,j,i)) + SQR(utest_(m,IM3,k,j,i)))/dtst;
           }
           // DMP bounds from the stage-input state over the neighborhood
-          const DvceArray5D<Real> &qref = (newtonian) ? w0_ : u0_;
+          const DvceArray5D<Real> &qref = (newtonian) ? wnad_ : u0_;
           Real qmn = qref(m,n,k,j,i), qmx = qmn;
           for (int dk=-ndk; dk<=ndk; ++dk) {
           for (int dj=-ndj; dj<=ndj; ++dj) {
@@ -561,6 +590,16 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
           }
           eps_m = fmax(eps_m, eps0*fabs(qmn));
           eps_p = fmax(eps_p, eps0*fabs(qmx));
+          if (wb) {
+            // Round-off floor tied to the EQUILIBRIUM: the perturbation carries the
+            // cancellation error of F - F_eq (~eps*|F_eq|), so its bounds and candidate
+            // are only defined to eps*|q_eq|.  Without this, gcfl gives 0 at rest,
+            // eps0*|bound'| -> 0, and every cell sits on the round-off fence.  w_eq is
+            // built from the global lattice, so the floor is decomposition-invariant.
+            const Real eq_floor = eps0_eq*fabs(weq_(m,n,k,j,i));
+            eps_m = fmax(eps_m, eq_floor);
+            eps_p = fmax(eps_p, eq_floor);
+          }
           bool nad = (q_new < qmn - eps_m) || (q_new > qmx + eps_p);
           // exempt smooth extrema of this variable from NAD (never from PAD/NaN)
           if (nad && use_sed) {
@@ -577,7 +616,8 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
       // the tracer itself is perfectly smooth).  r is a passively advected scalar, so it
       // is Galilean-invariant and decomposition-invariant on the same grounds as density.
       if (!trouble && lv < 1 && nad_scalars) {
-        const Real dtst = utest_(m,IDN,k,j,i);
+        const Real dtst = wb ? (utest_(m,IDN,k,j,i) + ueq_(m,IDN,k,j,i))
+                             : utest_(m,IDN,k,j,i);
         for (int n=nhyd_; n<nvars && !trouble; ++n) {
           // a non-positive candidate density is already PAD's business; skip the ratio
           if (!(dtst > 0.0)) break;
@@ -641,7 +681,11 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
         int tier = (lv_l > lv_r) ? lv_l : lv_r;
         ReconstructionMethod frecon = (tier >= n_fb) ?
             ReconstructionMethod::dc : ReconstructionMethod::plm;
-        ReconFace<IVX>(frecon, m, k, j, i, nvars, w0_, wl_, wr_);
+        ReconFace<IVX>(frecon, m, k, j, i, nvars, wnad_, wl_, wr_);
+        if (wb) {
+          wellbalance::AddFaceEquilibrium(eos_, false, nhyd_, m, k, j, i, weqf1,
+                                          wl_, wr_);
+        }
         auto eos = eos_;
         auto indcs = indcs_;
         auto size = size_;
@@ -652,11 +696,20 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
         const int is_ = is, js_ = js, ks_ = ks;
         SolveFace<rsolver_method_, IVX>(eos, indcs, size, coord,
                                         m, k, j, i, is_, js_, ks_, wl, wr, flx);
-        for (int n=nhyd_; n<nvars; ++n) {
-          if (flx1(m,IDN,k,j,i) >= 0.0) {
-            flx1(m,n,k,j,i) = flx1(m,IDN,k,j,i)*wl_(m,n,k,j,i);
-          } else {
-            flx1(m,n,k,j,i) = flx1(m,IDN,k,j,i)*wr_(m,n,k,j,i);
+        if (wb) {
+          // perturbation flux; scalars upwinded on the FULL mass flux
+          for (int n=0; n<nhyd_; ++n) {flx1(m,n,k,j,i) -= feq1(m,n,k,j,i);}
+          const Real fd = flx1(m,IDN,k,j,i) + feq1(m,IDN,k,j,i);
+          for (int n=nhyd_; n<nvars; ++n) {
+            flx1(m,n,k,j,i) = (fd >= 0.0) ? fd*wl_(m,n,k,j,i) : fd*wr_(m,n,k,j,i);
+          }
+        } else {
+          for (int n=nhyd_; n<nvars; ++n) {
+            if (flx1(m,IDN,k,j,i) >= 0.0) {
+              flx1(m,n,k,j,i) = flx1(m,IDN,k,j,i)*wl_(m,n,k,j,i);
+            } else {
+              flx1(m,n,k,j,i) = flx1(m,IDN,k,j,i)*wr_(m,n,k,j,i);
+            }
           }
         }
       }
@@ -671,7 +724,11 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
           int tier = (lv_l > lv_r) ? lv_l : lv_r;
           ReconstructionMethod frecon = (tier >= n_fb) ?
               ReconstructionMethod::dc : ReconstructionMethod::plm;
-          ReconFace<IVY>(frecon, m, k, j, i, nvars, w0_, wl_, wr_);
+          ReconFace<IVY>(frecon, m, k, j, i, nvars, wnad_, wl_, wr_);
+          if (wb) {
+            wellbalance::AddFaceEquilibrium(eos_, false, nhyd_, m, k, j, i, weqf2,
+                                            wl_, wr_);
+          }
           auto eos = eos_;
           auto indcs = indcs_;
           auto size = size_;
@@ -682,11 +739,20 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
           const int is_ = is, js_ = js, ks_ = ks;
           SolveFace<rsolver_method_, IVY>(eos, indcs, size, coord,
                                           m, k, j, i, is_, js_, ks_, wl, wr, flx);
-          for (int n=nhyd_; n<nvars; ++n) {
-            if (flx2(m,IDN,k,j,i) >= 0.0) {
-              flx2(m,n,k,j,i) = flx2(m,IDN,k,j,i)*wl_(m,n,k,j,i);
-            } else {
-              flx2(m,n,k,j,i) = flx2(m,IDN,k,j,i)*wr_(m,n,k,j,i);
+          if (wb) {
+            // perturbation flux; scalars upwinded on the FULL mass flux
+            for (int n=0; n<nhyd_; ++n) {flx2(m,n,k,j,i) -= feq2(m,n,k,j,i);}
+            const Real fd = flx2(m,IDN,k,j,i) + feq2(m,IDN,k,j,i);
+            for (int n=nhyd_; n<nvars; ++n) {
+              flx2(m,n,k,j,i) = (fd >= 0.0) ? fd*wl_(m,n,k,j,i) : fd*wr_(m,n,k,j,i);
+            }
+          } else {
+            for (int n=nhyd_; n<nvars; ++n) {
+              if (flx2(m,IDN,k,j,i) >= 0.0) {
+                flx2(m,n,k,j,i) = flx2(m,IDN,k,j,i)*wl_(m,n,k,j,i);
+              } else {
+                flx2(m,n,k,j,i) = flx2(m,IDN,k,j,i)*wr_(m,n,k,j,i);
+              }
             }
           }
         }
@@ -702,7 +768,11 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
           int tier = (lv_l > lv_r) ? lv_l : lv_r;
           ReconstructionMethod frecon = (tier >= n_fb) ?
               ReconstructionMethod::dc : ReconstructionMethod::plm;
-          ReconFace<IVZ>(frecon, m, k, j, i, nvars, w0_, wl_, wr_);
+          ReconFace<IVZ>(frecon, m, k, j, i, nvars, wnad_, wl_, wr_);
+          if (wb) {
+            wellbalance::AddFaceEquilibrium(eos_, false, nhyd_, m, k, j, i, weqf3,
+                                            wl_, wr_);
+          }
           auto eos = eos_;
           auto indcs = indcs_;
           auto size = size_;
@@ -713,11 +783,20 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
           const int is_ = is, js_ = js, ks_ = ks;
           SolveFace<rsolver_method_, IVZ>(eos, indcs, size, coord,
                                           m, k, j, i, is_, js_, ks_, wl, wr, flx);
-          for (int n=nhyd_; n<nvars; ++n) {
-            if (flx3(m,IDN,k,j,i) >= 0.0) {
-              flx3(m,n,k,j,i) = flx3(m,IDN,k,j,i)*wl_(m,n,k,j,i);
-            } else {
-              flx3(m,n,k,j,i) = flx3(m,IDN,k,j,i)*wr_(m,n,k,j,i);
+          if (wb) {
+            // perturbation flux; scalars upwinded on the FULL mass flux
+            for (int n=0; n<nhyd_; ++n) {flx3(m,n,k,j,i) -= feq3(m,n,k,j,i);}
+            const Real fd = flx3(m,IDN,k,j,i) + feq3(m,IDN,k,j,i);
+            for (int n=nhyd_; n<nvars; ++n) {
+              flx3(m,n,k,j,i) = (fd >= 0.0) ? fd*wl_(m,n,k,j,i) : fd*wr_(m,n,k,j,i);
+            }
+          } else {
+            for (int n=nhyd_; n<nvars; ++n) {
+              if (flx3(m,IDN,k,j,i) >= 0.0) {
+                flx3(m,n,k,j,i) = flx3(m,IDN,k,j,i)*wl_(m,n,k,j,i);
+              } else {
+                flx3(m,n,k,j,i) = flx3(m,IDN,k,j,i)*wr_(m,n,k,j,i);
+              }
             }
           }
         }

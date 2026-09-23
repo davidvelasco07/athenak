@@ -17,6 +17,50 @@
 #include "hydro.hpp"
 
 namespace hydro {
+
+//----------------------------------------------------------------------------------------
+//! \fn WBFaceLLF<ivx>()
+//! \brief Well-balanced first-order LLF flux at face (m,k,j,i) in direction ivx: donor-cell
+//! perturbation states on both sides plus the face equilibrium, minus the LLF flux of the
+//! face equilibrium itself (evaluated in registers in the same kernel, so it cancels
+//! exactly at U'=0).  Vector components are permuted so vx is the face-normal one.
+template <int ivx>
+KOKKOS_INLINE_FUNCTION
+void WBFaceLLF(const EOS_Data &eos, const int m, const int k, const int j, const int i,
+               const DvceArray5D<Real> &wp, const DvceArray5D<Real> &weqf,
+               const DvceArray5D<Real> &flx) {
+  constexpr int di = (ivx == IVX) ? 1 : 0;
+  constexpr int dj = (ivx == IVY) ? 1 : 0;
+  constexpr int dk = (ivx == IVZ) ? 1 : 0;
+  constexpr int ivy = IVX + ((ivx - IVX) + 1) % 3;
+  constexpr int ivz = IVX + ((ivx - IVX) + 2) % 3;
+  HydPrim1D we, wl, wr;
+  we.d  = weqf(m,IDN,k,j,i);
+  we.vx = weqf(m,ivx,k,j,i);
+  we.vy = weqf(m,ivy,k,j,i);
+  we.vz = weqf(m,ivz,k,j,i);
+  wl.d  = wp(m,IDN,k-dk,j-dj,i-di) + we.d;
+  wl.vx = wp(m,ivx,k-dk,j-dj,i-di) + we.vx;
+  wl.vy = wp(m,ivy,k-dk,j-dj,i-di) + we.vy;
+  wl.vz = wp(m,ivz,k-dk,j-dj,i-di) + we.vz;
+  wr.d  = wp(m,IDN,k,j,i) + we.d;
+  wr.vx = wp(m,ivx,k,j,i) + we.vx;
+  wr.vy = wp(m,ivy,k,j,i) + we.vy;
+  wr.vz = wp(m,ivz,k,j,i) + we.vz;
+  if (eos.is_ideal) {
+    we.e = weqf(m,IEN,k,j,i);
+    wl.e = wp(m,IEN,k-dk,j-dj,i-di) + we.e;
+    wr.e = wp(m,IEN,k,j,i) + we.e;
+  }
+  HydCons1D f, feq;
+  SingleStateLLF_Hyd(wl, wr, eos, f);
+  SingleStateLLF_Hyd(we, we, eos, feq);
+  flx(m,IDN,k,j,i) = f.d  - feq.d;
+  flx(m,ivx,k,j,i) = f.mx - feq.mx;
+  flx(m,ivy,k,j,i) = f.my - feq.my;
+  flx(m,ivz,k,j,i) = f.mz - feq.mz;
+  if (eos.is_ideal) {flx(m,IEN,k,j,i) = f.e - feq.e;}
+}
 //----------------------------------------------------------------------------------------
 //! \fn void Hydro::FOFC
 //! \brief Implements first-order flux-correction (FOFC) algorithm for Hydro.  First an
@@ -41,6 +85,56 @@ void Hydro::FOFC(Driver *pdriver, int stage) {
   auto flx2 = uflx.x2f;
   auto flx3 = uflx.x3f;
   auto &size = pmy_pack->pmb->mb_size;
+
+  // Well-balanced scheme: candidate and fluxes are perturbations; PAD on the full state,
+  // first-order replacement fluxes through the face equilibrium (WBFaceLLF).  Scalar
+  // fluxes are left as computed by the base scheme, as in the default path.
+  if (well_balanced) {
+    Real &gam0 = pdriver->gam0[stage-1];
+    Real &gam1 = pdriver->gam1[stage-1];
+    Real beta_dt = (pdriver->beta[stage-1])*(pmy_pack->pmesh->dt);
+    int &nhyd_ = nhydro;
+    auto &u0_ = u0;
+    auto &u1_ = u1;
+    auto &utest_ = utest;
+    int il = is-1, iu = ie+1, jl = js, ju = je, kl = ks, ku = ke;
+    if (multi_d) { jl = js-1, ju = je+1; }
+    if (three_d) { kl = ks-1, ku = ke+1; }
+    par_for("FOFC-newu-wb", DevExeSpace(), 0, nmb-1, kl, ku, jl, ju, il, iu,
+    KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      Real dtodx1 = beta_dt/size.d_view(m).dx1;
+      Real dtodx2 = beta_dt/size.d_view(m).dx2;
+      Real dtodx3 = beta_dt/size.d_view(m).dx3;
+      for (int n=0; n<nhyd_; ++n) {
+        Real divf = dtodx1*(flx1(m,n,k,j,i+1) - flx1(m,n,k,j,i));
+        if (multi_d) divf += dtodx2*(flx2(m,n,k,j+1,i) - flx2(m,n,k,j,i));
+        if (three_d) divf += dtodx3*(flx3(m,n,k+1,j,i) - flx3(m,n,k,j,i));
+        utest_(m,n,k,j,i) = gam0*u0_(m,n,k,j,i) + gam1*u1_(m,n,k,j,i) - divf;
+      }
+    });
+    peos->ConsToPrimWB(utest_, u_eq, w0, true, il, iu, jl, ju, kl, ku);
+
+    auto &eos = peos->eos_data;
+    auto &fofc_ = fofc;
+    auto &wp_ = w_pert;
+    auto weqf1 = w_eq_face.x1f, weqf2 = w_eq_face.x2f, weqf3 = w_eq_face.x3f;
+    par_for("FOFC-flx-wb", DevExeSpace(), 0, nmb-1, kl, ku, jl, ju, il, iu,
+    KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      if (fofc_(m,k,j,i)) {
+        WBFaceLLF<IVX>(eos, m, k, j, i,   wp_, weqf1, flx1);
+        WBFaceLLF<IVX>(eos, m, k, j, i+1, wp_, weqf1, flx1);
+        if (multi_d) {
+          WBFaceLLF<IVY>(eos, m, k, j,   i, wp_, weqf2, flx2);
+          WBFaceLLF<IVY>(eos, m, k, j+1, i, wp_, weqf2, flx2);
+        }
+        if (three_d) {
+          WBFaceLLF<IVZ>(eos, m, k,   j, i, wp_, weqf3, flx3);
+          WBFaceLLF<IVZ>(eos, m, k+1, j, i, wp_, weqf3, flx3);
+        }
+      }
+    });
+    return;
+  }
 
   if (use_fofc) {
     Real &gam0 = pdriver->gam0[stage-1];

@@ -32,6 +32,17 @@ namespace hydro {
 
 template <Hydro_RSolver rsolver_method_>
 void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
+  // well-balanced scheme: separate path (hydro_wb.cpp), so the default kernels below are
+  // untouched.  Only the non-relativistic dynamic solvers support it.
+  if constexpr (rsolver_method_ == Hydro_RSolver::llf ||
+                rsolver_method_ == Hydro_RSolver::hlle ||
+                rsolver_method_ == Hydro_RSolver::hllc ||
+                rsolver_method_ == Hydro_RSolver::roe) {
+    if (well_balanced) {
+      WBCalculateFluxes<rsolver_method_>(pdriver, stage);
+      return;
+    }
+  }
   RegionIndcs &indcs_ = pmy_pack->pmesh->mb_indcs;
   int is = indcs_.is, ie = indcs_.ie;
   int js = indcs_.js, je = indcs_.je;

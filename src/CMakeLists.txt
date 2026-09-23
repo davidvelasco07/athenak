@@ -73,6 +73,7 @@ add_executable(
         hydro/hydro_sts.cpp
         hydro/hydro_tasks.cpp
         hydro/hydro_update.cpp
+        hydro/hydro_wb.cpp
 
         ion-neutral/ion-neutral.cpp
         ion-neutral/ion-neutral_tasks.cpp
