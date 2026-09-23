@@ -16,6 +16,10 @@
 //!  iprob=2  Three-zone piecewise-polytropic atmosphere with a buoyant underdense bubble
 //!           (sec. 3.4), gravity along -x2.  Zone base values are propagated by
 //!           continuity from the bottom zone (the paper quotes them rounded).
+//!  iprob=3  (MHD) iprob=1 threaded by a uniform, force-free field (b1,b2,b3).
+//!  iprob=4  (MHD) Parker constant-beta atmosphere, gravity along -x2: horizontal field
+//!           B_x = sqrt(2 p/beta), rho, p ~ exp(-x2/H), H = (p0/rho0)(1+1/beta)/g.  A true
+//!           magnetostatic equilibrium with J x B != 0 (magnetic pressure gradient).
 //!
 //! The gravity vector is read from <hydro_srcterms> const_accel (dir/val or the dir=0
 //! vector form), so the equilibrium and the source term cannot disagree.  Boundaries
@@ -23,6 +27,7 @@
 //! well-balanced scheme, U = U_eq without it).
 
 #include <cmath>
+#include <memory>
 #include <iostream>
 #include <string>
 
@@ -31,6 +36,7 @@
 #include "mesh/mesh.hpp"
 #include "eos/eos.hpp"
 #include "hydro/hydro.hpp"
+#include "mhd/mhd.hpp"
 #include "hydro/well_balance.hpp"
 #include "srcterms/srcterms.hpp"
 #include "pgen/pgen.hpp"
@@ -106,18 +112,36 @@ struct BubbleDensity {       // only the density perturbation, pressure unpertur
   }
 };
 
+struct EqField {             // equilibrium magnetic field at a point
+  bool parker;
+  Real b1, b2, b3;           // uniform field (iprob=3)
+  Real bp0, hscale;          // Parker: B_x = bp0*exp(-x2/(2H))
+  KOKKOS_INLINE_FUNCTION
+  void operator()(const Real x1, const Real x2, const Real x3, Real b[3]) const {
+    if (parker) {
+      b[0] = bp0*exp(-0.5*x2/hscale); b[1] = 0.0; b[2] = 0.0;
+    } else {
+      b[0] = b1; b[1] = b2; b[2] = b3;
+    }
+  }
+};
+
 // problem parameters shared by the pgen, equilibrium and BC functions
 int iprob = 1;
 ExpAtmosphere exp_atm;
 PolytropeZones poly;
+EqField eq_field;
 DvceArray5D<Real> ubc_full;   // equilibrium conserved state for non-WB user BCs
+// equilibrium face field for user BCs.  A pointer: a file-scope View would be
+// constructed before Kokkos::initialize()
+std::unique_ptr<DvceFaceFld4D<Real>> bbc_full;
 
 // fill w (primitive cell averages) with the equilibrium of the selected problem
 void FillEquilibrium(MeshBlockPack *pmbp, DvceArray5D<Real> &w, int nvar) {
-  if (iprob == 1) {
-    wellbalance::FillEquilibriumCellAverages(pmbp, w, nvar, exp_atm);
-  } else {
+  if (iprob == 2) {
     wellbalance::FillEquilibriumCellAverages(pmbp, w, nvar, poly);
+  } else {
+    wellbalance::FillEquilibriumCellAverages(pmbp, w, nvar, exp_atm);
   }
 }
 
@@ -127,7 +151,13 @@ void FillEquilibrium(MeshBlockPack *pmbp, DvceArray5D<Real> &w, int nvar) {
 
 void HSEEquilibrium(Mesh *pm) {
   auto *phydro = pm->pmb_pack->phydro;
-  FillEquilibrium(pm->pmb_pack, phydro->w_eq, phydro->nhydro);
+  auto *pmhd = pm->pmb_pack->pmhd;
+  if (phydro != nullptr) {
+    FillEquilibrium(pm->pmb_pack, phydro->w_eq, phydro->nhydro);
+  } else {
+    FillEquilibrium(pm->pmb_pack, pmhd->w_eq, pmhd->nmhd);
+    wellbalance::FillEquilibriumFaceAverages(pm->pmb_pack, pmhd->b_eq, eq_field);
+  }
 }
 
 //----------------------------------------------------------------------------------------
@@ -138,6 +168,7 @@ void HSEEquilibrium(Mesh *pm) {
 void HSEBoundary(Mesh *pm) {
   auto *pmbp = pm->pmb_pack;
   auto *phydro = pmbp->phydro;
+  auto *pmhd = pmbp->pmhd;
   auto &indcs = pm->mb_indcs;
   const int is = indcs.is, ie = indcs.ie, js = indcs.js, je = indcs.je;
   const int ks = indcs.ks, ke = indcs.ke;
@@ -145,10 +176,11 @@ void HSEBoundary(Mesh *pm) {
   const int n2 = (indcs.nx2 > 1) ? (indcs.nx2 + 2*indcs.ng) : 1;
   const int n3 = (indcs.nx3 > 1) ? (indcs.nx3 + 2*indcs.ng) : 1;
   const bool multi_d = pm->multi_d, three_d = pm->three_d;
-  const bool wb = phydro->well_balanced;
-  const int nvar = phydro->nhydro + phydro->nscalars;
+  const bool wb = (phydro != nullptr) ? phydro->well_balanced : pmhd->well_balanced;
+  const int nvar = (phydro != nullptr) ? phydro->nhydro + phydro->nscalars
+                                       : pmhd->nmhd + pmhd->nscalars;
   auto &mb_bcs = pmbp->pmb->mb_bcs;
-  auto &u0 = phydro->u0;
+  auto u0 = (phydro != nullptr) ? phydro->u0 : pmhd->u0;
   auto &ubc = ubc_full;
   par_for("hse_bc", DevExeSpace(), 0, (pmbp->nmb_thispack-1), 0, n3-1, 0, n2-1, 0, n1-1,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
@@ -165,11 +197,43 @@ void HSEBoundary(Mesh *pm) {
       }
     }
   });
+  // MHD: ghost faces hold the (full) equilibrium face field.  The faces ON a boundary
+  // belong to the active domain (they are evolved by CT) and are left alone.
+  if (pmhd != nullptr) {
+    auto b0 = pmhd->b0;
+    auto bq = *bbc_full;
+    par_for("hse_bc_b", DevExeSpace(), 0, (pmbp->nmb_thispack-1), 0, n3, 0, n2, 0, n1,
+    KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      auto gx = [&](const int ii, const int jj, const int kk, const int iu, const int ju,
+                    const int ku) {
+        return (ii < is && mb_bcs.d_view(m,BoundaryFace::inner_x1) == BoundaryFlag::user) ||
+               (ii > iu && mb_bcs.d_view(m,BoundaryFace::outer_x1) == BoundaryFlag::user) ||
+               (multi_d && jj < js &&
+                mb_bcs.d_view(m,BoundaryFace::inner_x2) == BoundaryFlag::user) ||
+               (multi_d && jj > ju &&
+                mb_bcs.d_view(m,BoundaryFace::outer_x2) == BoundaryFlag::user) ||
+               (three_d && kk < ks &&
+                mb_bcs.d_view(m,BoundaryFace::inner_x3) == BoundaryFlag::user) ||
+               (three_d && kk > ku &&
+                mb_bcs.d_view(m,BoundaryFace::outer_x3) == BoundaryFlag::user);
+      };
+      if (k < n3 && j < n2 && gx(i, j, k, ie+1, je, ke)) {
+        b0.x1f(m,k,j,i) = bq.x1f(m,k,j,i);
+      }
+      if (k < n3 && i < n1 && (multi_d || j < 2) && gx(i, j, k, ie, je+1, ke)) {
+        b0.x2f(m,k,j,i) = bq.x2f(m,k,j,i);
+      }
+      if (j < n2 && i < n1 && (three_d || k < 2) && gx(i, j, k, ie, je, ke+1)) {
+        b0.x3f(m,k,j,i) = bq.x3f(m,k,j,i);
+      }
+    });
+  }
 }
 
 // release the file-scope view before Kokkos::finalize
 void HSEFinalize(ParameterInput *pin, Mesh *pm) {
   ubc_full = DvceArray5D<Real>();
+  bbc_full.reset();
 }
 
 }  // namespace
@@ -180,25 +244,59 @@ void HSEFinalize(ParameterInput *pin, Mesh *pm) {
 void ProblemGenerator::Hydrostatic(ParameterInput *pin, const bool restart) {
   MeshBlockPack *pmbp = pmy_mesh_->pmb_pack;
   auto *phydro = pmbp->phydro;
-  if (phydro == nullptr || !phydro->peos->eos_data.is_ideal) {
+  auto *pmhd = pmbp->pmhd;
+  EquationOfState *peos_ = (phydro != nullptr) ? phydro->peos
+                         : ((pmhd != nullptr) ? pmhd->peos : nullptr);
+  SourceTerms *psrc_ = (phydro != nullptr) ? phydro->psrc
+                     : ((pmhd != nullptr) ? pmhd->psrc : nullptr);
+  if (peos_ == nullptr || !peos_->eos_data.is_ideal) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
-              << "hydrostatic pgen requires <hydro> with an ideal gas EOS" << std::endl;
+              << "hydrostatic pgen requires <hydro> or <mhd> with an ideal gas EOS"
+              << std::endl;
     std::exit(EXIT_FAILURE);
   }
-  if (phydro->psrc == nullptr || !phydro->psrc->const_accel) {
+  if (psrc_ == nullptr || !psrc_->const_accel) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
-              << "hydrostatic pgen requires <hydro_srcterms> const_accel=true" << std::endl;
+              << "hydrostatic pgen requires <hydro_srcterms>/<mhd_srcterms> "
+              << "const_accel=true" << std::endl;
     std::exit(EXIT_FAILURE);
   }
-  const Real gm1 = phydro->peos->eos_data.gamma - 1.0;
-  const Real *gv = phydro->psrc->const_accel_vec;
+  const Real gm1 = peos_->eos_data.gamma - 1.0;
+  const Real *gv = psrc_->const_accel_vec;
   iprob = pin->GetOrAddInteger("problem", "iprob", 1);
+  if ((iprob >= 3) != (pmhd != nullptr)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+              << "hydrostatic: iprob=1,2 are hydro problems, iprob=3,4 MHD" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  eq_field.parker = false;
+  eq_field.b1 = eq_field.b2 = eq_field.b3 = 0.0;
 
-  if (iprob == 1) {
+  if (iprob == 1 || iprob == 3) {
     exp_atm.rho0 = pin->GetOrAddReal("problem", "rho0", 1.0);
     exp_atm.p0 = pin->GetOrAddReal("problem", "p0", 1.0);
     exp_atm.gm1 = gm1;
     exp_atm.g1 = gv[0]; exp_atm.g2 = gv[1]; exp_atm.g3 = gv[2];
+    if (iprob == 3) {
+      eq_field.b1 = pin->GetOrAddReal("problem", "b1", 0.0);
+      eq_field.b2 = pin->GetOrAddReal("problem", "b2", 0.0);
+      eq_field.b3 = pin->GetOrAddReal("problem", "b3", 0.0);
+    }
+  } else if (iprob == 4) {
+    if (gv[0] != 0.0 || gv[2] != 0.0 || gv[1] >= 0.0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "hydrostatic iprob=4 needs gravity along -x2" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    const Real beta = pin->GetOrAddReal("problem", "beta", 1.0);
+    exp_atm.rho0 = pin->GetOrAddReal("problem", "rho0", 1.0);
+    exp_atm.p0 = pin->GetOrAddReal("problem", "p0", 1.0);
+    exp_atm.gm1 = gm1;
+    // rho, p ~ exp(-x2/H): the exponential atmosphere with g_eff = g/(1+1/beta)
+    exp_atm.g1 = 0.0; exp_atm.g2 = gv[1]/(1.0 + 1.0/beta); exp_atm.g3 = 0.0;
+    eq_field.parker = true;
+    eq_field.hscale = (exp_atm.p0/exp_atm.rho0)*(1.0 + 1.0/beta)/(-gv[1]);
+    eq_field.bp0 = std::sqrt(2.0*exp_atm.p0/beta);
   } else if (iprob == 2) {
     if (gv[0] != 0.0 || gv[2] != 0.0 || gv[1] >= 0.0) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -227,7 +325,7 @@ void ProblemGenerator::Hydrostatic(ParameterInput *pin, const bool restart) {
     }
   } else {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
-              << "hydrostatic: iprob must be 1 or 2" << std::endl;
+              << "hydrostatic: iprob must be 1, 2, 3 or 4" << std::endl;
     std::exit(EXIT_FAILURE);
   }
 
@@ -241,36 +339,50 @@ void ProblemGenerator::Hydrostatic(ParameterInput *pin, const bool restart) {
   const int n1m1 = indcs.nx1 + 2*ng - 1;
   const int n2m1 = (indcs.nx2 > 1) ? (indcs.nx2 + 2*ng - 1) : 0;
   const int n3m1 = (indcs.nx3 > 1) ? (indcs.nx3 + 2*ng - 1) : 0;
-  const int nhyd = phydro->nhydro;
-  const int nvar = phydro->nhydro + phydro->nscalars;
+  const int nhyd = (phydro != nullptr) ? phydro->nhydro : pmhd->nmhd;
+  const int nvar = nhyd + ((phydro != nullptr) ? phydro->nscalars : pmhd->nscalars);
+  auto &w0 = (phydro != nullptr) ? phydro->w0 : pmhd->w0;
+  auto &u0 = (phydro != nullptr) ? phydro->u0 : pmhd->u0;
 
-  // full equilibrium conserved state for the non-WB user BCs
-  if (user_bcs && !phydro->well_balanced) {
-    DvceArray5D<Real> wtmp("hse_wtmp", phydro->w0.extent(0), nvar,
-                           phydro->w0.extent(2), phydro->w0.extent(3),
-                           phydro->w0.extent(4));
+  // full equilibrium state for the user BCs (u0 ghosts without WB; b0 ghosts always)
+  if (user_bcs) {
+    DvceArray5D<Real> wtmp("hse_wtmp", w0.extent(0), nvar, w0.extent(2), w0.extent(3),
+                           w0.extent(4));
     Kokkos::deep_copy(wtmp, 0.0);
     FillEquilibrium(pmbp, wtmp, nhyd);
-    Kokkos::realloc(ubc_full, phydro->u0.extent(0), nvar, phydro->u0.extent(2),
-                    phydro->u0.extent(3), phydro->u0.extent(4));
-    phydro->peos->PrimToCons(wtmp, ubc_full, 0, n1m1, 0, n2m1, 0, n3m1);
+    Kokkos::realloc(ubc_full, u0.extent(0), nvar, u0.extent(2), u0.extent(3),
+                    u0.extent(4));
+    if (phydro != nullptr) {
+      phydro->peos->PrimToCons(wtmp, ubc_full, 0, n1m1, 0, n2m1, 0, n3m1);
+    } else {
+      auto &b0 = pmhd->b0;
+      bbc_full = std::make_unique<DvceFaceFld4D<Real>>("hse_bbc", b0.x1f.extent(0),
+                   b0.x1f.extent(1), b0.x1f.extent(2), b0.x2f.extent(3));
+      wellbalance::FillEquilibriumFaceAverages(pmbp, *bbc_full, eq_field);
+      DvceArray5D<Real> btmp("hse_btmp", w0.extent(0), 3, w0.extent(2), w0.extent(3),
+                             w0.extent(4));
+      pmhd->WBBuildFullState(wtmp, *bbc_full, btmp, ubc_full);
+    }
   }
   if (restart) return;
 
-  // unperturbed state: the SAME cell averages and the SAME PrimToCons kernel the
-  // well-balanced scheme uses for U_eq, so U - U_eq is exactly zero where unperturbed
-  auto &w0 = phydro->w0;
-  auto &u0 = phydro->u0;
+  // unperturbed state: the SAME cell averages and the SAME conversion the well-balanced
+  // scheme uses for U_eq, so U - U_eq is exactly zero where unperturbed
   Kokkos::deep_copy(w0, 0.0);
   FillEquilibrium(pmbp, w0, nhyd);
-  phydro->peos->PrimToCons(w0, u0, 0, n1m1, 0, n2m1, 0, n3m1);
+  if (phydro != nullptr) {
+    phydro->peos->PrimToCons(w0, u0, 0, n1m1, 0, n2m1, 0, n3m1);
+  } else {
+    wellbalance::FillEquilibriumFaceAverages(pmbp, pmhd->b0, eq_field);
+    pmhd->WBBuildFullState(w0, pmhd->b0, pmhd->bcc0, u0);
+  }
 
   // perturbation, as cell averages of its own functor
   DvceArray5D<Real> dw("hse_dw", w0.extent(0), nvar, w0.extent(2), w0.extent(3),
                        w0.extent(4));
   Kokkos::deep_copy(dw, 0.0);
   bool perturb = false;
-  if (iprob == 1) {
+  if (iprob == 1 || iprob == 3 || iprob == 4) {
     const Real amp = pin->GetOrAddReal("problem", "pulse_amp", 0.0);
     if (amp != 0.0) {
       PressurePulse pp;
