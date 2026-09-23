@@ -216,13 +216,6 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
         << std::endl;
       std::exit(EXIT_FAILURE);
     }
-    if (use_mood && pmy_pack->pcoord->is_general_relativistic &&
-        pmy_pack->pcoord->coord_data.bh_excise) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-        << std::endl << "<hydro> mood=true does not support BH excision (use fofc)"
-        << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
 
     // select reconstruction method (default PLM)
     std::string xorder = pin->GetOrAddString("hydro","reconstruct","plm");

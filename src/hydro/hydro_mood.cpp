@@ -271,8 +271,35 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
   const int ndj = (multi_d) ? 1 : 0;
   const int ndk = (three_d) ? 1 : 0;
 
-  // reset per-cell cascade level at the start of every RK stage
-  Kokkos::deep_copy(fb_level_, 0);
+  // Cells at and around the excised region are pre-set to the BOTTOM tier every stage
+  // rather than reset to zero.  Inside the excision the primitives are not inverted at
+  // all -- ConsToPrim overwrites them with (dexcise, pexcise, 0) -- so the relaxed-DMP
+  // bounds built from those neighbours describe a held-constant state and mean nothing,
+  // and letting the detector reason about them produces permanent spurious demotion
+  // around the horizon.  FOFC already solves this the same way: it forces first-order
+  // LLF fluxes for every cell in excision_flux (see hydro_fofc.cpp), so the region
+  // always takes the most robust flux.  Seeding fb_level to n_fb_tiers reproduces that
+  // exactly -- the revise pass maps t >= n_fb_tiers to donor-cell reconstruction -- and
+  // is what allows mood=true to run with BH excision at all.
+  {
+    auto &excision_flux_ = pmy_pack->pcoord->excision_flux;
+    const bool excising = (pmy_pack->pcoord->is_general_relativistic &&
+                           pmy_pack->pcoord->coord_data.bh_excise);
+    const int nfb_seed = n_fb;
+    if (excising) {
+      // bounds from the View itself, so this does not depend on local index names
+      const int e3 = static_cast<int>(fb_level_.extent(1)) - 1;
+      const int e2 = static_cast<int>(fb_level_.extent(2)) - 1;
+      const int e1 = static_cast<int>(fb_level_.extent(3)) - 1;
+      par_for("mood_seed_excision", DevExeSpace(), 0, nmb1,
+              0, e3, 0, e2, 0, e1,
+      KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+        fb_level_(m,k,j,i) = excision_flux_(m,k,j,i) ? nfb_seed : 0;
+      });
+    } else {
+      Kokkos::deep_copy(fb_level_, 0);
+    }
+  }
 
   // detect / demote / revise loop
   int ndemoted_total = 0;

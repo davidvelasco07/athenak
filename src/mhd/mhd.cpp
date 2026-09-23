@@ -558,12 +558,6 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
           << std::endl;
         std::exit(EXIT_FAILURE);
       }
-      if (pmy_pack->pcoord->is_general_relativistic &&
-          pmy_pack->pcoord->coord_data.bh_excise) {
-        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-          << std::endl << "MOOD with BH excision is not supported" << std::endl;
-        std::exit(EXIT_FAILURE);
-      }
       n_fb_tiers = (recon_method == ReconstructionMethod::plm) ? 1 : 2;
       mood_max_revs = pin->GetOrAddInteger("mhd","mood_max_revs",n_fb_tiers);
       if (mood_max_revs < 1) {
