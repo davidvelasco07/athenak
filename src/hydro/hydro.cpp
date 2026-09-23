@@ -210,7 +210,11 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
       std::exit(EXIT_FAILURE);
     }
     mood_eps0  = pin->GetOrAddReal("hydro","mood_eps0",1.0e-12);
-    mood_eps0_eq = pin->GetOrAddReal("hydro","mood_eps0_eq",mood_eps0);
+    // Well-balanced round-off floor relative to the equilibrium.  Default 0: any positive
+    // value masks perturbations of that relative size from NAD (1e-12 hid the unlimited-
+    // PPM ringing of an eta=1e-12 pulse), while 0 keeps the detector scale-invariant for
+    // linear perturbations and was measured bitwise decomposition-invariant.
+    mood_eps0_eq = pin->GetOrAddReal("hydro","mood_eps0_eq",0.0);
     // the default rtol follows the scale: rcfl is calibrated at 1e-4, the range-based
     // scales (gcfl etc.) at 1e-5, so an explicit gcfl without mood_rtol is unchanged
     mood_rtol = pin->GetOrAddReal("hydro","mood_rtol",

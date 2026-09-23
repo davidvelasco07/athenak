@@ -146,6 +146,7 @@ class Hydro {
   Real mood_rtol;           // NAD tolerance as a fraction of the selected scale
   Real mood_eps0;           // round-off floor (relative to the violated bound)
   Real mood_eps0_eq;        // well-balanced: round-off floor relative to the equilibrium
+                            // (default 0, see hydro.cpp)
   Real mood_atol;           // absolute floor of the NAD tolerance
   bool mood_sed;            // exempt smooth extrema from NAD detection
   int n_fb_tiers;           // # of fallback tiers below base scheme (2, or 1 if base=plm)
