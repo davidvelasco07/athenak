@@ -30,6 +30,8 @@ class OrbitalAdvectionFC;
 class ShearingBoxCC;
 class ShearingBoxFC;
 class Driver;
+class Mesh;
+class ProblemGenerator;
 
 // function ptr for user-defined MHD boundary functions enrolled in problem generator
 namespace mhd {
@@ -201,6 +203,31 @@ class MHD {
   bool has_any_sts_diffusion = false;
   bool has_any_sts_cell_update = false;
   bool has_any_sts_field_update = false;
+
+  // following used for the well-balanced (WB) scheme (mhd_wb.cpp).  u0 holds the
+  // PERTURBATION U' = U - U_eq (E includes the magnetic energy); b0 keeps the FULL face
+  // field, updated by CT in perturbation form (b = b_eq + gam0*(b-b_eq) + ... ).  Static
+  // equilibria only.  w0/bcc0 hold the full state.
+  bool well_balanced = false;
+  bool wb_diagnostics = false;    // equilibrium arrays only (negative control)
+  DvceArray5D<Real> u_eq, w_eq;   // equilibrium conserved / primitive cell averages
+  DvceArray5D<Real> bcc_eq;       // = cell-centred B of b_eq, same routine as ConsToPrim
+  DvceFaceFld4D<Real> b_eq;       // equilibrium face field (div-free, from the pgen)
+  DvceArray5D<Real> w_pert;       // perturbation primitives W' (+ full scalars)
+  DvceArray5D<Real> bcc_pert;     // bcc0 - bcc_eq
+  DvceFaceFld5D<Real> w_eq_face;  // face equilibrium primitives
+  DvceFaceFld5D<Real> bcc_eq_face;  // face equilibrium B (transverse from bcc_eq)
+  DvceFaceFld5D<Real> f_eq;       // RS flux of the face equilibrium
+  DvceArray4D<Real> e3x1_eq, e2x1_eq, e1x2_eq, e3x2_eq, e2x3_eq, e1x3_eq;  // its face EMFs
+  void (*wb_eq_func)(Mesh *pm) = nullptr;
+  void WBInitialize(ProblemGenerator *ppgen, bool restart);
+  void WBSetEquilibrium();
+  void WBFormPerturbation();
+  // bcc/u/w of (w, b) with the ConToPrim arithmetic (equilibrium and pgen ICs)
+  void WBBuildFullState(DvceArray5D<Real> &w, const DvceFaceFld4D<Real> &b,
+                        DvceArray5D<Real> &bcc, DvceArray5D<Real> &u);
+  template <MHD_RSolver T> void WBEquilibriumFluxes();
+  template <MHD_RSolver T> void WBCalculateFluxes(Driver *d, int stage);
 
   // container to hold names of TaskIDs
   MHDTaskIDs id;

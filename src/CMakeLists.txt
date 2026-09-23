@@ -102,6 +102,7 @@ add_executable(
         mhd/mhd_sts.cpp
         mhd/mhd_tasks.cpp
         mhd/mhd_update.cpp
+        mhd/mhd_wb.cpp
 
         outputs/io_wrapper.cpp
         outputs/outputs.cpp

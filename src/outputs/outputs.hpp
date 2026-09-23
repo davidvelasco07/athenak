@@ -21,7 +21,7 @@
     #error NHISTORY > NREDUCTION in outputs.hpp
 #endif
 
-#define NOUTPUT_CHOICES 157
+#define NOUTPUT_CHOICES 158
 // choices for output variables used in <ouput> blocks in input file
 // TO ADD MORE CHOICES:
 //   - add more strings to array below, change NOUTPUT_CHOICES above appropriately
@@ -103,8 +103,8 @@ static const char *var_choice[NOUTPUT_CHOICES] = {
   "grav_phi",
   // MOOD diagnostics (154-155)
   "hydro_fb_level", "mhd_fb_level",
-  // well-balanced diagnostics (156): primitive perturbation W - W_eq
-  "hydro_wpert"
+  // well-balanced diagnostics (156-157): primitive perturbation W - W_eq (+ B - B_eq)
+  "hydro_wpert", "mhd_wpert"
 };
 
 

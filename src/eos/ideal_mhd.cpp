@@ -83,6 +83,29 @@ void IdealMHD::ConsToPrim(DvceArray5D<Real> &cons, const DvceFaceFld4D<Real> &b,
                           const bool only_testfloors,
                           const int il, const int iu, const int jl, const int ju,
                           const int kl, const int ku) {
+  ConsToPrimImpl<false>(cons, cons, b, prim, bcc, only_testfloors, il, iu, jl, ju, kl, ku);
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void ConsToPrimWB()
+//! \brief Well-balanced version: cons holds the perturbation U' and ueq the equilibrium;
+//! the inversion is done on U'+U_eq (in registers) with the FULL face field b.  Where a
+//! floor fires, the corrected full state is written back to cons as a perturbation.
+
+void IdealMHD::ConsToPrimWB(DvceArray5D<Real> &cons, const DvceArray5D<Real> &ueq,
+                            const DvceFaceFld4D<Real> &b, DvceArray5D<Real> &prim,
+                            DvceArray5D<Real> &bcc, const bool only_testfloors,
+                            const int il, const int iu, const int jl, const int ju,
+                            const int kl, const int ku) {
+  ConsToPrimImpl<true>(cons, ueq, b, prim, bcc, only_testfloors, il, iu, jl, ju, kl, ku);
+}
+
+template <bool WB>
+void IdealMHD::ConsToPrimImpl(DvceArray5D<Real> &cons, const DvceArray5D<Real> &ueq,
+                              const DvceFaceFld4D<Real> &b, DvceArray5D<Real> &prim,
+                              DvceArray5D<Real> &bcc, const bool only_testfloors,
+                              const int il, const int iu, const int jl, const int ju,
+                              const int kl, const int ku) {
   int &nmhd  = pmy_pack->pmhd->nmhd;
   int &nscal = pmy_pack->pmhd->nscalars;
   int &nmb = pmy_pack->nmb_thispack;
@@ -111,13 +134,22 @@ void IdealMHD::ConsToPrim(DvceArray5D<Real> &cons, const DvceFaceFld4D<Real> &b,
     k += kl;
     if (masked_ && !mask_(m,k,j,i)) return;
 
-    // load single state conserved variables
+    // load single state conserved variables (full state = perturbation + equilibrium
+    // with the well-balanced scheme)
     MHDCons1D u;
-    u.d  = cons(m,IDN,k,j,i);
-    u.mx = cons(m,IM1,k,j,i);
-    u.my = cons(m,IM2,k,j,i);
-    u.mz = cons(m,IM3,k,j,i);
-    u.e  = cons(m,IEN,k,j,i);
+    if constexpr (WB) {
+      u.d  = cons(m,IDN,k,j,i) + ueq(m,IDN,k,j,i);
+      u.mx = cons(m,IM1,k,j,i) + ueq(m,IM1,k,j,i);
+      u.my = cons(m,IM2,k,j,i) + ueq(m,IM2,k,j,i);
+      u.mz = cons(m,IM3,k,j,i) + ueq(m,IM3,k,j,i);
+      u.e  = cons(m,IEN,k,j,i) + ueq(m,IEN,k,j,i);
+    } else {
+      u.d  = cons(m,IDN,k,j,i);
+      u.mx = cons(m,IM1,k,j,i);
+      u.my = cons(m,IM2,k,j,i);
+      u.mz = cons(m,IM3,k,j,i);
+      u.e  = cons(m,IEN,k,j,i);
+    }
 
     // load cell-centered fields into conserved state
     // use input CC fields if only testing floors with FOFC
@@ -199,17 +231,32 @@ void IdealMHD::ConsToPrim(DvceArray5D<Real> &cons, const DvceFaceFld4D<Real> &b,
       }
     } else {
       // update counter, reset conserved if floor was hit
-      if (dfloor_used) {
-        cons(m,IDN,k,j,i) = u.d;
-        sumd++;
-      }
-      if (efloor_used) {
-        cons(m,IEN,k,j,i) = u.e;
-        sume++;
-      }
-      if (tfloor_used) {
-        cons(m,IEN,k,j,i) = u.e;
-        sumt++;
+      if constexpr (WB) {
+        if (dfloor_used) {
+          cons(m,IDN,k,j,i) = u.d - ueq(m,IDN,k,j,i);
+          sumd++;
+        }
+        if (efloor_used) {
+          cons(m,IEN,k,j,i) = u.e - ueq(m,IEN,k,j,i);
+          sume++;
+        }
+        if (tfloor_used) {
+          cons(m,IEN,k,j,i) = u.e - ueq(m,IEN,k,j,i);
+          sumt++;
+        }
+      } else {
+        if (dfloor_used) {
+          cons(m,IDN,k,j,i) = u.d;
+          sumd++;
+        }
+        if (efloor_used) {
+          cons(m,IEN,k,j,i) = u.e;
+          sume++;
+        }
+        if (tfloor_used) {
+          cons(m,IEN,k,j,i) = u.e;
+          sumt++;
+        }
       }
       // store primitive state in 3D array
       prim(m,IDN,k,j,i) = w.d;
@@ -243,6 +290,13 @@ void IdealMHD::ConsToPrim(DvceArray5D<Real> &cons, const DvceFaceFld4D<Real> &b,
 
   return;
 }
+
+template void IdealMHD::ConsToPrimImpl<false>(DvceArray5D<Real>&, const DvceArray5D<Real>&,
+    const DvceFaceFld4D<Real>&, DvceArray5D<Real>&, DvceArray5D<Real>&, const bool,
+    const int, const int, const int, const int, const int, const int);
+template void IdealMHD::ConsToPrimImpl<true>(DvceArray5D<Real>&, const DvceArray5D<Real>&,
+    const DvceFaceFld4D<Real>&, DvceArray5D<Real>&, DvceArray5D<Real>&, const bool,
+    const int, const int, const int, const int, const int, const int);
 
 //----------------------------------------------------------------------------------------
 //! \!fn void PrimToCons()

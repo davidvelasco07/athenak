@@ -236,6 +236,9 @@ TaskStatus MHD::CopyCons(Driver *pdrive, int stage) {
 //! of conserved variables
 
 TaskStatus MHD::Fluxes(Driver *pdrive, int stage) {
+  // well-balanced scheme: perturbation primitives of the stage-input state
+  if (well_balanced) WBFormPerturbation();
+
   // select which calculate_flux function to call based on rsolver_method
   if (rsolver_method == MHD_RSolver::advect) {
     CalculateFluxes<MHD_RSolver::advect>(pdrive, stage);
@@ -634,7 +637,11 @@ TaskStatus MHD::ConToPrim(Driver *pdrive, int stage) {
   int n1m1 = indcs.nx1 + 2*ng - 1;
   int n2m1 = (indcs.nx2 > 1)? (indcs.nx2 + 2*ng - 1) : 0;
   int n3m1 = (indcs.nx3 > 1)? (indcs.nx3 + 2*ng - 1) : 0;
-  peos->ConsToPrim(u0, b0, w0, bcc0, false, 0, n1m1, 0, n2m1, 0, n3m1);
+  if (well_balanced) {
+    peos->ConsToPrimWB(u0, u_eq, b0, w0, bcc0, false, 0, n1m1, 0, n2m1, 0, n3m1);
+  } else {
+    peos->ConsToPrim(u0, b0, w0, bcc0, false, 0, n1m1, 0, n2m1, 0, n3m1);
+  }
   return TaskStatus::complete;
 }
 

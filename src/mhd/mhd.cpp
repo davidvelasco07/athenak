@@ -81,10 +81,26 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
     bcctest("bcctest",1,1,1,1,1),
     fb_level("fb_level",1,1,1,1),
     bmag_ref("bmag_ref",1,1,1,1),
+    b_eq("b_eq",1,1,1,1),
+    w_eq_face("w_eq_face",1,1,1,1,1),
+    bcc_eq_face("bcc_eq_face",1,1,1,1,1),
+    f_eq("f_eq",1,1,1,1,1),
     pmy_pack(ppack),
     e1_cc("e1_cc",1,1,1,1),
     e2_cc("e2_cc",1,1,1,1),
     e3_cc("e3_cc",1,1,1,1) {
+  // well-balanced arrays: default-constructed at size 1, reallocated only when used
+  u_eq = DvceArray5D<Real>("u_eq",1,1,1,1,1);
+  w_eq = DvceArray5D<Real>("w_eq",1,1,1,1,1);
+  bcc_eq = DvceArray5D<Real>("bcc_eq",1,1,1,1,1);
+  w_pert = DvceArray5D<Real>("w_pert",1,1,1,1,1);
+  bcc_pert = DvceArray5D<Real>("bcc_pert",1,1,1,1,1);
+  e3x1_eq = DvceArray4D<Real>("e3x1_eq",1,1,1,1);
+  e2x1_eq = DvceArray4D<Real>("e2x1_eq",1,1,1,1);
+  e1x2_eq = DvceArray4D<Real>("e1x2_eq",1,1,1,1);
+  e3x2_eq = DvceArray4D<Real>("e3x2_eq",1,1,1,1);
+  e2x3_eq = DvceArray4D<Real>("e2x3_eq",1,1,1,1);
+  e1x3_eq = DvceArray4D<Real>("e1x3_eq",1,1,1,1);
   // defaults for members not always assigned in stationary path
   emf_method = MHD_EMF::ct_contact;
   uct_diag = false;
@@ -619,6 +635,39 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
       if (mood_edge_flag == -1) { mood_edge_flag = 0; }
     }
 
+    // Well-balanced scheme (mhd_wb.cpp): perturbation over a STATIC magnetohydrostatic
+    // equilibrium from the problem generator.  Modules whose meaning changes when u0 is a
+    // perturbation are rejected here or in WBInitialize().
+    well_balanced = pin->GetOrAddBoolean("mhd","well_balanced",false);
+    wb_diagnostics = pin->GetOrAddBoolean("mhd","wb_diagnostics",false);
+    if (well_balanced) {
+      std::string wb_err;
+      if (pmy_pack->pcoord->is_special_relativistic ||
+          pmy_pack->pcoord->is_general_relativistic) {
+        wb_err = "is implemented only for non-relativistic MHD";
+      } else if (evolution_t.compare("dynamic") != 0) {
+        wb_err = "requires <time>/evolution=dynamic";
+      } else if (!peos->eos_data.is_ideal) {
+        wb_err = "requires an ideal-gas EOS";
+      } else if (pcond != nullptr || presist != nullptr) {
+        wb_err = "cannot be used with conduction or resistivity (the equilibrium "
+                 "would diffuse)";
+      } else if (pin->DoesBlockExist("shearing_box")) {
+        wb_err = "cannot be used with the shearing box / orbital advection";
+      } else if (pmy_pack->pmesh->multilevel) {
+        wb_err = "does not support SMR/AMR yet (b0 is prolongated as a full field)";
+      } else if (psrc != nullptr &&
+                 (psrc->self_gravity || psrc->ism_cooling || psrc->rel_cooling)) {
+        wb_err = "supports only const_accel source terms";
+      }
+      if (!wb_err.empty()) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+          << std::endl << "<mhd> well_balanced=true " << wb_err << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      if (psrc != nullptr) psrc->pwb_pert = &w_pert;
+    }
+
     // Final memory allocations
     {
       // allocate second registers
@@ -712,6 +761,36 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
           Kokkos::realloc(fofc_scal,    nmb, nscalars, ncells3, ncells2, ncells1);
           Kokkos::deep_copy(fofc_scal, false);
         }
+      }
+      // well-balanced equilibrium and perturbation arrays
+      if (well_balanced || wb_diagnostics) {
+        Kokkos::realloc(u_eq,   nmb, (nmhd+nscalars), ncells3, ncells2, ncells1);
+        Kokkos::realloc(w_eq,   nmb, (nmhd+nscalars), ncells3, ncells2, ncells1);
+        Kokkos::realloc(bcc_eq, nmb, 3, ncells3, ncells2, ncells1);
+        Kokkos::realloc(b_eq.x1f, nmb, ncells3, ncells2, ncells1+1);
+        Kokkos::realloc(b_eq.x2f, nmb, ncells3, ncells2+1, ncells1);
+        Kokkos::realloc(b_eq.x3f, nmb, ncells3+1, ncells2, ncells1);
+        Kokkos::deep_copy(u_eq, 0.0);
+        Kokkos::deep_copy(w_eq, 0.0);
+      }
+      if (well_balanced) {
+        Kokkos::realloc(w_pert,   nmb, (nmhd+nscalars), ncells3, ncells2, ncells1);
+        Kokkos::realloc(bcc_pert, nmb, 3, ncells3, ncells2, ncells1);
+        Kokkos::realloc(w_eq_face.x1f, nmb, nmhd, ncells3, ncells2, ncells1+1);
+        Kokkos::realloc(w_eq_face.x2f, nmb, nmhd, ncells3, ncells2+1, ncells1);
+        Kokkos::realloc(w_eq_face.x3f, nmb, nmhd, ncells3+1, ncells2, ncells1);
+        Kokkos::realloc(bcc_eq_face.x1f, nmb, 3, ncells3, ncells2, ncells1+1);
+        Kokkos::realloc(bcc_eq_face.x2f, nmb, 3, ncells3, ncells2+1, ncells1);
+        Kokkos::realloc(bcc_eq_face.x3f, nmb, 3, ncells3+1, ncells2, ncells1);
+        Kokkos::realloc(f_eq.x1f, nmb, nmhd, ncells3, ncells2, ncells1+1);
+        Kokkos::realloc(f_eq.x2f, nmb, nmhd, ncells3, ncells2+1, ncells1);
+        Kokkos::realloc(f_eq.x3f, nmb, nmhd, ncells3+1, ncells2, ncells1);
+        Kokkos::realloc(e3x1_eq, nmb, ncells3, ncells2, ncells1);
+        Kokkos::realloc(e2x1_eq, nmb, ncells3, ncells2, ncells1);
+        Kokkos::realloc(e1x2_eq, nmb, ncells3, ncells2, ncells1);
+        Kokkos::realloc(e3x2_eq, nmb, ncells3, ncells2, ncells1);
+        Kokkos::realloc(e2x3_eq, nmb, ncells3, ncells2, ncells1);
+        Kokkos::realloc(e1x3_eq, nmb, ncells3, ncells2, ncells1);
       }
       if (use_mood) {
         Kokkos::realloc(fb_level, nmb, ncells3, ncells2, ncells1);

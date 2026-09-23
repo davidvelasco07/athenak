@@ -38,6 +38,52 @@ TaskStatus MHD::CT(Driver *pdriver, int stage) {
   auto e3 = efld.x3e;
   auto &mbsize = pmy_pack->pmb->mb_size;
 
+  // Well-balanced MHD: b0 is the FULL field; combine the RK registers as perturbations
+  // about b_eq, so an unperturbed equilibrium is reproduced bit for bit ((2/3)X+(1/3)X
+  // is not X in floating point).  The EMFs are already perturbation EMFs.
+  if (well_balanced) {
+    const auto b1q = b_eq.x1f, b2q = b_eq.x2f, b3q = b_eq.x3f;
+    if (multi_d) {
+      auto bx1f = b0.x1f;
+      auto bx1f_old = b1.x1f;
+      par_for("CT-b1-wb", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie+1,
+      KOKKOS_LAMBDA(int m, int k, int j, int i) {
+        Real bp = gam0*(bx1f(m,k,j,i) - b1q(m,k,j,i))
+                + gam1*(bx1f_old(m,k,j,i) - b1q(m,k,j,i));
+        bp -= beta_dt*(e3(m,k,j+1,i) - e3(m,k,j,i))/mbsize.d_view(m).dx2;
+        if (three_d) {
+          bp += beta_dt*(e2(m,k+1,j,i) - e2(m,k,j,i))/mbsize.d_view(m).dx3;
+        }
+        bx1f(m,k,j,i) = b1q(m,k,j,i) + bp;
+      });
+    }
+    auto bx2f = b0.x2f;
+    auto bx2f_old = b1.x2f;
+    par_for("CT-b2-wb", DevExeSpace(), 0, nmb1, ks, ke, js, je+1, is, ie,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      Real bp = gam0*(bx2f(m,k,j,i) - b2q(m,k,j,i))
+              + gam1*(bx2f_old(m,k,j,i) - b2q(m,k,j,i));
+      bp += beta_dt*(e3(m,k,j,i+1) - e3(m,k,j,i))/mbsize.d_view(m).dx1;
+      if (three_d) {
+        bp -= beta_dt*(e1(m,k+1,j,i) - e1(m,k,j,i))/mbsize.d_view(m).dx3;
+      }
+      bx2f(m,k,j,i) = b2q(m,k,j,i) + bp;
+    });
+    auto bx3f = b0.x3f;
+    auto bx3f_old = b1.x3f;
+    par_for("CT-b3-wb", DevExeSpace(), 0, nmb1, ks, ke+1, js, je, is, ie,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      Real bp = gam0*(bx3f(m,k,j,i) - b3q(m,k,j,i))
+              + gam1*(bx3f_old(m,k,j,i) - b3q(m,k,j,i));
+      bp -= beta_dt*(e2(m,k,j,i+1) - e2(m,k,j,i))/mbsize.d_view(m).dx1;
+      if (multi_d) {
+        bp += beta_dt*(e1(m,k,j+1,i) - e1(m,k,j,i))/mbsize.d_view(m).dx2;
+      }
+      bx3f(m,k,j,i) = b3q(m,k,j,i) + bp;
+    });
+    return TaskStatus::complete;
+  }
+
   //---- update B1 (only for 2D/3D problems)
   if (multi_d) {
     auto bx1f = b0.x1f;

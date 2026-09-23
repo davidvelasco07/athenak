@@ -38,6 +38,15 @@ namespace mhd {
 
 template <MHD_RSolver rsolver_method_>
 void MHD::CalculateFluxes(Driver *pdriver, int stage) {
+  // well-balanced scheme: separate path (mhd_wb.cpp), default kernels untouched
+  if constexpr (rsolver_method_ == MHD_RSolver::llf ||
+                rsolver_method_ == MHD_RSolver::hlle ||
+                rsolver_method_ == MHD_RSolver::hlld) {
+    if (well_balanced) {
+      WBCalculateFluxes<rsolver_method_>(pdriver, stage);
+      return;
+    }
+  }
   RegionIndcs &indcs_ = pmy_pack->pmesh->mb_indcs;
   int is = indcs_.is, ie = indcs_.ie;
   int js = indcs_.js, je = indcs_.je;

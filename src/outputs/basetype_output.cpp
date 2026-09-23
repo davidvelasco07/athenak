@@ -195,7 +195,24 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
   // formed as derived variables U' + U_eq (the full state users expect).
   const bool wb_u = (pm->pmb_pack->phydro != nullptr &&
                      pm->pmb_pack->phydro->well_balanced);
+  const bool wb_mu = (pm->pmb_pack->pmhd != nullptr &&
+                      pm->pmb_pack->pmhd->well_balanced);
   for (const auto& variable : variables) {
+    if (wb_mu && (variable.compare("mhd_u") == 0 ||
+                  variable.compare("mhd_u_d") == 0 || variable.compare("mhd_u_m1") == 0 ||
+                  variable.compare("mhd_u_m2") == 0 || variable.compare("mhd_u_m3") == 0 ||
+                  variable.compare("mhd_u_e") == 0)) {
+      const char *names[5] = {"dens", "mom1", "mom2", "mom3", "ener"};
+      const char *vars[5] = {"mhd_u_d", "mhd_u_m1", "mhd_u_m2", "mhd_u_m3", "mhd_u_e"};
+      for (int n=0; n<pm->pmb_pack->pmhd->nmhd; ++n) {
+        if (variable.compare("mhd_u") == 0 || variable.compare(vars[n]) == 0) {
+          out_params.contains_derived = true;
+          out_params.n_derived += 1;
+          outvars.emplace_back(names[n], out_params.n_derived - 1, &(derived_var));
+        }
+      }
+      continue;
+    }
     if (wb_u && (variable.compare("hydro_u") == 0 ||
                  variable.compare("hydro_u_d") == 0 || variable.compare("hydro_u_m1") == 0 ||
                  variable.compare("hydro_u_m2") == 0 || variable.compare("hydro_u_m3") == 0 ||
@@ -760,6 +777,23 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
     }
     const char *names[5] = {"dpert", "vxpert", "vypert", "vzpert", "epert"};
     for (int n=0; n<ph->nhydro; ++n) {
+      out_params.contains_derived = true;
+      out_params.n_derived += 1;
+      outvars.emplace_back(names[n], out_params.n_derived - 1, &(derived_var));
+    }
+  }
+
+  if (out_params.variable.compare("mhd_wpert") == 0) {
+    auto *pmh = pm->pmb_pack->pmhd;
+    if (pmh == nullptr || !(pmh->well_balanced || pmh->wb_diagnostics)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Output variable 'mhd_wpert' requires <mhd>/"
+                << "well_balanced=true or wb_diagnostics=true" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    const char *names[8] = {"dpert", "vxpert", "vypert", "vzpert", "epert",
+                            "b1pert", "b2pert", "b3pert"};
+    for (int n=0; n<8; ++n) {
       out_params.contains_derived = true;
       out_params.n_derived += 1;
       outvars.emplace_back(names[n], out_params.n_derived - 1, &(derived_var));

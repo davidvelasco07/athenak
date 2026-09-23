@@ -314,6 +314,9 @@ void HistoryOutput::LoadMHDHistoryData(HistoryData *pdata, Mesh *pm) {
 
   // capture class variabels for kernel
   auto &u0_ = pm->pmb_pack->pmhd->u0;
+  // well-balanced MHD: u0 is the perturbation, add the equilibrium back
+  const bool wb_ = pm->pmb_pack->pmhd->well_balanced;
+  auto &ueq_ = pm->pmb_pack->pmhd->u_eq;
   auto &bx1f = pm->pmb_pack->pmhd->b0.x1f;
   auto &bx2f = pm->pmb_pack->pmhd->b0.x2f;
   auto &bx3f = pm->pmb_pack->pmhd->b0.x3f;
@@ -343,18 +346,23 @@ void HistoryOutput::LoadMHDHistoryData(HistoryData *pdata, Mesh *pm) {
 
     // MHD conserved variables:
     array_sum::GlobalSum hvars;
-    hvars.the_array[IDN] = vol*u0_(m,IDN,k,j,i);
-    hvars.the_array[IM1] = vol*u0_(m,IM1,k,j,i);
-    hvars.the_array[IM2] = vol*u0_(m,IM2,k,j,i);
-    hvars.the_array[IM3] = vol*u0_(m,IM3,k,j,i);
+    const Real ud  = wb_ ? (u0_(m,IDN,k,j,i) + ueq_(m,IDN,k,j,i)) : u0_(m,IDN,k,j,i);
+    const Real um1 = wb_ ? (u0_(m,IM1,k,j,i) + ueq_(m,IM1,k,j,i)) : u0_(m,IM1,k,j,i);
+    const Real um2 = wb_ ? (u0_(m,IM2,k,j,i) + ueq_(m,IM2,k,j,i)) : u0_(m,IM2,k,j,i);
+    const Real um3 = wb_ ? (u0_(m,IM3,k,j,i) + ueq_(m,IM3,k,j,i)) : u0_(m,IM3,k,j,i);
+    hvars.the_array[IDN] = vol*ud;
+    hvars.the_array[IM1] = vol*um1;
+    hvars.the_array[IM2] = vol*um2;
+    hvars.the_array[IM3] = vol*um3;
     if (eos_data.is_ideal) {
-      hvars.the_array[IEN] = vol*u0_(m,IEN,k,j,i);
+      hvars.the_array[IEN] = vol*(wb_ ? (u0_(m,IEN,k,j,i) + ueq_(m,IEN,k,j,i))
+                                      : u0_(m,IEN,k,j,i));
     }
 
     // MHD KE
-    hvars.the_array[nmhd_  ] = vol*0.5*SQR(u0_(m,IM1,k,j,i))/u0_(m,IDN,k,j,i);
-    hvars.the_array[nmhd_+1] = vol*0.5*SQR(u0_(m,IM2,k,j,i))/u0_(m,IDN,k,j,i);
-    hvars.the_array[nmhd_+2] = vol*0.5*SQR(u0_(m,IM3,k,j,i))/u0_(m,IDN,k,j,i);
+    hvars.the_array[nmhd_  ] = vol*0.5*SQR(um1)/ud;
+    hvars.the_array[nmhd_+1] = vol*0.5*SQR(um2)/ud;
+    hvars.the_array[nmhd_+2] = vol*0.5*SQR(um3)/ud;
 
     // MHD ME
     hvars.the_array[nmhd_+3] = vol*0.25*(SQR(bx1f(m,k,j,i+1)) + SQR(bx1f(m,k,j,i)));

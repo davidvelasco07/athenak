@@ -120,6 +120,47 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
         i_dv += 1;
       }
     }
+    auto *pmh = pm->pmb_pack->pmhd;
+    const char *muvars[5] = {"mhd_u_d", "mhd_u_m1", "mhd_u_m2", "mhd_u_m3", "mhd_u_e"};
+    const bool is_mu = (name.compare("mhd_u") == 0);
+    bool want_mu = false;
+    for (int n=0; n<5; ++n) {if (name.compare(muvars[n]) == 0) want_mu = true;}
+    if (pmh != nullptr && pmh->well_balanced && (is_mu || want_mu)) {
+      if (derived_var.extent(4) <= 1) {
+        Kokkos::realloc(derived_var, nmb_alloc, n_dv, n3, n2, n1);
+      }
+      auto dv = derived_var;
+      auto u0 = pmh->u0;
+      auto ueq = pmh->u_eq;
+      for (int n=0; n<pmh->nmhd; ++n) {
+        if (!(is_mu || name.compare(muvars[n]) == 0)) continue;
+        const int idv = i_dv;
+        par_for("mhd_u_wb", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
+        KOKKOS_LAMBDA(int m, int k, int j, int i) {
+          dv(m,idv,k,j,i) = u0(m,n,k,j,i) + ueq(m,n,k,j,i);
+        });
+        i_dv += 1;
+      }
+    }
+    if (name.compare("mhd_wpert") == 0) {
+      if (derived_var.extent(4) <= 1) {
+        Kokkos::realloc(derived_var, nmb_alloc, n_dv, n3, n2, n1);
+      }
+      auto dv = derived_var;
+      auto w0 = pmh->w0;
+      auto weq = pmh->w_eq;
+      auto bcc = pmh->bcc0;
+      auto bcceq = pmh->bcc_eq;
+      for (int n=0; n<8; ++n) {
+        const int idv = i_dv;
+        par_for("mhd_wpert", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
+        KOKKOS_LAMBDA(int m, int k, int j, int i) {
+          dv(m,idv,k,j,i) = (n < 5) ? (w0(m,n,k,j,i) - weq(m,n,k,j,i))
+                                    : (bcc(m,n-5,k,j,i) - bcceq(m,n-5,k,j,i));
+        });
+        i_dv += 1;
+      }
+    }
     if (name.compare("hydro_wpert") == 0) {
       if (derived_var.extent(4) <= 1) {
         Kokkos::realloc(derived_var, nmb_alloc, n_dv, n3, n2, n1);

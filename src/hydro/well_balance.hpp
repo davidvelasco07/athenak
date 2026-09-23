@@ -205,5 +205,93 @@ void FillEquilibriumCellAverages(MeshBlockPack *pmbp, DvceArray5D<Real> &w,
   return;
 }
 
+//----------------------------------------------------------------------------------------
+//! \fn void FillEquilibriumFaceAverages()
+//! \brief Fill the face field b (full arrays, ghost faces included) with the face
+//! averages of the point functor f(x1,x2,x3,B[3]) on the global lattice: B1 averaged
+//! over x1-faces, etc.  The result is divergence-free when each component depends only
+//! on the coordinates transverse to it (uniform fields, B_x(z), ...); for general fields
+//! build b from a vector potential instead.
+
+template <typename BFn>
+void FillEquilibriumFaceAverages(MeshBlockPack *pmbp, DvceFaceFld4D<Real> &b,
+                                 const BFn &f) {
+  auto &indcs = pmbp->pmesh->mb_indcs;
+  const int n1m1 = indcs.nx1 + 2*indcs.ng - 1;
+  const int n2m1 = (indcs.nx2 > 1) ? (indcs.nx2 + 2*indcs.ng - 1) : 0;
+  const int n3m1 = (indcs.nx3 > 1) ? (indcs.nx3 + 2*indcs.ng - 1) : 0;
+  const int nmb1 = pmbp->nmb_thispack - 1;
+  const GlobalGeometry g = MakeGlobalGeometry(pmbp);
+  const BFn fn = f;
+  const int nq2 = g.multi_d ? kNGL : 1;
+  const int nq3 = g.three_d ? kNGL : 1;
+  auto b1 = b.x1f, b2 = b.x2f, b3 = b.x3f;
+  // x1-faces: i runs over n1m1+1 faces; face i is the left edge of cell i
+  par_for("wb_eq_face1", DevExeSpace(), 0, nmb1, 0, n3m1, 0, n2m1, 0, n1m1+1,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    Real xl, xr, x2l, x2r, x3l, x3r;
+    g.CellEdges(1, m, i, xl, xr);
+    g.CellEdges(2, m, j, x2l, x2r);
+    g.CellEdges(3, m, k, x3l, x3r);
+    Real acc = 0.0, wsum = 0.0, bpt[3];
+    for (int q3=0; q3<nq3; ++q3) {
+      const Real x3 = (nq3 > 1) ? 0.5*(x3l+x3r) + 0.5*(x3r-x3l)*GLNode(q3) : 0.5*(x3l+x3r);
+      const Real w3 = (nq3 > 1) ? GLWeight(q3) : 1.0;
+      for (int q2=0; q2<nq2; ++q2) {
+        const Real x2 = (nq2 > 1) ? 0.5*(x2l+x2r) + 0.5*(x2r-x2l)*GLNode(q2)
+                                  : 0.5*(x2l+x2r);
+        const Real w2 = (nq2 > 1) ? GLWeight(q2) : 1.0;
+        fn(xl, x2, x3, bpt);
+        acc += w2*w3*bpt[0];
+        wsum += w2*w3;
+      }
+    }
+    b1(m,k,j,i) = acc/wsum;
+  });
+  par_for("wb_eq_face2", DevExeSpace(), 0, nmb1, 0, n3m1, 0, (g.multi_d ? n2m1+1 : 1),
+          0, n1m1,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    Real x1l, x1r, yl, yr, x3l, x3r;
+    g.CellEdges(1, m, i, x1l, x1r);
+    g.CellEdges(2, m, j, yl, yr);
+    g.CellEdges(3, m, k, x3l, x3r);
+    Real acc = 0.0, wsum = 0.0, bpt[3];
+    for (int q3=0; q3<nq3; ++q3) {
+      const Real x3 = (nq3 > 1) ? 0.5*(x3l+x3r) + 0.5*(x3r-x3l)*GLNode(q3) : 0.5*(x3l+x3r);
+      const Real w3 = (nq3 > 1) ? GLWeight(q3) : 1.0;
+      for (int q1=0; q1<kNGL; ++q1) {
+        const Real x1 = 0.5*(x1l+x1r) + 0.5*(x1r-x1l)*GLNode(q1);
+        const Real w1 = GLWeight(q1);
+        fn(x1, yl, x3, bpt);
+        acc += w1*w3*bpt[1];
+        wsum += w1*w3;
+      }
+    }
+    b2(m,k,j,i) = acc/wsum;
+  });
+  par_for("wb_eq_face3", DevExeSpace(), 0, nmb1, 0, (g.three_d ? n3m1+1 : 1), 0, n2m1,
+          0, n1m1,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    Real x1l, x1r, x2l, x2r, zl, zr;
+    g.CellEdges(1, m, i, x1l, x1r);
+    g.CellEdges(2, m, j, x2l, x2r);
+    g.CellEdges(3, m, k, zl, zr);
+    Real acc = 0.0, wsum = 0.0, bpt[3];
+    for (int q2=0; q2<nq2; ++q2) {
+      const Real x2 = (nq2 > 1) ? 0.5*(x2l+x2r) + 0.5*(x2r-x2l)*GLNode(q2) : 0.5*(x2l+x2r);
+      const Real w2 = (nq2 > 1) ? GLWeight(q2) : 1.0;
+      for (int q1=0; q1<kNGL; ++q1) {
+        const Real x1 = 0.5*(x1l+x1r) + 0.5*(x1r-x1l)*GLNode(q1);
+        const Real w1 = GLWeight(q1);
+        fn(x1, x2, zl, bpt);
+        acc += w1*w2*bpt[2];
+        wsum += w1*w2;
+      }
+    }
+    b3(m,k,j,i) = acc/wsum;
+  });
+  return;
+}
+
 }  // namespace wellbalance
 #endif  // HYDRO_WELL_BALANCE_HPP_

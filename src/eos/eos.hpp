@@ -228,6 +228,12 @@ class EquationOfState {
                             DvceArray5D<Real> &prim, const bool only_testfloors,
                             const int il, const int iu, const int jl, const int ju,
                             const int kl, const int ku);
+  // well-balanced MHD: as above, with the FULL face field b (b0 is never a perturbation)
+  virtual void ConsToPrimWB(DvceArray5D<Real> &cons, const DvceArray5D<Real> &ueq,
+                            const DvceFaceFld4D<Real> &b, DvceArray5D<Real> &prim,
+                            DvceArray5D<Real> &bcc, const bool only_testfloors,
+                            const int il, const int iu, const int jl, const int ju,
+                            const int kl, const int ku);
 
   // virtual functions to convert prim to cons in either Hydro or MHD (depending on
   // arguments), overwritten in derived eos classes.
@@ -364,6 +370,18 @@ class IdealMHD : public EquationOfState {
                   const bool only_testfloors,
                   const int il, const int iu, const int jl, const int ju,
                   const int kl, const int ku) override;
+  void ConsToPrimWB(DvceArray5D<Real> &cons, const DvceArray5D<Real> &ueq,
+                    const DvceFaceFld4D<Real> &b, DvceArray5D<Real> &prim,
+                    DvceArray5D<Real> &bcc, const bool only_testfloors,
+                    const int il, const int iu, const int jl, const int ju,
+                    const int kl, const int ku) override;
+  // shared kernel (public: nvcc forbids extended lambdas in private members)
+  template <bool WB>
+  void ConsToPrimImpl(DvceArray5D<Real> &cons, const DvceArray5D<Real> &ueq,
+                      const DvceFaceFld4D<Real> &b, DvceArray5D<Real> &prim,
+                      DvceArray5D<Real> &bcc, const bool only_testfloors,
+                      const int il, const int iu, const int jl, const int ju,
+                      const int kl, const int ku);
   void PrimToCons(const DvceArray5D<Real> &prim, const DvceArray5D<Real> &bcc,
                   DvceArray5D<Real> &cons, const int il, const int iu,
                   const int jl, const int ju, const int kl, const int ku) override;
