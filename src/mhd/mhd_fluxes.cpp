@@ -54,14 +54,31 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
   int jl2 = js-mext, ju2 = je+1+mext;
   int kl3 = ks-mext, ku3 = ke+1+mext;
 
-  // For UCT the corner-EMF composition needs face-stored UCT quantities on a wider
-  // transverse range: edge recon reads faces up to 3 cells away with HO methods.
+  // For UCT the corner-EMF composition needs the face-stored UCT coefficients over a
+  // wider transverse range than the fluxes themselves.  ReconstructEdge at the edge
+  // i-1/2 reads faces i-3..i+2 with the high-order methods, i-2..i+1 with PLM and
+  // i-1..i with donor cell, over an edge range that already runs out to ie+1, so the
+  // fill has to reach ie+3 / ie+2 / ie+1 respectively.  This was previously keyed off
+  // the reconstruction ORDER (3 for the high-order methods, 1 otherwise), which is one
+  // cell short for PLM: the composition then interpolated Kokkos::realloc ZEROS into
+  // the upwind weights.  Because the partner weight is formed as (1 - aL) both weights
+  // were polluted identically and still summed to one, so the defect never showed up as
+  // an inconsistency -- it skewed the upwind split, broke the exact reflection symmetry
+  // of the Mach-10 jet (max|asym| 1.9 at t=200, vs 1.2e-7 once the range is right) and
+  // cost 3.4% in the MHD linear-wave L1 at 64^3.  Keep this sized to the stencil.
   const auto emf_method_ = emf_method;
   const bool use_uct = (emf_method_ != MHD_EMF::ct_contact);
-  const bool ho_uct = use_uct &&
-                      !(recon_method == ReconstructionMethod::dc ||
-                        recon_method == ReconstructionMethod::plm);
-  const int ext = std::max(ho_uct ? 3 : 1, mext);
+  int uct_ext = 1;
+  if (use_uct) {
+    if (recon_method == ReconstructionMethod::dc) {
+      uct_ext = 1;
+    } else if (recon_method == ReconstructionMethod::plm) {
+      uct_ext = 2;
+    } else {
+      uct_ext = 3;
+    }
+  }
+  const int ext = std::max(uct_ext, mext);
   const int uct_fl = (emf_method_ == MHD_EMF::uct_hlld) ? 2 : (use_uct ? 1 : 0);
 
   auto &eos_ = peos->eos_data;
