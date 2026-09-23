@@ -137,6 +137,8 @@ class Hydro {
   Real mood_nad_theta;      // grange Mach-softening: eps = rtol*G^theta*|bound|^(1-theta)
   bool mood_nad_energy;     // include the energy variable in NAD (density always on)
   bool mood_nad_scalars;    // include passive-scalar concentrations in NAD
+  bool mood_detect;         // false = run the unlimited base with NO detection
+                            // (negative control for the cascade; see hydro.cpp)
   Real mood_rtol;           // NAD tolerance as a fraction of the selected scale
   Real mood_eps0;           // round-off floor (relative to the violated bound)
   Real mood_atol;           // absolute floor of the NAD tolerance

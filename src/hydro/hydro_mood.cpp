@@ -159,7 +159,10 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
   // candidate variables: scalars are built only when they are checked
   const int ntest = (nad_scalars) ? nvars : nhyd_;
   const int n_fb = n_fb_tiers;
-  const int nrevs = mood_max_revs;
+  // mood_detect=false: no detection at all, so the cascade never runs and the scheme
+  // reduces to its unlimited base.  Kept as a first-class option because it is the
+  // only way to attribute a property to the detector rather than to the base scheme.
+  const int nrevs = mood_detect ? mood_max_revs : 0;
   const bool is_ideal_ = eos_.is_ideal;
 
   const int scale_mode = mood_nad_scale;

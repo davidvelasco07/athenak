@@ -204,6 +204,14 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
     mood_nad_theta = pin->GetOrAddReal("hydro","mood_nad_theta",1.0);
     mood_nad_energy = pin->GetOrAddBoolean("hydro","mood_nad_energy",true);
     mood_nad_scalars = pin->GetOrAddBoolean("hydro","mood_nad_scalars",true);
+    // DETECTION OFF -- the negative control for the whole cascade.  reconstruct=ppm is
+    // unlimited and requires mood=true, so before this flag existed there was no way to
+    // run the base scheme on its own and ask which of its properties the detector is
+    // actually responsible for.  mood_detect=false keeps mood=true (so the guard above
+    // is satisfied and the halos are sized as usual) but skips the detect/revise loop
+    // entirely, leaving pure unlimited PPM.  Expect it to be unstable on hard problems:
+    // that is the point of the control, not a defect to work around.
+    mood_detect = pin->GetOrAddBoolean("hydro","mood_detect",true);
     if (mood_nad_theta < 0.0 || mood_nad_theta > 1.0) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
         << std::endl << "<hydro> mood_nad_theta must be in [0,1]" << std::endl;
