@@ -125,7 +125,14 @@ void HLLD(const EOS_Data &eos,
 
     // S_M: eqn (38) of Miyoshi & Kusano
     // (KGF): group ptl, ptr terms for floating-point associativity symmetry
-    spd[2] = (sdr*ur.mx - sdl*ul.mx + (ptl - ptr))/(sdr*ur.d - sdl*ul.d);
+    // Reflection-equivalent rounding: hoist the products so the compiler cannot
+    // reassociate or FMA-contract them asymmetrically, then pair L/R before combining.
+    // (AstroJames/athenak 13390823, "Preserve exact numerical symmetry")
+    Real sm_mom_r = sdr*ur.mx;
+    Real sm_mom_l = sdl*ul.mx;
+    Real sm_mass_r = sdr*ur.d;
+    Real sm_mass_l = sdl*ul.d;
+    spd[2] = ((sm_mom_r - sm_mom_l) + (ptl - ptr))/(sm_mass_r - sm_mass_l);
 
     Real sdml   = spd[0] - spd[2];  // S_i-S_M (i=L or R)
     Real sdmr   = spd[4] - spd[2];
@@ -174,7 +181,10 @@ void HLLD(const EOS_Data &eos,
     }
     // v_i* dot B_i*
     // (KGF): group transverse momenta terms for floating-point associativity symmetry
-    Real vbstl = (ulst.mx*bxi+(ulst.my*ulst.by+ulst.mz*ulst.bz))*ulst_d_inv;
+    Real vbstl_x = ulst.mx*bxi;
+    Real vbstl_y = ulst.my*ulst.by;
+    Real vbstl_z = ulst.mz*ulst.bz;
+    Real vbstl = (vbstl_x + (vbstl_y + vbstl_z))*ulst_d_inv;
     // eqn (48) of M&K
     // (KGF): group transverse by, bz terms for floating-point associativity symmetry
     ulst.e = (sdl*ul.e - ptl*wl_ivx + ptst*spd[2] +
@@ -202,7 +212,10 @@ void HLLD(const EOS_Data &eos,
     }
     // v_i* dot B_i*
     // (KGF): group transverse momenta terms for floating-point associativity symmetry
-    Real vbstr = (urst.mx*bxi+(urst.my*urst.by+urst.mz*urst.bz))*urst_d_inv;
+    Real vbstr_x = urst.mx*bxi;
+    Real vbstr_y = urst.my*urst.by;
+    Real vbstr_z = urst.mz*urst.bz;
+    Real vbstr = (vbstr_x + (vbstr_y + vbstr_z))*urst_d_inv;
     // eqn (48) of M&K
     // (KGF): group transverse by, bz terms for floating-point associativity symmetry
     urst.e = (sdr*ur.e - ptr*wr_ivx + ptst*spd[2] +
@@ -214,6 +227,7 @@ void HLLD(const EOS_Data &eos,
     } else {
       Real invsumd = 1.0/(sqrtdl + sqrtdr);
       Real bxsig = (bxi > 0.0 ? 1.0 : -1.0);
+      Real sqrtdlr = sqrtdl*sqrtdr;
 
       uldst.d = ulst.d;
       urdst.d = urst.d;
@@ -222,25 +236,37 @@ void HLLD(const EOS_Data &eos,
       urdst.mx = urst.mx;
 
       // eqn (59) of M&K
-      Real tmp = invsumd*(sqrtdl*(ulst.my*ulst_d_inv) + sqrtdr*(urst.my*urst_d_inv) +
-                          bxsig*(urst.by - ulst.by));
+      Real tmp_l = sqrtdl*(ulst.my*ulst_d_inv);
+      Real tmp_r = sqrtdr*(urst.my*urst_d_inv);
+      Real tmp_b = bxsig*(urst.by - ulst.by);
+      Real tmp = invsumd*((tmp_l + tmp_r) + tmp_b);
       uldst.my = uldst.d * tmp;
       urdst.my = urdst.d * tmp;
 
       // eqn (60) of M&K
-      tmp = invsumd*(sqrtdl*(ulst.mz*ulst_d_inv) + sqrtdr*(urst.mz*urst_d_inv) +
-                     bxsig*(urst.bz - ulst.bz));
+      tmp_l = sqrtdl*(ulst.mz*ulst_d_inv);
+      tmp_r = sqrtdr*(urst.mz*urst_d_inv);
+      tmp_b = bxsig*(urst.bz - ulst.bz);
+      tmp = invsumd*((tmp_l + tmp_r) + tmp_b);
       uldst.mz = uldst.d * tmp;
       urdst.mz = urdst.d * tmp;
 
       // eqn (61) of M&K
-      tmp = invsumd*(sqrtdl*urst.by + sqrtdr*ulst.by +
-                     bxsig*sqrtdl*sqrtdr*((urst.my*urst_d_inv) - (ulst.my*ulst_d_inv)));
+      tmp_l = sqrtdl*urst.by;
+      tmp_r = sqrtdr*ulst.by;
+      Real vstr_y = urst.my*urst_d_inv;
+      Real vstl_y = ulst.my*ulst_d_inv;
+      tmp_b = bxsig*sqrtdlr*(vstr_y - vstl_y);
+      tmp = invsumd*((tmp_l + tmp_r) + tmp_b);
       uldst.by = urdst.by = tmp;
 
       // eqn (62) of M&K
-      tmp = invsumd*(sqrtdl*urst.bz + sqrtdr*ulst.bz +
-                     bxsig*sqrtdl*sqrtdr*((urst.mz*urst_d_inv) - (ulst.mz*ulst_d_inv)));
+      tmp_l = sqrtdl*urst.bz;
+      tmp_r = sqrtdr*ulst.bz;
+      Real vstr_z = urst.mz*urst_d_inv;
+      Real vstl_z = ulst.mz*ulst_d_inv;
+      tmp_b = bxsig*sqrtdlr*(vstr_z - vstl_z);
+      tmp = invsumd*((tmp_l + tmp_r) + tmp_b);
       uldst.bz = urdst.bz = tmp;
 
       // eqn (63) of M&K
