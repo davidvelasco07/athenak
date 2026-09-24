@@ -422,8 +422,9 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
           Real enew, eold;
           if (newt && wb) {
             Real dtst = utest_(m,IDN,k,j,i) + ueq_(m,IDN,k,j,i);
+            const Real efull = utest_(m,IEN,k,j,i) + ueq_(m,IEN,k,j,i);
             enew = (dtst > 0.0) ?
-                   (utest_(m,IEN,k,j,i) + ueq_(m,IEN,k,j,i)) - 0.5*(SQR(utest_(m,IM1,k,j,i))
+                   efull - 0.5*(SQR(utest_(m,IM1,k,j,i))
                    + SQR(utest_(m,IM2,k,j,i)) + SQR(utest_(m,IM3,k,j,i)))/dtst : 0.0;
             eold = (dtst > 0.0) ? w0_(m,IEN,k,j,i) : 0.0;
           } else if (newt) {
@@ -542,7 +543,8 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
             q_new = dtst;                         // density (WB: rho' = U'_rho)
           } else if (wb) {                        // WB: e' = e(U'+U_eq) - e_eq
             const Real dfull = dtst + ueq_(m,IDN,k,j,i);
-            q_new = ((utest_(m,IEN,k,j,i) + ueq_(m,IEN,k,j,i)) - 0.5*(SQR(utest_(m,IM1,k,j,i))
+            const Real efull = utest_(m,IEN,k,j,i) + ueq_(m,IEN,k,j,i);
+            q_new = (efull - 0.5*(SQR(utest_(m,IM1,k,j,i))
                   + SQR(utest_(m,IM2,k,j,i)) + SQR(utest_(m,IM3,k,j,i)))/dfull)
                   - weq_(m,IEN,k,j,i);
           } else {                                // internal energy density

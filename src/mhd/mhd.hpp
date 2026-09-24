@@ -218,7 +218,8 @@ class MHD {
   DvceFaceFld5D<Real> w_eq_face;  // face equilibrium primitives
   DvceFaceFld5D<Real> bcc_eq_face;  // face equilibrium B (transverse from bcc_eq)
   DvceFaceFld5D<Real> f_eq;       // RS flux of the face equilibrium
-  DvceArray4D<Real> e3x1_eq, e2x1_eq, e1x2_eq, e3x2_eq, e2x3_eq, e1x3_eq;  // its face EMFs
+  // face EMFs of the face equilibrium
+  DvceArray4D<Real> e3x1_eq, e2x1_eq, e1x2_eq, e3x2_eq, e2x3_eq, e1x3_eq;
   void (*wb_eq_func)(Mesh *pm) = nullptr;
   void WBInitialize(ProblemGenerator *ppgen, bool restart);
   void WBSetEquilibrium();

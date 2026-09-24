@@ -153,19 +153,19 @@ class Hydro {
   DvceArray4D<int> fb_level;    // per-cell cascade level (0=base, 1=plm, 2=dc)
 
   // following used for the well-balanced (WB) scheme (hydro_wb.cpp).  With
-  // well_balanced=true, u0 holds the PERTURBATION U' = U - U_eq over a static equilibrium
-  // supplied by the problem generator (user_eq_func); w0 holds the primitives of the
-  // FULL state.  Passive scalars carry no equilibrium (they stay full in u0).
+  // well_balanced=true, u0 holds the PERTURBATION U' = U - U_eq over a static
+  // equilibrium supplied by the problem generator (user_eq_func); w0 holds the
+  // primitives of the FULL state.  Passive scalars carry no equilibrium (full in u0).
   bool well_balanced = false;
   // build u_eq/w_eq WITHOUT changing the scheme, so hydro_wpert can measure a non-WB run
   // against the same equilibrium (the negative control of the well-balanced tests)
   bool wb_diagnostics = false;
   DvceArray5D<Real> u_eq;         // equilibrium conserved cell averages (incl. ghosts)
   DvceArray5D<Real> w_eq;         // = ConsToPrim(u_eq), so w0 == w_eq bitwise at U'=0
-  DvceArray5D<Real> w_pert;       // perturbation primitives W' (+ full scalars), per stage
+  DvceArray5D<Real> w_pert;       // perturbation primitives W' (+ full scalars)
   DvceFaceFld5D<Real> w_eq_face;  // single-valued equilibrium primitive state on faces
   DvceFaceFld5D<Real> f_eq;       // RS(w_eq_face, w_eq_face) with this Riemann solver
-  void (*wb_eq_func)(Mesh *pm) = nullptr;  // the pgen's user_eq_func (set by WBInitialize)
+  void (*wb_eq_func)(Mesh *pm) = nullptr;  // pgen's user_eq_func (set in WBInitialize)
 
   // container to hold names of TaskIDs
   HydroTaskIDs id;

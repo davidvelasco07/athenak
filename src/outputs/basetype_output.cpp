@@ -199,8 +199,10 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
                       pm->pmb_pack->pmhd->well_balanced);
   for (const auto& variable : variables) {
     if (wb_mu && (variable.compare("mhd_u") == 0 ||
-                  variable.compare("mhd_u_d") == 0 || variable.compare("mhd_u_m1") == 0 ||
-                  variable.compare("mhd_u_m2") == 0 || variable.compare("mhd_u_m3") == 0 ||
+                  variable.compare("mhd_u_d") == 0 ||
+                  variable.compare("mhd_u_m1") == 0 ||
+                  variable.compare("mhd_u_m2") == 0 ||
+                  variable.compare("mhd_u_m3") == 0 ||
                   variable.compare("mhd_u_e") == 0)) {
       const char *names[5] = {"dens", "mom1", "mom2", "mom3", "ener"};
       const char *vars[5] = {"mhd_u_d", "mhd_u_m1", "mhd_u_m2", "mhd_u_m3", "mhd_u_e"};
@@ -214,8 +216,10 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
       continue;
     }
     if (wb_u && (variable.compare("hydro_u") == 0 ||
-                 variable.compare("hydro_u_d") == 0 || variable.compare("hydro_u_m1") == 0 ||
-                 variable.compare("hydro_u_m2") == 0 || variable.compare("hydro_u_m3") == 0 ||
+                 variable.compare("hydro_u_d") == 0 ||
+                 variable.compare("hydro_u_m1") == 0 ||
+                 variable.compare("hydro_u_m2") == 0 ||
+                 variable.compare("hydro_u_m3") == 0 ||
                  variable.compare("hydro_u_e") == 0)) {
       const char *names[5] = {"dens", "mom1", "mom2", "mom3", "ener"};
       const char *vars[5] = {"hydro_u_d", "hydro_u_m1", "hydro_u_m2", "hydro_u_m3",

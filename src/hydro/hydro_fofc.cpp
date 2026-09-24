@@ -20,8 +20,9 @@ namespace hydro {
 
 //----------------------------------------------------------------------------------------
 //! \fn WBFaceLLF<ivx>()
-//! \brief Well-balanced first-order LLF flux at face (m,k,j,i) in direction ivx: donor-cell
-//! perturbation states on both sides plus the face equilibrium, minus the LLF flux of the
+//! \brief Well-balanced first-order LLF flux at face (m,k,j,i) in direction ivx:
+//! donor-cell perturbation states on both sides plus the face equilibrium, minus the
+//! LLF flux of the
 //! face equilibrium itself (evaluated in registers in the same kernel, so it cancels
 //! exactly at U'=0).  Vector components are permuted so vx is the face-normal one.
 template <int ivx>

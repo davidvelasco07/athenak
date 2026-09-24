@@ -83,7 +83,8 @@ void IdealMHD::ConsToPrim(DvceArray5D<Real> &cons, const DvceFaceFld4D<Real> &b,
                           const bool only_testfloors,
                           const int il, const int iu, const int jl, const int ju,
                           const int kl, const int ku) {
-  ConsToPrimImpl<false>(cons, cons, b, prim, bcc, only_testfloors, il, iu, jl, ju, kl, ku);
+  ConsToPrimImpl<false>(cons, cons, b, prim, bcc, only_testfloors,
+                        il, iu, jl, ju, kl, ku);
 }
 
 //----------------------------------------------------------------------------------------
@@ -291,12 +292,14 @@ void IdealMHD::ConsToPrimImpl(DvceArray5D<Real> &cons, const DvceArray5D<Real> &
   return;
 }
 
-template void IdealMHD::ConsToPrimImpl<false>(DvceArray5D<Real>&, const DvceArray5D<Real>&,
-    const DvceFaceFld4D<Real>&, DvceArray5D<Real>&, DvceArray5D<Real>&, const bool,
-    const int, const int, const int, const int, const int, const int);
-template void IdealMHD::ConsToPrimImpl<true>(DvceArray5D<Real>&, const DvceArray5D<Real>&,
-    const DvceFaceFld4D<Real>&, DvceArray5D<Real>&, DvceArray5D<Real>&, const bool,
-    const int, const int, const int, const int, const int, const int);
+template void IdealMHD::ConsToPrimImpl<false>(DvceArray5D<Real>&,
+    const DvceArray5D<Real>&, const DvceFaceFld4D<Real>&, DvceArray5D<Real>&,
+    DvceArray5D<Real>&, const bool, const int, const int, const int, const int,
+    const int, const int);
+template void IdealMHD::ConsToPrimImpl<true>(DvceArray5D<Real>&,
+    const DvceArray5D<Real>&, const DvceFaceFld4D<Real>&, DvceArray5D<Real>&,
+    DvceArray5D<Real>&, const bool, const int, const int, const int, const int,
+    const int, const int);
 
 //----------------------------------------------------------------------------------------
 //! \!fn void PrimToCons()

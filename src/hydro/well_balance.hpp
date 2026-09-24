@@ -36,8 +36,8 @@ namespace wellbalance {
 
 //----------------------------------------------------------------------------------------
 //! \fn void AddFaceEquilibrium()
-//! \brief Turn the reconstructed PERTURBATION states of face (m,k,j,i) into full states by
-//! adding the single-valued face equilibrium to both sides, then apply the density and
+//! \brief Turn the reconstructed PERTURBATION states of face (m,k,j,i) into full states
+//! by adding the single-valued face equilibrium to both sides, then apply the density and
 //! internal-energy floors to the full states (never to the perturbation: a negative
 //! rho' is legitimate).  `floors` mirrors the apply_floors of the non-WB reconstruction.
 //! The stored face equilibrium is itself floored, so at U'=0 this returns it unchanged
@@ -235,7 +235,8 @@ void FillEquilibriumFaceAverages(MeshBlockPack *pmbp, DvceFaceFld4D<Real> &b,
     g.CellEdges(3, m, k, x3l, x3r);
     Real acc = 0.0, wsum = 0.0, bpt[3];
     for (int q3=0; q3<nq3; ++q3) {
-      const Real x3 = (nq3 > 1) ? 0.5*(x3l+x3r) + 0.5*(x3r-x3l)*GLNode(q3) : 0.5*(x3l+x3r);
+      const Real x3 = (nq3 > 1) ? 0.5*(x3l+x3r) + 0.5*(x3r-x3l)*GLNode(q3)
+                                : 0.5*(x3l+x3r);
       const Real w3 = (nq3 > 1) ? GLWeight(q3) : 1.0;
       for (int q2=0; q2<nq2; ++q2) {
         const Real x2 = (nq2 > 1) ? 0.5*(x2l+x2r) + 0.5*(x2r-x2l)*GLNode(q2)
@@ -257,7 +258,8 @@ void FillEquilibriumFaceAverages(MeshBlockPack *pmbp, DvceFaceFld4D<Real> &b,
     g.CellEdges(3, m, k, x3l, x3r);
     Real acc = 0.0, wsum = 0.0, bpt[3];
     for (int q3=0; q3<nq3; ++q3) {
-      const Real x3 = (nq3 > 1) ? 0.5*(x3l+x3r) + 0.5*(x3r-x3l)*GLNode(q3) : 0.5*(x3l+x3r);
+      const Real x3 = (nq3 > 1) ? 0.5*(x3l+x3r) + 0.5*(x3r-x3l)*GLNode(q3)
+                                : 0.5*(x3l+x3r);
       const Real w3 = (nq3 > 1) ? GLWeight(q3) : 1.0;
       for (int q1=0; q1<kNGL; ++q1) {
         const Real x1 = 0.5*(x1l+x1r) + 0.5*(x1r-x1l)*GLNode(q1);
@@ -278,7 +280,8 @@ void FillEquilibriumFaceAverages(MeshBlockPack *pmbp, DvceFaceFld4D<Real> &b,
     g.CellEdges(3, m, k, zl, zr);
     Real acc = 0.0, wsum = 0.0, bpt[3];
     for (int q2=0; q2<nq2; ++q2) {
-      const Real x2 = (nq2 > 1) ? 0.5*(x2l+x2r) + 0.5*(x2r-x2l)*GLNode(q2) : 0.5*(x2l+x2r);
+      const Real x2 = (nq2 > 1) ? 0.5*(x2l+x2r) + 0.5*(x2r-x2l)*GLNode(q2)
+                                : 0.5*(x2l+x2r);
       const Real w2 = (nq2 > 1) ? GLWeight(q2) : 1.0;
       for (int q1=0; q1<kNGL; ++q1) {
         const Real x1 = 0.5*(x1l+x1r) + 0.5*(x1r-x1l)*GLNode(q1);

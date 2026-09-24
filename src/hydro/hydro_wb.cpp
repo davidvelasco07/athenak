@@ -4,13 +4,14 @@
 // Licensed under the 3-clause BSD License (the "LICENSE")
 //========================================================================================
 //! \file hydro_wb.cpp
-//! \brief Well-balanced (WB) scheme for non-relativistic hydro, following Velasco-Romero &
-//! Teyssier (2025, MNRAS, "Spectral difference method with a posteriori limiting II",
-//! sec. 2.2) and its spd implementation.
+//! \brief Well-balanced (WB) scheme for non-relativistic hydro, following
+//! Velasco-Romero & Teyssier (2025, MNRAS, "Spectral difference method with a posteriori
+//! limiting II", sec. 2.2) and its spd implementation.
 //!
 //! The solution is split into a static equilibrium and a perturbation, U = U_eq + U'.
 //! u0 holds U' and is what the time integrator, the boundary exchange, the physical BCs
-//! and AMR restriction/prolongation operate on; w0 holds the primitives of the FULL state.
+//! and AMR restriction/prolongation operate on; w0 holds the primitives of the FULL
+//! state.
 //! At each face the reconstructed PERTURBATION states are added to a single-valued face
 //! equilibrium, the Riemann problem is solved on the full states, and the Riemann
 //! solver's own flux of the face equilibrium is subtracted:
@@ -153,8 +154,9 @@ void Hydro::WBSetEquilibrium() {
       }, Kokkos::Max<Real>(vmax));
     if (vmax != 0.0) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "<hydro> well_balanced=true requires a static equilibrium "
-                << "(user_eq_func returned max|v_eq| = " << vmax << ")" << std::endl;
+                << std::endl << "<hydro> well_balanced=true requires a static "
+                << "equilibrium (user_eq_func returned max|v_eq| = " << vmax << ")"
+                << std::endl;
       std::exit(EXIT_FAILURE);
     }
   }

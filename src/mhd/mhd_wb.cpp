@@ -18,7 +18,7 @@
 //! - Fluxes: reconstruct W' and B' = bcc0 - bcc_eq without floors, add the single-valued
 //!   face equilibrium (4th-order interpolation of the equilibrium cell averages; the
 //!   normal component is the face field itself), floor the full states, solve, subtract
-//!   the Riemann flux and face EMFs of the face equilibrium computed with the same solver.
+//!   the Riemann flux and face EMFs of the face equilibrium (same solver).
 
 #include <iostream>
 #include <string>
@@ -486,7 +486,8 @@ void MHD::WBCalculateFluxes(Driver *pdriver, int stage) {
         kl, ku, jl2-1, ju2, is-ext, ie+ext, eos_, false, nvars, wp_, wl_, wr_);
     ReconDispatch<IVY>(recon_method_, "mflux_x2_recon_b_wb", nmb1,
         kl, ku, jl2-1, ju2, is-ext, ie+ext, eos_, false, 3, bp_, bl_, br_);
-    par_for("mflux_x2_rsolve_wb", DevExeSpace(), 0, nmb1, kl, ku, jl2, ju2, is-ext, ie+ext,
+    par_for("mflux_x2_rsolve_wb", DevExeSpace(), 0, nmb1, kl, ku, jl2, ju2,
+            is-ext, ie+ext,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
       auto eos = eos_;  auto indcs = indcs_;  auto size = size_;  auto coord = coord_;
       auto wl = wl_;  auto wr = wr_;  auto bl = bl_;  auto br = br_;
