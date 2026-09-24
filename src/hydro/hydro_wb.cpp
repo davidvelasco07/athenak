@@ -130,6 +130,9 @@ void Hydro::WBSetEquilibrium() {
   const int nmb1 = pmy_pack->nmb_thispack - 1;
   const int nhyd = nhydro;
 
+  auto &ec0 = pm->ecounter;
+  const int nfl0[3] = {ec0.neos_dfloor, ec0.neos_efloor, ec0.neos_tfloor};
+
   // (1) equilibrium primitive cell averages from the problem generator
   Kokkos::deep_copy(w_eq, 0.0);
   wb_eq_func(pm);
@@ -138,6 +141,36 @@ void Hydro::WBSetEquilibrium() {
   //     same arithmetic on the same bits, so w0 == w_eq exactly at equilibrium.
   peos->PrimToCons(w_eq, u_eq, 0, n1m1, 0, n2m1, 0, n3m1);
   peos->ConsToPrim(u_eq, w_eq, false, 0, n1m1, 0, n2m1, 0, n3m1);
+
+  // The equilibrium must be physically admissible EVERYWHERE, ghost zones included
+  // (they hold the analytic continuation, not reflected data): a floor there would
+  // silently alter U_eq.  Count the floors hit while building it, and keep them out of
+  // the run's event counters.
+  {
+    auto &ec = pm->ecounter;
+    const int nfloor = (ec.neos_dfloor - nfl0[0]) + (ec.neos_efloor - nfl0[1]) +
+                       (ec.neos_tfloor - nfl0[2]);
+    ec.neos_dfloor = nfl0[0]; ec.neos_efloor = nfl0[1]; ec.neos_tfloor = nfl0[2];
+#if MPI_PARALLEL_ENABLED
+    int nfl = nfloor;
+    MPI_Allreduce(MPI_IN_PLACE, &nfl, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+#else
+    const int nfl = nfloor;
+#endif
+    if (nfl > 0) {
+      if (well_balanced) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "well-balanced equilibrium is not admissible: " << nfl
+                  << " density/pressure floors hit while building it (ghost zones "
+                  << "included; e.g. p <= 0 above the domain)" << std::endl;
+        std::exit(EXIT_FAILURE);
+      } else if (global_variable::my_rank == 0) {
+        std::cout << "### WARNING in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "wb_diagnostics equilibrium hits " << nfl
+                  << " floors (ghost zones included)" << std::endl;
+      }
+    }
+  }
 
   // (3) the scheme is written for STATIC equilibria (v_eq = 0 exactly): the scalar
   //     fluxes, the energy source and the cancellation-free W' all assume it.
