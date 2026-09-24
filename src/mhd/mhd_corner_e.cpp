@@ -139,14 +139,19 @@ Real InterpolateEdgeD(const ReconstructionMethod recon,
 //! reconstruction acts on b - b_eq and a single-valued equilibrium edge value (4th-order
 //! interpolation of b_eq) is added to both states: otherwise the UCT dissipation
 //! d*(B_E - B_W) would be non-zero for a static equilibrium whose field varies along the
-//! reconstruction direction.  Without WB this is exactly the original call.
+//! reconstruction direction.  Also returns the perturbation states pL,pR and the
+//! equilibrium edge value qe (pL=qL, pR=qR, qe=0 without WB), so that the WB corner EMF
+//! can write the dissipation as d_E*p_E - d_W*p_W + (d_E-d_W)*qe: identical in exact
+//! arithmetic, but exactly zero at equilibrium (every product has an exactly-zero
+//! factor), whereas d*q - d*q contracted to fma(d,q,-d*q) returns the rounding error of
+//! d*q.  Without WB this is exactly the original call.
 
 template <int dir>
 KOKKOS_INLINE_FUNCTION
 void ReconstructEdgeB(const ReconstructionMethod recon, const bool wb,
                       const DvceArray4D<Real> &b, const DvceArray4D<Real> &beq,
                       const int m, const int k, const int j, const int i,
-                      Real &qL, Real &qR) {
+                      Real &qL, Real &qR, Real &pL, Real &pR, Real &qe) {
   constexpr int di = (dir == 1) ? 1 : 0;
   constexpr int dj = (dir == 2) ? 1 : 0;
   constexpr int dk = (dir == 3) ? 1 : 0;
@@ -157,6 +162,7 @@ void ReconstructEdgeB(const ReconstructionMethod recon, const bool wb,
       b(m,k,j,i), b(m,k+dk,j+dj,i+di),
       b(m,k+2*dk,j+2*dj,i+2*di), b(m,k+3*dk,j+3*dj,i+3*di),
       qL, qR);
+    pL = qL; pR = qR; qe = 0.0;
     return;
   }
   ReconstructEdge(recon,
@@ -168,11 +174,11 @@ void ReconstructEdgeB(const ReconstructionMethod recon, const bool wb,
     b(m,k+dk,j+dj,i+di) - beq(m,k+dk,j+dj,i+di),
     b(m,k+2*dk,j+2*dj,i+2*di) - beq(m,k+2*dk,j+2*dj,i+2*di),
     b(m,k+3*dk,j+3*dj,i+3*di) - beq(m,k+3*dk,j+3*dj,i+3*di),
-    qL, qR);
-  const Real e = (7.0*(beq(m,k-dk,j-dj,i-di) + beq(m,k,j,i))
-                  - (beq(m,k-2*dk,j-2*dj,i-2*di) + beq(m,k+dk,j+dj,i+di)))/12.0;
-  qL += e;
-  qR += e;
+    pL, pR);
+  qe = (7.0*(beq(m,k-dk,j-dj,i-di) + beq(m,k,j,i))
+        - (beq(m,k-2*dk,j-2*dj,i-2*di) + beq(m,k+dk,j+dj,i+di)))/12.0;
+  qL = pL + qe;
+  qR = pR + qe;
 }
 
 namespace mhd {
@@ -271,13 +277,24 @@ void MHD::ComposeCornerEMF(int il, int iu, int jl, int ju, int kl, int ku,
         vx2(m,ks,j,i), vx2(m,ks,j,i+1), vx2(m,ks,j,i+2), vx2(m,ks,j,i+3),
         vx_W, vx_E);
       Real By_W, By_E;
-      ReconstructEdgeB<1>(er, wb_, bx2f_, bq2f_, m, ks, j, i, By_W, By_E);
+      Real By_Wp, By_Ep, By_qWE;
+      ReconstructEdgeB<1>(er, wb_, bx2f_, bq2f_, m, ks, j, i,
+          By_W, By_E, By_Wp, By_Ep, By_qWE);
       Real Bx_S, Bx_N;
-      ReconstructEdgeB<2>(er, wb_, bx1f_, bq1f_, m, ks, j, i, Bx_S, Bx_N);
-      e3(m,ks,j,i) = -(ax_W*vx_W*By_W + ax_E*vx_E*By_E)
-                     +(ay_S*vy_S*Bx_S + ay_N*vy_N*Bx_N)
-                     +(dx_E*By_E - dx_W*By_W)
-                     -(dy_N*Bx_N - dy_S*Bx_S);
+      Real Bx_Sp, Bx_Np, Bx_qSN;
+      ReconstructEdgeB<2>(er, wb_, bx1f_, bq1f_, m, ks, j, i,
+          Bx_S, Bx_N, Bx_Sp, Bx_Np, Bx_qSN);
+      if (wb_) {
+        e3(m,ks,j,i) = -(ax_W*vx_W*By_W + ax_E*vx_E*By_E)
+            +(ay_S*vy_S*Bx_S + ay_N*vy_N*Bx_N)
+            +((dx_E*By_Ep - dx_W*By_Wp) + (dx_E - dx_W)*By_qWE)
+            -((dy_N*Bx_Np - dy_S*Bx_Sp) + (dy_N - dy_S)*Bx_qSN);
+      } else {
+        e3(m,ks,j,i) = -(ax_W*vx_W*By_W + ax_E*vx_E*By_E)
+                       +(ay_S*vy_S*Bx_S + ay_N*vy_N*Bx_N)
+                       +(dx_E*By_E - dx_W*By_W)
+                       -(dy_N*Bx_N - dy_S*Bx_S);
+      }
     });
   }
 
@@ -327,13 +344,24 @@ void MHD::ComposeCornerEMF(int il, int iu, int jl, int ju, int kl, int ku,
           vy3(m,k,j,i), vy3(m,k,j+1,i), vy3(m,k,j+2,i), vy3(m,k,j+3,i),
           vy_S, vy_N);
         Real By_B, By_T;
-        ReconstructEdgeB<3>(er1, wb_, bx2f_, bq2f_, m, k, j, i, By_B, By_T);
+        Real By_Bp, By_Tp, By_qBT;
+        ReconstructEdgeB<3>(er1, wb_, bx2f_, bq2f_, m, k, j, i,
+            By_B, By_T, By_Bp, By_Tp, By_qBT);
         Real Bz_S, Bz_N;
-        ReconstructEdgeB<2>(er1, wb_, bx3f_, bq3f_, m, k, j, i, Bz_S, Bz_N);
-        e1(m,k,j,i) = -(ay_S*vy_S*Bz_S + ay_N*vy_N*Bz_N)
-                      +(az_B*vz_B*By_B + az_T*vz_T*By_T)
-                      +(dy_N*Bz_N - dy_S*Bz_S)
-                      -(dz_T*By_T - dz_B*By_B);
+        Real Bz_Sp, Bz_Np, Bz_qSN;
+        ReconstructEdgeB<2>(er1, wb_, bx3f_, bq3f_, m, k, j, i,
+            Bz_S, Bz_N, Bz_Sp, Bz_Np, Bz_qSN);
+        if (wb_) {
+          e1(m,k,j,i) = -(ay_S*vy_S*Bz_S + ay_N*vy_N*Bz_N)
+              +(az_B*vz_B*By_B + az_T*vz_T*By_T)
+              +((dy_N*Bz_Np - dy_S*Bz_Sp) + (dy_N - dy_S)*Bz_qSN)
+              -((dz_T*By_Tp - dz_B*By_Bp) + (dz_T - dz_B)*By_qBT);
+        } else {
+          e1(m,k,j,i) = -(ay_S*vy_S*Bz_S + ay_N*vy_N*Bz_N)
+                        +(az_B*vz_B*By_B + az_T*vz_T*By_T)
+                        +(dy_N*Bz_N - dy_S*Bz_S)
+                        -(dz_T*By_T - dz_B*By_B);
+        }
       }
       // ---- E2 at y-edge (i-1/2, j, k-1/2) ----
       {
@@ -377,13 +405,24 @@ void MHD::ComposeCornerEMF(int il, int iu, int jl, int ju, int kl, int ku,
           vz1(m,k,j,i), vz1(m,k+1,j,i), vz1(m,k+2,j,i), vz1(m,k+3,j,i),
           vz_B, vz_T);
         Real Bz_W, Bz_E;
-        ReconstructEdgeB<1>(er2, wb_, bx3f_, bq3f_, m, k, j, i, Bz_W, Bz_E);
+        Real Bz_Wp, Bz_Ep, Bz_qWE;
+        ReconstructEdgeB<1>(er2, wb_, bx3f_, bq3f_, m, k, j, i,
+            Bz_W, Bz_E, Bz_Wp, Bz_Ep, Bz_qWE);
         Real Bx_B, Bx_T;
-        ReconstructEdgeB<3>(er2, wb_, bx1f_, bq1f_, m, k, j, i, Bx_B, Bx_T);
-        e2(m,k,j,i) = -(az_B*vz_B*Bx_B + az_T*vz_T*Bx_T)
-                      +(ax_W*vx_W*Bz_W + ax_E*vx_E*Bz_E)
-                      +(dz_T*Bx_T - dz_B*Bx_B)
-                      -(dx_E*Bz_E - dx_W*Bz_W);
+        Real Bx_Bp, Bx_Tp, Bx_qBT;
+        ReconstructEdgeB<3>(er2, wb_, bx1f_, bq1f_, m, k, j, i,
+            Bx_B, Bx_T, Bx_Bp, Bx_Tp, Bx_qBT);
+        if (wb_) {
+          e2(m,k,j,i) = -(az_B*vz_B*Bx_B + az_T*vz_T*Bx_T)
+              +(ax_W*vx_W*Bz_W + ax_E*vx_E*Bz_E)
+              +((dz_T*Bx_Tp - dz_B*Bx_Bp) + (dz_T - dz_B)*Bx_qBT)
+              -((dx_E*Bz_Ep - dx_W*Bz_Wp) + (dx_E - dx_W)*Bz_qWE);
+        } else {
+          e2(m,k,j,i) = -(az_B*vz_B*Bx_B + az_T*vz_T*Bx_T)
+                        +(ax_W*vx_W*Bz_W + ax_E*vx_E*Bz_E)
+                        +(dz_T*Bx_T - dz_B*Bx_B)
+                        -(dx_E*Bz_E - dx_W*Bz_W);
+        }
       }
       // ---- E3 at z-edge (i-1/2, j-1/2, k) ----
       {
@@ -427,13 +466,24 @@ void MHD::ComposeCornerEMF(int il, int iu, int jl, int ju, int kl, int ku,
           vy1(m,k,j,i), vy1(m,k,j+1,i), vy1(m,k,j+2,i), vy1(m,k,j+3,i),
           vy_S, vy_N);
         Real By_W, By_E;
-        ReconstructEdgeB<1>(er3, wb_, bx2f_, bq2f_, m, k, j, i, By_W, By_E);
+        Real By_Wp, By_Ep, By_qWE;
+        ReconstructEdgeB<1>(er3, wb_, bx2f_, bq2f_, m, k, j, i,
+            By_W, By_E, By_Wp, By_Ep, By_qWE);
         Real Bx_S, Bx_N;
-        ReconstructEdgeB<2>(er3, wb_, bx1f_, bq1f_, m, k, j, i, Bx_S, Bx_N);
-        e3(m,k,j,i) = -(ax_W*vx_W*By_W + ax_E*vx_E*By_E)
-                      +(ay_S*vy_S*Bx_S + ay_N*vy_N*Bx_N)
-                      +(dx_E*By_E - dx_W*By_W)
-                      -(dy_N*Bx_N - dy_S*Bx_S);
+        Real Bx_Sp, Bx_Np, Bx_qSN;
+        ReconstructEdgeB<2>(er3, wb_, bx1f_, bq1f_, m, k, j, i,
+            Bx_S, Bx_N, Bx_Sp, Bx_Np, Bx_qSN);
+        if (wb_) {
+          e3(m,k,j,i) = -(ax_W*vx_W*By_W + ax_E*vx_E*By_E)
+              +(ay_S*vy_S*Bx_S + ay_N*vy_N*Bx_N)
+              +((dx_E*By_Ep - dx_W*By_Wp) + (dx_E - dx_W)*By_qWE)
+              -((dy_N*Bx_Np - dy_S*Bx_Sp) + (dy_N - dy_S)*Bx_qSN);
+        } else {
+          e3(m,k,j,i) = -(ax_W*vx_W*By_W + ax_E*vx_E*By_E)
+                        +(ay_S*vy_S*Bx_S + ay_N*vy_N*Bx_N)
+                        +(dx_E*By_E - dx_W*By_W)
+                        -(dy_N*Bx_N - dy_S*Bx_S);
+        }
       }
     });
   }
@@ -689,16 +739,27 @@ TaskStatus MHD::CornerE(Driver *pdriver, int stage) {
 
         // --- Staggered B: reconstruct to L/R at edge ---
         Real By_W, By_E;
-        ReconstructEdgeB<1>(er, wb_, bx2f_, bq2f_, m, ks, j, i, By_W, By_E);
+        Real By_Wp, By_Ep, By_qWE;
+        ReconstructEdgeB<1>(er, wb_, bx2f_, bq2f_, m, ks, j, i,
+            By_W, By_E, By_Wp, By_Ep, By_qWE);
         Real Bx_S, Bx_N;
-        ReconstructEdgeB<2>(er, wb_, bx1f_, bq1f_, m, ks, j, i, Bx_S, Bx_N);
+        Real Bx_Sp, Bx_Np, Bx_qSN;
+        ReconstructEdgeB<2>(er, wb_, bx1f_, bq1f_, m, ks, j, i,
+            Bx_S, Bx_N, Bx_Sp, Bx_Np, Bx_qSN);
 
         // UCT composition (Eq. 39, Berta et al. 2024):
         // E_z = vy*Bx - vx*By (with upwind dissipation)
-        e3(m,ks,j,i) = -(ax_W*vx_W*By_W + ax_E*vx_E*By_E)
-                       +(ay_S*vy_S*Bx_S + ay_N*vy_N*Bx_N)
-                       +(dx_E*By_E - dx_W*By_W)
-                       -(dy_N*Bx_N - dy_S*Bx_S);
+        if (wb_) {
+          e3(m,ks,j,i) = -(ax_W*vx_W*By_W + ax_E*vx_E*By_E)
+              +(ay_S*vy_S*Bx_S + ay_N*vy_N*Bx_N)
+              +((dx_E*By_Ep - dx_W*By_Wp) + (dx_E - dx_W)*By_qWE)
+              -((dy_N*Bx_Np - dy_S*Bx_Sp) + (dy_N - dy_S)*Bx_qSN);
+        } else {
+          e3(m,ks,j,i) = -(ax_W*vx_W*By_W + ax_E*vx_E*By_E)
+                         +(ay_S*vy_S*Bx_S + ay_N*vy_N*Bx_N)
+                         +(dx_E*By_E - dx_W*By_W)
+                         -(dy_N*Bx_N - dy_S*Bx_S);
+        }
       });
     }
   }
@@ -1018,17 +1079,28 @@ TaskStatus MHD::CornerE(Driver *pdriver, int stage) {
           // Staggered B: reconstruct to L/R at edge
           // By from x2-faces: reconstruct along k to B/T
           Real By_B, By_T;
-          ReconstructEdgeB<3>(er1, wb_, bx2f_, bq2f_, m, k, j, i, By_B, By_T);
+          Real By_Bp, By_Tp, By_qBT;
+          ReconstructEdgeB<3>(er1, wb_, bx2f_, bq2f_, m, k, j, i,
+              By_B, By_T, By_Bp, By_Tp, By_qBT);
           // Bz from x3-faces: reconstruct along j to S/N
           Real Bz_S, Bz_N;
-          ReconstructEdgeB<2>(er1, wb_, bx3f_, bq3f_, m, k, j, i, Bz_S, Bz_N);
+          Real Bz_Sp, Bz_Np, Bz_qSN;
+          ReconstructEdgeB<2>(er1, wb_, bx3f_, bq3f_, m, k, j, i,
+              Bz_S, Bz_N, Bz_Sp, Bz_Np, Bz_qSN);
 
           // UCT composition: E_x = +vz*By - vy*Bz (with dissipation)
           // All quantities (B, v, a, d) reconstructed to edge via high-order interp
-          e1(m,k,j,i) = -(ay_S*vy_S*Bz_S + ay_N*vy_N*Bz_N)
-                        +(az_B*vz_B*By_B + az_T*vz_T*By_T)
-                        +(dy_N*Bz_N - dy_S*Bz_S)
-                        -(dz_T*By_T - dz_B*By_B);
+          if (wb_) {
+            e1(m,k,j,i) = -(ay_S*vy_S*Bz_S + ay_N*vy_N*Bz_N)
+                +(az_B*vz_B*By_B + az_T*vz_T*By_T)
+                +((dy_N*Bz_Np - dy_S*Bz_Sp) + (dy_N - dy_S)*Bz_qSN)
+                -((dz_T*By_Tp - dz_B*By_Bp) + (dz_T - dz_B)*By_qBT);
+          } else {
+            e1(m,k,j,i) = -(ay_S*vy_S*Bz_S + ay_N*vy_N*Bz_N)
+                          +(az_B*vz_B*By_B + az_T*vz_T*By_T)
+                          +(dy_N*Bz_N - dy_S*Bz_S)
+                          -(dz_T*By_T - dz_B*By_B);
+          }
         }
 
         // ---- E2 at y-edge (i-1/2, j, k-1/2) ----
@@ -1087,17 +1159,28 @@ TaskStatus MHD::CornerE(Driver *pdriver, int stage) {
           // Staggered B: reconstruct to L/R at edge
           // Bz from x3-faces: reconstruct along i to W/E
           Real Bz_W, Bz_E;
-          ReconstructEdgeB<1>(er2, wb_, bx3f_, bq3f_, m, k, j, i, Bz_W, Bz_E);
+          Real Bz_Wp, Bz_Ep, Bz_qWE;
+          ReconstructEdgeB<1>(er2, wb_, bx3f_, bq3f_, m, k, j, i,
+              Bz_W, Bz_E, Bz_Wp, Bz_Ep, Bz_qWE);
           // Bx from x1-faces: reconstruct along k to B/T
           Real Bx_B, Bx_T;
-          ReconstructEdgeB<3>(er2, wb_, bx1f_, bq1f_, m, k, j, i, Bx_B, Bx_T);
+          Real Bx_Bp, Bx_Tp, Bx_qBT;
+          ReconstructEdgeB<3>(er2, wb_, bx1f_, bq1f_, m, k, j, i,
+              Bx_B, Bx_T, Bx_Bp, Bx_Tp, Bx_qBT);
 
           // UCT composition: E_y = +vx*Bz - vz*Bx (with dissipation)
           // All quantities (B, v, a, d) reconstructed to edge via high-order interp
-          e2(m,k,j,i) = -(az_B*vz_B*Bx_B + az_T*vz_T*Bx_T)
-                        +(ax_W*vx_W*Bz_W + ax_E*vx_E*Bz_E)
-                        +(dz_T*Bx_T - dz_B*Bx_B)
-                        -(dx_E*Bz_E - dx_W*Bz_W);
+          if (wb_) {
+            e2(m,k,j,i) = -(az_B*vz_B*Bx_B + az_T*vz_T*Bx_T)
+                +(ax_W*vx_W*Bz_W + ax_E*vx_E*Bz_E)
+                +((dz_T*Bx_Tp - dz_B*Bx_Bp) + (dz_T - dz_B)*Bx_qBT)
+                -((dx_E*Bz_Ep - dx_W*Bz_Wp) + (dx_E - dx_W)*Bz_qWE);
+          } else {
+            e2(m,k,j,i) = -(az_B*vz_B*Bx_B + az_T*vz_T*Bx_T)
+                          +(ax_W*vx_W*Bz_W + ax_E*vx_E*Bz_E)
+                          +(dz_T*Bx_T - dz_B*Bx_B)
+                          -(dx_E*Bz_E - dx_W*Bz_W);
+          }
         }
 
         // ---- E3 at z-edge (i-1/2, j-1/2, k) ----
@@ -1156,17 +1239,28 @@ TaskStatus MHD::CornerE(Driver *pdriver, int stage) {
           // Staggered B: reconstruct to L/R at edge
           // By from x2-faces: reconstruct along i to W/E
           Real By_W, By_E;
-          ReconstructEdgeB<1>(er3, wb_, bx2f_, bq2f_, m, k, j, i, By_W, By_E);
+          Real By_Wp, By_Ep, By_qWE;
+          ReconstructEdgeB<1>(er3, wb_, bx2f_, bq2f_, m, k, j, i,
+              By_W, By_E, By_Wp, By_Ep, By_qWE);
           // Bx from x1-faces: reconstruct along j to S/N
           Real Bx_S, Bx_N;
-          ReconstructEdgeB<2>(er3, wb_, bx1f_, bq1f_, m, k, j, i, Bx_S, Bx_N);
+          Real Bx_Sp, Bx_Np, Bx_qSN;
+          ReconstructEdgeB<2>(er3, wb_, bx1f_, bq1f_, m, k, j, i,
+              Bx_S, Bx_N, Bx_Sp, Bx_Np, Bx_qSN);
 
           // UCT composition: E_z = vy*Bx - vx*By (with dissipation)
           // All quantities (B, v, a, d) reconstructed to edge via high-order interp
-          e3(m,k,j,i) = -(ax_W*vx_W*By_W + ax_E*vx_E*By_E)
-                        +(ay_S*vy_S*Bx_S + ay_N*vy_N*Bx_N)
-                        +(dx_E*By_E - dx_W*By_W)
-                        -(dy_N*Bx_N - dy_S*Bx_S);
+          if (wb_) {
+            e3(m,k,j,i) = -(ax_W*vx_W*By_W + ax_E*vx_E*By_E)
+                +(ay_S*vy_S*Bx_S + ay_N*vy_N*Bx_N)
+                +((dx_E*By_Ep - dx_W*By_Wp) + (dx_E - dx_W)*By_qWE)
+                -((dy_N*Bx_Np - dy_S*Bx_Sp) + (dy_N - dy_S)*Bx_qSN);
+          } else {
+            e3(m,k,j,i) = -(ax_W*vx_W*By_W + ax_E*vx_E*By_E)
+                          +(ay_S*vy_S*Bx_S + ay_N*vy_N*Bx_N)
+                          +(dx_E*By_E - dx_W*By_W)
+                          -(dy_N*Bx_N - dy_S*Bx_S);
+          }
         }
       });
     }
