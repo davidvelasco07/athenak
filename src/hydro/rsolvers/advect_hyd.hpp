@@ -27,16 +27,16 @@ void Advect(TeamMember_t const &member, const EOS_Data &eos,
     if (wl(ivx,i) >= 0.0) {
       flx(m,IDN,k,j,i) = wl(IDN,i)*wl(ivx,i);
       flx(m,ivx,k,j,i) = wl(IDN,i)*wl(ivx,i)*wl(ivx,i);
-      flx(m,ivy,k,j,i) = wl(ivy,i)*wl(ivx,i);
-      flx(m,ivz,k,j,i) = wl(ivz,i)*wl(ivx,i);
+      flx(m,ivy,k,j,i) = wl(IDN,i)*wl(ivy,i)*wl(ivx,i);
+      flx(m,ivz,k,j,i) = wl(IDN,i)*wl(ivz,i)*wl(ivx,i);
       if (eos.is_ideal) {
         flx(m,IEN,k,j,i) = wl(IEN,i)*wl(ivx,i);
       }
     } else {
       flx(m,IDN,k,j,i) = wr(IDN,i)*wr(ivx,i);
       flx(m,ivx,k,j,i) = wr(IDN,i)*wr(ivx,i)*wr(ivx,i);
-      flx(m,ivy,k,j,i) = wr(ivy,i)*wr(ivx,i);
-      flx(m,ivz,k,j,i) = wr(ivz,i)*wr(ivx,i);
+      flx(m,ivy,k,j,i) = wr(IDN,i)*wr(ivy,i)*wr(ivx,i);
+      flx(m,ivz,k,j,i) = wr(IDN,i)*wr(ivz,i)*wr(ivx,i);
       if (eos.is_ideal) {
         flx(m,IEN,k,j,i) = wr(IEN,i)*wr(ivx,i);
       }
