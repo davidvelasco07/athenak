@@ -183,6 +183,114 @@ void PPMX(const Real &q_im2, const Real &q_im1, const Real &q_i, const Real &q_i
 }
 
 //----------------------------------------------------------------------------------------
+//! \fn UnlimitedPPM()
+//! \brief Unlimited 4th-order interface interpolation.  Both cells sharing a face get
+//! the same interpolated value (wl = wr there), so the Riemann solver returns the
+//! pure physical flux.  Stability relies entirely on the MOOD a-posteriori fallback.
+
+KOKKOS_INLINE_FUNCTION
+void UnlimitedPPM(const Real &q_im2, const Real &q_im1, const Real &q_i,
+                  const Real &q_ip1, const Real &q_ip2,
+                  Real &ql_ip1, Real &qr_i) {
+  ql_ip1 = (7.0*(q_i + q_ip1) - (q_im1 + q_ip2))/12.0;
+  qr_i   = (7.0*(q_im1 + q_i) - (q_im2 + q_ip1))/12.0;
+  return;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn UnlimitedParabolicX1()
+//! \brief Wrapper for unlimited PPM reconstruction in x1-direction.
+
+KOKKOS_INLINE_FUNCTION
+void UnlimitedParabolicX1(TeamMember_t const &member,
+     const EOS_Data &eos, const bool apply_floors,
+     const int m, const int k, const int j, const int il, const int iu,
+     const DvceArray5D<Real> &q, ScrArray2D<Real> &ql, ScrArray2D<Real> &qr) {
+  int nvar = q.extent_int(1);
+  const Real &dfloor_ = eos.dfloor;
+  Real efloor_ = eos.is_ideal ? (eos.pfloor/(eos.gamma - 1.0)) : 0.0;
+  for (int n=0; n<nvar; ++n) {
+    par_for_inner(member, il, iu, [&](const int i) {
+      UnlimitedPPM(q(m,n,k,j,i-2), q(m,n,k,j,i-1), q(m,n,k,j,i),
+                   q(m,n,k,j,i+1), q(m,n,k,j,i+2), ql(n,i+1), qr(n,i));
+      if (apply_floors) {
+        if (n==IDN) {
+          ql(IDN,i+1) = fmax(ql(IDN,i+1), dfloor_);
+          qr(IDN,i  ) = fmax(qr(IDN,i  ), dfloor_);
+        }
+        if (eos.is_ideal && n==IEN) {
+          ql(IEN,i+1) = fmax(ql(IEN,i+1), efloor_);
+          qr(IEN,i  ) = fmax(qr(IEN,i  ), efloor_);
+        }
+      }
+    });
+  }
+  return;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn UnlimitedParabolicX2()
+//! \brief Wrapper for unlimited PPM reconstruction in x2-direction.
+
+KOKKOS_INLINE_FUNCTION
+void UnlimitedParabolicX2(TeamMember_t const &member,
+     const EOS_Data &eos, const bool apply_floors,
+     const int m, const int k, const int j, const int il, const int iu,
+     const DvceArray5D<Real> &q, ScrArray2D<Real> &ql_jp1, ScrArray2D<Real> &qr_j) {
+  int nvar = q.extent_int(1);
+  const Real &dfloor_ = eos.dfloor;
+  Real efloor_ = eos.is_ideal ? (eos.pfloor/(eos.gamma - 1.0)) : 0.0;
+  for (int n=0; n<nvar; ++n) {
+    par_for_inner(member, il, iu, [&](const int i) {
+      UnlimitedPPM(q(m,n,k,j-2,i), q(m,n,k,j-1,i), q(m,n,k,j,i),
+                   q(m,n,k,j+1,i), q(m,n,k,j+2,i), ql_jp1(n,i), qr_j(n,i));
+      if (apply_floors) {
+        if (n==IDN) {
+          ql_jp1(IDN,i) = fmax(ql_jp1(IDN,i), dfloor_);
+          qr_j  (IDN,i) = fmax(qr_j  (IDN,i), dfloor_);
+        }
+        if (eos.is_ideal && n==IEN) {
+          ql_jp1(IEN,i) = fmax(ql_jp1(IEN,i), efloor_);
+          qr_j  (IEN,i) = fmax(qr_j  (IEN,i), efloor_);
+        }
+      }
+    });
+  }
+  return;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn UnlimitedParabolicX3()
+//! \brief Wrapper for unlimited PPM reconstruction in x3-direction.
+
+KOKKOS_INLINE_FUNCTION
+void UnlimitedParabolicX3(TeamMember_t const &member,
+     const EOS_Data &eos, const bool apply_floors,
+     const int m, const int k, const int j, const int il, const int iu,
+     const DvceArray5D<Real> &q, ScrArray2D<Real> &ql_kp1, ScrArray2D<Real> &qr_k) {
+  int nvar = q.extent_int(1);
+  const Real &dfloor_ = eos.dfloor;
+  Real efloor_ = eos.is_ideal ? (eos.pfloor/(eos.gamma - 1.0)) : 0.0;
+  for (int n=0; n<nvar; ++n) {
+    par_for_inner(member, il, iu, [&](const int i) {
+      UnlimitedPPM(q(m,n,k-2,j,i), q(m,n,k-1,j,i), q(m,n,k,j,i),
+                   q(m,n,k+1,j,i), q(m,n,k+2,j,i), ql_kp1(n,i), qr_k(n,i));
+      if (apply_floors) {
+        if (n==IDN) {
+          ql_kp1(IDN,i) = fmax(ql_kp1(IDN,i), dfloor_);
+          qr_k  (IDN,i) = fmax(qr_k  (IDN,i), dfloor_);
+        }
+        if (eos.is_ideal && n==IEN) {
+          ql_kp1(IEN,i) = fmax(ql_kp1(IEN,i), efloor_);
+          qr_k  (IEN,i) = fmax(qr_k  (IEN,i), efloor_);
+        }
+      }
+    });
+  }
+  return;
+}
+
+//----------------------------------------------------------------------------------------
 //! \fn PiecewiseParabolicX1()
 //! \brief Wrapper function for PPM reconstruction in x1-direction.
 //! This function should be called over [is-1,ie+1] to get BOTH L/R states over [is,ie]

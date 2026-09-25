@@ -63,14 +63,17 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
   int scr_level = 0;
   auto &flx1_ = uflx.x1f;
 
+  // Face-range halo: FOFC needs ±1; MOOD needs ±mood_max_revs (light cone).
+  const int ext = use_mood ? mood_max_revs : (use_fofc ? 1 : 0);
+
   // set the loop limits for 1D/2D/3D problems
   int il = is, iu = ie+1, jl = js, ju = je, kl = ks, ku = ke;
-  if (use_fofc) {
-    il = is-1, iu = ie+2;
+  if (ext > 0) {
+    il = is-ext, iu = ie+1+ext;
     if (pmy_pack->pmesh->two_d) {
-      jl = js-1, ju = je+1, kl = ks, ku = ke;
-    } else {
-      jl = js-1, ju = je+1, kl = ks-1, ku = ke+1;
+      jl = js-ext, ju = je+ext, kl = ks, ku = ke;
+    } else if (pmy_pack->pmesh->three_d) {
+      jl = js-ext, ju = je+ext, kl = ks-ext, ku = ke+ext;
     }
   }
 
@@ -90,6 +93,9 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
       case ReconstructionMethod::ppm4:
       case ReconstructionMethod::ppmx:
         PiecewiseParabolicX1(member,eos_,extrema,true, m, k, j, il-1, iu, w0_, wl, wr);
+        break;
+      case ReconstructionMethod::ppm:
+        UnlimitedParabolicX1(member,eos_,true, m, k, j, il-1, iu, w0_, wl, wr);
         break;
       case ReconstructionMethod::wenoz:
         WENOZX1(member, eos_, true, m, k, j, il-1, iu, w0_, wl, wr);
@@ -153,12 +159,12 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
 
     // set the loop limits for 1D/2D/3D problems
     il = is, iu = ie, jl = js-1, ju = je+1, kl = ks, ku = ke;
-    if (use_fofc) {
-      jl = js-2, ju = je+2;
+    if (ext > 0) {
+      jl = js-1-ext, ju = je+1+ext;
       if (pmy_pack->pmesh->two_d) {
-        il = is-1, iu = ie+1, kl = ks, ku = ke;
-      } else {
-        il = is-1, iu = ie+1, kl = ks-1, ku = ke+1;
+        il = is-ext, iu = ie+ext, kl = ks, ku = ke;
+      } else if (pmy_pack->pmesh->three_d) {
+        il = is-ext, iu = ie+ext, kl = ks-ext, ku = ke+ext;
       }
     }
 
@@ -189,6 +195,9 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
           case ReconstructionMethod::ppm4:
           case ReconstructionMethod::ppmx:
             PiecewiseParabolicX2(member,eos_,extrema,true,m,k,j,il,iu, w0_, wl_jp1, wr);
+            break;
+          case ReconstructionMethod::ppm:
+            UnlimitedParabolicX2(member,eos_,true,m,k,j,il,iu, w0_, wl_jp1, wr);
             break;
           case ReconstructionMethod::wenoz:
             WENOZX2(member, eos_, true, m, k, j, il, iu, w0_, wl_jp1, wr);
@@ -255,7 +264,10 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
 
     // set the loop limits
     il = is, iu = ie, jl = js, ju = je, kl = ks-1, ku = ke+1;
-    if (use_fofc) { il = is-1, iu = ie+1, jl = js-1, ju = je+1, kl = ks-2, ku = ke+2; }
+    if (ext > 0) {
+      il = is-ext, iu = ie+ext, jl = js-ext, ju = je+ext;
+      kl = ks-1-ext, ku = ke+1+ext;
+    }
 
     par_for_outer("hflux_x3",DevExeSpace(), scr_size, scr_level, 0, nmb1, jl, ju,
     KOKKOS_LAMBDA(TeamMember_t member, const int m, const int j) {
@@ -284,6 +296,9 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
           case ReconstructionMethod::ppm4:
           case ReconstructionMethod::ppmx:
             PiecewiseParabolicX3(member,eos_,extrema,true,m,k,j,il,iu, w0_, wl_kp1, wr);
+            break;
+          case ReconstructionMethod::ppm:
+            UnlimitedParabolicX3(member,eos_,true,m,k,j,il,iu, w0_, wl_kp1, wr);
             break;
           case ReconstructionMethod::wenoz:
             WENOZX3(member, eos_, true, m, k, j, il, iu, w0_, wl_kp1, wr);

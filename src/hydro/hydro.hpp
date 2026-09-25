@@ -104,6 +104,23 @@ class Hydro {
   bool use_fofc = false;   // flag to enable FOFC
   DvceArray5D<Real> utest;  // scratch array for FOFC
 
+  // MOOD a-posteriori fallback.  Shares fofc/utest: fofc marks newly demoted
+  // cells in the current revision, utest holds the candidate update.
+  bool use_mood = false;
+  int mood_max_revs = 1;
+  int mood_nad_scale = 3;       // 0=relative, 1=grange, 2=gdu, 3=gcfl
+  Real mood_nad_theta = 1.0;
+  int mood_nad_v = 0;           // 0=off, 1=|v|, 2=components (Newtonian, opt-in)
+  bool mood_nad_energy = true;
+  bool mood_nad_scalars = true;
+  bool mood_detect = true;      // false = unlimited base, no detect/revise
+  Real mood_rtol = 1.0e-5;
+  Real mood_eps0 = 1.0e-12;
+  Real mood_atol = 0.0;
+  bool mood_sed = true;
+  int n_fb_tiers = 2;           // fallback tiers below base (2, or 1 if base=plm)
+  DvceArray4D<int> fb_level;    // 0=base, 1=plm, 2=dc
+
   // container to hold names of TaskIDs
   HydroTaskIDs id;
 
@@ -139,6 +156,11 @@ class Hydro {
 
   // first-order flux correction
   void FOFC(Driver *d, int stage);
+
+  // MOOD a-posteriori fallback; templated so revised faces use the same Riemann
+  // solver as the base scheme (Newtonian HLLE/LLF; SR/GR revision uses LLF)
+  template <Hydro_RSolver T>
+  void MOODLoop(Driver *d, int stage);
 
  private:
   MeshBlockPack* pmy_pack;  // ptr to MeshBlockPack containing this Hydro
