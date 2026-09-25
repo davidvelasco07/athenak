@@ -185,45 +185,6 @@ struct MultigridTaskIDs {
       TaskID fill_coarseB2;
 };
 
-struct MGTimers {
-  using Clock = std::chrono::high_resolution_clock;
-  double pack_send_sec     = 0.0;
-  double recv_unpack_sec   = 0.0;
-  double allreduce_sec     = 0.0;
-  double vcycle_sec        = 0.0;
-  double smooth_sec        = 0.0;
-  double restrict_sec      = 0.0;
-  double prolongate_sec    = 0.0;
-  double prolongate_fc_sec = 0.0;
-  double fillfc_sec        = 0.0;
-  int    msg_count         = 0;
-  int64_t bytes_sent       = 0;
-  int    vcycle_count      = 0;
-
-  void Reset() {
-    pack_send_sec = recv_unpack_sec = allreduce_sec = 0.0;
-    vcycle_sec = smooth_sec = restrict_sec = prolongate_sec = 0.0;
-    prolongate_fc_sec = fillfc_sec = 0.0;
-    msg_count = 0; bytes_sent = 0; vcycle_count = 0;
-  }
-  void Print(int rank) {
-    std::cout << "[Rank " << rank << "] MG timers:"
-              << " vcycles=" << vcycle_count
-              << " vcycle=" << vcycle_sec << "s"
-              << " pack_send=" << pack_send_sec << "s"
-              << " recv_unpack=" << recv_unpack_sec << "s"
-              << " allreduce=" << allreduce_sec << "s"
-              << " smooth=" << smooth_sec << "s"
-              << " restrict=" << restrict_sec << "s"
-              << " prolongate=" << prolongate_sec << "s"
-              << " prolongate_fc=" << prolongate_fc_sec << "s"
-              << " fillfc=" << fillfc_sec << "s"
-              << " msgs=" << msg_count
-              << " bytes=" << bytes_sent
-              << std::endl;
-  }
-};
-
 //! \class Multigrid
 //  \brief Multigrid object containing each MeshBlock and/or the root block
 
@@ -302,9 +263,6 @@ class Multigrid {
   // The stencil functor must provide:
   //   Real Apply(const ViewType&, const ViewType&, int m, int v, int k, int j, int i)
   //   Real omega_over_diag
-  // Definition is out-of-class (after MultigridDriver is complete) because
-  // the body calls pmy_driver_->GetCoffset(). Clang rejects access through a
-  // forward-declared type even in an unused template body.
   template <typename ViewType, typename StencilOp>
   void Smooth(ViewType &u, const ViewType &src, const ViewType &coeff,
               const ViewType &matrix, const StencilOp &stencil, int rlev,
@@ -524,10 +482,6 @@ class MultigridDriver {
   bool full_multigrid_;
   int fmg_ncycle_;
 
- public:
-  MGTimers mg_timers_;
-
- protected:
   // Source masking (zero source outside mask_radius_)
   Real mask_radius_;
   Real mask_origin_[3];
@@ -664,6 +618,34 @@ class MultigridBoundaryValues : public MeshBoundaryValuesCC {
 #endif
 };
 
+template <typename ViewType, typename StencilOp>
+void Multigrid::Smooth(ViewType &u, const ViewType &src, const ViewType &coeff,
+                       const ViewType &matrix, const StencilOp &stencil, int rlev,
+                       int il, int iu, int jl, int ju, int kl, int ku, int color,
+                       bool th) {
+  using ExeSpace = typename ViewType::execution_space;
+  auto brdx = [this]() {
+    if constexpr (std::is_same_v<ExeSpace, HostExeSpace>)
+      return block_rdx_.h_view;
+    else
+      return block_rdx_.d_view;
+  }();
+  int rlev_l = rlev;
+  Real odiag = stencil.omega_over_diag;
+  color ^= pmy_driver_->GetCoffset();
+  par_for("Multigrid::Smooth", ExeSpace(), 0, nmmb_-1, kl, ku, jl, ju,
+  KOKKOS_LAMBDA(const int m, const int k, const int j) {
+    Real dx = (rlev_l <= 0) ? brdx(m) * static_cast<Real>(1<<(-rlev_l))
+                            : brdx(m) / static_cast<Real>(1<<rlev_l);
+    Real dx2 = dx * dx;
+    const int c = (color + k + j) & 1;
+    for (int i = il + c; i <= iu; i += 2) {
+      Real lap = stencil.Apply(u, coeff, m, 0, k, j, i);
+      u(m,0,k,j,i) -= (lap - src(m,0,k,j,i)*dx2) * odiag;
+    }
+  });
+}
+
 inline Real RestrictOne(const MGOctet &oct, int v, int fi, int fj, int fk) {
   return 0.125*(oct.U(v, fk,   fj,   fi)   + oct.U(v, fk,   fj,   fi+1)
                +oct.U(v, fk,   fj+1, fi)   + oct.U(v, fk,   fj+1, fi+1)
@@ -725,38 +707,5 @@ Real EvalMultipolePhi(Real x, Real y, Real z,
   return phis;
 }
 
-
-//----------------------------------------------------------------------------------------
-//! \fn Multigrid::Smooth
-//! Out-of-class definition (see in-class declaration above). Placed here so that
-//! MultigridDriver's full definition is visible -- required by Clang.
-
-template <typename ViewType, typename StencilOp>
-void Multigrid::Smooth(ViewType &u, const ViewType &src, const ViewType &coeff,
-                       const ViewType &matrix, const StencilOp &stencil, int rlev,
-                       int il, int iu, int jl, int ju, int kl, int ku,
-                       int color, bool th) {
-  using ExeSpace = typename ViewType::execution_space;
-  auto brdx = [this]() {
-    if constexpr (std::is_same_v<ExeSpace, HostExeSpace>)
-      return block_rdx_.h_view;
-    else
-      return block_rdx_.d_view;
-  }();
-  int rlev_l = rlev;
-  Real odiag = stencil.omega_over_diag;
-  color ^= pmy_driver_->GetCoffset();
-  par_for("Multigrid::Smooth", ExeSpace(), 0, nmmb_-1, kl, ku, jl, ju,
-  KOKKOS_LAMBDA(const int m, const int k, const int j) {
-    Real dx = (rlev_l <= 0) ? brdx(m) * static_cast<Real>(1<<(-rlev_l))
-                            : brdx(m) / static_cast<Real>(1<<rlev_l);
-    Real dx2 = dx * dx;
-    const int c = (color + k + j) & 1;
-    for (int i = il + c; i <= iu; i += 2) {
-      Real lap = stencil.Apply(u, coeff, m, 0, k, j, i);
-      u(m,0,k,j,i) -= (lap - src(m,0,k,j,i)*dx2) * odiag;
-    }
-  });
-}
 
 #endif // MULTIGRID_MULTIGRID_HPP_
