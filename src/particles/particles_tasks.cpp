@@ -483,6 +483,7 @@ TaskStatus Particles::XPhiInitRecv(Driver *pdrive, int stage) {
 
 TaskStatus Particles::XPhiRestrict(Driver *pdrive, int stage) {
   if (pbval_phi == nullptr || pmy_pack->pgrav == nullptr) return TaskStatus::complete;
+  pmy_pack->pgrav->SaveFaceBoundaries();
   // restrict the fine interior into the coarse buffer, so coarser neighbours are sent
   // restricted data and the prolongation has a valid coarse source
   if (pmy_pack->pmesh->multilevel) {
@@ -516,6 +517,7 @@ TaskStatus Particles::XPhiProlongate(Driver *pdrive, int stage) {
     pbval_phi->FillCoarseInBndryCC(pmy_pack->pgrav->phi, pmy_pack->pgrav->coarse_phi);
     pbval_phi->ProlongateCC(pmy_pack->pgrav->phi, pmy_pack->pgrav->coarse_phi);
   }
+  pmy_pack->pgrav->RestoreFaceBoundaries();
   return TaskStatus::complete;
 }
 

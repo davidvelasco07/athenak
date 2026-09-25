@@ -59,6 +59,8 @@ class Gravity {
   Real four_pi_G;
   bool output_defect;
   bool fill_ghost;
+  // Opt-in post-solve exchange preserving MG fine/coarse face gradients.
+  bool moon_exchange;
   MGGravityDriver *pmgd;
   MGGravity *pmg;
   void SaveFaceBoundaries();

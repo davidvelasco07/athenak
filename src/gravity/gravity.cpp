@@ -39,6 +39,7 @@ Gravity::Gravity(MeshBlockPack *pmbp, ParameterInput *pin):
     four_pi_G(-1.0),
     output_defect(false),
     fill_ghost(false) {
+    moon_exchange = pin->GetOrAddBoolean("gravity", "moon_exchange", false);
     four_pi_G = pin->GetOrAddReal("gravity", "four_pi_G",-1.0);
     output_defect = pin->GetOrAddBoolean("gravity", "output_defect", false);
     fill_ghost = pin->GetOrAddBoolean("gravity", "fill_ghost", true);
@@ -123,4 +124,60 @@ void Gravity::AssembleSource() {
 Gravity::~Gravity() {
     delete pmg;
 }
+
+// Preserve the MG first face ghost on fine blocks bordering coarser blocks.
+// The remaining halo is filled by the normal particle potential exchange.
+void Gravity::SaveFaceBoundaries() {
+  if (!moon_exchange || !pmy_pack->pmesh->multilevel) return;
+  const auto ix=pmy_pack->pmesh->mb_indcs;
+  const int nmb=pmy_pack->nmb_thispack;
+  auto p=phi;auto nb=pmy_pack->pmb->nghbr.d_view;
+  auto lev=pmy_pack->pmb->mb_lev.d_view;
+  const int slots[6]={0,4,8,12,24,28};
+  for(int face=0;face<6;++face) {
+    const int axis=face/2, side=face%2, slot=slots[face];
+    const int na=(axis==0?ix.nx2:ix.nx1);
+    const int nc=(axis==2?ix.nx2:ix.nx3);
+    Kokkos::realloc(fbuf_[face],nmb,1,1,1,na*nc);
+    auto buf=fbuf_[face];
+    par_for("SaveFaceBoundaries",DevExeSpace(),0,nmb-1,0,na*nc-1,
+      KOKKOS_LAMBDA(int m,int q) {
+        if(nb(m,slot).gid<0 || nb(m,slot).lev>=lev(m)) return;
+        const int a=q%na,c=q/na;
+        const int i=axis==0?(side?ix.ie+1:ix.is-1):ix.is+a;
+        const int j=axis==1?(side?ix.je+1:ix.js-1):ix.js+(axis==0?a:c);
+        const int k=axis==2?(side?ix.ke+1:ix.ks-1):ix.ks+c;
+        buf(m,0,0,0,q)=p(m,0,k,j,i);
+      });
+  }
+}
+
+
+// Preserve the MG first face ghost on fine blocks bordering coarser blocks.
+// The remaining halo is filled by the normal particle potential exchange.
+void Gravity::RestoreFaceBoundaries() {
+  if (!moon_exchange || !pmy_pack->pmesh->multilevel) return;
+  const auto ix=pmy_pack->pmesh->mb_indcs;
+  const int nmb=pmy_pack->nmb_thispack;
+  auto p=phi;auto nb=pmy_pack->pmb->nghbr.d_view;
+  auto lev=pmy_pack->pmb->mb_lev.d_view;
+  const int slots[6]={0,4,8,12,24,28};
+  for(int face=0;face<6;++face) {
+    const int axis=face/2, side=face%2, slot=slots[face];
+    const int na=(axis==0?ix.nx2:ix.nx1);
+    const int nc=(axis==2?ix.nx2:ix.nx3);
+
+    auto buf=fbuf_[face];
+    par_for("RestoreFaceBoundaries",DevExeSpace(),0,nmb-1,0,na*nc-1,
+      KOKKOS_LAMBDA(int m,int q) {
+        if(nb(m,slot).gid<0 || nb(m,slot).lev>=lev(m)) return;
+        const int a=q%na,c=q/na;
+        const int i=axis==0?(side?ix.ie+1:ix.is-1):ix.is+a;
+        const int j=axis==1?(side?ix.je+1:ix.js-1):ix.js+(axis==0?a:c);
+        const int k=axis==2?(side?ix.ke+1:ix.ks-1):ix.ks+c;
+        p(m,0,k,j,i)=buf(m,0,0,0,q);
+      });
+  }
+}
+
 } // namespace gravity
