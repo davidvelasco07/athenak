@@ -50,6 +50,36 @@ TaskStatus Particles::Push(Driver *pdriver, int stage) {
         }
       });
       break;
+    case ParticlesPusher::rk3: {
+      // Evolve particle position and velocity with the same SSPRK(3,3) stages
+      // as the gas. Matched gravity weights preserve equal/opposite impulses.
+      if (ppm != nullptr && pmy_pack->pgrav != nullptr) {
+        ppm->GatherGravity(pmy_pack->pgrav->phi, prtcl_rdata, prtcl_idata,
+                           nprtcl_thispack);
+      }
+      const Real g0 = pdriver->gam0[stage-1];
+      const Real g1 = pdriver->gam1[stage-1];
+      const Real bdt = pdriver->beta[stage-1]*dt_;
+      const bool first_stage = (stage == 1);
+      par_for("part_rk3",DevExeSpace(),0,(nprtcl_thispack-1),
+      KOKKOS_LAMBDA(const int p) {
+        if (first_stage) {
+          pr(IPX0,p) = pr(IPX,p); pr(IPY0,p) = pr(IPY,p); pr(IPZ0,p) = pr(IPZ,p);
+          pr(IPVX0,p) = pr(IPVX,p); pr(IPVY0,p) = pr(IPVY,p);
+          pr(IPVZ0,p) = pr(IPVZ,p);
+        }
+        // Update positions before velocities: the derivative is the input-stage
+        // velocity. Migration carries all registers; periodic wrapping shifts
+        // IPX0/IPY0/IPZ0 alongside the current position before the next stage.
+        pr(IPX,p) = g0*pr(IPX,p) + g1*pr(IPX0,p) + bdt*pr(IPVX,p);
+        pr(IPY,p) = g0*pr(IPY,p) + g1*pr(IPY0,p) + bdt*pr(IPVY,p);
+        pr(IPZ,p) = g0*pr(IPZ,p) + g1*pr(IPZ0,p) + bdt*pr(IPVZ,p);
+        pr(IPVX,p) = g0*pr(IPVX,p) + g1*pr(IPVX0,p) + bdt*pr(IPGX,p);
+        pr(IPVY,p) = g0*pr(IPVY,p) + g1*pr(IPVY0,p) + bdt*pr(IPGY,p);
+        pr(IPVZ,p) = g0*pr(IPVZ,p) + g1*pr(IPVZ0,p) + bdt*pr(IPGZ,p);
+      });
+      break;
+    }
     case ParticlesPusher::leapfrog: {
       // Gather the gravitational acceleration -grad(phi) from the multigrid
       // potential onto each particle (writes IPGX/IPGY/IPGZ). phi already

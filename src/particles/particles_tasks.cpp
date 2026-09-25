@@ -36,7 +36,7 @@ namespace particles {
 void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) {
   TaskID none(0);
 
-  if (pusher == ParticlesPusher::leapfrog) {
+  if (pusher == ParticlesPusher::leapfrog || pusher == ParticlesPusher::rk3) {
     // Re-bin particles at the start of every cycle by recomputing PGID *absolutely* from
     // position. AthenaK's AMR regrid (end of the previous cycle) renumbers MeshBlocks but
     // does NOT remap particles, so PGID is stale afterwards; the normal per-step

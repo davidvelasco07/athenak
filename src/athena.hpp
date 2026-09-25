@@ -82,6 +82,7 @@ enum MetricIndex {I00=0, I01=1, I02=2, I03=3, I11=4, I12=5, I13=6, I22=7, I23=8,
 //                                 the stage-1 leapfrog push immediately before the
 //                                 drift); used by AccreteMass to detect sink-cell
 //                                 crossings (old control-volume correction)
+//   IPVX0,IPVY0,IPVZ0          -- start-of-step velocity registers, RK3 pusher only
 //   NRDATA_SINK -- total real columns for sink type (3D layout always; 2D
 //                  runs leave IPZ/IPVZ/IPGZ at zero)
 enum ParticlesIndex {PGID=0, PTAG=1,
@@ -89,7 +90,9 @@ enum ParticlesIndex {PGID=0, PTAG=1,
                      IPM=6,
                      IPGX=7, IPGY=8, IPGZ=9,
                      IPX0=10, IPY0=11, IPZ0=12,
-                     NRDATA_SINK=13};
+                     NRDATA_SINK=13,
+                     IPVX0=13, IPVY0=14, IPVZ0=15,
+                     NRDATA_SINK_RK3=16};
 
 // integer constants to specify spatial reconstruction methods
 enum ReconstructionMethod {dc, plm, ppm4, ppmx, wenoz, ppm};

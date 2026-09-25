@@ -20,7 +20,7 @@
 // forward declarations
 
 // constants that enumerate ParticlesPusher options
-enum class ParticlesPusher {drift, leapfrog, lagrangian_tracer, lagrangian_mc};
+enum class ParticlesPusher {drift, leapfrog, rk3, lagrangian_tracer, lagrangian_mc};
 
 // constants that enumerate ParticleTypes
 enum class ParticleType {cosmic_ray, sink};

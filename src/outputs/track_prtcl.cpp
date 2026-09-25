@@ -189,8 +189,9 @@ void TrackedParticleOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     } else {
       for (int v=0; v<pp->nidata; ++v) { cols += (v?" i":"i") + std::to_string(v); }
     }
-    if (pp->nrdata == NRDATA_SINK) {
+    if (pp->nrdata == NRDATA_SINK || pp->nrdata == NRDATA_SINK_RK3) {
       cols += " x vx y vy z vz m gx gy gz x0 y0 z0";
+      if (pp->nrdata == NRDATA_SINK_RK3) { cols += " vx0 vy0 vz0"; }
     } else {
       for (int v=0; v<pp->nrdata; ++v) { cols += " r" + std::to_string(v); }
     }

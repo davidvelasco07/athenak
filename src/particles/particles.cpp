@@ -85,10 +85,22 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
       pusher = ParticlesPusher::drift;
     } else if (ppush.compare("leapfrog") == 0) {
       pusher = ParticlesPusher::leapfrog;
+    } else if (ppush.compare("rk3") == 0) {
+      pusher = ParticlesPusher::rk3;
     } else {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Particle pusher must be specified in <particles> block"
                 <<std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
+
+  if (pusher == ParticlesPusher::leapfrog || pusher == ParticlesPusher::rk3) {
+    const std::string time_integrator = pin->GetOrAddString("time", "integrator", "rk2");
+    const std::string required = (pusher == ParticlesPusher::rk3) ? "rk3" : "rk2";
+    if (time_integrator != required || particle_type != ParticleType::sink) {
+      std::cout << "### FATAL ERROR: gravity particle pusher requires sink particles and "
+                << "time/integrator=" << required << std::endl;
       std::exit(EXIT_FAILURE);
     }
   }
@@ -118,7 +130,7 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
         // 3D-only layout always; 2D runs leave IPZ/IPVZ/IPGZ at zero. The leapfrog
         // pusher reads IPZ/IPVZ unconditionally, so a 2D-shortened nrdata would
         // out-of-bounds. Pay the 24 B/particle to keep the layout uniform.
-        nrdata = NRDATA_SINK;  // = 10
+        nrdata = (pusher == ParticlesPusher::rk3) ? NRDATA_SINK_RK3 : NRDATA_SINK;
         nidata = 2;            // PGID, PTAG
         break;
       }
