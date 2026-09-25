@@ -120,6 +120,8 @@ class Particles {
   // sink that the next AccreteMass reset seeds conservatively (Moon & Ostriker 2025
   // section 3.4). Requires accretion = true.
   bool creation = false;
+  // Optional AMR experiment: retain the uniform finest-grid creation threshold.
+  bool creation_finest_only = false;
   int created_total_ = 0;   // running count, for unique tags
 
   // Enable sink-sink merging (<particles>/merging, default false): two sinks whose
@@ -130,11 +132,21 @@ class Particles {
   // create -> merge -> accrete. See particles_merger.cpp.
   bool merging = false;
   // Require the overlapping pair to be gravitationally bound before merging
-  // (<particles>/merge_bound, default true): 0.5*mu*|dv|^2 - G*m_a*m_b/r < 0. Rejects
+  // (<particles>/merge_bound, default false): 0.5*mu*|dv|^2 - G*m_a*m_b/r < 0. Rejects
   // unbound fly-bys that momentarily pass within the halo. Set false to merge on halo
   // overlap alone. Needs the gravity module; falls back to overlap-only (one-time
   // warning) if <gravity> is absent.
-  bool merge_bound = true;
+  bool merge_bound = false;
+  // Reference defaults; sink_setup=legacy restores the previous defaults.
+  bool merge_iterative = true;
+  bool merge_cell_centers = true;
+  bool merge_face_contact = false;
+  bool creation_exclusion = false;
+  bool creation_zero_velocity = true;
+  bool accrete_old_position = false;
+  bool reject_negative_accretion = true;
+  int sink_convergence = 1;  // 0: off; 1: directional mass flux; 2: velocity gradient
+
 
   // Cross-rank control-volume reset (MPI). When a sink's control volume reaches into an
   // off-rank neighbour, the accretion kernel stages the off-rank-destined reset cells

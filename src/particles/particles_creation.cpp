@@ -40,6 +40,7 @@
 #include "eos/eos.hpp"
 #include "gravity/gravity.hpp"
 #include "particles.hpp"
+#include "sink_convergence.hpp"
 
 #if MPI_PARALLEL_ENABLED
 #include <mpi.h>
@@ -86,6 +87,13 @@ TaskStatus Particles::CreateSinks(Driver *pdriver, int stage) {
   const int npart = nprtcl_thispack;
   const int rctrl = 1;
 
+  const bool zero_velocity = creation_zero_velocity;
+  const bool use_exclusion = creation_exclusion;
+  const int convergence = sink_convergence;
+  const bool finest_only = creation_finest_only;
+  const int max_level = pmy_pack->pmesh->max_level;
+  auto levels = pmy_pack->pmb->mb_lev.d_view;
+
   // ---- scan: candidate cells -> (m,k,j,i) buffer ----
   DvceArray2D<int> cand("sink_cand", MAX_NEW_SINKS, 4);
   DvceArray1D<int> ncand_d("ncand", 1);
@@ -93,9 +101,11 @@ TaskStatus Particles::CreateSinks(Driver *pdriver, int stage) {
 
   const int nmkji = nmb*nx3*nx2*nx1;
   const int nkji = nx3*nx2*nx1, nji = nx2*nx1;
+  auto scan = [&](int capacity) {
   par_for("sink_create_scan", DevExeSpace(), 0, nmkji-1,
   KOKKOS_LAMBDA(const int idx) {
     const int m = idx/nkji;
+    if (finest_only && levels(m) != max_level) return;
     const int k = (idx - m*nkji)/nji + ks;
     const int j = (idx - m*nkji - (k-ks)*nji)/nx1 + js;
     const int i = (idx - m*nkji - (k-ks)*nji - (j-js)*nx1) + is;
@@ -103,6 +113,7 @@ TaskStatus Particles::CreateSinks(Driver *pdriver, int stage) {
     const Real rho_thr = thr_fac/(dx1*dx1);
     const Real rho = u0(m, IDN, k, j, i);
     if (rho <= rho_thr) return;
+    if (!SinkConverging(u0, m, i, j, k, 0.0, 0.0, 0.0, convergence)) return;
     // local potential minimum over the 26 neighbours (phi ghosts valid: the XPhi tasks
     // ran this stage)
     const Real p0 = phi(m, 0, k, j, i);
@@ -121,28 +132,33 @@ TaskStatus Particles::CreateSinks(Driver *pdriver, int stage) {
     const Real zc = mbsize.d_view(m).x3min +
                     (static_cast<Real>(k-ks) + 0.5)*mbsize.d_view(m).dx3;
     const Real dmin = 2.0*(rctrl + 1)*dx1;
-    for (int p = 0; p < npart; ++p) {
+    for (int p = 0; use_exclusion && p < npart; ++p) {
       const Real ddx = pr(IPX, p) - xc;
       const Real ddy = pr(IPY, p) - yc;
       const Real ddz = pr(IPZ, p) - zc;
       if (ddx*ddx + ddy*ddy + ddz*ddz < dmin*dmin) return;
     }
     const int slot = Kokkos::atomic_fetch_add(&ncand_d(0), 1);
-    if (slot < MAX_NEW_SINKS) {
+    if (slot < capacity) {
       cand(slot, 0) = m; cand(slot, 1) = k; cand(slot, 2) = j; cand(slot, 3) = i;
     }
   });
+
+  };
+  scan(MAX_NEW_SINKS);
 
   auto ncand_h = Kokkos::create_mirror_view(ncand_d);
   Kokkos::deep_copy(ncand_h, ncand_d);
   int nnew = ncand_h(0);
   // NOTE: no early return for nnew == 0. Every rank must reach the tag-numbering
   // collective below, and the loops between here and there are no-ops when nnew is 0.
-  if (nnew > MAX_NEW_SINKS) {
-    if (global_variable::my_rank == 0) {
-      std::cout << "### WARNING in Particles::CreateSinks: " << nnew << " candidates, "
-                << "capped at " << MAX_NEW_SINKS << " this step" << std::endl;
-    }
+  if (nnew > MAX_NEW_SINKS && !use_exclusion) {
+    Kokkos::realloc(cand, nnew, 4);
+    Kokkos::deep_copy(ncand_d, 0);
+    scan(nnew);
+  } else if (nnew > MAX_NEW_SINKS) {
+    if (global_variable::my_rank == 0) std::cout
+        << "### WARNING: legacy creation candidates capped at " << MAX_NEW_SINKS << std::endl;
     nnew = MAX_NEW_SINKS;
   }
 
@@ -150,8 +166,8 @@ TaskStatus Particles::CreateSinks(Driver *pdriver, int stage) {
   auto cand_h = Kokkos::create_mirror_view(cand);
   Kokkos::deep_copy(cand_h, cand);
   auto msz_h = pmy_pack->pmb->mb_size.h_view;
-  Real cx[MAX_NEW_SINKS], cy[MAX_NEW_SINKS], cz[MAX_NEW_SINKS];
-  bool keep[MAX_NEW_SINKS];
+  std::vector<Real> cx(nnew), cy(nnew), cz(nnew);
+  std::vector<bool> keep(nnew);
   for (int n = 0; n < nnew; ++n) {
     const int m = cand_h(n, 0), k = cand_h(n, 1), j = cand_h(n, 2), i = cand_h(n, 3);
     cx[n] = msz_h(m).x1min + (static_cast<Real>(i-is) + 0.5)*msz_h(m).dx1;
@@ -165,7 +181,7 @@ TaskStatus Particles::CreateSinks(Driver *pdriver, int stage) {
       const Real dmin = 2.0*(rctrl + 1)*msz_h(cand_h(n,0)).dx1;
       const Real d2 = (cx[n]-cx[q])*(cx[n]-cx[q]) + (cy[n]-cy[q])*(cy[n]-cy[q]) +
                       (cz[n]-cz[q])*(cz[n]-cz[q]);
-      if (d2 < dmin*dmin) keep[q] = false;
+      if (use_exclusion && d2 < dmin*dmin) keep[q] = false;
     }
   }
   int nkeep = 0;
@@ -242,9 +258,9 @@ TaskStatus Particles::CreateSinks(Driver *pdriver, int stage) {
     const Real z = mbsize.d_view(m).x3min + (static_cast<Real>(k-ks) + 0.5)*mbsize.d_view(m).dx3;
     const Real rho = u0(m, IDN, k, j, i);
     prn(IPX, p) = x;  prn(IPY, p) = y;  prn(IPZ, p) = z;
-    prn(IPVX, p) = u0(m, IM1, k, j, i)/rho;
-    prn(IPVY, p) = u0(m, IM2, k, j, i)/rho;
-    prn(IPVZ, p) = u0(m, IM3, k, j, i)/rho;
+    prn(IPVX, p) = zero_velocity ? 0.0 : u0(m, IM1, k, j, i)/rho;
+    prn(IPVY, p) = zero_velocity ? 0.0 : u0(m, IM2, k, j, i)/rho;
+    prn(IPVZ, p) = zero_velocity ? 0.0 : u0(m, IM3, k, j, i)/rho;
     prn(IPM, p) = 0.0;
     prn(IPGX, p) = 0.0; prn(IPGY, p) = 0.0; prn(IPGZ, p) = 0.0;
     prn(IPX0, p) = x; prn(IPY0, p) = y; prn(IPZ0, p) = z;

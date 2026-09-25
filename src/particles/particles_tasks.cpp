@@ -145,6 +145,15 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
     if (merging) {
       id.merge = tl["after_stagen"]->AddTask(&Particles::MergeSinks, this, dep);
       dep = id.merge;
+      if (merge_iterative) {
+        dep = tl["after_stagen"]->AddTask(&Particles::SetGIDFromPosition, this, dep);
+        dep = tl["after_stagen"]->AddTask(&Particles::SendCnt, this, dep);
+        dep = tl["after_stagen"]->AddTask(&Particles::InitRecv, this, dep);
+        dep = tl["after_stagen"]->AddTask(&Particles::SendP, this, dep);
+        dep = tl["after_stagen"]->AddTask(&Particles::RecvP, this, dep);
+        dep = tl["after_stagen"]->AddTask(&Particles::ClearRecv, this, dep);
+        dep = tl["after_stagen"]->AddTask(&Particles::ClearSend, this, dep);
+      }
     }
     if (accretion) {
       id.accrete = tl["after_stagen"]->AddTask(&Particles::AccreteMass, this, dep);

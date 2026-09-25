@@ -112,6 +112,7 @@
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
 #include "particles.hpp"
+#include "sink_convergence.hpp"
 
 namespace particles {
 
@@ -162,6 +163,9 @@ TaskStatus Particles::AccreteMass(Driver *pdriver, int stage) {
   const int ncells3 = indcs.nx3 + 2*indcs.ng;
   const int gids = pmy_pack->gids;
   const int npart = nprtcl_thispack;
+  const bool old_position = accrete_old_position;
+  const bool reject_negative = reject_negative_accretion;
+  const int convergence = sink_convergence;
   const int rctrl = 1;      // control volume = (2*rctrl+1)^3 = 27 cells (paper standard)
   const int nmb_ = pmy_pack->nmb_thispack;
 
@@ -399,6 +403,9 @@ TaskStatus Particles::AccreteMass(Driver *pdriver, int stage) {
           return;
         }
 
+        if (!SinkConverging(u0, m, ic, jc, kc, pr(IPVX,p), pr(IPVY,p),
+                            pr(IPVZ,p), convergence)) return;
+
         // Step (a): integrate conserved vars over the 27 cells (pre-reset), and
         // Step (b): compute the 26 shell reset values into scratch from pre-reset u0.
         // Unified extrapolation rule for a shell cell at offset (di,dj,dk), nnz = number
@@ -435,9 +442,21 @@ TaskStatus Particles::AccreteMass(Driver *pdriver, int stage) {
             scr(v, 13) = (scr(v, 12) + scr(v, 14) +    // (di=-1/+1, dj=dk=0)
                           scr(v, 10) + scr(v, 16) +    // (dj=-1/+1)
                           scr(v, 4)  + scr(v, 22))/6.0; // (dk=-1/+1)
-            Real s2 = 0.0;
-            for (int c = 0; c < 27; ++c) s2 += scr(v, c);
-            acc(v) += (s1[v] - s2)*dV;
+
+          }
+        });
+        tm.team_barrier();
+
+        // Decide before any local, coarse/fine or remote writes. All team threads
+        // read identical scratch values and take the same branch.
+        Real reset_mass = 0.0;
+        for (int c = 0; c < 27; ++c) reset_mass += scr(0,c);
+        if (reject_negative && reset_mass > s1[0]) return;
+        Kokkos::single(Kokkos::PerTeam(tm), [&]() {
+          for (int v=0; v<4; ++v) {
+            Real s2=0.0;
+            for (int c=0; c<27; ++c) s2 += scr(v,c);
+            acc(v) += (s1[v]-s2)*dV;
           }
         });
         tm.team_barrier();
@@ -632,7 +651,7 @@ TaskStatus Particles::AccreteMass(Driver *pdriver, int stage) {
       // Step 2: the old control volume, if the sink crossed a cell boundary this step
       // (sequential after Step 1; the overlap region is deliberately re-reset and its
       // additional change accounted, per the reference)
-      if (ip != ip0 || jp != jp0 || kp != kp0) {
+      if (old_position && (ip != ip0 || jp != jp0 || kp != kp0)) {
         process_cv(ip0, jp0, kp0);
       }
 

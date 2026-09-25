@@ -46,9 +46,38 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
   accretion = pin->GetOrAddBoolean("particles","accretion",false);
   // sink creation (LP threshold + potential minimum; see particles_creation.cpp)
   creation = pin->GetOrAddBoolean("particles","creation",false);
+  creation_finest_only = pin->GetOrAddBoolean("particles", "creation_finest_only", false);
   // sink-sink merging on overlapping control volumes (see particles_merger.cpp)
-  merging = pin->GetOrAddBoolean("particles","merging",false);
-  merge_bound = pin->GetOrAddBoolean("particles","merge_bound",true);
+  const std::string setup = pin->GetOrAddString("particles", "sink_setup", "tigris");
+  if (setup != "tigris" && setup != "legacy") {
+    std::cerr << "Unknown particles/sink_setup: " << setup << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  const bool reference = (setup == "tigris");
+  merging = pin->GetOrAddBoolean("particles", "merging", reference && creation);
+  merge_bound = pin->GetOrAddBoolean("particles", "merge_bound", !reference);
+  merge_iterative = pin->GetOrAddBoolean("particles", "merge_iterative", reference);
+  merge_cell_centers = pin->GetOrAddBoolean("particles", "merge_cell_centers", reference);
+  merge_face_contact = pin->GetOrAddBoolean("particles", "merge_face_contact", false);
+  creation_exclusion = pin->GetOrAddBoolean("particles", "creation_exclusion", !reference);
+  creation_zero_velocity = pin->GetOrAddBoolean("particles", "creation_zero_velocity", reference);
+  accrete_old_position = pin->GetOrAddBoolean("particles", "accrete_old_position", !reference);
+  reject_negative_accretion = pin->GetOrAddBoolean("particles", "reject_negative_accretion", reference);
+  const std::string convergence = pin->GetOrAddString(
+      "particles", "sink_convergence", reference ? "mass_flux" : "off");
+  if (convergence != "off" && convergence != "mass_flux" && convergence != "velocity") {
+    std::cerr << "Unknown particles/sink_convergence: " << convergence << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  sink_convergence = convergence == "off" ? 0 : (convergence == "mass_flux" ? 1 : 2);
+  if (!merge_iterative && (merge_cell_centers || merge_face_contact)) {
+    std::cerr << "Cell/face merger geometry requires merge_iterative=true." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (creation && !creation_exclusion && (!merging || !merge_iterative)) {
+    std::cerr << "Creation without exclusion requires iterative merging." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
 
   // particle CFL number (see particles.hpp); 0.5 guarantees <= 1 cell crossed per step
   cfl_par = pin->GetOrAddReal("particles","cfl_par",0.5);

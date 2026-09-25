@@ -6,40 +6,12 @@
 //! \file particles_merger.cpp
 //! \brief sink-particle merging on overlapping control volumes.
 //!
-//! Sinks are merged into one when their 27-cell control volumes (the "halos" of Moon &
-//! Ostriker 2025 / Gong & Ostriker 2013) overlap and -- unless disabled -- the pair is
-//! gravitationally bound. The control volume is the cube of (2*rctrl+1)^3 cells centred
-//! on the sink cell (rctrl=1 => 3x3x3 = 27 cells), i.e. a cube of half-width
-//! (rctrl+0.5)*dx per axis. Two such cubes overlap when their centres are closer than the
-//! sum of the half-widths on EVERY axis (axis-aligned box overlap): the faithful "the
-//! halos overlap" criterion. Merging removes the overlapping control volumes that
-//! AccreteMass cannot otherwise handle, so this runs create -> MERGE -> accrete.
-//!
-//! A merged group conserves mass and linear momentum exactly and sits at the centre of
-//! mass:  M = sum m_a ;  v = (sum m_a v_a)/M ;  x = (sum m_a x_a)/M.  The relative orbital
-//! angular momentum about the COM is absorbed by the (unresolved) merged object. The MOST
-//! MASSIVE sink survives (ties -> lowest PTAG) and keeps its tag; the others are removed.
-//! Chained/simultaneous overlaps are resolved with union-find, so 3+ sinks merge at once.
-//!
-//! MPI (cross-rank): a MeshBlockPack holds only this rank's particles, so a pair whose
-//! halos overlap while owned by DIFFERENT ranks is invisible to a purely local scan. To
-//! handle it, every rank Allgathers ALL sinks (position, velocity, mass, per-sink dx,
-//! tag) each step, runs the SAME global union-find + conservative reduction (deterministic
-//! -> identical on every rank), then mutates only its LOCAL particles, keyed by tag:
-//!   * a local particle whose tag is a merge survivor  -> updated to the merged state
-//!     (its PGID re-derived from the COM; if the COM left this rank the migration chain
-//!      moves it next cycle);
-//!   * a local particle whose tag was absorbed          -> removed (array compacted);
-//!   * any other local particle                         -> untouched.
-//! The survivor lives on the rank that owned the most-massive member, so the merged
-//! particle ends up on exactly one of the interacting ranks. Because the group decision is
-//! global and the reduction sums in ascending-PTAG order, the result is
-//! decomposition-invariant, and on a single rank it is bit-identical to the local path
-//! (the same in-place update + compaction, keyed by tag instead of index).
-//!
-//! Sink counts are few, so the O(N^2) global test and the per-step Allgather are cheap;
-//! the collective RefreshMeshParticleCounts is reached on every post-gate exit path so all
-//! ranks participate (a merge changes the global particle total).
+//! Default: cell-centred CV overlap, iterative pair reduction, no binding gate.
+//! New candidates carry zero physical mass and separate temporary merger weights.
+//! Every rank resolves the same tag-sorted global list, then updates its local arrays.
+//! The task chain migrates moved survivors before accretion. Legacy physical-position
+//! overlap, binding gate and one-shot union-find remain available via sink_setup=legacy.
+//! Optional merge_face_contact includes face adjacency but excludes edge/corner contact.
 
 #include <algorithm>
 #include <cmath>
@@ -56,6 +28,8 @@
 #include "driver/driver.hpp"
 #include "gravity/gravity.hpp"
 #include "particles.hpp"
+#include "sink_merge.hpp"
+#include "coordinates/cell_locations.hpp"
 
 #if MPI_PARALLEL_ENABLED
 #include <mpi.h>
@@ -192,6 +166,50 @@ TaskStatus Particles::MergeSinks(Driver *pdriver, int stage) {
     }
   }
 
+  struct Surv { Real x, y, z, vx, vy, vz, M; };
+  std::map<int, Surv> survmap;
+  std::set<int> absorbed;
+  if (merge_iterative) {
+    std::vector<SinkMergeRecord<Real>> sinks;
+    for (int i=0; i<Ntot; ++i) {
+      const Real *r=&G[static_cast<size_t>(i)*REC];
+      sinks.push_back({{r[0],r[1],r[2]}, {r[3],r[4],r[5]}, {r[7],r[8],r[9]},
+                       r[6], 1.0, static_cast<int>(r[10])});
+    }
+    auto locate = [&](SinkMergeRecord<Real> &s) {
+      auto *pm=pmy_pack->pmesh;
+      for (int g=0; g<pm->nmb_total; ++g) {
+        const auto &ll=pm->lloc_eachmb[g];
+        const int shift=ll.level-pm->root_level;
+        const int nb[3]={pm->nmb_rootx1<<shift,pm->nmb_rootx2<<shift,
+                         pm->nmb_rootx3<<shift};
+        const auto ix=std::array<std::int64_t,3>{ll.lx1,ll.lx2,ll.lx3};
+        bool inside=true;
+        for (int c=0;c<3;++c) {
+          const Real lo=LeftEdgeX(ix[c],nb[c],dlo[c],dlo[c]+L[c]);
+          const Real hi=LeftEdgeX(ix[c]+1,nb[c],dlo[c],dlo[c]+L[c]);
+          inside=inside && s.x[c]>=lo && s.x[c]<hi;
+        }
+        if (inside) {
+          s.dx={L[0]/(nb[0]*pm->mb_indcs.nx1), L[1]/(nb[1]*pm->mb_indcs.nx2),
+                L[2]/(nb[2]*pm->mb_indcs.nx3)};
+          return;
+        }
+      }
+      std::cerr << "Merged sink has no owning MeshBlock" << std::endl;
+      std::exit(EXIT_FAILURE);
+    };
+    ResolveSinkMergers(sinks, std::array<Real,3>{dlo[0],dlo[1],dlo[2]},
+                      std::array<Real,3>{L[0],L[1],L[2]}, per,
+                      merge_cell_centers, merge_face_contact, do_bound, Ggrav, locate);
+    for (const auto &s:sinks) {
+      if (!s.alive) absorbed.insert(s.tag);
+      else if (s.changed) survmap[s.tag]={s.x[0],s.x[1],s.x[2],s.v[0],s.v[1],s.v[2],s.mass};
+    }
+    if (absorbed.empty()) return refresh_return();
+    if (my_rank==0) std::printf("MergeSinks: iterative removed %zu sinks cycle=%d\n",
+                                absorbed.size(),pmy_pack->pmesh->ncycle);
+  } else {
   // ---- global union-find over all sinks (identical on every rank) ----
   auto GX = [&](int i, int c) -> Real { return G[static_cast<size_t>(i)*REC + c]; };
   auto mimg = [&](Real d, int c) { return per ? d - L[c]*std::floor(d/L[c] + 0.5) : d; };
@@ -219,9 +237,9 @@ TaskStatus Particles::MergeSinks(Driver *pdriver, int stage) {
   if (!any) return refresh_return();
 
   // ---- reduce merged groups: survivor tag + conserved (M, COM, v) ----
-  struct Surv { Real x, y, z, vx, vy, vz, M; };
-  std::map<int, Surv> survmap;    // survivor tag -> merged state
-  std::set<int> absorbed;         // tags removed by a merge
+
+
+
   for (int root = 0; root < Ntot; ++root) {
     auto &mem = groups[root];
     if (mem.size() < 2) continue;
@@ -254,6 +272,8 @@ TaskStatus Particles::MergeSinks(Driver *pdriver, int stage) {
                   static_cast<int>(mem.size()), survtag, M, xc, yc, zc,
                   pmy_pack->pmesh->ncycle);
     }
+  }
+
   }
 
   // ---- pre-merge totals, measured from the ACTUAL particle arrays ----------------
