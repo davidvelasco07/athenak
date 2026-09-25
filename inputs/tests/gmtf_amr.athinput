@@ -1,0 +1,160 @@
+# GMTF sink ladder, PLM+RK2, Jeans AMR: base 128^3 (16^3 blocks, 8 per dimension),
+# 4 levels (finest 1024^3), 8 cells per Jeans length, sink protection, TIGRIS sink
+# defaults, velocity-bounded prolongation (default) and a dt guard. The known
+# coarse/fine gravity momentum drift is retained and measured (amr_diagnostics).
+# See gmtf_mood.athinput for the scheme notes.
+
+<comment>
+problem = gravo-turbulent fragmentation with sinks (PLM+RK2), Jeans AMR 128^3 -> 1024^3
+
+<job>
+basename = GMTF_amr_tigris
+
+<mesh>
+nghost = 4
+nx1 = 128
+x1min  = -2.0
+x1max  =  2.0
+ix1_bc = periodic
+ox1_bc = periodic
+
+nx2 = 128
+x2min  = -2.0
+x2max  =  2.0
+ix2_bc = periodic
+ox2_bc = periodic
+
+nx3 = 128
+x3min  = -2.0
+x3max  =  2.0
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 16
+nx2 = 16
+nx3 = 16
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.3
+nlim       = -1
+tlim = 0.36
+ndiag      = 10
+dt_guard   = 0.01
+dt_guard_window = 100
+
+<hydro>
+eos             = isothermal
+reconstruct     = plm
+rsolver         = hlle
+iso_sound_speed = 1.0
+mood            = false
+# MOOD settings below are inactive in this PLM run.
+# Velocity NAD follows fallback-validation MHD; isothermal hydro has no energy test.
+
+<hydro_srcterms>
+self_gravity = true
+
+<gravity>
+four_pi_G      = 39.47841760435743
+niteration = 10
+npresmooth     = 1
+npostsmooth    = 1
+full_multigrid = true
+fmg_ncycle     = 1
+mg_nghost      = 1
+
+moon_exchange = false
+
+<particles>
+type        = sink
+pusher      = leapfrog
+accretion   = true
+creation    = true
+merging     = true
+merge_bound = false
+cfl_par     = 0.5
+ppc         = 0.0
+
+creation_finest_only = true
+
+sink_setup = tigris
+
+merge_iterative = true
+
+merge_cell_centers = true
+
+merge_face_contact = false
+
+creation_exclusion = false
+
+creation_zero_velocity = true
+
+accrete_old_position = false
+
+reject_negative_accretion = true
+
+sink_convergence = mass_flux
+
+<problem>
+Mach      = 10
+mu_phi    = 2
+sfe_term = 0.15
+user_hist = true
+rseed     = 0
+nlow      = 0
+nhigh     = 16
+expo      = 2.0
+
+njeans = 8
+
+jeans_derefine = 2.5
+
+sink_buffer_cells = 4
+
+sink_protect = true
+
+amr_diagnostics = true
+
+<output1>
+file_type = hst
+dt        = 0.002
+last_time = 0.0
+
+data_format = %24.16e
+
+<output2>
+file_type = bin
+single_file_per_rank = true
+variable  = hydro_w
+dt = 0.01
+last_time = 0.0
+
+<output3>
+file_type = log
+dt        = 0.002
+last_time = 0.0
+
+<output5>
+file_type = trk
+variable  = prtcl
+dt = 0.002
+last_time = 0.0
+
+
+<mesh_refinement>
+refinement = adaptive
+num_levels = 4
+max_nmb_per_rank = 12288
+refinement_interval = 1
+ncycle_check = 1
+
+<amr_criterion0>
+method = user
+
+<output6>
+file_type = rst
+dt = 0.05
+last_time = 0.0
