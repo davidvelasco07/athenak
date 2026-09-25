@@ -240,6 +240,8 @@ class MeshBoundaryValuesCC : public MeshBoundaryValues {
   void FillCoarseInBndryCC(DvceArray5D<Real> &a, DvceArray5D<Real> &ca,
        bool is_z4c=false);
   void ProlongateCC(DvceArray5D<Real> &a, DvceArray5D<Real> &ca, bool is_z4c=false);
+  void ProlongateHydroCC(DvceArray5D<Real> &a, DvceArray5D<Real> &ca, int nhydro,
+                         int nscalars, bool is_ideal);
   void ConsToPrimCoarseBndry(const DvceArray5D<Real> &cons, DvceArray5D<Real> &prim);
   void PrimToConsFineBndry(const DvceArray5D<Real> &prim, DvceArray5D<Real> &cons);
   void ConsToPrimCoarseBndry(const DvceArray5D<Real> &cons, const DvceFaceFld4D<Real> &b,

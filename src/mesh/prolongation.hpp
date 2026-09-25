@@ -58,6 +58,147 @@ void ProlongCC(const int m, const int v, const int k, const int j, const int i,
 }
 
 //----------------------------------------------------------------------------------------
+//! \fn ProlongHydroCC()
+//! \brief Velocity-bounded, conservative prolongation of the hydro conserved variables of
+//! coarse cell (k,j,i) into its 2^dim children.
+//!
+//! ProlongCC() limits each conserved variable independently, so a child can receive a low
+//! density from the density slope but nearly the parent's momentum, i.e. a velocity far
+//! outside the range of its coarse neighbours. At a steep density peak this empties the
+//! child on its first update (rho -> 0, v -> 1e38). Here density (and, for an ideal EOS, the
+//! internal energy density) use the same min-mod slopes as ProlongCC, while the velocity is
+//! prolongated with min-mod slopes of the coarse VELOCITY field. A uniform per-parent shift
+//! of the child velocities (and of the child total energies) then restores exact momentum
+//! (and energy) conservation. If that would leave a child with non-positive density or
+//! internal energy, the parent state is copied into every child (piecewise constant).
+//! Passive scalars are prolongated with ProlongCC().
+
+KOKKOS_INLINE_FUNCTION
+Real ProlongMinmodQuarter(const Real dl, const Real dr) {
+  // same limited slope, scaled to the child offset, as used in ProlongCC()
+  return 0.125*(SIGN(dl) + SIGN(dr))*fmin(fabs(dl), fabs(dr));
+}
+
+KOKKOS_INLINE_FUNCTION
+void ProlongHydroCC(const int m, const int k, const int j, const int i,
+                    const int fk, const int fj, const int fi,
+                    const bool multi_d, const bool three_d,
+                    const int nhydro, const int nscalars, const bool is_ideal,
+                    const DvceArray5D<Real> &ca, const DvceArray5D<Real> &a) {
+  const int nc2 = multi_d ? 2 : 1;
+  const int nc3 = three_d ? 2 : 1;
+  const int nchild = 2*nc2*nc3;
+
+  // coarse primitive-like fields at the parent (index 0) and its 6 face neighbours
+  // (1:-i 2:+i 3:-j 4:+j 5:-k 6:+k)
+  const int ok[7] = {0, 0, 0, 0, 0, -1, 1};
+  const int oj[7] = {0, 0, 0, -1, 1, 0, 0};
+  const int oi[7] = {0, -1, 1, 0, 0, 0, 0};
+  const int nstencil = three_d ? 7 : (multi_d ? 5 : 3);
+  Real d[7], vel[3][7], eint[7];
+  for (int s=0; s<nstencil; ++s) {
+    const int kk = k + ok[s], jj = j + oj[s], ii = i + oi[s];
+    d[s] = ca(m,IDN,kk,jj,ii);
+    Real ke = 0.0;
+    for (int n=0; n<3; ++n) {
+      vel[n][s] = ca(m,IM1+n,kk,jj,ii)/d[s];
+      ke += 0.5*ca(m,IM1+n,kk,jj,ii)*vel[n][s];
+    }
+    eint[s] = is_ideal ? (ca(m,IEN,kk,jj,ii) - ke) : 0.0;
+  }
+
+  // limited slopes (already scaled to the child offset) of each field
+  auto slope = [&](const Real *f, const int dir) -> Real {
+    return ProlongMinmodQuarter(f[0] - f[2*dir+1], f[2*dir+2] - f[0]);
+  };
+  Real sd[3] = {slope(d, 0), multi_d ? slope(d, 1) : 0.0, three_d ? slope(d, 2) : 0.0};
+  Real se[3] = {0.0, 0.0, 0.0};
+  if (is_ideal) {
+    se[0] = slope(eint, 0);
+    se[1] = multi_d ? slope(eint, 1) : 0.0;
+    se[2] = three_d ? slope(eint, 2) : 0.0;
+  }
+  Real sv[3][3];
+  for (int n=0; n<3; ++n) {
+    sv[n][0] = slope(vel[n], 0);
+    sv[n][1] = multi_d ? slope(vel[n], 1) : 0.0;
+    sv[n][2] = three_d ? slope(vel[n], 2) : 0.0;
+  }
+
+  // child states before the conservation correction
+  Real rc[8], vc[3][8], ec[8];
+  Real sum_rv[3] = {0.0, 0.0, 0.0};
+  int c = 0;
+  for (int ck=0; ck<nc3; ++ck) {
+    for (int cj=0; cj<nc2; ++cj) {
+      for (int ci=0; ci<2; ++ci) {
+        const Real s1 = (ci == 0) ? -1.0 : 1.0;
+        const Real s2 = (cj == 0) ? -1.0 : 1.0;
+        const Real s3 = (ck == 0) ? -1.0 : 1.0;
+        rc[c] = d[0] + s1*sd[0] + s2*sd[1] + s3*sd[2];
+        ec[c] = eint[0] + s1*se[0] + s2*se[1] + s3*se[2];
+        for (int n=0; n<3; ++n) {
+          vc[n][c] = vel[n][0] + s1*sv[n][0] + s2*sv[n][1] + s3*sv[n][2];
+          sum_rv[n] += rc[c]*vc[n][c];
+        }
+        ++c;
+      }
+    }
+  }
+
+  // uniform velocity shift restoring sum(child momentum) = nchild * parent momentum
+  // (sum of child densities = nchild * parent density, since the slopes are symmetric)
+  Real dv[3];
+  for (int n=0; n<3; ++n) {
+    dv[n] = (nchild*ca(m,IM1+n,k,j,i) - sum_rv[n])/(nchild*d[0]);
+  }
+  bool ok_state = (d[0] > 0.0);
+  Real etot[8];
+  Real de = 0.0;
+  for (int cc=0; cc<nchild; ++cc) {
+    ok_state = ok_state && (rc[cc] > 0.0);
+    if (is_ideal) {
+      Real ke = 0.0;
+      for (int n=0; n<3; ++n) {
+        const Real v = vc[n][cc] + dv[n];
+        ke += 0.5*rc[cc]*v*v;
+      }
+      etot[cc] = ec[cc] + ke;
+      de += etot[cc];
+    }
+  }
+  if (is_ideal) {
+    // uniform energy shift restoring sum(child total energy) = nchild * parent energy
+    de = (nchild*ca(m,IEN,k,j,i) - de)/nchild;
+    for (int cc=0; cc<nchild; ++cc) {ok_state = ok_state && (ec[cc] + de > 0.0);}
+  }
+
+  c = 0;
+  for (int ck=0; ck<nc3; ++ck) {
+    for (int cj=0; cj<nc2; ++cj) {
+      for (int ci=0; ci<2; ++ci) {
+        if (ok_state) {
+          a(m,IDN,fk+ck,fj+cj,fi+ci) = rc[c];
+          for (int n=0; n<3; ++n) {
+            a(m,IM1+n,fk+ck,fj+cj,fi+ci) = rc[c]*(vc[n][c] + dv[n]);
+          }
+          if (is_ideal) {a(m,IEN,fk+ck,fj+cj,fi+ci) = etot[c] + de;}
+        } else {
+          // fall back to piecewise-constant prolongation of the whole hydro state
+          for (int v=0; v<nhydro; ++v) {a(m,v,fk+ck,fj+cj,fi+ci) = ca(m,v,k,j,i);}
+        }
+        ++c;
+      }
+    }
+  }
+
+  for (int v=nhydro; v<nhydro+nscalars; ++v) {
+    ProlongCC(m,v,k,j,i,fk,fj,fi,multi_d,three_d,ca,a);
+  }
+  return;
+}
+
+//----------------------------------------------------------------------------------------
 //! \fn ProlongFCSharedX1Face()
 //! \brief 2nd-order (piecewise-linear) prolongation operator for face-centered variables
 //! on shared X1-faces between fine and coarse cells

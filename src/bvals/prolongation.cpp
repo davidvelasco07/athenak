@@ -210,6 +210,57 @@ void MeshBoundaryValuesCC::ProlongateCC(DvceArray5D<Real> &a, DvceArray5D<Real> 
 }
 
 //----------------------------------------------------------------------------------------
+//! \fn void ProlongateHydroCC()
+//! \brief Same as ProlongateCC() for the hydro conserved variables, but with the
+//! velocity-bounded operator ProlongHydroCC() (all variables of a coarse cell together).
+
+void MeshBoundaryValuesCC::ProlongateHydroCC(DvceArray5D<Real> &a, DvceArray5D<Real> &ca,
+    int nhydro, int nscalars, bool is_ideal) {
+  int nmb = pmy_pack->nmb_thispack;
+  int nnghbr = pmy_pack->pmb->nnghbr;
+  int nmn = nmb*nnghbr;
+  auto &nghbr = pmy_pack->pmb->nghbr;
+  auto &mblev = pmy_pack->pmb->mb_lev;
+  auto &rbuf = recvbuf;
+  auto &indcs  = pmy_pack->pmesh->mb_indcs;
+  const bool multi_d = pmy_pack->pmesh->multi_d;
+  const bool three_d = pmy_pack->pmesh->three_d;
+
+  Kokkos::TeamPolicy<> policy(DevExeSpace(), nmn, Kokkos::AUTO);
+  Kokkos::parallel_for("ProlHydroCC", policy, KOKKOS_LAMBDA(TeamMember_t tmember) {
+    const int m = (tmember.league_rank())/nnghbr;
+    const int n = (tmember.league_rank() - m*nnghbr);
+    // only prolongate when neighbor exists and is at coarser level
+    if ((nghbr.d_view(m,n).gid >= 0) && (nghbr.d_view(m,n).lev < mblev.d_view(m))) {
+      int il = rbuf[n].iprol[0].bis;
+      int iu = rbuf[n].iprol[0].bie;
+      int jl = rbuf[n].iprol[0].bjs;
+      int ju = rbuf[n].iprol[0].bje;
+      int kl = rbuf[n].iprol[0].bks;
+      int ku = rbuf[n].iprol[0].bke;
+      const int ni = iu - il + 1;
+      const int nj = ju - jl + 1;
+      const int nk = ku - kl + 1;
+      const int nkji = nk*nj*ni;
+      const int nji  = nj*ni;
+      Kokkos::parallel_for(Kokkos::TeamThreadRange<>(tmember, nkji), [&](const int idx) {
+        int k = idx/nji;
+        int j = (idx - k*nji)/ni;
+        int i = (idx - k*nji - j*ni) + il;
+        j += jl;
+        k += kl;
+        int fi = (i - indcs.cis)*2 + indcs.is;
+        int fj = (j - indcs.cjs)*2 + indcs.js;
+        int fk = (k - indcs.cks)*2 + indcs.ks;
+        ProlongHydroCC(m,k,j,i,fk,fj,fi,multi_d,three_d,nhydro,nscalars,is_ideal,ca,a);
+      });
+    }
+    tmember.team_barrier();
+  });
+  return;
+}
+
+//----------------------------------------------------------------------------------------
 //! \fn void FillCoarseInBndryFC()
 //! \brief As in the case of cell-centered variables, to ensure that the coarse field is
 //! up-to-date in all neighboring cells touched by the prolongation interpolation stencil,

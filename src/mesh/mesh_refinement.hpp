@@ -53,6 +53,7 @@ class MeshRefinement {
   int ncyc_check_amr;        // # of cycles between checking mesh for ref/derefinement
   int refinement_interval;   // # of cycles between allowing successive ref/derefinement
   bool prolong_prims;        // flag to enable prolongation of primitive vars
+  bool prolong_velocity;     // hydro: velocity-bounded conservative prolongation
   RefinementCriteria* pmrc=nullptr;   // object to control various refinement criteria
 
   // following 2x Views are dimensioned [nmb_total]
@@ -114,6 +115,8 @@ class MeshRefinement {
   void RefineCC(DualArray1D<int> &n2o, DvceArray5D<Real> &a, DvceArray5D<Real> &ca,
                 bool is_z4c=false);
   void RefineFC(DualArray1D<int> &n2o, DvceFaceFld4D<Real> &b, DvceFaceFld4D<Real> &cb);
+  void RefineHydroCC(DualArray1D<int> &n2o, DvceArray5D<Real> &a, DvceArray5D<Real> &ca,
+                     int nhydro, int nscalars, bool is_ideal);
 
   void RestrictCC(DvceArray5D<Real> &a, DvceArray5D<Real> &ca, bool is_z4c=false);
   void RestrictFC(DvceFaceFld4D<Real> &b, DvceFaceFld4D<Real> &cb);

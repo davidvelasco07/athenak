@@ -26,6 +26,7 @@
 #include "refinement_criteria.hpp"
 
 #include "hydro/hydro.hpp"
+#include "eos/eos.hpp"
 #include "mhd/mhd.hpp"
 #include "radiation/radiation.hpp"
 #include "coordinates/adm.hpp"
@@ -49,6 +50,7 @@ MeshRefinement::MeshRefinement(Mesh *pm, ParameterInput *pin) :
   ncyc_check_amr(1),
   refinement_interval(5),
   prolong_prims(false),
+  prolong_velocity(true),
   refine_flag("rflag",pm->nmb_total),
   ncyc_since_ref("cyc_since_ref",pm->nmb_total),
 #if MPI_PARALLEL_ENABLED
@@ -66,6 +68,11 @@ MeshRefinement::MeshRefinement(Mesh *pm, ParameterInput *pin) :
     if (pin->DoesParameterExist("mesh_refinement", "prolong_primitives")) {
       prolong_prims = pin->GetBoolean("mesh_refinement", "prolong_primitives");
     }
+    // hydro: prolongate velocity (not momentum) with limited slopes, conservatively, both
+    // into newly refined MeshBlocks and into fine ghost zones at coarse/fine boundaries.
+    // Independent limiting of rho and rho*v let a low-density child inherit a velocity far
+    // outside its neighbours' range, which emptied the cell and collapsed dt (GMTF AMR).
+    prolong_velocity = pin->GetOrAddBoolean("mesh_refinement", "prolong_velocity", true);
   }
 
   // allocate arrays for AMR, add RefinementCriteria object
@@ -589,7 +596,12 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
 
   if (nnew > 0) {
     if (phydro != nullptr) {
-      RefineCC(new_to_old, phydro->u0, phydro->coarse_u0);
+      if (prolong_velocity) {
+        RefineHydroCC(new_to_old, phydro->u0, phydro->coarse_u0, phydro->nhydro,
+                      phydro->nscalars, phydro->peos->eos_data.is_ideal);
+      } else {
+        RefineCC(new_to_old, phydro->u0, phydro->coarse_u0);
+      }
     }
     if (pmhd != nullptr) {
       RefineCC(new_to_old, pmhd->u0, pmhd->coarse_u0);
@@ -1072,6 +1084,49 @@ void MeshRefinement::RefineCC(DualArray1D<int> &n2o, DvceArray5D<Real> &a,
     }
   });
 
+  return;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void MeshRefinement::RefineHydroCC
+//! \brief Same as RefineCC, but for the hydro conserved variables, using the
+//! velocity-bounded conservative operator ProlongHydroCC() (all variables of a coarse cell
+//! are prolongated together, so the outer loop is over MeshBlocks only).
+
+void MeshRefinement::RefineHydroCC(DualArray1D<int> &n2o, DvceArray5D<Real> &a,
+                                   DvceArray5D<Real> &ca, int nhydro, int nscalars,
+                                   bool is_ideal) {
+  auto &new_nmb = new_nmb_eachrank[global_variable::my_rank];
+  auto &indcs = pmy_mesh->mb_indcs;
+  auto &cis = indcs.cis, &cie = indcs.cie;
+  auto &cjs = indcs.cjs, &cje = indcs.cje;
+  auto &cks = indcs.cks, &cke = indcs.cke;
+  auto &refine_flag_ = refine_flag;
+  const bool multi_d = pmy_mesh->multi_d;
+  const bool three_d = pmy_mesh->three_d;
+  auto &ngids_ = new_gids_eachrank[global_variable::my_rank];
+  Kokkos::TeamPolicy<> policy(DevExeSpace(), new_nmb, Kokkos::AUTO);
+  Kokkos::parallel_for("RefineHydro", policy, KOKKOS_LAMBDA(TeamMember_t tmember) {
+    const int m = tmember.league_rank();
+    if (refine_flag_.d_view(n2o.d_view(m+ngids_)) > 0) {
+      const int ni = cie - cis + 1;
+      const int nj = cje - cjs + 1;
+      const int nk = cke - cks + 1;
+      const int nkji = nk*nj*ni;
+      const int nji  = nj*ni;
+      Kokkos::parallel_for(Kokkos::TeamThreadRange<>(tmember, nkji), [&](const int idx) {
+        int k = (idx)/nji;
+        int j = (idx - k*nji)/ni;
+        int i = (idx - k*nji - j*ni) + cis;
+        k += cks;
+        j += cjs;
+        int fi = 2*i - cis;  // correct when cis=is
+        int fj = 2*j - cjs;  // correct when cjs=js
+        int fk = 2*k - cks;  // correct when cks=ks
+        ProlongHydroCC(m,k,j,i,fk,fj,fi,multi_d,three_d,nhydro,nscalars,is_ideal,ca,a);
+      });
+    }
+  });
   return;
 }
 
