@@ -352,6 +352,8 @@ int main(int argc, char *argv[]) {
   pdriver->Initialize(pmesh, pinput, pout, res_flag);
   pdriver->Execute(pmesh, pinput, pout);
   pdriver->Finalize(pmesh, pinput, pout);
+  // a run stopped by <time>/dt_guard did not reach its end, so report failure
+  const int exit_code = pdriver->dt_guard_tripped ? EXIT_FAILURE : 0;
 
   //--- Step 8. -------------------------------------------------------------------------
   // clean up, and terminate
@@ -365,5 +367,5 @@ int main(int argc, char *argv[]) {
 #if MPI_PARALLEL_ENABLED
   MPI_Finalize();
 #endif
-  return(0);
+  return(exit_code);
 }
