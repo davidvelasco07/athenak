@@ -22,6 +22,9 @@
 #include "parameter_input.hpp"
 #include "coordinates/cell_locations.hpp"
 #include "mesh/mesh.hpp"
+#include "mesh/mesh_refinement.hpp"
+#include "gravity/gravity.hpp"
+#include "particles/sink_positions.hpp"
 #include "eos/eos.hpp"
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
@@ -35,6 +38,9 @@ namespace {
 Real sfe_term_ = -1.0;      // terminal star-formation efficiency; <= 0 disables
 Real mtot0_ = -1.0;         // initial gas mass, set on the first history call
 bool sfe_stop_announced_ = false;
+Real njeans_ = 0.0, jeans_derefine_ = 2.5, sink_buffer_ = 4.0;
+bool sink_protect_ = true, amr_diagnostics_ = false;
+void GMTFRefinement(MeshBlockPack *pmbp);
 void GMTFHistory(HistoryData *pdata, Mesh *pm);
 void SeedSinks(ParameterInput *pin, MeshBlockPack *pmbp);
 }  // namespace
@@ -48,6 +54,50 @@ void SeedSinks(ParameterInput *pin, MeshBlockPack *pmbp);
 //  \brief
 //========================================================================================
 void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
+  // Enroll callbacks before the restart return; input settings must survive restart.
+  sfe_term_ = pin->GetOrAddReal("problem", "sfe_term", -1.0);
+  // The stopping test lives inside GMTFHistory, so sfe_term does nothing unless that
+  // function is enrolled. Gating enrolment on user_hist alone made `sfe_term = 0.15` a
+  // silent no-op in every deck that omitted the flag: the 256^3 and 512^3 GMTF runs each
+  // ran to tlim, ~10x past the intended stop, and nothing in the output said why. A
+  // parameter that is read must not be quietly ignorable, so enrol whenever EITHER the
+  // extra history columns were asked for OR a stopping efficiency was set. The only side
+  // effect of the second case is that such a run also writes <basename>.user.hst, which
+  // carries m_sink, n_sink and SFE -- worth having whenever sfe_term is in play.
+  //
+  // BOTH members must be set. `user_hist_func` is only the callback; whether the history
+  // output has a UserDefined entry to invoke it from is gated separately on the
+  // `user_hist` flag (see HistoryOutput::HistoryOutput, which tests pgen->user_hist).
+  // Setting the function pointer alone is a silent no-op -- the callback is simply never
+  // reached. pgen.cpp initialises user_hist from the input before UserProblem runs and
+  // validates it afterwards, so overriding it here is both safe and in time.
+  if (pin->GetOrAddBoolean("problem", "user_hist", false) || sfe_term_ > 0.0) {
+    user_hist = true;
+    user_hist_func = GMTFHistory;
+  }
+  amr_diagnostics_ = pin->GetOrAddBoolean("problem", "amr_diagnostics", false);
+  if (amr_diagnostics_) { user_hist = true; user_hist_func = GMTFHistory; }
+  if (pmy_mesh_->adaptive || amr_diagnostics_) {
+    njeans_ = pin->GetOrAddReal("problem", "njeans", 8.0);
+    jeans_derefine_ = pin->GetOrAddReal("problem", "jeans_derefine", 2.5);
+    sink_buffer_ = pin->GetOrAddReal("problem", "sink_buffer_cells", 4.0);
+    sink_protect_ = pin->GetOrAddBoolean("problem", "sink_protect", true);
+    auto pack = pmy_mesh_->pmb_pack;
+    if (pack->phydro == nullptr || pack->pgrav == nullptr ||
+        pack->phydro->peos->eos_data.is_ideal || pack->pgrav->four_pi_G <= 0.0 ||
+        !std::isfinite(njeans_) || njeans_ <= 0.0 ||
+        !std::isfinite(jeans_derefine_) || jeans_derefine_ <= 2.0 ||
+        !std::isfinite(sink_buffer_) || (sink_protect_ && sink_buffer_ < 4.0)) {
+      Kokkos::abort("GMTF Jeans AMR needs isothermal hydro, positive gravity/NJeans, "
+                    "derefinement ratio > 2 and protected sink buffer >= 4 cells");
+    }
+    for (int face=0; face<6; ++face) {
+      if (pmy_mesh_->mesh_bcs[face] != BoundaryFlag::periodic) {
+        Kokkos::abort("GMTF Jeans AMR currently requires a periodic box");
+      }
+    }
+    if (pmy_mesh_->adaptive) user_ref_func = GMTFRefinement;
+  }
   if (restart) return;
 
   MeshBlockPack *pmbp = pmy_mesh_->pmb_pack;
@@ -142,20 +192,6 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   int nlow = pin->GetInteger("problem", "nlow");
   int nhigh = pin->GetInteger("problem", "nhigh");
   Real expo = pin->GetReal("problem", "expo");
-
-  // Star-formation efficiency diagnostic and stopping criterion.
-  //   SFE = M_sink / (M_sink + M_gas)
-  // A pure gravo-turbulent box has no feedback -- no radiation, no outflows, no
-  // supernovae -- and with periodic boundaries nothing opposes global collapse, so SFE
-  // runs away to ~1 regardless of the physics being modelled. Real clouds convert only a
-  // few per cent per free-fall time before feedback intervenes. sfe_term is therefore a
-  // statement about the DOMAIN OF VALIDITY of this setup, not about the gas: past it the
-  // run is integrating a cloud that could not exist. It was previously read from the
-  // input and never used, so it silently did nothing.
-  sfe_term_ = pin->GetOrAddReal("problem", "sfe_term", -1.0);
-  if (pin->GetOrAddBoolean("problem", "user_hist", false)) {
-    user_hist_func = GMTFHistory;
-  }
 
   if (mach <= 0.0) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -324,6 +360,29 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   const int nmkji = nmb*nx3*nx2*nx1;
   const int nkji = nx3*nx2*nx1;
   const int nji = nx2*nx1;
+  const bool weighted = pmy_mesh_->multilevel;
+  const Real volume = (pmy_mesh_->mesh_size.x1max-pmy_mesh_->mesh_size.x1min)*
+                      (pmy_mesh_->mesh_size.x2max-pmy_mesh_->mesh_size.x2min)*
+                      (pmy_mesh_->mesh_size.x3max-pmy_mesh_->mesh_size.x3min);
+  if (weighted) {
+    for (int v=0; v<3; ++v) {
+      Real mean = 0.0;
+      Kokkos::parallel_reduce("gmtf_amr_mean", Kokkos::RangePolicy<>(DevExeSpace(),0,nmkji),
+      KOKKOS_LAMBDA(const int idx, Real &sum) {
+        const int m=idx/nkji, k=(idx-m*nkji)/nji+ks;
+        const int j=(idx-m*nkji-(k-ks)*nji)/nx1+js;
+        const int i=(idx-m*nkji-(k-ks)*nji-(j-js)*nx1)+is;
+        const auto b=size.d_view(m);
+        sum += dv(m,v,k,j,i)*b.dx1*b.dx2*b.dx3;
+      }, Kokkos::Sum<Real>(mean));
+#if MPI_PARALLEL_ENABLED
+      MPI_Allreduce(MPI_IN_PLACE,&mean,1,MPI_ATHENA_REAL,MPI_SUM,MPI_COMM_WORLD);
+#endif
+      mean /= volume;
+      par_for("gmtf_amr_zero_momentum", DevExeSpace(),0,nmb-1,ks,ke,js,je,is,ie,
+      KOKKOS_LAMBDA(int m,int k,int j,int i) { dv(m,v,k,j,i) -= mean; });
+    }
+  }
   Real v2_sum = 0.0;
   Kokkos::parallel_reduce("gmtf_vrms",
   Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
@@ -334,7 +393,10 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     int i = (idx - m*nkji - k*nji - j*nx1) + is;
     k += ks;
     j += js;
-    v2_sum_local += SQR(dv(m,0,k,j,i)) + SQR(dv(m,1,k,j,i)) + SQR(dv(m,2,k,j,i));
+    const auto b=size.d_view(m);
+    const Real weight = weighted ? b.dx1*b.dx2*b.dx3 : 1.0;
+    v2_sum_local += weight*(SQR(dv(m,0,k,j,i)) + SQR(dv(m,1,k,j,i))
+                           + SQR(dv(m,2,k,j,i)));
   }, Kokkos::Sum<Real>(v2_sum));
 #if MPI_PARALLEL_ENABLED
   MPI_Allreduce(MPI_IN_PLACE, &v2_sum, 1, MPI_ATHENA_REAL, MPI_SUM, MPI_COMM_WORLD);
@@ -344,7 +406,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   long long Nx1 = static_cast<long long>(pmbp->pmesh->mesh_indcs.nx1);
   long long Nx2 = static_cast<long long>(pmbp->pmesh->mesh_indcs.nx2);
   long long Nx3 = static_cast<long long>(pmbp->pmesh->mesh_indcs.nx3);
-  Real vrms = std::sqrt(v2_sum / static_cast<Real>(Nx1*Nx2*Nx3));
+  Real vrms = std::sqrt(v2_sum / (weighted ? volume : static_cast<Real>(Nx1*Nx2*Nx3)));
   par_for("gmtf_init_turb", DevExeSpace(), 0, nmb - 1, ks, ke, js, je, is, ie,
   KOKKOS_LAMBDA(int m, int k, int j, int i) {
     u0(m,IM1,k,j,i) += mach/vrms*dv(m,0,k,j,i);
@@ -364,6 +426,58 @@ namespace {
 //! to the current time so the run ends at the close of this cycle by the NORMAL path --
 //! final outputs are written and the usual "Terminating on time limit" message appears,
 //! rather than aborting and losing the last dump.
+
+// Jeans gas refinement OR finest-level sink protection. The density stencil includes
+// ghosts, so a core approaching a block boundary requests refinement on both sides.
+void GMTFRefinement(MeshBlockPack *pmbp) {
+  auto pm = pmbp->pmesh;
+  auto &flags = pm->pmr->refine_flag;
+  const auto ix = pm->mb_indcs;
+  const int ni=ix.nx1+2*ix.ng, nj=ix.nx2+2*ix.ng, nk=ix.nx3+2*ix.ng;
+  const int nmb=pmbp->nmb_thispack, gids=pmbp->gids;
+  auto u=pmbp->phydro->u0;
+  auto sizes=pmbp->pmb->mb_size.d_view;
+  const Real cs=pmbp->phydro->peos->eos_data.iso_cs;
+  const Real factor=4.0*M_PI*M_PI*cs*cs/pmbp->pgrav->four_pi_G;
+  const Real target2=njeans_*njeans_, derefine2=target2*jeans_derefine_*jeans_derefine_;
+  const Real buffer=sink_buffer_;
+  const bool protect=sink_protect_;
+  int nsink=0;
+  auto pos=GatherAllSinkPositions(pmbp,nsink);
+  auto sp=pos.d_view;
+  const Real lx=pm->mesh_size.x1max-pm->mesh_size.x1min;
+  const Real ly=pm->mesh_size.x2max-pm->mesh_size.x2min;
+  const Real lz=pm->mesh_size.x3max-pm->mesh_size.x3min;
+  par_for_outer("GMTFJeansAMR",DevExeSpace(),0,0,0,nmb-1,
+  KOKKOS_LAMBDA(TeamMember_t team,const int m) {
+    Real rhomax;
+    Kokkos::parallel_reduce(Kokkos::TeamThreadRange(team,ni*nj*nk),
+      [&](const int idx,Real &v) {
+        const int k=idx/(ni*nj), j=(idx-k*ni*nj)/ni, i=idx-k*ni*nj-j*ni;
+        v=Kokkos::fmax(v,u(m,IDN,k,j,i));
+      },Kokkos::Max<Real>(rhomax));
+    Kokkos::single(Kokkos::PerTeam(team),[&]() {
+      const auto b=sizes(m);
+      const Real dx=Kokkos::fmax(b.dx1,Kokkos::fmax(b.dx2,b.dx3));
+      const Real j2=factor/(rhomax*dx*dx);
+      int flag=(j2<target2) ? 1 : ((j2>derefine2) ? -1 : 0);
+      if (protect) {
+        for (int p=0;p<nsink;++p) {
+          Real x=Kokkos::fabs(sp(3*p)-0.5*(b.x1min+b.x1max));
+          Real y=Kokkos::fabs(sp(3*p+1)-0.5*(b.x2min+b.x2max));
+          Real z=Kokkos::fabs(sp(3*p+2)-0.5*(b.x3min+b.x3max));
+          x=Kokkos::fmin(x,lx-x); y=Kokkos::fmin(y,ly-y); z=Kokkos::fmin(z,lz-z);
+          if (x<=0.5*(b.x1max-b.x1min)+buffer*b.dx1 &&
+              y<=0.5*(b.x2max-b.x2min)+buffer*b.dx2 &&
+              z<=0.5*(b.x3max-b.x3min)+buffer*b.dx3) flag=1;
+        }
+      }
+      flags.d_view(m+gids)=flag;
+    });
+  });
+  flags.template modify<DevExeSpace>();
+  flags.template sync<HostMemSpace>();
+}
 
 void GMTFHistory(HistoryData *pdata, Mesh *pm) {
   MeshBlockPack *pmbp = pm->pmb_pack;
@@ -414,6 +528,51 @@ void GMTFHistory(HistoryData *pdata, Mesh *pm) {
   // totals are available; on one rank the two agree.
   pdata->hdata[6] = 0.0;
   for (int n = pdata->nhist; n < NHISTORY_VARIABLES; ++n) { pdata->hdata[n] = 0.0; }
+
+  if (amr_diagnostics_) {
+    pdata->nhist = 16;
+    const char *extra[] = {"px_total", "py_total", "pz_total", "nblock", "nblock_max",
+                           "j_bad_lo", "j_bad_max", "sink_lo", "vol_max"};
+    for (int v=0; v<9; ++v) { pdata->label[7+v]=extra[v]; pdata->hdata[7+v]=0.0; }
+    for (int v=0; v<3; ++v) pdata->hdata[7+v]=g[1+v];
+    if (pmbp->ppart != nullptr) {
+      auto pr=Kokkos::create_mirror_view_and_copy(HostMemSpace(),pmbp->ppart->prtcl_rdata);
+      auto pi=Kokkos::create_mirror_view_and_copy(HostMemSpace(),pmbp->ppart->prtcl_idata);
+      for (int p=0;p<nsink;++p) {
+        pdata->hdata[7]+=pr(IPM,p)*pr(IPVX,p);
+        pdata->hdata[8]+=pr(IPM,p)*pr(IPVY,p);
+        pdata->hdata[9]+=pr(IPM,p)*pr(IPVZ,p);
+        const int m=pi(PGID,p)-pmbp->gids;
+        if (m>=0 && m<pmbp->nmb_thispack &&
+            pmbp->pmb->mb_lev.h_view(m)<pm->max_level) pdata->hdata[14]+=1.0;
+      }
+    }
+    pdata->hdata[10]=pmbp->nmb_thispack;
+    for (int m=0;m<pmbp->nmb_thispack;++m) {
+      if (pmbp->pmb->mb_lev.h_view(m)==pm->max_level) {
+        pdata->hdata[11]+=1.0;
+        const auto b=sz.h_view(m);
+        pdata->hdata[15]+=(b.x1max-b.x1min)*(b.x2max-b.x2min)*(b.x3max-b.x3min);
+      }
+    }
+    const Real cs=pmbp->phydro->peos->eos_data.iso_cs;
+    const Real fac=4.0*M_PI*M_PI*cs*cs/(pmbp->pgrav->four_pi_G*njeans_*njeans_);
+    auto levels=pmbp->pmb->mb_lev.d_view;
+    const int maxlevel=pm->max_level;
+    for (int capped=0;capped<2;++capped) {
+      Real count=0;
+      Kokkos::parallel_reduce("gmtf_jeans_count",Kokkos::RangePolicy<>(DevExeSpace(),0,nmkji),
+      KOKKOS_LAMBDA(const int idx,Real &sum) {
+        const int m=idx/nkji, k=(idx-m*nkji)/nji+ks;
+        const int j=(idx-m*nkji-(k-ks)*nji)/nx1+js;
+        const int i=(idx-m*nkji-(k-ks)*nji-(j-js)*nx1)+is;
+        const auto b=sz.d_view(m);
+        const Real dx=Kokkos::fmax(b.dx1,Kokkos::fmax(b.dx2,b.dx3));
+        if ((levels(m)==maxlevel)==(capped==1) && u0(m,IDN,k,j,i)>fac/(dx*dx)) sum+=1;
+      },Kokkos::Sum<Real>(count));
+      pdata->hdata[12+capped]=count;
+    }
+  }
 
   // ---- global totals, for the stopping criterion -------------------------------------
   Real loc[2] = {g[0], msink}, glb[2] = {g[0], msink};
