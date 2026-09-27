@@ -350,6 +350,31 @@ class MultigridDriver {
   auto GetRootSource_h() { return mgroot_->GetCurrentSource_h(); }
   // pure virtual function
   virtual void Solve(Driver *pdriver, int step, Real dt = 0.0) = 0;
+
+  // ---- host / MPI phase timers (env MG_TIMERS) ----------------------------------------
+  // Wall-clock accounting of a solve's parts, for the costs kokkos-tools cannot see: with
+  // mesh refinement the octet levels run serially on the host (every rank repeats all of
+  // them), the block<->root transfers do a device->host sync and an MPI_Allgatherv, and
+  // block-level exchanges wait on MPI. Same two modes as SINK_TIMERS (particles.hpp):
+  //   MG_TIMERS=1  accumulate and report. Kernels are asynchronous, so a region can absorb
+  //                the completion of work launched before it.
+  //   MG_TIMERS=2  additionally Kokkos::fence() + MPI_Barrier before each region, charged
+  //                to "wait", and a fence at its end, so each region is charged its own
+  //                kernels. Perturbing on purpose: an attribution run, never a timing run.
+  // Everything is nested in MT_SOLVE, and MT_ALLGATHER in MT_TO_ROOT. MT_FROM_ROOT includes
+  // the octet pre-transfer restriction and boundaries; MT_ROOT includes the coarsest solve.
+  enum MGTimerId {MT_SOLVE=0, MT_PREPARE, MT_BLOCKS, MT_TO_ROOT, MT_ALLGATHER, MT_FROM_ROOT,
+                  MT_ROOT, MT_OCT_BND, MT_OCT_SMOOTH, MT_OCT_OTHER, MT_NUM};
+  double MtBegin(int id);
+  void   MtEnd(int id, double t0);
+  void   ReportMGTimers(double wall_seconds);
+  // scope guard, so a region with early returns still stops its timer
+  struct MGTimerScope {
+    MultigridDriver *d; int id; double t0;
+    MGTimerScope(MultigridDriver *pd, int i) : d(pd), id(i), t0(pd->MtBegin(i)) {}
+    ~MGTimerScope() { d->MtEnd(id, t0); }
+  };
+
   void PrepareForAMR();
   int GetCoffset() const { return coffset_; }
   void MGRootBoundary();
@@ -522,6 +547,11 @@ class MultigridDriver {
 
  private:
   int nb_rank_;
+  // MG_TIMERS accumulators (see the block above MGTimerId)
+  int mt_mode_ = 0;
+  double mt_time_[MT_NUM] = {};
+  double mt_wait_[MT_NUM] = {};
+  long long mt_calls_[MT_NUM] = {};
 };
 
 struct MGPerLevelIndcs {

@@ -175,11 +175,13 @@ MGGravity::~MGGravity() {
 //! \brief load the data and solve
 
 void MGGravityDriver::Solve(Driver *pdriver, int stage, Real dt) {
+  MGTimerScope _mt_solve(this, MT_SOLVE);
   RegionIndcs &indcs_ = pmy_pack_->pmesh->mb_indcs;
 
   // Reallocate MG arrays and phi if AMR has changed the mesh
-  PrepareForAMR();
   {
+    MGTimerScope _mt(this, MT_PREPARE);
+    PrepareForAMR();
     int nmb = pmy_pack_->nmb_thispack;
     if (static_cast<int>(pmy_pack_->pgrav->phi.extent_int(0)) != nmb) {
       int ncells1 = indcs_.nx1 + 2*indcs_.ng;

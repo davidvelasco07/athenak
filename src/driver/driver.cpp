@@ -507,6 +507,10 @@ void Driver::Finalize(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
     // host/MPI phase breakdown, when SINK_TIMERS is set (no-op otherwise)
     pmesh->pmb_pack->ppart->ReportSinkTimers(pwall_clock_->seconds());
   }
+  // multigrid phase breakdown, when MG_TIMERS is set (no-op otherwise)
+  if (pmesh->pmb_pack->pgrav != nullptr) {
+    pmesh->pmb_pack->pgrav->pmgd->ReportMGTimers(pwall_clock_->seconds());
+  }
 
   // cycle through output Types and load data / write files
   //  This design allows for asynchronous outputs to implemented in the future.

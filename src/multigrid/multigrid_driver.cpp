@@ -10,8 +10,10 @@
 
 // C++ headers
 #include <algorithm>
+#include <chrono>
 #include <climits>
 #include <cmath>
+#include <cstdio>
 #include <cstdint>
 #include <cstdlib>    // abs
 #include <iomanip>    // setprecision
@@ -56,6 +58,8 @@ MultigridDriver::MultigridDriver(MeshBlockPack *pmbp, int invar):
     mporder_(-1), nmpcoeff_(0) {
   mask_origin_[0] = mask_origin_[1] = mask_origin_[2] = 0.0;
   mpo_[0] = mpo_[1] = mpo_[2] = 0.0;
+  // host/MPI phase timers, off unless MG_TIMERS is set (see multigrid.hpp)
+  if (const char *e = std::getenv("MG_TIMERS")) { mt_mode_ = std::atoi(e); }
   std::memset(mpcoeff_, 0, sizeof(mpcoeff_));
   if (pmy_mesh_->mb_indcs.nx2==1 || pmy_mesh_->mb_indcs.nx3==1) {
     std::cout << "### FATAL ERROR in MultigridDriver::MultigridDriver" << std::endl
@@ -122,6 +126,84 @@ MultigridDriver::~MultigridDriver() {
   delete [] oct_def_buf_;
   delete [] oct_src_buf_;
   delete [] oct_uold_buf_;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn double MultigridDriver::MtBegin(int id) / void MultigridDriver::MtEnd(int id, ...)
+//! \brief start/stop one MG_TIMERS region. See the block above MGTimerId in multigrid.hpp.
+
+double MultigridDriver::MtBegin(int id) {
+  if (mt_mode_ <= 0) return 0.0;
+  if (mt_mode_ >= 2) {
+    // Isolate the region from work already in flight: fence, then barrier. What the
+    // barrier absorbs is load imbalance, charged to "wait" rather than to the region.
+    const double b = std::chrono::duration<double>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+    Kokkos::fence();
+#if MPI_PARALLEL_ENABLED
+    if (global_variable::nranks > 1) { MPI_Barrier(MPI_COMM_WORLD); }
+#endif
+    mt_wait_[id] += std::chrono::duration<double>(
+        std::chrono::steady_clock::now().time_since_epoch()).count() - b;
+  }
+  return std::chrono::duration<double>(
+      std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
+void MultigridDriver::MtEnd(int id, double t0) {
+  if (mt_mode_ <= 0) return;
+  if (mt_mode_ >= 2) { Kokkos::fence(); }  // charge the region its own kernels
+  mt_time_[id] += std::chrono::duration<double>(
+      std::chrono::steady_clock::now().time_since_epoch()).count() - t0;
+  mt_calls_[id] += 1;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void MultigridDriver::ReportMGTimers(double wall_seconds)
+//! \brief print the accumulated MG phase times. Rank 0 prints max and mean over ranks; the
+//! "rest of solve" line is MT_SOLVE minus its top-level parts, from rank means.
+
+void MultigridDriver::ReportMGTimers(double wall_seconds) {
+  if (mt_mode_ <= 0) return;
+  const int n = MT_NUM;
+  const char *name[MT_NUM] = {"solve(total)", "prepare_for_amr", "block_levels",
+                              "blocks_to_root", "  MPI_Allgatherv", "root_to_blocks",
+                              "root_grid", "octet_boundaries", "octet_smooth",
+                              "octet_other"};
+  double tmax[MT_NUM], tsum[MT_NUM], wmax[MT_NUM];
+  long long csum[MT_NUM];
+  for (int i = 0; i < n; ++i) {
+    tmax[i] = mt_time_[i]; tsum[i] = mt_time_[i];
+    wmax[i] = mt_wait_[i]; csum[i] = mt_calls_[i];
+  }
+#if MPI_PARALLEL_ENABLED
+  if (global_variable::nranks > 1) {
+    MPI_Allreduce(MPI_IN_PLACE, tmax, n, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, tsum, n, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, wmax, n, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, csum, n, MPI_LONG_LONG, MPI_SUM, MPI_COMM_WORLD);
+  }
+#endif
+  if (global_variable::my_rank != 0) return;
+  const int nr = global_variable::nranks;
+  const long long nsolve = csum[MT_SOLVE]/nr;
+  std::printf("\n### MG TIMERS  mode=%d  ranks=%d  solves=%lld  wall=%.4f s\n",
+              mt_mode_, nr, nsolve, wall_seconds);
+  std::printf("###   all regions are inside solve(total); MPI_Allgatherv is inside "
+              "blocks_to_root. ms/solve is from the rank mean.\n");
+  std::printf("### %-18s %10s %11s %11s %11s %10s %8s\n",
+              "region", "calls", "max_s", "mean_s", "wait_max_s", "ms/solve", "%wall");
+  double rest = tsum[MT_SOLVE];
+  for (int i = 0; i < n; ++i) {
+    if (csum[i] == 0) continue;
+    if (i != MT_SOLVE && i != MT_ALLGATHER) rest -= tsum[i];
+    std::printf("### %-18s %10lld %11.4f %11.4f %11.4f %10.3f %7.2f%%\n",
+                name[i], csum[i]/nr, tmax[i], tsum[i]/nr, wmax[i],
+                (nsolve > 0) ? 1e3*tsum[i]/nr/nsolve : 0.0,
+                (wall_seconds > 0.0) ? 100.0*tmax[i]/wall_seconds : 0.0);
+  }
+  std::printf("### %-18s %10s %11s %11.4f %11s %10.3f\n\n", "rest of solve", "", "",
+              rest/nr, "", (nsolve > 0) ? 1e3*rest/nr/nsolve : 0.0);
 }
 
 
@@ -477,6 +559,7 @@ void MultigridDriver::BuildRootFlatBuffers() {
 //! the root grid (if at root level) or the appropriate octet.
 
 void MultigridDriver::TransferFromBlocksToRoot(bool initflag) {
+  MGTimerScope _mt(this, MT_TO_ROOT);
   const int nv = nvar_;
   auto rootbuf = rootbuf_;
   const auto &src = mglevels_->src_[0].d_view;
@@ -495,6 +578,7 @@ void MultigridDriver::TransferFromBlocksToRoot(bool initflag) {
   rootbuf.template sync<HostExeSpace>();
 #if MPI_PARALLEL_ENABLED
   int ncomm = initflag ? nv : 2*nv;
+  MGTimerScope _mt_ag(this, MT_ALLGATHER);
   for (int v = 0; v < ncomm; ++v) {
     MPI_Allgatherv(MPI_IN_PLACE,
         nblist_[global_variable::my_rank],
@@ -553,6 +637,7 @@ void MultigridDriver::TransferFromBlocksToRoot(bool initflag) {
 //! \brief Transfer data from root/octets to block coarsest levels
 
 void MultigridDriver::TransferFromRootToBlocks(bool folddata) {
+  MGTimerScope _mt(this, MT_FROM_ROOT);
   SyncRootToHost();
   if (nreflevel_ > 0) {
     RestrictOctetsBeforeTransfer();
@@ -571,7 +656,7 @@ void MultigridDriver::FMGProlongate(Driver *pdriver) {
   int ngh = mgroot_->ngh_;
   int flag = 0;
   if (current_level_ == nrootlevel_ + nreflevel_ - 1) {
-    MGRootBoundary();
+    { MGTimerScope _mt(this, MT_ROOT); MGRootBoundary(); }
     TransferFromRootToBlocks(false);
     // flag = 1: first time on meshblock levels; ghosts (incl. the 1-cell level)
     // were just filled from root/octets by SetFromRootGrid, so no inter-block
@@ -583,16 +668,20 @@ void MultigridDriver::FMGProlongate(Driver *pdriver) {
   if (current_level_ >= nrootlevel_ + nreflevel_ - 1) { // MeshBlocks
     pmg = mglevels_;
     SetMGTaskListFMGProlongate(ngh, flag);
+    MGTimerScope _mt(this, MT_BLOCKS);
     pdriver->ExecuteTaskList(pmy_mesh_, "mg_fmg_prolongate", 0);
     current_level_++;
   } else if (current_level_ >= nrootlevel_ - 1) { // octets
-    if (current_level_ == nrootlevel_ - 1)
+    if (current_level_ == nrootlevel_ - 1) {
+      MGTimerScope _mt(this, MT_ROOT);
       MGRootBoundary();
-    else
+    } else {
       SetBoundariesOctets(true, false);
+    }
     FMGProlongateOctets();
     current_level_++;
   } else { // root grid
+    MGTimerScope _mt(this, MT_ROOT);
     MGRootBoundary();
     mgroot_->FMGProlongatePack();
     MarkRootDeviceModified();
@@ -609,7 +698,7 @@ void MultigridDriver::FMGProlongate(Driver *pdriver) {
 void MultigridDriver::OneStepToFiner(Driver *pdriver, int nsmooth) {
   int ngh = mgroot_->ngh_;
   if (current_level_ == nrootlevel_ + nreflevel_ - 1) {
-    MGRootBoundary();
+    { MGTimerScope _mt(this, MT_ROOT); MGRootBoundary(); }
     TransferFromRootToBlocks(true);
   }
   if (current_level_ >= nrootlevel_ + nreflevel_ - 1) { // MeshBlocks
@@ -620,10 +709,12 @@ void MultigridDriver::OneStepToFiner(Driver *pdriver, int nsmooth) {
 
     if (current_level_ == ntotallevel_ - 2) flag = 2;
     SetMGTaskListToFiner(nsmooth, ngh, flag);
+    MGTimerScope _mt(this, MT_BLOCKS);
     pdriver->ExecuteTaskList(pmy_mesh_, "mg_to_finer", 0);
     current_level_++;
   } else if (current_level_ >= nrootlevel_ - 1) { // octets
     if (current_level_ == nrootlevel_ - 1) {
+      MGTimerScope _mt(this, MT_ROOT);
       MGRootBoundary();
     } else {
       SetBoundariesOctets(true, true);
@@ -637,6 +728,7 @@ void MultigridDriver::OneStepToFiner(Driver *pdriver, int nsmooth) {
       SmoothOctets(1 - coffset_);
     }
   } else { // root grid
+    MGTimerScope _mt(this, MT_ROOT);
     MGRootBoundary();
     mgroot_->ProlongateAndCorrectPack();
     MarkRootDeviceModified();
@@ -663,7 +755,10 @@ void MultigridDriver::OneStepToCoarser(Driver *pdriver, int nsmooth) {
   if (current_level_ >= nrootlevel_ + nreflevel_) { // MeshBlocks
     pmg = mglevels_;
     SetMGTaskListToCoarser(nsmooth, ngh);
-    pdriver->ExecuteTaskList(pmy_mesh_, "mg_to_coarser", 0);
+    {
+      MGTimerScope _mt(this, MT_BLOCKS);
+      pdriver->ExecuteTaskList(pmy_mesh_, "mg_to_coarser", 0);
+    }
     if (current_level_ == nrootlevel_ + nreflevel_) {
       TransferFromBlocksToRoot(false);
       if (nreflevel_ > 0) {
@@ -684,6 +779,7 @@ void MultigridDriver::OneStepToCoarser(Driver *pdriver, int nsmooth) {
     }
     RestrictOctets();
   } else { // root grid
+    MGTimerScope _mt(this, MT_ROOT);
     MGRootBoundary();
     if (current_level_ < fmglevel_) {
       mgroot_->StoreOldData();
@@ -715,7 +811,10 @@ void MultigridDriver::SolveVCycle(Driver *pdriver, int npresmooth, int npostsmoo
   while (current_level_ > 0) {
     OneStepToCoarser(pdriver, npresmooth);
   }
-  SolveCoarsestGrid();
+  {
+    MGTimerScope _mt(this, MT_ROOT);
+    SolveCoarsestGrid();
+  }
   while (current_level_ < startlevel) {
     OneStepToFiner(pdriver, npostsmooth);
   }
@@ -763,7 +862,7 @@ void MultigridDriver::SolveFMG(Driver *pdriver) {
 void MultigridDriver::SolveFMGCoarser() {
   while (current_level_ >= nrootlevel_ + nreflevel_) {
     pmg = mglevels_;
-    pmg->RestrictSourcePack();
+    { MGTimerScope _mt(this, MT_BLOCKS); pmg->RestrictSourcePack(); }
     if (current_level_ == nrootlevel_ + nreflevel_) {
       TransferFromBlocksToRoot(true);
     }
@@ -773,6 +872,7 @@ void MultigridDriver::SolveFMGCoarser() {
     RestrictFMGSourceOctets();
   }
   current_level_ = nrootlevel_ - 1;
+  MGTimerScope _mt(this, MT_ROOT);
   while (current_level_ > 0) {
     pmg = mgroot_;
     pmg->RestrictSourcePack();
@@ -946,6 +1046,7 @@ Real MultigridDriver::CalculateDefectNorm(MGNormType nrm, int n) {
 //! \brief Apply smoothing on all octets at current level
 
 void MultigridDriver::SmoothOctets(int color) {
+  MGTimerScope _mt(this, MT_OCT_SMOOTH);
   int lev = current_level_ - nrootlevel_;
   for (int o = 0; o < noctets_[lev]; ++o) {
     SmoothOctet(octets_[lev][o], lev + 1, color);
@@ -957,6 +1058,7 @@ void MultigridDriver::SmoothOctets(int color) {
 //! \brief Store u -> uold for all octets at current level
 
 void MultigridDriver::StoreOldDataOctets() {
+  MGTimerScope _mt(this, MT_OCT_OTHER);
   int lev = current_level_ - nrootlevel_;
   for (int o = 0; o < noctets_[lev]; ++o) {
     octets_[lev][o].StoreOld();
@@ -968,6 +1070,7 @@ void MultigridDriver::StoreOldDataOctets() {
 //! \brief Calculate FAS RHS for all octets at current level
 
 void MultigridDriver::CalculateFASRHSOctets() {
+  MGTimerScope _mt(this, MT_OCT_OTHER);
   int lev = current_level_ - nrootlevel_;
   for (int o = 0; o < noctets_[lev]; ++o) {
     CalculateFASRHSOctet(octets_[lev][o], lev + 1);
@@ -979,6 +1082,7 @@ void MultigridDriver::CalculateFASRHSOctets() {
 //! \brief Zero clear u data in all octets up to current level
 
 void MultigridDriver::ZeroClearOctets() {
+  MGTimerScope _mt(this, MT_OCT_OTHER);
   int maxlev = current_level_ - 1 - nrootlevel_;
   for (int l = 0; l <= maxlev && l < nreflevel_; ++l) {
     for (int o = 0; o < noctets_[l]; ++o)
@@ -991,6 +1095,7 @@ void MultigridDriver::ZeroClearOctets() {
 //! \brief Restrict the source through the octet hierarchy for FMG initialization
 
 void MultigridDriver::RestrictFMGSourceOctets() {
+  MGTimerScope _mt(this, MT_OCT_OTHER);
   int ngh = mgroot_->ngh_;
   // Fine octets to coarser octets
   for (int l = nreflevel_ - 1; l >= 1; --l) {
@@ -1032,6 +1137,7 @@ void MultigridDriver::RestrictFMGSourceOctets() {
 //! \brief Compute defect and restrict octets at current level to coarser level
 
 void MultigridDriver::RestrictOctets() {
+  MGTimerScope _mt(this, MT_OCT_OTHER);
   int lev = current_level_ - nrootlevel_;
   int ngh = mgroot_->ngh_;
 
@@ -1086,6 +1192,7 @@ void MultigridDriver::RestrictOctets() {
 //! of the FAS correction (u - uold) from a 3x3x3 coarse neighborhood.
 
 void MultigridDriver::ProlongateAndCorrectOctets() {
+  MGTimerScope _mt(this, MT_OCT_OTHER);
   int clev = current_level_ - nrootlevel_;
   int flev = clev + 1;
   if (flev == 0) SyncRootToHost();
@@ -1179,6 +1286,7 @@ void MultigridDriver::ProlongateAndCorrectOctets() {
 //! \brief FMG prolongation for octets (tricubic interpolation from coarser level)
 
 void MultigridDriver::FMGProlongateOctets() {
+  MGTimerScope _mt(this, MT_OCT_OTHER);
   int clev = current_level_ - nrootlevel_;
   int flev = clev + 1;
   if (flev == 0) SyncRootToHost();
@@ -1259,6 +1367,7 @@ void MultigridDriver::FMGProlongateOctets() {
 //! folddata=true: also fill uold ghost cells
 
 void MultigridDriver::SetBoundariesOctets(bool fprolong, bool folddata) {
+  MGTimerScope _mt(this, MT_OCT_BND);
   int lev = current_level_ - nrootlevel_;
 
   for (int o = 0; o < noctets_[lev]; ++o) {
@@ -1570,6 +1679,7 @@ void MultigridDriver::ProlongateOctetBoundaries(MGOctet &oct,
 //!        transverse gradients in ProlongateOctetBoundariesFluxCons during the descent.
 
 void MultigridDriver::PreRestrictOctetU() {
+  MGTimerScope _mt(this, MT_OCT_OTHER);
   const int ngh = mgroot_->ngh_;
   for (int l = nreflevel_ - 1; l >= 1; --l) {
     for (int o = 0; o < noctets_[l]; ++o) {
