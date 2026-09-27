@@ -148,8 +148,9 @@ last_time = 0.0
 refinement = adaptive
 num_levels = 4
 max_nmb_per_rank = 12288
-refinement_interval = 1
-ncycle_check = 1
+# regrid at most every 3rd cycle, and a given block at most every 5th
+refinement_interval = 5
+ncycle_check = 3
 
 <amr_criterion0>
 method = user

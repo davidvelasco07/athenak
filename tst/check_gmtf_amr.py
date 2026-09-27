@@ -17,7 +17,10 @@ common=['mesh/nx1=32','mesh/nx2=32','mesh/nx3=32','meshblock/nx1=16',
  'mesh_refinement/max_nmb_per_rank=64','time/nlim=2','time/ndiag=1',
  'problem/Mach=1e-8','problem/nhigh=4','problem/sfe_term=-1',
  'particles/creation=false','particles/accretion=false','particles/merging=false',
- 'output1/dcycle=1','output2/dt=0','output3/dt=0','output5/dt=0']
+ 'output1/dcycle=1','output2/dt=0','output3/dt=0','output5/dt=0',
+ # These 2-cycle runs test the Jeans thresholds, not the regrid cadence: check every
+ # cycle and let a block refine at once (the deck regrids at most every 3rd cycle).
+ 'mesh_refinement/ncycle_check=1','mesh_refinement/refinement_interval=1']
 results={}
 def run(name,opts,blocks,prefix=''):
  d=a.work/name;d.mkdir(exist_ok=False)
