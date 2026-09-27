@@ -49,7 +49,9 @@ if a.mpi_prefix:
 # finest-only creation must reject it before the end-of-step refinement occurs.
 d=a.work/'creation_guard';d.mkdir()
 cmd=[str(exe),'-i',str(inp)]+common+['time/nlim=1','gravity/four_pi_G=1e6',
- 'particles/creation=true','particles/accretion=true','particles/creation_finest_only=true']
+ 'particles/creation=true','particles/accretion=true','particles/creation_finest_only=true',
+ # the TIGRIS defaults refuse creation without exclusion unless merging is on
+ 'particles/merging=true']
 with (d/'stdout.log').open('w') as f:r=subprocess.run(cmd,cwd=d,stdout=f,stderr=subprocess.STDOUT,timeout=120)
 assert r.returncode==0,(d/'stdout.log').read_text()[-1000:]
 h=np.loadtxt(next(d.glob('*.user.hst')));assert np.max(h[:,7])==0,'coarse-level sink created'
