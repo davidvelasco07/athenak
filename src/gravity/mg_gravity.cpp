@@ -127,12 +127,25 @@ MGGravityDriver::MGGravityDriver(MeshBlockPack *pmbp, ParameterInput *pin)
 
   // Allocate the root multigrid
   int nghost = pin->GetOrAddInteger("gravity", "mg_nghost", 1);
+  // mg_ca_smooth (see MultigridDriver) is exact only where every ghost the halo-wide red
+  // sweep reads is a copy of a neighbour's value: no refinement, and no multipole BC,
+  // whose ghost 2*phi(face)-u is evaluated at coordinates a neighbour cannot reproduce
+  // bit for bit (it also leaves the block-face/physical-face edge ghosts unset).
+  ca_smooth_ = pin->GetOrAddBoolean("gravity", "mg_ca_smooth", false);
+  if (ca_smooth_ && (nghost < 2 || pmy_mesh_->multilevel || mporder_ >= 0)) {
+    std::cout << "### FATAL ERROR in MGGravityDriver" << std::endl
+              << "mg_ca_smooth = true needs mg_nghost >= 2, a mesh without refinement "
+              << "and no multipole MG boundary (mg_nghost = " << nghost
+              << ", multilevel = " << pmy_mesh_->multilevel << ", multipole = "
+              << (mporder_ >= 0) << ")." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
   bool root_on_host = pin->GetOrAddBoolean("gravity", "root_on_host", false);
   mgroot_ = new MGGravity(this, nullptr, nghost, root_on_host);
   mglevels_ = new MGGravity(this, pmbp, nghost);
-  // allocate boundary buffers
+  // allocate boundary buffers (the u+src exchange of mg_ca_smooth doubles the payload)
   mglevels_->pbval = new MultigridBoundaryValues(pmbp, pin, false, mglevels_);
-  mglevels_->pbval->InitializeBuffers((nvar_));
+  mglevels_->pbval->InitializeBuffers(ca_smooth_ ? 2*nvar_ : nvar_);
   mglevels_->pbval->RemapIndicesForMG();
   mglevels_->pbval->ComputePerLevelIndices();
 }
@@ -273,6 +286,40 @@ void MGGravity::SmoothPack(int color) {
     Smooth(u_[current_level_].d_view, src_[current_level_].d_view,
            coeff_[current_level_].d_view, matrix_[current_level_].d_view,
            stencil, -ll, is, ie, js, je, ks, ke, color, false);
+  }
+}
+
+void MGGravity::SmoothPackWide(int color) {
+  int ll = nlevel_-1-current_level_;
+  int is = ngh_, ie = is+(indcs_.nx1>>ll)-1;
+  int js = ngh_, je = js+(indcs_.nx2>>ll)-1;
+  int ks = ngh_, ke = ks+(indcs_.nx3>>ll)-1;
+  GravityStencil stencil{static_cast<MGGravityDriver*>(pmy_driver_)->omega_/6.0};
+  if (on_host_) {
+    SmoothWide(u_[current_level_].h_view, src_[current_level_].h_view,
+               coeff_[current_level_].h_view, matrix_[current_level_].h_view,
+               stencil, -ll, is, ie, js, je, ks, ke, color);
+  } else {
+    SmoothWide(u_[current_level_].d_view, src_[current_level_].d_view,
+               coeff_[current_level_].d_view, matrix_[current_level_].d_view,
+               stencil, -ll, is, ie, js, je, ks, ke, color);
+  }
+}
+
+void MGGravity::CalculateFASRHSPackWide() {
+  int ll = nlevel_-1-current_level_;
+  int is = ngh_, ie = is+(indcs_.nx1>>ll)-1;
+  int js = ngh_, je = js+(indcs_.nx2>>ll)-1;
+  int ks = ngh_, ke = ks+(indcs_.nx3>>ll)-1;
+  GravityStencil stencil{0.0};
+  if (on_host_) {
+    CalculateFASRHSWide(src_[current_level_].h_view, u_[current_level_].h_view,
+                        coeff_[current_level_].h_view, stencil, -ll,
+                        is, ie, js, je, ks, ke);
+  } else {
+    CalculateFASRHSWide(src_[current_level_].d_view, u_[current_level_].d_view,
+                        coeff_[current_level_].d_view, stencil, -ll,
+                        is, ie, js, je, ks, ke);
   }
 }
 

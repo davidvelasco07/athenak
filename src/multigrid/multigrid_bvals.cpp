@@ -2216,7 +2216,8 @@ TaskStatus MultigridBoundaryValues::FillFineCoarseMGGhosts(DvceArray5D<Real> &u)
 //! boundaries into boundary buffers and send to neighbors.
 //! Adapts to different block sizes per level.
 
-TaskStatus MultigridBoundaryValues::PackAndSendMG(const DvceArray5D<Real> &u) {
+TaskStatus MultigridBoundaryValues::PackAndSendMG(const DvceArray5D<Real> &u,
+                                                  const DvceArray5D<Real> *u2) {
   if (pmy_mg == nullptr) return TaskStatus::complete;
   MultigridDriver *pd = pmy_mg->pmy_driver_;
   double t_sub = pd->MtBegin(MultigridDriver::MT_SUB_PACK);
@@ -2224,6 +2225,9 @@ TaskStatus MultigridBoundaryValues::PackAndSendMG(const DvceArray5D<Real> &u) {
   int nmb = pmy_pack->nmb_thispack;
   int nnghbr = pmy_pack->pmb->nnghbr;
   int nvar = u.extent_int(1);
+  // optional second array: message variables [nvar, nvart) come from w
+  DvceArray5D<Real> w = (u2 != nullptr) ? *u2 : u;
+  const int nvart = nvar + ((u2 != nullptr) ? u2->extent_int(1) : 0);
 
   int my_rank = global_variable::my_rank;
   auto &nghbr = pmy_pack->pmb->nghbr;
@@ -2258,12 +2262,14 @@ TaskStatus MultigridBoundaryValues::PackAndSendMG(const DvceArray5D<Real> &u) {
 #endif
 
   {
-  int nmnv = nmb * nnghbr * nvar;
+  int nmnv = nmb * nnghbr * nvart;
   Kokkos::TeamPolicy<> policy(DevExeSpace(), nmnv, Kokkos::AUTO);
   Kokkos::parallel_for("PackMG", policy, KOKKOS_LAMBDA(TeamMember_t tmember) {
-    const int m = tmember.league_rank() / (nnghbr * nvar);
-    const int n = (tmember.league_rank() - m * nnghbr * nvar) / nvar;
-    const int v = tmember.league_rank() - m * nnghbr * nvar - n * nvar;
+    const int m = tmember.league_rank() / (nnghbr * nvart);
+    const int n = (tmember.league_rank() - m * nnghbr * nvart) / nvart;
+    const int v = tmember.league_rank() - m * nnghbr * nvart - n * nvart;
+    const auto &a = (v < nvar) ? u : w;           // array holding variable v
+    const int va = (v < nvar) ? v : v - nvar;
 
     if (nghbr.d_view(m, n).gid < 0) {
       tmember.team_barrier();
@@ -2342,16 +2348,16 @@ TaskStatus MultigridBoundaryValues::PackAndSendMG(const DvceArray5D<Real> &u) {
           Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember, il, iu + 1),
           [&](const int i) {
             rbuf[dn].vars(dm, (i-il + ni*(j-jl + nj*(k-kl + nk*v))))
-                = u(m, v, k, j, i);
+                = a(m, va, k, j, i);
           });
         } else {
           Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember, il, iu + 1),
           [&](const int i) {
             const int bi = (i-il + ni*(j-jl + nj*(k-kl + nk*v)));
             if (urp) {
-              aggsbuf(soff(m*nnghbr + n) + bi) = u(m, v, k, j, i);
+              aggsbuf(soff(m*nnghbr + n) + bi) = a(m, va, k, j, i);
             } else {
-              sbuf[n].vars(m, bi) = u(m, v, k, j, i);
+              sbuf[n].vars(m, bi) = a(m, va, k, j, i);
             }
           });
         }
@@ -2413,7 +2419,8 @@ TaskStatus MultigridBoundaryValues::PackAndSendMG(const DvceArray5D<Real> &u) {
 //! \brief Receive and unpack cell-centered multigrid variables.
 //! Handles ghost-cell filling at each multigrid level independently.
 
-TaskStatus MultigridBoundaryValues::RecvAndUnpackMG(DvceArray5D<Real> &u) {
+TaskStatus MultigridBoundaryValues::RecvAndUnpackMG(DvceArray5D<Real> &u,
+                                                    DvceArray5D<Real> *u2) {
   if (pmy_mg == nullptr) return TaskStatus::complete;
   MultigridDriver *pd = pmy_mg->pmy_driver_;
   // create local references for variables in kernel
@@ -2455,6 +2462,8 @@ TaskStatus MultigridBoundaryValues::RecvAndUnpackMG(DvceArray5D<Real> &u) {
   // buffer (fuses the former MGRankUnpackScatter kernel); on-rank payloads sit
   // in their per-neighbour recv buffers, written there directly by the sender.
   int nvar = u.extent_int(1);
+  DvceArray5D<Real> w = (u2 != nullptr) ? *u2 : u;
+  const int nvart = nvar + ((u2 != nullptr) ? u2->extent_int(1) : 0);
   int ngh = pmy_mg->GetGhostCells();
   int lev_ = pmy_mg->GetCurrentLevel();
   auto cbuf = coarse_buf_;
@@ -2471,12 +2480,14 @@ TaskStatus MultigridBoundaryValues::RecvAndUnpackMG(DvceArray5D<Real> &u) {
   auto roff = mg_recv_agg_offset_;
 
   {
-  int nmnv = nmb * nnghbr * nvar;
+  int nmnv = nmb * nnghbr * nvart;
   Kokkos::TeamPolicy<> policy(DevExeSpace(), nmnv, Kokkos::AUTO);
   Kokkos::parallel_for("UnpackMG", policy, KOKKOS_LAMBDA(TeamMember_t tmember) {
-    const int m = tmember.league_rank() / (nnghbr * nvar);
-    const int n = (tmember.league_rank() - m * nnghbr * nvar) / nvar;
-    const int v = tmember.league_rank() - m * nnghbr * nvar - n * nvar;
+    const int m = tmember.league_rank() / (nnghbr * nvart);
+    const int n = (tmember.league_rank() - m * nnghbr * nvart) / nvart;
+    const int v = tmember.league_rank() - m * nnghbr * nvart - n * nvart;
+    const auto &a = (v < nvar) ? u : w;           // array receiving variable v
+    const int va = (v < nvar) ? v : v - nvar;
 
     if (nghbr.d_view(m, n).gid < 0) {
       tmember.team_barrier();
@@ -2540,7 +2551,7 @@ TaskStatus MultigridBoundaryValues::RecvAndUnpackMG(DvceArray5D<Real> &u) {
         Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember, il, iu + 1),
         [&](const int i) {
           const int bi = (i-il + ni*(j-jl + nj*(k-kl + nk*v)));
-          u(m, v, k, j, i) = (base >= 0) ? aggrbuf(base + bi) : rbuf[n].vars(m, bi);
+          a(m, va, k, j, i) = (base >= 0) ? aggrbuf(base + bi) : rbuf[n].vars(m, bi);
         });
       });
     }
@@ -2599,8 +2610,8 @@ TaskStatus MultigridBoundaryValues::InitRecvMG(const int nvars) {
   // doing several device allocations + H2D deep_copies that dominate at small
   // payloads. Build each level once and persist it; write the active level's
   // state back before switching so its in-flight requests + buffers stay paired.
-  if (static_cast<int>(mg_rp_cache_.size()) < kMaxMGLevels) {
-    mg_rp_cache_.resize(kMaxMGLevels);
+  if (static_cast<int>(mg_rp_cache_.size()) < 2*kMaxMGLevels) {
+    mg_rp_cache_.resize(2*kMaxMGLevels);
   }
   if (mg_rp_cache_seq_ != mesh_seq) {            // AMR/regrid: invalidate all levels
     for (auto &s : mg_rp_cache_) s = MGRankPackLevelState();
@@ -2608,10 +2619,11 @@ TaskStatus MultigridBoundaryValues::InitRecvMG(const int nvars) {
     mg_rp_active_level_ = -1;
   }
   if (lev_ >= 0 && lev_ < kMaxMGLevels) {
-    auto &c = mg_rp_cache_[lev_];
+    const int slot = lev_ + ((nvars != pmy_mg->nvar_) ? kMaxMGLevels : 0);
+    auto &c = mg_rp_cache_[slot];
     const bool key_ok = c.built && c.nvars == nvars && c.skip_fc == skip_fc_ir;
-    if (lev_ != mg_rp_active_level_ || !key_ok) {
-      if (mg_rp_active_level_ >= 0 && mg_rp_active_level_ != lev_) {
+    if (slot != mg_rp_active_level_ || !key_ok) {
+      if (mg_rp_active_level_ >= 0 && mg_rp_active_level_ != slot) {
         SaveRankPackState(mg_rp_cache_[mg_rp_active_level_]);
       }
       if (!key_ok) {
@@ -2622,7 +2634,7 @@ TaskStatus MultigridBoundaryValues::InitRecvMG(const int nvars) {
       } else {
         LoadRankPackState(c);
       }
-      mg_rp_active_level_ = lev_;
+      mg_rp_active_level_ = slot;
     }
   } else {
     // out-of-range level (should not happen): rebuild bare each call

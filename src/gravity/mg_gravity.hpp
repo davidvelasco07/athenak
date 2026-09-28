@@ -47,6 +47,8 @@ class MGGravity : public Multigrid {
   void SmoothPack(int color) final;
   void CalculateDefectPack() final;
   void CalculateFASRHSPack() final;
+  void SmoothPackWide(int color) final;
+  void CalculateFASRHSPackWide() final;
 };
 
 
