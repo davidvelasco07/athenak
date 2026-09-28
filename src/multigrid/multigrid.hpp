@@ -363,8 +363,19 @@ class MultigridDriver {
   //                kernels. Perturbing on purpose: an attribution run, never a timing run.
   // Everything is nested in MT_SOLVE, and MT_ALLGATHER in MT_TO_ROOT. MT_FROM_ROOT includes
   // the octet pre-transfer restriction and boundaries; MT_ROOT includes the coarsest solve.
+  // The MT_TK_* regions are the block-level tasks, nested in MT_BLOCKS. A task can be polled
+  // a different number of times on each rank (MT_TK_RECV returns incomplete until its
+  // messages arrive), so in mode 2 task regions fence but never barrier: a barrier there
+  // would deadlock.
   enum MGTimerId {MT_SOLVE=0, MT_PREPARE, MT_BLOCKS, MT_TO_ROOT, MT_ALLGATHER, MT_FROM_ROOT,
-                  MT_ROOT, MT_OCT_BND, MT_OCT_SMOOTH, MT_OCT_OTHER, MT_NUM};
+                  MT_ROOT, MT_OCT_BND, MT_OCT_SMOOTH, MT_OCT_OTHER,
+                  MT_TK_IRECV, MT_TK_SEND, MT_TK_RECV, MT_TK_FILLC, MT_TK_PROLFC,
+                  MT_TK_SMOOTH, MT_TK_RESTRICT, MT_TK_PROLONG, MT_TK_FAS, MT_TK_CLEAR,
+                  MT_SUB_RPBUILD, MT_SUB_IRECV, MT_SUB_PACK, MT_SUB_FENCE, MT_SUB_ISEND,
+                  MT_SUB_TEST, MT_SUB_UNPACK, MT_NUM};
+  // MT_SUB_* split the three exchange tasks (nested in them, so also never barrier):
+  // init_recv = rank-packed metadata rebuild + MPI_Irecv posting; pack_send = pack kernels
+  // and host loop + the pre-send fence + MPI_Isend; recv_unpack = MPI_Test polls + unpack.
   double MtBegin(int id);
   void   MtEnd(int id, double t0);
   void   ReportMGTimers(double wall_seconds);
@@ -552,6 +563,7 @@ class MultigridDriver {
   double mt_time_[MT_NUM] = {};
   double mt_wait_[MT_NUM] = {};
   long long mt_calls_[MT_NUM] = {};
+  long long mt_polls_ = 0;  // MT_TK_RECV calls that returned incomplete
 };
 
 struct MGPerLevelIndcs {

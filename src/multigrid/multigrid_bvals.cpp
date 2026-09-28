@@ -2218,6 +2218,8 @@ TaskStatus MultigridBoundaryValues::FillFineCoarseMGGhosts(DvceArray5D<Real> &u)
 
 TaskStatus MultigridBoundaryValues::PackAndSendMG(const DvceArray5D<Real> &u) {
   if (pmy_mg == nullptr) return TaskStatus::complete;
+  MultigridDriver *pd = pmy_mg->pmy_driver_;
+  double t_sub = pd->MtBegin(MultigridDriver::MT_SUB_PACK);
 
   int nmb = pmy_pack->nmb_thispack;
   int nnghbr = pmy_pack->pmb->nnghbr;
@@ -2372,7 +2374,11 @@ TaskStatus MultigridBoundaryValues::PackAndSendMG(const DvceArray5D<Real> &u) {
       }
     }
   }
+  pd->MtEnd(MultigridDriver::MT_SUB_PACK, t_sub);
+  t_sub = pd->MtBegin(MultigridDriver::MT_SUB_FENCE);
   if (has_cross_rank) Kokkos::fence();
+  pd->MtEnd(MultigridDriver::MT_SUB_FENCE, t_sub);
+  t_sub = pd->MtBegin(MultigridDriver::MT_SUB_ISEND);
 
   bool no_errors = true;
   // PackMG already wrote every off-rank payload directly into
@@ -2395,6 +2401,9 @@ TaskStatus MultigridBoundaryValues::PackAndSendMG(const DvceArray5D<Real> &u) {
        << std::endl << "MPI error in posting sends" << std::endl;
     std::exit(EXIT_FAILURE);
   }
+  pd->MtEnd(MultigridDriver::MT_SUB_ISEND, t_sub);
+#else
+  pd->MtEnd(MultigridDriver::MT_SUB_PACK, t_sub);
 #endif
   return TaskStatus::complete;
 }
@@ -2406,6 +2415,7 @@ TaskStatus MultigridBoundaryValues::PackAndSendMG(const DvceArray5D<Real> &u) {
 
 TaskStatus MultigridBoundaryValues::RecvAndUnpackMG(DvceArray5D<Real> &u) {
   if (pmy_mg == nullptr) return TaskStatus::complete;
+  MultigridDriver *pd = pmy_mg->pmy_driver_;
   // create local references for variables in kernel
   int nmb = pmy_pack->nmb_thispack;
   int nnghbr = pmy_pack->pmb->nnghbr;
@@ -2418,6 +2428,7 @@ TaskStatus MultigridBoundaryValues::RecvAndUnpackMG(DvceArray5D<Real> &u) {
 
   #if MPI_PARALLEL_ENABLED
   //----- STEP 1: check that recv boundary buffer communications have all completed
+  double t_sub = pd->MtBegin(MultigridDriver::MT_SUB_TEST);
   bool bflag = false;
   for (std::size_t i = 0; i < mg_recv_var_msgs_.size(); ++i) {
     int test_d = 0;
@@ -2432,10 +2443,12 @@ TaskStatus MultigridBoundaryValues::RecvAndUnpackMG(DvceArray5D<Real> &u) {
       bflag = true;
     }
   }
+  pd->MtEnd(MultigridDriver::MT_SUB_TEST, t_sub);
   if (bflag) {
     return TaskStatus::incomplete;
   }
 #endif
+  MultigridDriver::MGTimerScope _mt_unpack(pd, MultigridDriver::MT_SUB_UNPACK);
 
   //----- STEP 2: buffers have all completed, so unpack
   // Off-rank payloads are read directly out of the rank-packed aggregate recv
@@ -2574,6 +2587,7 @@ void MultigridBoundaryValues::LoadRankPackState(const MGRankPackLevelState &s) {
 
 TaskStatus MultigridBoundaryValues::InitRecvMG(const int nvars) {
 #if MPI_PARALLEL_ENABLED
+  MultigridDriver *pd = pmy_mg->pmy_driver_;
   int lev_ = pmy_mg->GetCurrentLevel();
   int shift_ir = pmy_mg->GetNumberOfLevels() - 1 - lev_;
   int ncells_ir = pmy_mg->GetSize() >> shift_ir;
@@ -2601,6 +2615,7 @@ TaskStatus MultigridBoundaryValues::InitRecvMG(const int nvars) {
         SaveRankPackState(mg_rp_cache_[mg_rp_active_level_]);
       }
       if (!key_ok) {
+        MultigridDriver::MGTimerScope _mt(pd, MultigridDriver::MT_SUB_RPBUILD);
         BuildRankPackedMGMetadata(nvars, lev_, skip_fc_ir);
         SaveRankPackState(c);
         c.built = true; c.nvars = nvars; c.skip_fc = skip_fc_ir;
@@ -2611,12 +2626,14 @@ TaskStatus MultigridBoundaryValues::InitRecvMG(const int nvars) {
     }
   } else {
     // out-of-range level (should not happen): rebuild bare each call
+    MultigridDriver::MGTimerScope _mt(pd, MultigridDriver::MT_SUB_RPBUILD);
     BuildRankPackedMGMetadata(nvars, lev_, skip_fc_ir);
     mg_rp_active_level_ = -1;
   }
 
   // Payload-only Irecv: the receiver derives the payload layout from its own
   // sorted recv entries (see BuildRankPackedMGMetadata), so no header is sent.
+  MultigridDriver::MGTimerScope _mt_irecv(pd, MultigridDriver::MT_SUB_IRECV);
   for (std::size_t i = 0; i < mg_recv_var_msgs_.size(); ++i) {
     auto &msg = mg_recv_var_msgs_[i];
     MPI_Wait(&mg_recv_var_reqs_[i], MPI_STATUS_IGNORE);

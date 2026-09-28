@@ -141,7 +141,8 @@ double MultigridDriver::MtBegin(int id) {
         std::chrono::steady_clock::now().time_since_epoch()).count();
     Kokkos::fence();
 #if MPI_PARALLEL_ENABLED
-    if (global_variable::nranks > 1) { MPI_Barrier(MPI_COMM_WORLD); }
+    // never inside a task: tasks are polled a rank-dependent number of times
+    if (global_variable::nranks > 1 && id < MT_TK_IRECV) { MPI_Barrier(MPI_COMM_WORLD); }
 #endif
     mt_wait_[id] += std::chrono::duration<double>(
         std::chrono::steady_clock::now().time_since_epoch()).count() - b;
@@ -169,19 +170,27 @@ void MultigridDriver::ReportMGTimers(double wall_seconds) {
   const char *name[MT_NUM] = {"solve(total)", "prepare_for_amr", "block_levels",
                               "blocks_to_root", "  MPI_Allgatherv", "root_to_blocks",
                               "root_grid", "octet_boundaries", "octet_smooth",
-                              "octet_other"};
+                              "octet_other", "  task:init_recv", "  task:pack_send",
+                              "  task:recv_unpack", "  task:fill_coarse",
+                              "  task:prolong_fc", "  task:smooth", "  task:restrict",
+                              "  task:prolongate", "  task:fas_rhs", "  task:clear",
+                              "    rp_metadata", "    mpi_irecv", "    pack+loop",
+                              "    pre-send fence", "    mpi_isend", "    mpi_test",
+                              "    unpack"};
   double tmax[MT_NUM], tsum[MT_NUM], wmax[MT_NUM];
   long long csum[MT_NUM];
   for (int i = 0; i < n; ++i) {
     tmax[i] = mt_time_[i]; tsum[i] = mt_time_[i];
     wmax[i] = mt_wait_[i]; csum[i] = mt_calls_[i];
   }
+  long long polls = mt_polls_;
 #if MPI_PARALLEL_ENABLED
   if (global_variable::nranks > 1) {
     MPI_Allreduce(MPI_IN_PLACE, tmax, n, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
     MPI_Allreduce(MPI_IN_PLACE, tsum, n, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     MPI_Allreduce(MPI_IN_PLACE, wmax, n, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
     MPI_Allreduce(MPI_IN_PLACE, csum, n, MPI_LONG_LONG, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, &polls, 1, MPI_LONG_LONG, MPI_SUM, MPI_COMM_WORLD);
   }
 #endif
   if (global_variable::my_rank != 0) return;
@@ -190,20 +199,32 @@ void MultigridDriver::ReportMGTimers(double wall_seconds) {
   std::printf("\n### MG TIMERS  mode=%d  ranks=%d  solves=%lld  wall=%.4f s\n",
               mt_mode_, nr, nsolve, wall_seconds);
   std::printf("###   all regions are inside solve(total); MPI_Allgatherv is inside "
-              "blocks_to_root. ms/solve is from the rank mean.\n");
+              "blocks_to_root, task:* inside block_levels, and the indented regions under "
+              "them inside their task. ms/solve is from the rank mean.\n");
   std::printf("### %-18s %10s %11s %11s %11s %10s %8s\n",
               "region", "calls", "max_s", "mean_s", "wait_max_s", "ms/solve", "%wall");
-  double rest = tsum[MT_SOLVE];
+  double rest = tsum[MT_SOLVE], rest_blocks = tsum[MT_BLOCKS];
   for (int i = 0; i < n; ++i) {
     if (csum[i] == 0) continue;
-    if (i != MT_SOLVE && i != MT_ALLGATHER) rest -= tsum[i];
+    if (i >= MT_SUB_RPBUILD) {
+      // nested in a task region: already counted there
+    } else if (i >= MT_TK_IRECV) {
+      rest_blocks -= tsum[i];
+    } else if (i != MT_SOLVE && i != MT_ALLGATHER) {
+      rest -= tsum[i];
+    }
     std::printf("### %-18s %10lld %11.4f %11.4f %11.4f %10.3f %7.2f%%\n",
                 name[i], csum[i]/nr, tmax[i], tsum[i]/nr, wmax[i],
                 (nsolve > 0) ? 1e3*tsum[i]/nr/nsolve : 0.0,
                 (wall_seconds > 0.0) ? 100.0*tmax[i]/wall_seconds : 0.0);
   }
-  std::printf("### %-18s %10s %11s %11.4f %11s %10.3f\n\n", "rest of solve", "", "",
+  std::printf("### %-18s %10s %11s %11.4f %11s %10.3f\n", "rest of blocks", "", "",
+              rest_blocks/nr, "", (nsolve > 0) ? 1e3*rest_blocks/nr/nsolve : 0.0);
+  std::printf("### %-18s %10s %11s %11.4f %11s %10.3f\n", "rest of solve", "", "",
               rest/nr, "", (nsolve > 0) ? 1e3*rest/nr/nsolve : 0.0);
+  std::printf("###   task:recv_unpack returned incomplete %lld times per rank "
+              "(%.1f per solve)\n\n", polls/nr,
+              (nsolve > 0) ? static_cast<double>(polls)/nr/nsolve : 0.0);
 }
 
 

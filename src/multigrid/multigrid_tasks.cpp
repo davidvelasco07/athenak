@@ -33,60 +33,72 @@ void MultigridDriver::DoTaskListOneStage() {
 }
 
 TaskStatus MultigridDriver::ClearRecv(Driver *pdrive, int stage) {
+  MGTimerScope _mt(this, MT_TK_CLEAR);
   TaskStatus tstat;
   tstat = pmg->pbval->ClearRecvMG();
   return tstat;
 }
 
 TaskStatus MultigridDriver::ClearSend(Driver *pdrive, int stage) {
+  MGTimerScope _mt(this, MT_TK_CLEAR);
   TaskStatus tstat;
   tstat = pmg->pbval->ClearSendMG();
   return tstat;
 }
 
 TaskStatus MultigridDriver::StartReceive(Driver *pdrive, int stage) {
+  MGTimerScope _mt(this, MT_TK_IRECV);
   TaskStatus tstat = pmg->pbval->InitRecvMG(pmg->nvar_);
   return tstat;
 }
 
 TaskStatus MultigridDriver::SendBoundary(Driver *pdrive, int stage) {
+  MGTimerScope _mt(this, MT_TK_SEND);
   DvceArray5D<Real> u = pmg->GetCurrentData();
   TaskStatus tstat = pmg->pbval->PackAndSendMG(u);
   return tstat;
 }
 
 TaskStatus MultigridDriver::RecvBoundary(Driver *pdrive, int stage) {
+  MGTimerScope _mt(this, MT_TK_RECV);
   DvceArray5D<Real> u = pmg->GetCurrentData();
   TaskStatus tstat = pmg->pbval->RecvAndUnpackMG(u);
+  if (tstat == TaskStatus::incomplete) ++mt_polls_;
   return tstat;
 }
 
 TaskStatus MultigridDriver::SmoothRed(Driver *pdrive, int stage) {
+  MGTimerScope _mt(this, MT_TK_SMOOTH);
   pmg->SmoothPack(coffset_);
   return TaskStatus::complete;
 }
 
 TaskStatus MultigridDriver::SmoothBlack(Driver *pdrive, int stage) {
+  MGTimerScope _mt(this, MT_TK_SMOOTH);
   pmg->SmoothPack(1-coffset_);
   return TaskStatus::complete;
 }
 
 TaskStatus MultigridDriver::Restrict(Driver *pdrive, int stage) {
+  MGTimerScope _mt(this, MT_TK_RESTRICT);
   pmg->RestrictPack();
   return TaskStatus::complete;
 }
 
 TaskStatus MultigridDriver::Prolongate(Driver *pdrive, int stage) {
+  MGTimerScope _mt(this, MT_TK_PROLONG);
   pmg->ProlongateAndCorrectPack();
   return TaskStatus::complete;
 }
 
 TaskStatus MultigridDriver::FMGProlongateTask(Driver *pdrive, int stage) {
+  MGTimerScope _mt(this, MT_TK_PROLONG);
   pmg->FMGProlongatePack();
   return TaskStatus::complete;
 }
 
 TaskStatus MultigridDriver::CalculateFASRHS(Driver *pdrive, int stage) {
+  MGTimerScope _mt(this, MT_TK_FAS);
   if (current_level_ < fmglevel_) {
     pmg->StoreOldData();
     pmg->CalculateFASRHSPack();
@@ -113,6 +125,7 @@ TaskStatus MultigridDriver::FillFCBoundary(Driver *pdrive, int stage) {
 }
 
 TaskStatus MultigridDriver::FillCoarseBoundary(Driver *pdrive, int stage) {
+  MGTimerScope _mt(this, MT_TK_FILLC);
   if (nreflevel_ == 0) return TaskStatus::complete;
   DvceArray5D<Real> u = pmg->GetCurrentData();
   pmg->pbval->FillCoarseMG(u);
@@ -120,6 +133,7 @@ TaskStatus MultigridDriver::FillCoarseBoundary(Driver *pdrive, int stage) {
 }
 
 TaskStatus MultigridDriver::ProlongateFCBoundary(Driver *pdrive, int stage) {
+  MGTimerScope _mt(this, MT_TK_PROLFC);
   if (nreflevel_ == 0) return TaskStatus::complete;
   DvceArray5D<Real> u = pmg->GetCurrentData();
   pmg->pbval->ProlongateFCMG(u);
