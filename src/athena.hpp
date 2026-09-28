@@ -95,7 +95,8 @@ enum ParticlesIndex {PGID=0, PTAG=1,
                      NRDATA_SINK_RK3=16};
 
 // integer constants to specify spatial reconstruction methods
-enum ReconstructionMethod {dc, plm, ppm4, ppmx, wenoz, ppm};
+// ppm = unlimited 4th-order parabolic (the MOOD candidate scheme, hydro only)
+enum ReconstructionMethod {dc, plm, ppm4, ppmx, wenoz, teno, ppm};
 
 // constants that enumerate time evolution options
 enum TimeEvolution {tstatic, kinematic, dynamic};
