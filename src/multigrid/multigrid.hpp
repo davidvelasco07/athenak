@@ -634,8 +634,37 @@ class MultigridBoundaryValues : public MeshBoundaryValuesCC {
   MGPerLevelIndcs send_mg_indcs_[56][kMaxMGLevels];
   MGPerLevelIndcs recv_mg_indcs_[56][kMaxMGLevels];
 
+  // <gravity>/mg_direct_copy: write same-rank, same-level payloads straight into the
+  // receiver's ghosts. nvar_max is the most variables one exchange carries (2*nvar with
+  // mg_ca_smooth), which sizes the same-rank buffer.
+  void SetExchangeOptions(bool direct_copy, int nvar_max) {
+    direct_copy_ = direct_copy;
+    nvar_max_ = nvar_max;
+  }
+
  private:
   Multigrid *pmy_mg;
+  // Same-rank exchanges. The pack/unpack kernels used to capture the 56 per-neighbour
+  // buffers and the host index tables by value (~166 kB), far over CUDA's 4 kB kernel
+  // argument limit, so Kokkos copied the closure to the device at every launch. They now
+  // capture device views only: mg_idx_d_ holds the per-level indices, same-level pairs on
+  // this rank are copied directly into the receiver's ghosts (when the send region stays
+  // in the interior, ncells >= ngh), and every other same-rank payload goes through
+  // mg_selfbuf_ at the receiver's (m,n) offset. Classified per level, rebuilt when the
+  // mesh changes.
+  struct MGLevelExchange {
+    bool direct = false;          // same-level same-rank pairs are copied directly
+    int nbuffered = 0;            // same-rank payloads through mg_selfbuf_
+    int noffrank = 0;             // payloads to/from other ranks
+    DvceArray1D<int> self_off;    // (nmb*nnghbr) receiver offsets into mg_selfbuf_, or -1
+  };
+  std::vector<MGLevelExchange> mg_lex_;
+  int mg_lex_seq_ = -2;
+  DvceArray1D<Real> mg_selfbuf_;
+  DvceArray4D<int> mg_idx_d_;     // (send/recv, level, slot, isame|icoar|ifine x 6)
+  bool direct_copy_ = true;
+  int nvar_max_ = 1;
+  void ClassifyMGExchanges();
   std::vector<RankPackedVarEntry> mg_send_var_entries_;
   std::vector<RankPackedVarEntry> mg_recv_var_entries_;
   std::vector<RankPackedVarMessage> mg_send_var_msgs_;

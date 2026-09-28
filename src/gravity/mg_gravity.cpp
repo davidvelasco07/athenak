@@ -143,9 +143,13 @@ MGGravityDriver::MGGravityDriver(MeshBlockPack *pmbp, ParameterInput *pin)
   bool root_on_host = pin->GetOrAddBoolean("gravity", "root_on_host", false);
   mgroot_ = new MGGravity(this, nullptr, nghost, root_on_host);
   mglevels_ = new MGGravity(this, pmbp, nghost);
-  // allocate boundary buffers (the u+src exchange of mg_ca_smooth doubles the payload)
+  // allocate boundary buffers
   mglevels_->pbval = new MultigridBoundaryValues(pmbp, pin, false, mglevels_);
-  mglevels_->pbval->InitializeBuffers(ca_smooth_ ? 2*nvar_ : nvar_);
+  mglevels_->pbval->InitializeBuffers((nvar_));
+  // same-rank same-level ghosts are copied directly unless mg_direct_copy = false;
+  // the u+src exchange of mg_ca_smooth carries twice the variables
+  bool direct_copy = pin->GetOrAddBoolean("gravity", "mg_direct_copy", true);
+  mglevels_->pbval->SetExchangeOptions(direct_copy, ca_smooth_ ? 2*nvar_ : nvar_);
   mglevels_->pbval->RemapIndicesForMG();
   mglevels_->pbval->ComputePerLevelIndices();
 }
