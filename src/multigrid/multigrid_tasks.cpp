@@ -61,6 +61,59 @@ TaskStatus MultigridDriver::RecvBoundary(Driver *pdrive, int stage) {
   return tstat;
 }
 
+//----------------------------------------------------------------------------------------
+// mg_ca_smooth tasks. The level is widened only when its blocks have >= 2 cells: on the
+// 1-cell level the parity of a ghost cell does not match the neighbour's (see SmoothWide)
+// and the exchange is dropped there only because the black half-sweep is empty.
+
+bool MultigridDriver::WideThisLevel() {
+  return ca_smooth_ && (pmg->GetSize() >> pmg->GetLevelShift()) >= 2;
+}
+
+TaskStatus MultigridDriver::StartReceivePair(Driver *pdrive, int stage) {
+  return pmg->pbval->InitRecvMG(WideThisLevel() ? 2*pmg->nvar_ : pmg->nvar_);
+}
+
+TaskStatus MultigridDriver::SendBoundaryPair(Driver *pdrive, int stage) {
+  DvceArray5D<Real> u = pmg->GetCurrentData();
+  if (!WideThisLevel()) return pmg->pbval->PackAndSendMG(u);
+  DvceArray5D<Real> s = pmg->GetCurrentSource();
+  return pmg->pbval->PackAndSendMG(u, &s);
+}
+
+TaskStatus MultigridDriver::RecvBoundaryPair(Driver *pdrive, int stage) {
+  DvceArray5D<Real> u = pmg->GetCurrentData();
+  TaskStatus tstat;
+  if (WideThisLevel()) {
+    DvceArray5D<Real> s = pmg->GetCurrentSource();
+    tstat = pmg->pbval->RecvAndUnpackMG(u, &s);
+  } else {
+    tstat = pmg->pbval->RecvAndUnpackMG(u);
+  }
+  return tstat;
+}
+
+TaskStatus MultigridDriver::SmoothRedWide(Driver *pdrive, int stage) {
+  if (WideThisLevel()) {
+    pmg->SmoothPackWide(coffset_);
+  } else {
+    pmg->SmoothPack(coffset_);
+  }
+  return TaskStatus::complete;
+}
+
+TaskStatus MultigridDriver::CalculateFASRHSWide(Driver *pdrive, int stage) {
+  if (current_level_ < fmglevel_) {
+    pmg->StoreOldData();
+    if (WideThisLevel()) {
+      pmg->CalculateFASRHSPackWide();
+    } else {
+      pmg->CalculateFASRHSPack();
+    }
+  }
+  return TaskStatus::complete;
+}
+
 TaskStatus MultigridDriver::SmoothRed(Driver *pdrive, int stage) {
   pmg->SmoothPack(coffset_);
   return TaskStatus::complete;
@@ -392,7 +445,27 @@ void MultigridDriver::SetMGTaskListToFiner(int nsmooth, int ngh, int flag) {
   }
 
   TaskID last_smooth = id.prolongate;
-  if (nsmooth > 0) {
+  if (nsmooth > 0 && ca_smooth_) {
+    // mg_ca_smooth: one exchange per red-black pair. The halo-wide red sweep reads src in
+    // the first ghost layer, which the restriction step at this level set up (u+src
+    // exchange and halo-wide FAS RHS). Physical faces need no refresh between red and
+    // black: a black cell's first physical ghost mirrors that same black cell.
+    auto &t = tl["mg_to_finer"];
+    TaskID prev = id.prolongate;
+    for (int s = 0; s < nsmooth; ++s) {
+      TaskID fillc = t->AddTask(&MultigridDriver::FillCoarseBoundary, this, prev);
+      TaskID ircv  = t->AddTask(&MultigridDriver::StartReceive, this, prev);
+      TaskID dsend = fillc | ircv;                // the pack uses the slot ircv activates
+      TaskID send  = t->AddTask(&MultigridDriver::SendBoundary, this, dsend);
+      TaskID drecv = send | ircv;
+      TaskID recv  = t->AddTask(&MultigridDriver::RecvBoundary, this, drecv);
+      TaskID physb = t->AddTask(&MultigridDriver::PhysicalBoundary, this, recv);
+      TaskID fcg   = t->AddTask(&MultigridDriver::ProlongateFCBoundary, this, physb);
+      TaskID red   = t->AddTask(&MultigridDriver::SmoothRedWide, this, fcg);
+      prev = t->AddTask(&MultigridDriver::SmoothBlack, this, red);
+    }
+    last_smooth = prev;
+  } else if (nsmooth > 0) {
     // Fine-level boundary comm after prolongation
     id.fill_coarse1 = tl["mg_to_finer"]->AddTask(
                         &MultigridDriver::FillCoarseBoundary, this, id.prolongate);
@@ -540,6 +613,42 @@ void MultigridDriver::SetMGTaskListToCoarser(int nsmooth, int cycle) {
   tl.emplace(std::make_pair("mg_to_coarser",
       std::make_shared<TaskList>()));
   TaskID none(0);
+
+  if (ca_smooth_) {
+    // mg_ca_smooth: the first exchange carries u and src, the FAS RHS and the red sweep
+    // are halo-wide, and only the black half-sweep is followed by an exchange. The u+src
+    // exchange and the wide FAS RHS happen even with nsmooth = 0, because the
+    // prolongation step at this level smooths with the src ghosts set here. Each send
+    // depends on its StartReceive, which activates the rank-packed slot the pack uses.
+    auto &t = tl["mg_to_coarser"];
+    id.fill_coarse0 = t->AddTask(&MultigridDriver::FillCoarseBoundary, this, none);
+    id.ircv0  = t->AddTask(&MultigridDriver::StartReceivePair, this, none);
+    TaskID dsend0 = id.fill_coarse0 | id.ircv0;
+    id.send0  = t->AddTask(&MultigridDriver::SendBoundaryPair, this, dsend0);
+    TaskID drecv0 = id.send0 | id.ircv0;
+    id.recv0  = t->AddTask(&MultigridDriver::RecvBoundaryPair, this, drecv0);
+    id.physb0 = t->AddTask(&MultigridDriver::PhysicalBoundary, this, id.recv0);
+    id.fc_ghosts0 = t->AddTask(&MultigridDriver::ProlongateFCBoundary, this, id.physb0);
+    id.calc_rhs = t->AddTask(&MultigridDriver::CalculateFASRHSWide, this, id.fc_ghosts0);
+    TaskID prev = id.calc_rhs;
+    for (int s = 0; s < nsmooth; ++s) {
+      TaskID red   = t->AddTask(&MultigridDriver::SmoothRedWide, this, prev);
+      TaskID black = t->AddTask(&MultigridDriver::SmoothBlack, this, red);
+      TaskID dircv = id.fc_ghosts0 | prev;
+      TaskID ircv  = t->AddTask(&MultigridDriver::StartReceive, this, dircv);
+      TaskID fillc = t->AddTask(&MultigridDriver::FillCoarseBoundary, this, black);
+      TaskID dsend = fillc | ircv;
+      TaskID send  = t->AddTask(&MultigridDriver::SendBoundary, this, dsend);
+      TaskID drecv = send | ircv;
+      TaskID recv  = t->AddTask(&MultigridDriver::RecvBoundary, this, drecv);
+      TaskID physb = t->AddTask(&MultigridDriver::PhysicalBoundary, this, recv);
+      prev = t->AddTask(&MultigridDriver::ProlongateFCBoundary, this, physb);
+    }
+    id.restrict_ = t->AddTask(&MultigridDriver::Restrict, this, prev);
+    id.clear_send0 = t->AddTask(&MultigridDriver::ClearSend, this, id.restrict_);
+    id.clear_recv0 = t->AddTask(&MultigridDriver::ClearRecv, this, id.clear_send0);
+    return;
+  }
 
   id.fill_coarse0 = tl["mg_to_coarser"]->AddTask(
       &MultigridDriver::FillCoarseBoundary, this, none);

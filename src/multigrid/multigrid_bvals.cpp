@@ -1017,6 +1017,87 @@ void MultigridBoundaryValues::ComputePerLevelIndices() {
     int cbn = cnx_f + 2*ngh;
     Kokkos::realloc(coarse_buf_, nmb, nvar, cbn, cbn, cbn);
   }
+
+  // Device copy of the index tables for the pack/unpack kernels:
+  // (send/recv, level, slot, 6*{isame, icoar, ifine} + {bis,bie,bjs,bje,bks,bke})
+  Kokkos::realloc(mg_idx_d_, 2, kMaxMGLevels, 56, 18);
+  auto idx_h = Kokkos::create_mirror_view(mg_idx_d_);
+  for (int sr = 0; sr < 2; ++sr) {
+    for (int lev = 0; lev < std::min(nlevel, static_cast<int>(kMaxMGLevels)); ++lev) {
+      for (int n = 0; n < 56; ++n) {
+        const MGPerLevelIndcs &x = (sr == 0) ? send_mg_indcs_[n][lev]
+                                             : recv_mg_indcs_[n][lev];
+        const MeshBufferIndcs *r[3] = {&x.isame, &x.icoar, &x.ifine};
+        for (int s = 0; s < 3; ++s) {
+          idx_h(sr, lev, n, 6*s+0) = r[s]->bis;  idx_h(sr, lev, n, 6*s+1) = r[s]->bie;
+          idx_h(sr, lev, n, 6*s+2) = r[s]->bjs;  idx_h(sr, lev, n, 6*s+3) = r[s]->bje;
+          idx_h(sr, lev, n, 6*s+4) = r[s]->bks;  idx_h(sr, lev, n, 6*s+5) = r[s]->bke;
+        }
+      }
+    }
+  }
+  Kokkos::deep_copy(mg_idx_d_, idx_h);
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void MultigridBoundaryValues::ClassifyMGExchanges()
+//! \brief Per MG level: whether same-rank same-level pairs are copied directly, and the
+//! receiver offsets in mg_selfbuf_ of every other same-rank payload. Rebuilt when the
+//! mesh changes (AMR / load balancing).
+
+void MultigridBoundaryValues::ClassifyMGExchanges() {
+  const int seq = pmy_pack->pmesh->GetAMRLoadBalanceUpdateSeq();
+  if (seq == mg_lex_seq_) return;
+  mg_lex_seq_ = seq;
+  const int nmb = pmy_pack->nmb_thispack;
+  const int nnghbr = pmy_pack->pmb->nnghbr;
+  const int my_rank = global_variable::my_rank;
+  const int ngh = pmy_mg->GetGhostCells();
+  const int nlevel = pmy_mg->GetNumberOfLevels();
+  const int nxmin = std::min(pmy_mg->indcs_.nx1,
+                             std::min(pmy_mg->indcs_.nx2, pmy_mg->indcs_.nx3));
+  auto &nghbr = pmy_pack->pmb->nghbr;
+  auto &mblev = pmy_pack->pmb->mb_lev;
+  mg_lex_.assign(nlevel, MGLevelExchange());
+  std::size_t maxtot = 1;
+  for (int lev = 0; lev < nlevel; ++lev) {
+    MGLevelExchange &x = mg_lex_[lev];
+    const int shift = nlevel - 1 - lev;
+    const bool skip_fc = ((pmy_mg->GetSize() >> shift) < 2);
+    // a send region wider than the interior would read ghosts that other teams write
+    x.direct = direct_copy_ && ((nxmin >> shift) >= ngh);
+    x.self_off = DvceArray1D<int>("mg_self_off", std::max(1, nmb*nnghbr));
+    auto off_h = Kokkos::create_mirror_view(x.self_off);
+    std::size_t tot = 0;
+    for (int m = 0; m < std::max(1, nmb*nnghbr); ++m) off_h(m) = -1;
+    for (int m = 0; m < nmb; ++m) {
+      for (int n = 0; n < nnghbr; ++n) {
+        if (nghbr.h_view(m, n).gid < 0) continue;
+        const int nlev = nghbr.h_view(m, n).lev, mlev = mblev.h_view(m);
+        if (nlev != mlev && skip_fc) continue;
+        if (nghbr.h_view(m, n).rank != my_rank) { ++x.noffrank; continue; }
+        if (nlev == mlev && x.direct) continue;
+        // block m receives this payload from its same-rank neighbour in slot n
+        const MGPerLevelIndcs &r = recv_mg_indcs_[n][lev];
+        const int ndat = (nlev < mlev) ? r.icoar_ndat
+                       : (nlev == mlev) ? r.isame_ndat : r.ifine_ndat;
+        if (tot + static_cast<std::size_t>(nvar_max_) * ndat > 2147483647u) {
+          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                    << std::endl << "same-rank MG buffer exceeds int offsets"
+                    << std::endl;
+          std::exit(EXIT_FAILURE);
+        }
+        off_h(m*nnghbr + n) = static_cast<int>(tot);
+        tot += static_cast<std::size_t>(nvar_max_) * ndat;
+        ++x.nbuffered;
+      }
+    }
+    Kokkos::deep_copy(x.self_off, off_h);
+    maxtot = std::max(maxtot, tot);
+  }
+  if (mg_selfbuf_.extent(0) < maxtot) {
+    mg_selfbuf_ = DvceArray1D<Real>("mg_selfbuf", maxtot);
+  }
 }
 
 //----------------------------------------------------------------------------------------
@@ -1104,6 +1185,32 @@ void MultigridBoundaryValues::FillCoarseMG(const DvceArray5D<Real> &u) {
     });
 }
 
+namespace {
+//! \brief Map slot s in [0,56) to a neighbour direction (ox1,ox2,ox3) and sub-face
+//! (f1,f2), enumerated in loop order: ox3, ox2, ox1, then f2, f1. Faces have 2x2
+//! sub-faces, edges 2, corners 1, so 6*4 + 12*2 + 8 = 56. nface is the number of nonzero
+//! offsets.
+KOKKOS_INLINE_FUNCTION
+void FCNeighborSlot(int s, int &ox1, int &ox2, int &ox3, int &f1, int &f2, int &nface) {
+  for (int k = -1; k <= 1; ++k) {
+    for (int j = -1; j <= 1; ++j) {
+      for (int i = -1; i <= 1; ++i) {
+        if (i == 0 && j == 0 && k == 0) continue;
+        int nf = (i != 0 ? 1 : 0) + (j != 0 ? 1 : 0) + (k != 0 ? 1 : 0);
+        int n1 = (nf <= 2) ? 2 : 1;  // sub-faces along f1
+        int n2 = (nf == 1) ? 2 : 1;  // sub-faces along f2
+        if (s < n1*n2) {
+          ox1 = i; ox2 = j; ox3 = k; f2 = s/n1; f1 = s%n1; nface = nf;
+          return;
+        }
+        s -= n1*n2;
+      }
+    }
+  }
+  ox1 = ox2 = ox3 = f1 = f2 = nface = 0;  // unreachable for s in [0,56)
+}
+}  // namespace
+
 //----------------------------------------------------------------------------------------
 //! \fn TaskStatus MultigridBoundaryValues::ProlongateFCMG()
 //! \brief Prolongate from coarse_buf_ to fine ghost cells using the same flux-conserving
@@ -1137,226 +1244,221 @@ TaskStatus MultigridBoundaryValues::ProlongateFCMG(DvceArray5D<Real> &u) {
   int half = ncells / 2;
   constexpr Real ot = 1.0/3.0;
 
-  Kokkos::parallel_for("ProlongateFCMG",
-    Kokkos::RangePolicy<DevExeSpace>(0, nmb),
-    KOKKOS_LAMBDA(const int m) {
+  // One team per MeshBlock and one thread per neighbour slot. The 56 slots write disjoint
+  // ghost regions, and no slot reads cells another slot writes (faces read interior
+  // cells, their own ghosts or coarse_buf_; edges and corners read only coarse_buf_), so
+  // the slots are independent. Each slot keeps its serial loops in the original order,
+  // which the finer-face correction relies on when mg_nghost > 1. The previous kernel ran
+  // one thread per MeshBlock over all 56 slots, which on a GPU left most of the device
+  // idle.
+  par_for_outer("ProlongateFCMG", DevExeSpace(), 0, 0, 0, nmb-1,
+    KOKKOS_LAMBDA(TeamMember_t tmember, const int m) {
       int m_lev = mblev_d(m);
       int child_x = fc_cx(m);
       int child_y = fc_cy(m);
       int child_z = fc_cz(m);
 
-      for (int ox3 = -1; ox3 <= 1; ++ox3) {
-        for (int ox2 = -1; ox2 <= 1; ++ox2) {
-          for (int ox1 = -1; ox1 <= 1; ++ox1) {
-            if (ox1 == 0 && ox2 == 0 && ox3 == 0) continue;
-            int nface = (ox1!=0?1:0) + (ox2!=0?1:0) + (ox3!=0?1:0);
-            int f2_max = (nface == 1) ? 1 : 0;
-            int f1_max = (nface <= 2) ? 1 : 0;
+      Kokkos::parallel_for(Kokkos::TeamThreadRange(tmember, 56), [&](const int s) {
+        int ox1, ox2, ox3, f1, f2, nface;
+        FCNeighborSlot(s, ox1, ox2, ox3, f1, f2, nface);
+        int n = NeighborIndex(ox1, ox2, ox3, f1, f2);
+        if (n < 0 || n >= 56) return;
+        if (nghbr_d(m, n).gid < 0) return;
+        int nlev = nghbr_d(m, n).lev;
 
-            for (int f2 = 0; f2 <= f2_max; ++f2) {
-              for (int f1 = 0; f1 <= f1_max; ++f1) {
-                int n = NeighborIndex(ox1, ox2, ox3, f1, f2);
-                if (n < 0 || n >= 56) continue;
-                if (nghbr_d(m, n).gid < 0) continue;
-                int nlev = nghbr_d(m, n).lev;
+        // From finer face neighbor: apply FC correction.
+        // Ghost cells already contain restricted face avg from unpack.
+        if (nlev > m_lev && nface == 1) {
+          int oi = (ox1 < 0) ? 1 : (ox1 > 0) ? -1 : 0;
+          int oj = (ox2 < 0) ? 1 : (ox2 > 0) ? -1 : 0;
+          int ok = (ox3 < 0) ? 1 : (ox3 > 0) ? -1 : 0;
 
-                // From finer face neighbor: apply FC correction.
-                // Ghost cells already contain restricted face avg from unpack.
-                if (nlev > m_lev && nface == 1) {
-                  int oi = (ox1 < 0) ? 1 : (ox1 > 0) ? -1 : 0;
-                  int oj = (ox2 < 0) ? 1 : (ox2 > 0) ? -1 : 0;
-                  int ok = (ox3 < 0) ? 1 : (ox3 > 0) ? -1 : 0;
+          int sub_x = 0, sub_y = 0, sub_z = 0;
+          if (ox1 != 0) {
+            sub_y = f1; sub_z = f2;
+          } else if (ox2 != 0) {
+            sub_x = f1; sub_z = f2;
+          } else {
+            sub_x = f1; sub_y = f2;
+          }
 
-                  int sub_x = 0, sub_y = 0, sub_z = 0;
-                  if (ox1 != 0) {
-                    sub_y = f1; sub_z = f2;
-                  } else if (ox2 != 0) {
-                    sub_x = f1; sub_z = f2;
-                  } else {
-                    sub_x = f1; sub_y = f2;
-                  }
+          int gis, gie, gjs, gje, gks, gke;
+          if (ox1 < 0) {
+            gis = 0; gie = ngh_l - 1;
+          } else if (ox1 > 0) {
+            gis = ngh_l + ncells_l;
+            gie = ngh_l + ncells_l + ngh_l - 1;
+          } else {
+            gis = ngh_l + sub_x*half;
+            gie = ngh_l + sub_x*half + half - 1;
+          }
+          if (ox2 < 0) {
+            gjs = 0; gje = ngh_l - 1;
+          } else if (ox2 > 0) {
+            gjs = ngh_l + ncells_l;
+            gje = ngh_l + ncells_l + ngh_l - 1;
+          } else {
+            gjs = ngh_l + sub_y*half;
+            gje = ngh_l + sub_y*half + half - 1;
+          }
+          if (ox3 < 0) {
+            gks = 0; gke = ngh_l - 1;
+          } else if (ox3 > 0) {
+            gks = ngh_l + ncells_l;
+            gke = ngh_l + ncells_l + ngh_l - 1;
+          } else {
+            gks = ngh_l + sub_z*half;
+            gke = ngh_l + sub_z*half + half - 1;
+          }
 
-                  int gis, gie, gjs, gje, gks, gke;
-                  if (ox1 < 0) {
-                    gis = 0; gie = ngh_l - 1;
-                  } else if (ox1 > 0) {
-                    gis = ngh_l + ncells_l;
-                    gie = ngh_l + ncells_l + ngh_l - 1;
-                  } else {
-                    gis = ngh_l + sub_x*half;
-                    gie = ngh_l + sub_x*half + half - 1;
-                  }
-                  if (ox2 < 0) {
-                    gjs = 0; gje = ngh_l - 1;
-                  } else if (ox2 > 0) {
-                    gjs = ngh_l + ncells_l;
-                    gje = ngh_l + ncells_l + ngh_l - 1;
-                  } else {
-                    gjs = ngh_l + sub_y*half;
-                    gje = ngh_l + sub_y*half + half - 1;
-                  }
-                  if (ox3 < 0) {
-                    gks = 0; gke = ngh_l - 1;
-                  } else if (ox3 > 0) {
-                    gks = ngh_l + ncells_l;
-                    gke = ngh_l + ncells_l + ngh_l - 1;
-                  } else {
-                    gks = ngh_l + sub_z*half;
-                    gke = ngh_l + sub_z*half + half - 1;
-                  }
-
-                  for (int v = 0; v < nvar_l; ++v) {
-                    for (int gk = gks; gk <= gke; ++gk) {
-                      for (int gj = gjs; gj <= gje; ++gj) {
-                        for (int gi = gis; gi <= gie; ++gi) {
-                          Real avg = u(m,v,gk,gj,gi);
-                          u(m,v,gk,gj,gi) =
-                              ot*(4.0*avg
-                              - u(m,v,gk+ok,gj+oj,gi+oi));
-                        }
-                      }
-                    }
-                  }
-                  continue;
+          for (int v = 0; v < nvar_l; ++v) {
+            for (int gk = gks; gk <= gke; ++gk) {
+              for (int gj = gjs; gj <= gje; ++gj) {
+                for (int gi = gis; gi <= gie; ++gi) {
+                  Real avg = u(m,v,gk,gj,gi);
+                  u(m,v,gk,gj,gi) =
+                      ot*(4.0*avg
+                      - u(m,v,gk+ok,gj+oj,gi+oi));
                 }
+              }
+            }
+          }
+          return;
+        }
 
-                if (nlev >= m_lev) continue;
+        if (nlev >= m_lev) return;
 
-                // Face neighbor from coarser: flux-conserving prolongation
-                // from coarse_buf_ into fine ghost cells of u
-                if (nface == 1) {
-                  if (ox1 != 0) {
-                    int fig = (ox1 < 0) ? ngh_l - 1 : ngh_l + ncells_l;
-                    int fi  = (ox1 < 0) ? ngh_l : ngh_l + ncells_l - 1;
-                    int si  = (ox1 < 0) ? ngh_l - 1 : ngh_l + half;
-                    int sj0 = ngh_l;
-                    int sk0 = ngh_l;
-                    for (int v = 0; v < nvar_l; ++v) {
-                      for (int sk = sk0; sk < sk0 + half; ++sk) {
-                        for (int sj = sj0; sj < sj0 + half; ++sj) {
-                          int fj = ngh_l + 2*(sj - sj0);
-                          int fk = ngh_l + 2*(sk - sk0);
-                          Real cc = cbuf(m,v,sk,sj,si);
-                          int sjm = (sj > ngh_l) ? sj-1 : sj;
-                          int sjp = (sj < ngh_l+half-1) ? sj+1 : sj;
-                          int skm = (sk > ngh_l) ? sk-1 : sk;
-                          int skp = (sk < ngh_l+half-1) ? sk+1 : sk;
-                          Real gy = 0.125*(cbuf(m,v,sk,sjp,si)-cbuf(m,v,sk,sjm,si));
-                          Real gz = 0.125*(cbuf(m,v,skp,sj,si)-cbuf(m,v,skm,sj,si));
-                          u(m,v,fk  ,fj  ,fig)=ot*(2.0*(cc-gy-gz)+u(m,v,fk  ,fj  ,fi));
-                          u(m,v,fk  ,fj+1,fig)=ot*(2.0*(cc+gy-gz)+u(m,v,fk  ,fj+1,fi));
-                          u(m,v,fk+1,fj  ,fig)=ot*(2.0*(cc-gy+gz)+u(m,v,fk+1,fj  ,fi));
-                          u(m,v,fk+1,fj+1,fig)=ot*(2.0*(cc+gy+gz)+u(m,v,fk+1,fj+1,fi));
-                        }
-                      }
-                    }
-                  } else if (ox2 != 0) {
-                    int fjg = (ox2 < 0) ? ngh_l - 1 : ngh_l + ncells_l;
-                    int fj  = (ox2 < 0) ? ngh_l : ngh_l + ncells_l - 1;
-                    int sj  = (ox2 < 0) ? ngh_l - 1 : ngh_l + half;
-                    int si0 = ngh_l;
-                    int sk0 = ngh_l;
-                    for (int v = 0; v < nvar_l; ++v) {
-                      for (int sk = sk0; sk < sk0 + half; ++sk) {
-                        for (int si = si0; si < si0 + half; ++si) {
-                          int fi = ngh_l + 2*(si - si0);
-                          int fk = ngh_l + 2*(sk - sk0);
-                          Real cc = cbuf(m,v,sk,sj,si);
-                          int sim = (si > ngh_l) ? si-1 : si;
-                          int sip = (si < ngh_l+half-1) ? si+1 : si;
-                          int skm = (sk > ngh_l) ? sk-1 : sk;
-                          int skp = (sk < ngh_l+half-1) ? sk+1 : sk;
-                          Real gx = 0.125*(cbuf(m,v,sk,sj,sip)-cbuf(m,v,sk,sj,sim));
-                          Real gz = 0.125*(cbuf(m,v,skp,sj,si)-cbuf(m,v,skm,sj,si));
-                          u(m,v,fk  ,fjg,fi  )=ot*(2.0*(cc-gx-gz)+u(m,v,fk  ,fj,fi  ));
-                          u(m,v,fk  ,fjg,fi+1)=ot*(2.0*(cc+gx-gz)+u(m,v,fk  ,fj,fi+1));
-                          u(m,v,fk+1,fjg,fi  )=ot*(2.0*(cc-gx+gz)+u(m,v,fk+1,fj,fi  ));
-                          u(m,v,fk+1,fjg,fi+1)=ot*(2.0*(cc+gx+gz)+u(m,v,fk+1,fj,fi+1));
-                        }
-                      }
-                    }
-                  } else {
-                    int fkg = (ox3 < 0) ? ngh_l - 1 : ngh_l + ncells_l;
-                    int fk  = (ox3 < 0) ? ngh_l : ngh_l + ncells_l - 1;
-                    int sk  = (ox3 < 0) ? ngh_l - 1 : ngh_l + half;
-                    int si0 = ngh_l;
-                    int sj0 = ngh_l;
-                    for (int v = 0; v < nvar_l; ++v) {
-                      for (int sj = sj0; sj < sj0 + half; ++sj) {
-                        for (int si = si0; si < si0 + half; ++si) {
-                          int fi = ngh_l + 2*(si - si0);
-                          int fj = ngh_l + 2*(sj - sj0);
-                          Real cc = cbuf(m,v,sk,sj,si);
-                          int sim = (si > ngh_l) ? si-1 : si;
-                          int sip = (si < ngh_l+half-1) ? si+1 : si;
-                          int sjm = (sj > ngh_l) ? sj-1 : sj;
-                          int sjp = (sj < ngh_l+half-1) ? sj+1 : sj;
-                          Real gx = 0.125*(cbuf(m,v,sk,sj,sip)-cbuf(m,v,sk,sj,sim));
-                          Real gy = 0.125*(cbuf(m,v,sk,sjp,si)-cbuf(m,v,sk,sjm,si));
-                          u(m,v,fkg,fj  ,fi  )=ot*(2.0*(cc-gx-gy)+u(m,v,fk,fj  ,fi  ));
-                          u(m,v,fkg,fj  ,fi+1)=ot*(2.0*(cc+gx-gy)+u(m,v,fk,fj  ,fi+1));
-                          u(m,v,fkg,fj+1,fi  )=ot*(2.0*(cc-gx+gy)+u(m,v,fk,fj+1,fi  ));
-                          u(m,v,fkg,fj+1,fi+1)=ot*(2.0*(cc+gx+gy)+u(m,v,fk,fj+1,fi+1));
-                        }
-                      }
-                    }
-                  }
-                } else {
-                  int gis, gie, gjs, gje, gks, gke;
-                  if (ox1 < 0) {
-                    gis = 0; gie = ngh_l - 1;
-                  } else if (ox1 > 0) {
-                    gis = ngh_l + ncells_l;
-                    gie = ngh_l + ncells_l + ngh_l - 1;
-                  } else {
-                    gis = ngh_l;
-                    gie = ngh_l + ncells_l - 1;
-                  }
-                  if (ox2 < 0) {
-                    gjs = 0; gje = ngh_l - 1;
-                  } else if (ox2 > 0) {
-                    gjs = ngh_l + ncells_l;
-                    gje = ngh_l + ncells_l + ngh_l - 1;
-                  } else {
-                    gjs = ngh_l;
-                    gje = ngh_l + ncells_l - 1;
-                  }
-                  if (ox3 < 0) {
-                    gks = 0; gke = ngh_l - 1;
-                  } else if (ox3 > 0) {
-                    gks = ngh_l + ncells_l;
-                    gke = ngh_l + ncells_l + ngh_l - 1;
-                  } else {
-                    gks = ngh_l;
-                    gke = ngh_l + ncells_l - 1;
-                  }
+        // Face neighbor from coarser: flux-conserving prolongation
+        // from coarse_buf_ into fine ghost cells of u
+        if (nface == 1) {
+          if (ox1 != 0) {
+            int fig = (ox1 < 0) ? ngh_l - 1 : ngh_l + ncells_l;
+            int fi  = (ox1 < 0) ? ngh_l : ngh_l + ncells_l - 1;
+            int si  = (ox1 < 0) ? ngh_l - 1 : ngh_l + half;
+            int sj0 = ngh_l;
+            int sk0 = ngh_l;
+            for (int v = 0; v < nvar_l; ++v) {
+              for (int sk = sk0; sk < sk0 + half; ++sk) {
+                for (int sj = sj0; sj < sj0 + half; ++sj) {
+                  int fj = ngh_l + 2*(sj - sj0);
+                  int fk = ngh_l + 2*(sk - sk0);
+                  Real cc = cbuf(m,v,sk,sj,si);
+                  int sjm = (sj > ngh_l) ? sj-1 : sj;
+                  int sjp = (sj < ngh_l+half-1) ? sj+1 : sj;
+                  int skm = (sk > ngh_l) ? sk-1 : sk;
+                  int skp = (sk < ngh_l+half-1) ? sk+1 : sk;
+                  Real gy = 0.125*(cbuf(m,v,sk,sjp,si)-cbuf(m,v,sk,sjm,si));
+                  Real gz = 0.125*(cbuf(m,v,skp,sj,si)-cbuf(m,v,skm,sj,si));
+                  u(m,v,fk  ,fj  ,fig)=ot*(2.0*(cc-gy-gz)+u(m,v,fk  ,fj  ,fi));
+                  u(m,v,fk  ,fj+1,fig)=ot*(2.0*(cc+gy-gz)+u(m,v,fk  ,fj+1,fi));
+                  u(m,v,fk+1,fj  ,fig)=ot*(2.0*(cc-gy+gz)+u(m,v,fk+1,fj  ,fi));
+                  u(m,v,fk+1,fj+1,fig)=ot*(2.0*(cc+gy+gz)+u(m,v,fk+1,fj+1,fi));
+                }
+              }
+            }
+          } else if (ox2 != 0) {
+            int fjg = (ox2 < 0) ? ngh_l - 1 : ngh_l + ncells_l;
+            int fj  = (ox2 < 0) ? ngh_l : ngh_l + ncells_l - 1;
+            int sj  = (ox2 < 0) ? ngh_l - 1 : ngh_l + half;
+            int si0 = ngh_l;
+            int sk0 = ngh_l;
+            for (int v = 0; v < nvar_l; ++v) {
+              for (int sk = sk0; sk < sk0 + half; ++sk) {
+                for (int si = si0; si < si0 + half; ++si) {
+                  int fi = ngh_l + 2*(si - si0);
+                  int fk = ngh_l + 2*(sk - sk0);
+                  Real cc = cbuf(m,v,sk,sj,si);
+                  int sim = (si > ngh_l) ? si-1 : si;
+                  int sip = (si < ngh_l+half-1) ? si+1 : si;
+                  int skm = (sk > ngh_l) ? sk-1 : sk;
+                  int skp = (sk < ngh_l+half-1) ? sk+1 : sk;
+                  Real gx = 0.125*(cbuf(m,v,sk,sj,sip)-cbuf(m,v,sk,sj,sim));
+                  Real gz = 0.125*(cbuf(m,v,skp,sj,si)-cbuf(m,v,skm,sj,si));
+                  u(m,v,fk  ,fjg,fi  )=ot*(2.0*(cc-gx-gz)+u(m,v,fk  ,fj,fi  ));
+                  u(m,v,fk  ,fjg,fi+1)=ot*(2.0*(cc+gx-gz)+u(m,v,fk  ,fj,fi+1));
+                  u(m,v,fk+1,fjg,fi  )=ot*(2.0*(cc-gx+gz)+u(m,v,fk+1,fj,fi  ));
+                  u(m,v,fk+1,fjg,fi+1)=ot*(2.0*(cc+gx+gz)+u(m,v,fk+1,fj,fi+1));
+                }
+              }
+            }
+          } else {
+            int fkg = (ox3 < 0) ? ngh_l - 1 : ngh_l + ncells_l;
+            int fk  = (ox3 < 0) ? ngh_l : ngh_l + ncells_l - 1;
+            int sk  = (ox3 < 0) ? ngh_l - 1 : ngh_l + half;
+            int si0 = ngh_l;
+            int sj0 = ngh_l;
+            for (int v = 0; v < nvar_l; ++v) {
+              for (int sj = sj0; sj < sj0 + half; ++sj) {
+                for (int si = si0; si < si0 + half; ++si) {
+                  int fi = ngh_l + 2*(si - si0);
+                  int fj = ngh_l + 2*(sj - sj0);
+                  Real cc = cbuf(m,v,sk,sj,si);
+                  int sim = (si > ngh_l) ? si-1 : si;
+                  int sip = (si < ngh_l+half-1) ? si+1 : si;
+                  int sjm = (sj > ngh_l) ? sj-1 : sj;
+                  int sjp = (sj < ngh_l+half-1) ? sj+1 : sj;
+                  Real gx = 0.125*(cbuf(m,v,sk,sj,sip)-cbuf(m,v,sk,sj,sim));
+                  Real gy = 0.125*(cbuf(m,v,sk,sjp,si)-cbuf(m,v,sk,sjm,si));
+                  u(m,v,fkg,fj  ,fi  )=ot*(2.0*(cc-gx-gy)+u(m,v,fk,fj  ,fi  ));
+                  u(m,v,fkg,fj  ,fi+1)=ot*(2.0*(cc+gx-gy)+u(m,v,fk,fj  ,fi+1));
+                  u(m,v,fkg,fj+1,fi  )=ot*(2.0*(cc-gx+gy)+u(m,v,fk,fj+1,fi  ));
+                  u(m,v,fkg,fj+1,fi+1)=ot*(2.0*(cc+gx+gy)+u(m,v,fk,fj+1,fi+1));
+                }
+              }
+            }
+          }
+        } else {
+          int gis, gie, gjs, gje, gks, gke;
+          if (ox1 < 0) {
+            gis = 0; gie = ngh_l - 1;
+          } else if (ox1 > 0) {
+            gis = ngh_l + ncells_l;
+            gie = ngh_l + ncells_l + ngh_l - 1;
+          } else {
+            gis = ngh_l;
+            gie = ngh_l + ncells_l - 1;
+          }
+          if (ox2 < 0) {
+            gjs = 0; gje = ngh_l - 1;
+          } else if (ox2 > 0) {
+            gjs = ngh_l + ncells_l;
+            gje = ngh_l + ncells_l + ngh_l - 1;
+          } else {
+            gjs = ngh_l;
+            gje = ngh_l + ncells_l - 1;
+          }
+          if (ox3 < 0) {
+            gks = 0; gke = ngh_l - 1;
+          } else if (ox3 > 0) {
+            gks = ngh_l + ncells_l;
+            gke = ngh_l + ncells_l + ngh_l - 1;
+          } else {
+            gks = ngh_l;
+            gke = ngh_l + ncells_l - 1;
+          }
 
-                  for (int v = 0; v < nvar_l; ++v) {
-                    for (int gk = gks; gk <= gke; ++gk) {
-                      for (int gj = gjs; gj <= gje; ++gj) {
-                        for (int gi = gis; gi <= gie; ++gi) {
-                          int ci, cj, ck;
-                          if (ox1 < 0)      ci = ngh_l - 1;
-                          else if (ox1 > 0) ci = ngh_l + half;
-                          else              ci = ngh_l + (gi - ngh_l)/2;
-                          if (ox2 < 0)      cj = ngh_l - 1;
-                          else if (ox2 > 0) cj = ngh_l + half;
-                          else              cj = ngh_l + (gj - ngh_l)/2;
-                          if (ox3 < 0)      ck = ngh_l - 1;
-                          else if (ox3 > 0) ck = ngh_l + half;
-                          else              ck = ngh_l + (gk - ngh_l)/2;
+          for (int v = 0; v < nvar_l; ++v) {
+            for (int gk = gks; gk <= gke; ++gk) {
+              for (int gj = gjs; gj <= gje; ++gj) {
+                for (int gi = gis; gi <= gie; ++gi) {
+                  int ci, cj, ck;
+                  if (ox1 < 0)      ci = ngh_l - 1;
+                  else if (ox1 > 0) ci = ngh_l + half;
+                  else              ci = ngh_l + (gi - ngh_l)/2;
+                  if (ox2 < 0)      cj = ngh_l - 1;
+                  else if (ox2 > 0) cj = ngh_l + half;
+                  else              cj = ngh_l + (gj - ngh_l)/2;
+                  if (ox3 < 0)      ck = ngh_l - 1;
+                  else if (ox3 > 0) ck = ngh_l + half;
+                  else              ck = ngh_l + (gk - ngh_l)/2;
 
-                          u(m, v, gk, gj, gi) = cbuf(m, v, ck, cj, ci);
-                        }
-                      }
-                    }
-                  }
+                  u(m, v, gk, gj, gi) = cbuf(m, v, ck, cj, ci);
                 }
               }
             }
           }
         }
-      }
+      });
   });
 
   return TaskStatus::complete;
@@ -2197,36 +2299,36 @@ TaskStatus MultigridBoundaryValues::FillFineCoarseMGGhosts(DvceArray5D<Real> &u)
 //! boundaries into boundary buffers and send to neighbors.
 //! Adapts to different block sizes per level.
 
-TaskStatus MultigridBoundaryValues::PackAndSendMG(const DvceArray5D<Real> &u) {
+TaskStatus MultigridBoundaryValues::PackAndSendMG(const DvceArray5D<Real> &u,
+                                                  const DvceArray5D<Real> *u2) {
   if (pmy_mg == nullptr) return TaskStatus::complete;
 
   int nmb = pmy_pack->nmb_thispack;
   int nnghbr = pmy_pack->pmb->nnghbr;
   int nvar = u.extent_int(1);
+  // optional second array: message variables [nvar, nvart) come from w
+  DvceArray5D<Real> w = (u2 != nullptr) ? *u2 : u;
+  const int nvart = nvar + ((u2 != nullptr) ? u2->extent_int(1) : 0);
 
   int my_rank = global_variable::my_rank;
   auto &nghbr = pmy_pack->pmb->nghbr;
   auto &mbgid = pmy_pack->pmb->mb_gid;
   auto &mblev = pmy_pack->pmb->mb_lev;
-  auto &sbuf = sendbuf;
-  auto &rbuf = recvbuf;
 
   int lev_ = pmy_mg->GetCurrentLevel();
   int nlev_total = pmy_mg->GetNumberOfLevels();
   int shift_ps = nlev_total - 1 - lev_;
   int ncells_ps = pmy_mg->GetSize() >> shift_ps;
   bool skip_fc_this_level = (ncells_ps < 2);
-  auto &smgi = send_mg_indcs_;
+  ClassifyMGExchanges();
+  const MGLevelExchange &lex = mg_lex_[lev_];
+  const bool direct = lex.direct;
+  auto idx = mg_idx_d_;
+  auto selfbuf = mg_selfbuf_;
+  auto selfoff = lex.self_off;
   auto cbuf = coarse_buf_;
-  // Fused-pack state: PackMG writes off-rank payloads straight into the aggregate
-  // send buffer at the per-(m,n) base offset. The aggregate buffers only exist
-  // under MPI; without MPI every neighbour is on-rank and no packing is needed,
-  // which is what `urp` (a compile-time constant) selects inside the kernels.
-#if MPI_PARALLEL_ENABLED
-  const bool urp = true;
-#else
-  const bool urp = false;
-#endif
+  // Off-rank payloads go straight into the rank-packed aggregate send buffer at their
+  // per-(m,n) base offset (MPI only; without MPI every neighbour is on this rank).
   auto aggsbuf = mg_rank_sendbuf_vars_;
   auto soff = mg_send_agg_offset_;
 
@@ -2237,12 +2339,14 @@ TaskStatus MultigridBoundaryValues::PackAndSendMG(const DvceArray5D<Real> &u) {
 #endif
 
   {
-  int nmnv = nmb * nnghbr * nvar;
+  int nmnv = nmb * nnghbr * nvart;
   Kokkos::TeamPolicy<> policy(DevExeSpace(), nmnv, Kokkos::AUTO);
   Kokkos::parallel_for("PackMG", policy, KOKKOS_LAMBDA(TeamMember_t tmember) {
-    const int m = tmember.league_rank() / (nnghbr * nvar);
-    const int n = (tmember.league_rank() - m * nnghbr * nvar) / nvar;
-    const int v = tmember.league_rank() - m * nnghbr * nvar - n * nvar;
+    const int m = tmember.league_rank() / (nnghbr * nvart);
+    const int n = (tmember.league_rank() - m * nnghbr * nvart) / nvart;
+    const int v = tmember.league_rank() - m * nnghbr * nvart - n * nvart;
+    const auto &a = (v < nvar) ? u : w;           // array holding variable v
+    const int va = (v < nvar) ? v : v - nvar;
 
     if (nghbr.d_view(m, n).gid < 0) {
       tmember.team_barrier();
@@ -2258,22 +2362,11 @@ TaskStatus MultigridBoundaryValues::PackAndSendMG(const DvceArray5D<Real> &u) {
       return;
     }
 
-    int il, iu, jl, ju, kl, ku;
     bool is_coarser = (nlev < mlev);
-
-    if (nlev == mlev) {
-      il = smgi[n][lev_].isame.bis; iu = smgi[n][lev_].isame.bie;
-      jl = smgi[n][lev_].isame.bjs; ju = smgi[n][lev_].isame.bje;
-      kl = smgi[n][lev_].isame.bks; ku = smgi[n][lev_].isame.bke;
-    } else if (is_coarser) {
-      il = smgi[n][lev_].icoar.bis; iu = smgi[n][lev_].icoar.bie;
-      jl = smgi[n][lev_].icoar.bjs; ju = smgi[n][lev_].icoar.bje;
-      kl = smgi[n][lev_].icoar.bks; ku = smgi[n][lev_].icoar.bke;
-    } else {
-      il = smgi[n][lev_].ifine.bis; iu = smgi[n][lev_].ifine.bie;
-      jl = smgi[n][lev_].ifine.bjs; ju = smgi[n][lev_].ifine.bje;
-      kl = smgi[n][lev_].ifine.bks; ku = smgi[n][lev_].ifine.bke;
-    }
+    const int s = (nlev == mlev) ? 0 : (is_coarser ? 6 : 12);   // isame|icoar|ifine
+    const int il = idx(0, lev_, n, s+0), iu = idx(0, lev_, n, s+1);
+    const int jl = idx(0, lev_, n, s+2), ju = idx(0, lev_, n, s+3);
+    const int kl = idx(0, lev_, n, s+4), ku = idx(0, lev_, n, s+5);
 
     int ni = iu - il + 1;
     int nj = ju - jl + 1;
@@ -2282,58 +2375,45 @@ TaskStatus MultigridBoundaryValues::PackAndSendMG(const DvceArray5D<Real> &u) {
 
     int dm = nghbr.d_view(m, n).gid - mbgid.d_view(0);
     int dn = nghbr.d_view(m, n).dest;
+    const bool onrank = (nghbr.d_view(m, n).rank == my_rank);
 
-    if (is_coarser) {
-      // Restricted data is pre-computed in coarse_buf_ by FillCoarseMG:
-      //   face neighbors  -> face-aligned 2x2 avg in ghost cells
-      //   edge/corner     -> volume 2x2x2 avg in interior cells
+    if (onrank && !is_fc && direct) {
+      // direct copy into the receiver's ghosts (its same-level recv range for slot dn);
+      // reads are interior cells, writes ghost cells, so no two teams touch one cell
+      const int oi = idx(1, lev_, dn, 0) - il;
+      const int oj = idx(1, lev_, dn, 2) - jl;
+      const int ok = idx(1, lev_, dn, 4) - kl;
       Kokkos::parallel_for(Kokkos::TeamThreadRange<>(tmember, nkj),
-      [&](const int idx) {
-        int k = idx / nj;
-        int j = (idx - k * nj) + jl;
+      [&](const int ix) {
+        int k = ix / nj;
+        int j = (ix - k * nj) + jl;
         k += kl;
-        if (nghbr.d_view(m, n).rank == my_rank) {
-          Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember, il, iu + 1),
-          [&](const int i) {
-            rbuf[dn].vars(dm, (i-il + ni*(j-jl + nj*(k-kl + nk*v))))
-                = cbuf(m, v, k, j, i);
-          });
-        } else {
-          Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember, il, iu + 1),
-          [&](const int i) {
-            const int bi = (i-il + ni*(j-jl + nj*(k-kl + nk*v)));
-            if (urp) {
-              aggsbuf(soff(m*nnghbr + n) + bi) = cbuf(m, v, k, j, i);
-            } else {
-              sbuf[n].vars(m, bi) = cbuf(m, v, k, j, i);
-            }
-          });
-        }
+        Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember, il, iu + 1),
+        [&](const int i) {
+          a(dm, va, k + ok, j + oj, i + oi) = a(m, va, k, j, i);
+        });
       });
     } else {
+      // same-rank payloads land at the receiver's (dm,dn) offset in selfbuf, off-rank
+      // ones at this sender's (m,n) offset in the aggregate send buffer
+      const int base = onrank ? selfoff(dm*nnghbr + dn) : soff(m*nnghbr + n);
       Kokkos::parallel_for(Kokkos::TeamThreadRange<>(tmember, nkj),
-      [&](const int idx) {
-        int k = idx / nj;
-        int j = (idx - k * nj) + jl;
+      [&](const int ix) {
+        int k = ix / nj;
+        int j = (ix - k * nj) + jl;
         k += kl;
-
-        if (nghbr.d_view(m, n).rank == my_rank) {
-          Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember, il, iu + 1),
-          [&](const int i) {
-            rbuf[dn].vars(dm, (i-il + ni*(j-jl + nj*(k-kl + nk*v))))
-                = u(m, v, k, j, i);
-          });
-        } else {
-          Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember, il, iu + 1),
-          [&](const int i) {
-            const int bi = (i-il + ni*(j-jl + nj*(k-kl + nk*v)));
-            if (urp) {
-              aggsbuf(soff(m*nnghbr + n) + bi) = u(m, v, k, j, i);
-            } else {
-              sbuf[n].vars(m, bi) = u(m, v, k, j, i);
-            }
-          });
-        }
+        Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember, il, iu + 1),
+        [&](const int i) {
+          const int bi = (i-il + ni*(j-jl + nj*(k-kl + nk*v)));
+          // restricted data for a coarser neighbour is pre-computed in coarse_buf_ by
+          // FillCoarseMG (face-aligned 2x2 averages in ghosts, 2x2x2 in the interior)
+          const Real val = is_coarser ? cbuf(m, v, k, j, i) : a(m, va, k, j, i);
+          if (onrank) {
+            selfbuf(base + bi) = val;
+          } else {
+            aggsbuf(base + bi) = val;
+          }
+        });
       });
     }
     tmember.team_barrier();
@@ -2341,18 +2421,7 @@ TaskStatus MultigridBoundaryValues::PackAndSendMG(const DvceArray5D<Real> &u) {
   }
 
   #if MPI_PARALLEL_ENABLED
-  bool has_cross_rank = false;
-  for (int m=0; m<nmb && !has_cross_rank; ++m) {
-    for (int n=0; n<nnghbr && !has_cross_rank; ++n) {
-      if (nghbr.h_view(m,n).gid >= 0 && nghbr.h_view(m,n).rank != my_rank) {
-        int nlev_h = nghbr.h_view(m,n).lev;
-        int mlev_h = mblev.h_view(m);
-        bool is_fc_h = (nlev_h != mlev_h);
-        if (is_fc_h && skip_fc_this_level) continue;
-        has_cross_rank = true;
-      }
-    }
-  }
+  const bool has_cross_rank = (lex.noffrank > 0);
   if (has_cross_rank) Kokkos::fence();
 
   bool no_errors = true;
@@ -2385,14 +2454,14 @@ TaskStatus MultigridBoundaryValues::PackAndSendMG(const DvceArray5D<Real> &u) {
 //! \brief Receive and unpack cell-centered multigrid variables.
 //! Handles ghost-cell filling at each multigrid level independently.
 
-TaskStatus MultigridBoundaryValues::RecvAndUnpackMG(DvceArray5D<Real> &u) {
+TaskStatus MultigridBoundaryValues::RecvAndUnpackMG(DvceArray5D<Real> &u,
+                                                    DvceArray5D<Real> *u2) {
   if (pmy_mg == nullptr) return TaskStatus::complete;
   // create local references for variables in kernel
   int nmb = pmy_pack->nmb_thispack;
   int nnghbr = pmy_pack->pmb->nnghbr;
   auto &nghbr = pmy_pack->pmb->nghbr;
   auto &mblev = pmy_pack->pmb->mb_lev;
-  auto &rbuf = recvbuf;
   int shift_ru = pmy_mg->GetNumberOfLevels() - 1 - pmy_mg->GetCurrentLevel();
   int ncells_ru = pmy_mg->GetSize() >> shift_ru;
   bool skip_fc_this_level = (ncells_ru < 2);
@@ -2419,32 +2488,34 @@ TaskStatus MultigridBoundaryValues::RecvAndUnpackMG(DvceArray5D<Real> &u) {
 #endif
 
   //----- STEP 2: buffers have all completed, so unpack
-  // Off-rank payloads are read directly out of the rank-packed aggregate recv
-  // buffer (fuses the former MGRankUnpackScatter kernel); on-rank payloads sit
-  // in their per-neighbour recv buffers, written there directly by the sender.
+  // Off-rank payloads are read out of the rank-packed aggregate recv buffer, same-rank
+  // ones out of mg_selfbuf_; same-rank same-level payloads were already copied into the
+  // ghosts by the sender's pack (see PackAndSendMG), so they are skipped here.
   int nvar = u.extent_int(1);
-  int ngh = pmy_mg->GetGhostCells();
+  DvceArray5D<Real> w = (u2 != nullptr) ? *u2 : u;
+  const int nvart = nvar + ((u2 != nullptr) ? u2->extent_int(1) : 0);
   int lev_ = pmy_mg->GetCurrentLevel();
+  int my_rank = global_variable::my_rank;
+  ClassifyMGExchanges();
+  const MGLevelExchange &lex = mg_lex_[lev_];
+  if (lex.nbuffered + lex.noffrank == 0) return TaskStatus::complete;
+  const bool direct = lex.direct;
+  auto idx = mg_idx_d_;
+  auto selfbuf = mg_selfbuf_;
+  auto selfoff = lex.self_off;
   auto cbuf = coarse_buf_;
-  auto &rmgi = recv_mg_indcs_;
-  // Off-rank payloads live in the aggregate recv buffer (MPI only); without MPI
-  // every neighbour is on-rank, so `urp` (a compile-time constant) makes the
-  // kernel read from the per-neighbour recv buffers instead.
-#if MPI_PARALLEL_ENABLED
-  const bool urp = true;
-#else
-  const bool urp = false;
-#endif
   auto aggrbuf = mg_rank_recvbuf_vars_;
   auto roff = mg_recv_agg_offset_;
 
   {
-  int nmnv = nmb * nnghbr * nvar;
+  int nmnv = nmb * nnghbr * nvart;
   Kokkos::TeamPolicy<> policy(DevExeSpace(), nmnv, Kokkos::AUTO);
   Kokkos::parallel_for("UnpackMG", policy, KOKKOS_LAMBDA(TeamMember_t tmember) {
-    const int m = tmember.league_rank() / (nnghbr * nvar);
-    const int n = (tmember.league_rank() - m * nnghbr * nvar) / nvar;
-    const int v = tmember.league_rank() - m * nnghbr * nvar - n * nvar;
+    const int m = tmember.league_rank() / (nnghbr * nvart);
+    const int n = (tmember.league_rank() - m * nnghbr * nvart) / nvart;
+    const int v = tmember.league_rank() - m * nnghbr * nvart - n * nvart;
+    const auto &a = (v < nvar) ? u : w;           // array receiving variable v
+    const int va = (v < nvar) ? v : v - nvar;
 
     if (nghbr.d_view(m, n).gid < 0) {
       tmember.team_barrier();
@@ -2455,63 +2526,41 @@ TaskStatus MultigridBoundaryValues::RecvAndUnpackMG(DvceArray5D<Real> &u) {
     int mlev = mblev.d_view(m);
 
     bool is_fc = (nlev != mlev);
-    if (is_fc && skip_fc_this_level) {
+    const bool onrank = (nghbr.d_view(m, n).rank == my_rank);
+    if ((is_fc && skip_fc_this_level) || (onrank && !is_fc && direct)) {
       tmember.team_barrier();
       return;
     }
 
     bool from_coarser = (nlev < mlev);
-
-    int il, iu, jl, ju, kl, ku;
-
-    if (nlev == mlev) {
-      il = rmgi[n][lev_].isame.bis; iu = rmgi[n][lev_].isame.bie;
-      jl = rmgi[n][lev_].isame.bjs; ju = rmgi[n][lev_].isame.bje;
-      kl = rmgi[n][lev_].isame.bks; ku = rmgi[n][lev_].isame.bke;
-    } else if (from_coarser) {
-      il = rmgi[n][lev_].icoar.bis; iu = rmgi[n][lev_].icoar.bie;
-      jl = rmgi[n][lev_].icoar.bjs; ju = rmgi[n][lev_].icoar.bje;
-      kl = rmgi[n][lev_].icoar.bks; ku = rmgi[n][lev_].icoar.bke;
-    } else {
-      il = rmgi[n][lev_].ifine.bis; iu = rmgi[n][lev_].ifine.bie;
-      jl = rmgi[n][lev_].ifine.bjs; ju = rmgi[n][lev_].ifine.bje;
-      kl = rmgi[n][lev_].ifine.bks; ku = rmgi[n][lev_].ifine.bke;
-    }
+    const int s = (nlev == mlev) ? 0 : (from_coarser ? 6 : 12);   // isame|icoar|ifine
+    const int il = idx(1, lev_, n, s+0), iu = idx(1, lev_, n, s+1);
+    const int jl = idx(1, lev_, n, s+2), ju = idx(1, lev_, n, s+3);
+    const int kl = idx(1, lev_, n, s+4), ku = idx(1, lev_, n, s+5);
 
     int ni = iu - il + 1;
     int nj = ju - jl + 1;
     int nk = ku - kl + 1;
     int nkj = nk * nj;
 
-    // base offset of this (m,n) payload in the aggregate recv buffer; -1 means
-    // on-rank (data already sits in rbuf) or legacy (non-rank-packed) path.
-    const int base = urp ? roff(m*nnghbr + n) : -1;
+    const int base = onrank ? selfoff(m*nnghbr + n) : roff(m*nnghbr + n);
 
-    if (from_coarser) {
-      Kokkos::parallel_for(Kokkos::TeamThreadRange<>(tmember, nkj),
-      [&](const int idx) {
-        int k = idx / nj;
-        int j = (idx - k * nj) + jl;
-        k += kl;
-        Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember, il, iu + 1),
-        [&](const int i) {
-          const int bi = (i-il + ni*(j-jl + nj*(k-kl + nk*v)));
-          cbuf(m, v, k, j, i) = (base >= 0) ? aggrbuf(base + bi) : rbuf[n].vars(m, bi);
-        });
+    Kokkos::parallel_for(Kokkos::TeamThreadRange<>(tmember, nkj),
+    [&](const int ix) {
+      int k = ix / nj;
+      int j = (ix - k * nj) + jl;
+      k += kl;
+      Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember, il, iu + 1),
+      [&](const int i) {
+        const int bi = (i-il + ni*(j-jl + nj*(k-kl + nk*v)));
+        const Real val = onrank ? selfbuf(base + bi) : aggrbuf(base + bi);
+        if (from_coarser) {
+          cbuf(m, v, k, j, i) = val;
+        } else {
+          a(m, va, k, j, i) = val;
+        }
       });
-    } else {
-      Kokkos::parallel_for(Kokkos::TeamThreadRange<>(tmember, nkj),
-      [&](const int idx) {
-        int k = idx / nj;
-        int j = (idx - k * nj) + jl;
-        k += kl;
-        Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember, il, iu + 1),
-        [&](const int i) {
-          const int bi = (i-il + ni*(j-jl + nj*(k-kl + nk*v)));
-          u(m, v, k, j, i) = (base >= 0) ? aggrbuf(base + bi) : rbuf[n].vars(m, bi);
-        });
-      });
-    }
+    });
     tmember.team_barrier();
   });
   }
@@ -2566,8 +2615,8 @@ TaskStatus MultigridBoundaryValues::InitRecvMG(const int nvars) {
   // doing several device allocations + H2D deep_copies that dominate at small
   // payloads. Build each level once and persist it; write the active level's
   // state back before switching so its in-flight requests + buffers stay paired.
-  if (static_cast<int>(mg_rp_cache_.size()) < kMaxMGLevels) {
-    mg_rp_cache_.resize(kMaxMGLevels);
+  if (static_cast<int>(mg_rp_cache_.size()) < 2*kMaxMGLevels) {
+    mg_rp_cache_.resize(2*kMaxMGLevels);
   }
   if (mg_rp_cache_seq_ != mesh_seq) {            // AMR/regrid: invalidate all levels
     for (auto &s : mg_rp_cache_) s = MGRankPackLevelState();
@@ -2575,10 +2624,11 @@ TaskStatus MultigridBoundaryValues::InitRecvMG(const int nvars) {
     mg_rp_active_level_ = -1;
   }
   if (lev_ >= 0 && lev_ < kMaxMGLevels) {
-    auto &c = mg_rp_cache_[lev_];
+    const int slot = lev_ + ((nvars != pmy_mg->nvar_) ? kMaxMGLevels : 0);
+    auto &c = mg_rp_cache_[slot];
     const bool key_ok = c.built && c.nvars == nvars && c.skip_fc == skip_fc_ir;
-    if (lev_ != mg_rp_active_level_ || !key_ok) {
-      if (mg_rp_active_level_ >= 0 && mg_rp_active_level_ != lev_) {
+    if (slot != mg_rp_active_level_ || !key_ok) {
+      if (mg_rp_active_level_ >= 0 && mg_rp_active_level_ != slot) {
         SaveRankPackState(mg_rp_cache_[mg_rp_active_level_]);
       }
       if (!key_ok) {
@@ -2588,7 +2638,7 @@ TaskStatus MultigridBoundaryValues::InitRecvMG(const int nvars) {
       } else {
         LoadRankPackState(c);
       }
-      mg_rp_active_level_ = lev_;
+      mg_rp_active_level_ = slot;
     }
   } else {
     // out-of-range level (should not happen): rebuild bare each call
