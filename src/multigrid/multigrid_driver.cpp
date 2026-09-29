@@ -382,6 +382,16 @@ void MultigridDriver::PrepareForAMR() {
     if (pmy_mesh_->multilevel) {
       mglevels_->UpdateBlockDx();
     }
+    if (agg_ncells_ > 1) {
+      agg_loc_ = DvceArray2D<int>("mg_agg_loc", nbtotal_, 3);
+      auto h = Kokkos::create_mirror_view(agg_loc_);
+      for (int n = 0; n < nbtotal_; ++n) {
+        h(n, 0) = static_cast<int>(pmy_mesh_->lloc_eachmb[n].lx1);
+        h(n, 1) = static_cast<int>(pmy_mesh_->lloc_eachmb[n].lx2);
+        h(n, 2) = static_cast<int>(pmy_mesh_->lloc_eachmb[n].lx3);
+      }
+      Kokkos::deep_copy(agg_loc_, h);
+    }
   }
   needinit_ = false;
 }
@@ -628,6 +638,10 @@ void MultigridDriver::BuildRootFlatBuffers() {
 //! the root grid (if at root level) or the appropriate octet.
 
 void MultigridDriver::TransferFromBlocksToRoot(bool initflag) {
+  if (agg_ncells_ > 1) {
+    TransferFromBlocksToRootAgg(initflag);
+    return;
+  }
   MGTimerScope _mt(this, MT_TO_ROOT);
   const int nv = nvar_;
   auto rootbuf = rootbuf_;
@@ -702,11 +716,74 @@ void MultigridDriver::TransferFromBlocksToRoot(bool initflag) {
 
 
 //----------------------------------------------------------------------------------------
+//! \fn void MultigridDriver::TransferFromBlocksToRootAgg(bool initflag)
+//! \brief mg_root_ncells = K > 1 (uniform meshes): gather every MeshBlock's K^3 level-0
+//! cells of src (and u unless initflag) into the finest root level, on the device. One
+//! MPI_Allgatherv of device data replaces the per-level boundary exchanges of the levels
+//! below K cells per block.
+
+void MultigridDriver::TransferFromBlocksToRootAgg(bool initflag) {
+  MGTimerScope _mt(this, MT_TO_ROOT);
+  const int nv = nvar_, K = agg_ncells_, K3 = K*K*K;
+  const int nper = 2*nv*K3;               // per block: nv*K3 of src, then nv*K3 of u
+  if (aggbuf_.extent_int(0) < nbtotal_*nper) {
+    aggbuf_ = DvceArray1D<Real>("mg_aggbuf", nbtotal_*nper);
+  }
+  auto buf = aggbuf_;
+  auto src = mglevels_->src_[0].d_view;
+  auto u = mglevels_->u_[0].d_view;
+  const int ngh = mglevels_->ngh_;
+  const int gid0 = nslist_[global_variable::my_rank];
+  par_for("Multigrid:SaveToRootAgg", DevExeSpace(), 0, mglevels_->nmmb_-1, 0, nv-1,
+          0, K-1, 0, K-1, 0, K-1,
+  KOKKOS_LAMBDA(const int m, const int v, const int k, const int j, const int i) {
+    const int b = (m + gid0)*nper + ((v*K + k)*K + j)*K + i;
+    buf(b) = src(m, v, k + ngh, j + ngh, i + ngh);
+    if (!initflag) buf(b + nv*K3) = u(m, v, k + ngh, j + ngh, i + ngh);
+  });
+#if MPI_PARALLEL_ENABLED
+  if (nranks_ > 1) {
+    Kokkos::fence();                        // MPI reads the device buffer
+    std::vector<int> cnt(nranks_), dsp(nranks_);
+    for (int r = 0; r < nranks_; ++r) {
+      cnt[r] = nblist_[r]*nper;
+      dsp[r] = nslist_[r]*nper;
+    }
+    MGTimerScope _mt_ag(this, MT_ALLGATHER);
+    MPI_Allgatherv(MPI_IN_PLACE, cnt[global_variable::my_rank], MPI_ATHENA_REAL,
+                   buf.data(), cnt.data(), dsp.data(), MPI_ATHENA_REAL, MPI_COMM_WORLD);
+  }
+#endif
+  const int rl = nrootlevel_ - 1;
+  auto rsrc = mgroot_->src_[rl].d_view;
+  auto ru = mgroot_->u_[rl].d_view;
+  const int rngh = mgroot_->ngh_;
+  auto loc = agg_loc_;
+  par_for("Multigrid:ScatterToRootAgg", DevExeSpace(), 0, nbtotal_-1, 0, nv-1,
+          0, K-1, 0, K-1, 0, K-1,
+  KOKKOS_LAMBDA(const int n, const int v, const int k, const int j, const int i) {
+    const int b = n*nper + ((v*K + k)*K + j)*K + i;
+    const int ri = loc(n, 0)*K + i + rngh, rj = loc(n, 1)*K + j + rngh;
+    const int rk = loc(n, 2)*K + k + rngh;
+    rsrc(0, v, rk, rj, ri) = buf(b);
+    if (!initflag) ru(0, v, rk, rj, ri) = buf(b + nv*K3);
+  });
+  mgroot_->current_level_ = rl;
+  MarkRootDeviceModified();
+}
+
+
+//----------------------------------------------------------------------------------------
 //! \fn void MultigridDriver::TransferFromRootToBlocks(bool folddata)
 //! \brief Transfer data from root/octets to block coarsest levels
 
 void MultigridDriver::TransferFromRootToBlocks(bool folddata) {
   MGTimerScope _mt(this, MT_FROM_ROOT);
+  if (agg_ncells_ > 1) {
+    SyncRootToDevice();
+    mglevels_->SetFromRootGridAgg(folddata);
+    return;
+  }
   SyncRootToHost();
   if (nreflevel_ > 0) {
     RestrictOctetsBeforeTransfer();
@@ -1035,7 +1112,8 @@ void MultigridDriver::SolveIterativeFixedTimes(Driver *pdriver) {
 
 void MultigridDriver::SolveCoarsestGrid() {
   pmg = mgroot_;
-  int ni = (std::max(nrbx1_, std::max(nrbx2_, nrbx3_))
+  int ni = (std::max(mgroot_->indcs_.nx1, std::max(mgroot_->indcs_.nx2,
+                                                    mgroot_->indcs_.nx3))
             >> (nrootlevel_-1));
   if (fsubtract_average_ && ni == 1) {
     MGRootBoundary();

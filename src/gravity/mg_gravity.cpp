@@ -141,6 +141,20 @@ MGGravityDriver::MGGravityDriver(MeshBlockPack *pmbp, ParameterInput *pin)
     std::exit(EXIT_FAILURE);
   }
   bool root_on_host = pin->GetOrAddBoolean("gravity", "root_on_host", false);
+  // coarse-level agglomeration onto the root grid (see MultigridDriver::agg_ncells_)
+  agg_ncells_ = pin->GetOrAddInteger("gravity", "mg_root_ncells", 1);
+  {
+    const int K = agg_ncells_, nx = pmy_mesh_->mb_indcs.nx1;
+    const bool pow2 = (K >= 1) && ((K & (K - 1)) == 0);
+    if (!pow2 || (K > 1 && (nx % K != 0 || nx/K < 2 || pmy_mesh_->multilevel ||
+                            root_on_host))) {
+      std::cout << "### FATAL ERROR in MGGravityDriver" << std::endl
+                << "mg_root_ncells = " << K << " must be a power of two; values > 1 "
+                << "need MeshBlocks of at least 2*mg_root_ncells cells, a mesh without "
+                << "refinement and root_on_host = false." << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
   mgroot_ = new MGGravity(this, nullptr, nghost, root_on_host);
   mglevels_ = new MGGravity(this, pmbp, nghost);
   // allocate boundary buffers

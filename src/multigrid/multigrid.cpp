@@ -61,10 +61,11 @@ Multigrid::Multigrid(MultigridDriver *pmd, MeshBlockPack *pmbp, int nghost,
     loc_ = pmy_pack_->pmesh->lloc_eachmb[0];
     size_ = pmy_pack_->pmb->mb_size.h_view(0);
   } else {
-    //Root levels
-    indcs_.nx1 = pmy_mesh_->nmb_rootx1;
-    indcs_.nx2 = pmy_mesh_->nmb_rootx2;
-    indcs_.nx3 = pmy_mesh_->nmb_rootx3;
+    //Root levels: GetRootNcells() cells per root MeshBlock (1 unless mg_root_ncells > 1)
+    const int K = pmd->GetRootNcells();
+    indcs_.nx1 = pmy_mesh_->nmb_rootx1*K;
+    indcs_.nx2 = pmy_mesh_->nmb_rootx2*K;
+    indcs_.nx3 = pmy_mesh_->nmb_rootx3*K;
     size_ = pmy_mesh_->mesh_size;
     nmmbx1_ = 1;
     nmmbx2_ = 1;
@@ -129,9 +130,9 @@ Multigrid::Multigrid(MultigridDriver *pmd, MeshBlockPack *pmbp, int nghost,
                 << "We recommend to reconsider grid configuration." << std::endl;
     }
   } else {
-    // MeshBlock levels
+    // MeshBlock levels: nx1 down to GetRootNcells() cells per block side
     for (int l = 0; l < 20; l++) {
-      if ((1<<l) == indcs_.nx1) {
+      if ((1<<l)*pmd->GetRootNcells() == indcs_.nx1) {
         nlevel_=l+1;
         break;
       }
@@ -675,6 +676,37 @@ void Multigrid::SetFromRootGrid(bool folddata) {
   return;
 }
 
+
+//----------------------------------------------------------------------------------------
+//! \fn void Multigrid::SetFromRootGridAgg(bool folddata)
+//! \brief mg_root_ncells = K > 1: copy every local MeshBlock's K^3 cells and their ngh_
+//! ghost layers from the finest root level into block level 0, on the device. The root
+//! grid's ghosts (set by MGRootBoundary) supply the periodic/physical boundaries.
+
+void Multigrid::SetFromRootGridAgg(bool folddata) {
+  current_level_ = 0;
+  MultigridDriver *pd = pmy_driver_;
+  const int K = pd->agg_ncells_;
+  const int rl = pd->mgroot_->nlevel_ - 1;
+  auto dst = u_[0].d_view;
+  auto odst = uold_[0].d_view;
+  auto src = pd->mgroot_->u_[rl].d_view;
+  auto osrc = pd->mgroot_->uold_[rl].d_view;
+  auto loc = pd->agg_loc_;
+  const int gid0 = pmy_mesh_->gids_eachrank[global_variable::my_rank];
+  const int ne = K + 2*ngh_;
+  par_for("Multigrid::SetFromRootAgg", DevExeSpace(), 0, nmmb_-1, 0, nvar_-1,
+          0, ne-1, 0, ne-1, 0, ne-1,
+  KOKKOS_LAMBDA(const int m, const int v, const int k, const int j, const int i) {
+    // root index of global cell c is c + ngh, and the block's ghost cell 0 is global
+    // cell lx*K - ngh, so block (k,j,i) <- root (lx3*K + k, lx2*K + j, lx1*K + i)
+    const int ci = loc(m + gid0, 0)*K, cj = loc(m + gid0, 1)*K, ck = loc(m + gid0, 2)*K;
+    dst(m, v, k, j, i) = src(0, v, ck + k, cj + j, ci + i);
+    if (folddata) odst(m, v, k, j, i) = osrc(0, v, ck + k, cj + j, ci + i);
+  });
+  u_[0].template modify<DevExeSpace>();
+  if (folddata) uold_[0].template modify<DevExeSpace>();
+}
 
 //----------------------------------------------------------------------------------------
 //! \fn Real Multigrid::CalculateDefectNorm(MGNormType nrm, int n)

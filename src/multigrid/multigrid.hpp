@@ -224,6 +224,7 @@ class Multigrid {
   void ComputeCorrection();
   void CalculateMatrixPack(Real dt);
   void SetFromRootGrid(bool folddata);
+  void SetFromRootGridAgg(bool folddata);   // mg_root_ncells > 1, see MultigridDriver
   Real CalculateDefectNorm(MGNormType nrm, int n);
   Real CalculateAverage(MGVariable type);
   Real CalculateTotal(MGVariable type, int n);
@@ -404,6 +405,8 @@ class MultigridDriver {
   void MGRootBoundary();
   void TransferFromBlocksToRoot(bool initflag);
   void TransferFromRootToBlocks(bool folddata);
+  void TransferFromBlocksToRootAgg(bool initflag);
+  int GetRootNcells() const { return agg_ncells_; }
 
   // per-cell octet operations (Athena++ style)
   void InitializeOctets();
@@ -440,6 +443,8 @@ class MultigridDriver {
        std::vector<Real> &cbuf, const std::vector<bool> &ncoarse);
 
   DualArray2D<Real> rootbuf_;
+  DvceArray1D<Real> aggbuf_;       // mg_root_ncells > 1: K^3 cells of src and u per block
+  DvceArray2D<int> agg_loc_;       // (nbtotal, 3) logical location of every MeshBlock
 
   TaskStatus PhysicalBoundary(Driver *pdrive, int stag);
 
@@ -544,6 +549,15 @@ class MultigridDriver {
   // default schedule as long as every MeshBlock has the same cell width; multipole
   // boundaries are refused (see the MGGravityDriver constructor).
   bool ca_smooth_ = false;
+  // Coarse-level agglomeration (<gravity>/mg_root_ncells = K, default 1; uniform meshes).
+  // The MeshBlock hierarchy stops at K cells per block side and the root grid,
+  // replicated on every rank, gets K cells per MeshBlock, so the V-cycle levels below K
+  // per block are smoothed there without boundary exchanges. The hand-off is one
+  // MPI_Allgatherv of K^3 cells of src and u per block on the way down, and a copy of
+  // each block's K^3 cells plus ghosts from the root grid on the way up. With K = 1 this
+  // is the default scheme. The levels moved to the root keep their operators and (K
+  // even) their red-black parity, so the results do not depend on K.
+  int agg_ncells_ = 1;
   int fprolongation_;
   int fshowdef_;
   int mg_verbose_;
