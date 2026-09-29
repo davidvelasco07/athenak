@@ -32,8 +32,8 @@ void Advect(const EOS_Data &eos,
   if (wl_ivx >= 0.0) {
     flx(m, IDN, k, j, i) = wl_idn*wl_ivx;
     flx(m, ivx, k, j, i) = wl_idn*wl_ivx*wl_ivx;
-    flx(m, ivy, k, j, i) = wl(m, ivy, k, j, i)*wl_ivx;
-    flx(m, ivz, k, j, i) = wl(m, ivz, k, j, i)*wl_ivx;
+    flx(m, ivy, k, j, i) = wl_idn*wl(m, ivy, k, j, i)*wl_ivx;
+    flx(m, ivz, k, j, i) = wl_idn*wl(m, ivz, k, j, i)*wl_ivx;
     if (eos.is_ideal) {
       flx(m, IEN, k, j, i) = wl(m, IEN, k, j, i)*wl_ivx;
     }
@@ -42,8 +42,8 @@ void Advect(const EOS_Data &eos,
     const Real wr_ivx = wr(m, ivx, k, j, i);
     flx(m, IDN, k, j, i) = wr_idn*wr_ivx;
     flx(m, ivx, k, j, i) = wr_idn*wr_ivx*wr_ivx;
-    flx(m, ivy, k, j, i) = wr(m, ivy, k, j, i)*wr_ivx;
-    flx(m, ivz, k, j, i) = wr(m, ivz, k, j, i)*wr_ivx;
+    flx(m, ivy, k, j, i) = wr_idn*wr(m, ivy, k, j, i)*wr_ivx;
+    flx(m, ivz, k, j, i) = wr_idn*wr(m, ivz, k, j, i)*wr_ivx;
     if (eos.is_ideal) {
       flx(m, IEN, k, j, i) = wr(m, IEN, k, j, i)*wr_ivx;
     }
