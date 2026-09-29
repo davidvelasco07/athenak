@@ -217,6 +217,10 @@ class Multigrid {
   virtual void SmoothPack(int color) = 0;
   virtual void CalculateDefectPack() = 0;
   virtual void CalculateFASRHSPack() = 0;
+  // Halo-wide versions for mg_ca_smooth: the same update, also applied to the first
+  // face-ghost layer of every face that exchanges with a neighbour (see SmoothWide).
+  virtual void SmoothPackWide(int color) = 0;
+  virtual void CalculateFASRHSPackWide() = 0;
   void ComputeCorrection();
   void CalculateMatrixPack(Real dt);
   void SetFromRootGrid(bool folddata);
@@ -267,6 +271,14 @@ class Multigrid {
   void Smooth(ViewType &u, const ViewType &src, const ViewType &coeff,
               const ViewType &matrix, const StencilOp &stencil, int rlev,
               int il, int iu, int jl, int ju, int kl, int ku, int color, bool th);
+  template <typename ViewType, typename StencilOp>
+  void SmoothWide(ViewType &u, const ViewType &src, const ViewType &coeff,
+                  const ViewType &matrix, const StencilOp &stencil, int rlev,
+                  int il, int iu, int jl, int ju, int kl, int ku, int color);
+  template <typename ViewType, typename StencilOp>
+  void CalculateFASRHSWide(ViewType &src, const ViewType &u, const ViewType &coeff,
+                           const StencilOp &stencil, int rlev,
+                           int il, int iu, int jl, int ju, int kl, int ku);
 
   template <typename ViewType, typename StencilOp>
   void CalculateDefect(ViewType &def, const ViewType &u, const ViewType &src,
@@ -418,6 +430,13 @@ class MultigridDriver {
   TaskStatus SendBoundary(Driver *pdrive, int stag);
   TaskStatus RecvBoundary(Driver *pdrive, int stag);
   TaskStatus StartReceive(Driver *pdrive, int stag);
+  // mg_ca_smooth: exchange u and src together, and the halo-wide red sweep / FAS RHS
+  TaskStatus SendBoundaryPair(Driver *pdrive, int stag);
+  TaskStatus RecvBoundaryPair(Driver *pdrive, int stag);
+  TaskStatus StartReceivePair(Driver *pdrive, int stag);
+  TaskStatus SmoothRedWide(Driver *pdrive, int stag);
+  TaskStatus CalculateFASRHSWide(Driver *pdrive, int stag);
+  bool WideThisLevel();
   TaskStatus StartReceiveFluxCons(Driver *pdrive, int stag);
   TaskStatus StartReceiveForProlongation(Driver *pdrive, int stag);
   TaskStatus ClearBoundary(Driver *pdrive, int stag);
@@ -475,6 +494,19 @@ class MultigridDriver {
   int niter_, npresmooth_, npostsmooth_;
   int os_, oe_;
   int coffset_;
+  // Communication-avoiding red-black smoothing (<gravity>/mg_ca_smooth, uniform meshes
+  // with mg_nghost >= 2 only). The block-level smoother normally exchanges ghosts after
+  // the red AND the black half-sweep. Here the red sweep also updates the first
+  // face-ghost layer, redundantly and with the same arithmetic the neighbour uses for
+  // that cell (its stencil reaches the second ghost layer), so the black sweep finds
+  // current red values in its ghosts and the exchange between red and black is dropped.
+  // The red update needs src in that ghost layer, so the first exchange of each
+  // restriction step carries u and src together and the FAS RHS is formed one layer
+  // wide. On the 1-cell block level the black half-sweep updates nothing, so the
+  // exchange is dropped there without widening. Results are bit-identical to the
+  // default schedule as long as every MeshBlock has the same cell width; multipole
+  // boundaries are refused (see the MGGravityDriver constructor).
+  bool ca_smooth_ = false;
   int fprolongation_;
   int fshowdef_;
   int mg_verbose_;
@@ -541,8 +573,11 @@ class MultigridBoundaryValues : public MeshBoundaryValuesCC {
   void ComputePerLevelIndices();
 
   // pack/restrict fluxes at fine/coarse boundaries into boundary buffers and send
-  TaskStatus PackAndSendMG(const DvceArray5D<Real> &u);
-  TaskStatus RecvAndUnpackMG(DvceArray5D<Real> &u);
+  // With u2 set, variables [nvar, nvar+nvar2) of the message come from/go to u2
+  // (mg_ca_smooth's u+src exchange; uniform meshes only, so no coarse/fine slots).
+  TaskStatus PackAndSendMG(const DvceArray5D<Real> &u,
+                           const DvceArray5D<Real> *u2 = nullptr);
+  TaskStatus RecvAndUnpackMG(DvceArray5D<Real> &u, DvceArray5D<Real> *u2 = nullptr);
   TaskStatus InitRecvMG(const int nvars);
   TaskStatus ClearSendMG();
   TaskStatus ClearRecvMG();
@@ -557,8 +592,37 @@ class MultigridBoundaryValues : public MeshBoundaryValuesCC {
   MGPerLevelIndcs send_mg_indcs_[56][kMaxMGLevels];
   MGPerLevelIndcs recv_mg_indcs_[56][kMaxMGLevels];
 
+  // <gravity>/mg_direct_copy: write same-rank, same-level payloads straight into the
+  // receiver's ghosts. nvar_max is the most variables one exchange carries (2*nvar with
+  // mg_ca_smooth), which sizes the same-rank buffer.
+  void SetExchangeOptions(bool direct_copy, int nvar_max) {
+    direct_copy_ = direct_copy;
+    nvar_max_ = nvar_max;
+  }
+
  private:
   Multigrid *pmy_mg;
+  // Same-rank exchanges. The pack/unpack kernels used to capture the 56 per-neighbour
+  // buffers and the host index tables by value (~166 kB), far over CUDA's 4 kB kernel
+  // argument limit, so Kokkos copied the closure to the device at every launch. They now
+  // capture device views only: mg_idx_d_ holds the per-level indices, same-level pairs on
+  // this rank are copied directly into the receiver's ghosts (when the send region stays
+  // in the interior, ncells >= ngh), and every other same-rank payload goes through
+  // mg_selfbuf_ at the receiver's (m,n) offset. Classified per level, rebuilt when the
+  // mesh changes.
+  struct MGLevelExchange {
+    bool direct = false;          // same-level same-rank pairs are copied directly
+    int nbuffered = 0;            // same-rank payloads through mg_selfbuf_
+    int noffrank = 0;             // payloads to/from other ranks
+    DvceArray1D<int> self_off;    // (nmb*nnghbr) receiver offsets into mg_selfbuf_, or -1
+  };
+  std::vector<MGLevelExchange> mg_lex_;
+  int mg_lex_seq_ = -2;
+  DvceArray1D<Real> mg_selfbuf_;
+  DvceArray4D<int> mg_idx_d_;     // (send/recv, level, slot, isame|icoar|ifine x 6)
+  bool direct_copy_ = true;
+  int nvar_max_ = 1;
+  void ClassifyMGExchanges();
   std::vector<RankPackedVarEntry> mg_send_var_entries_;
   std::vector<RankPackedVarEntry> mg_recv_var_entries_;
   std::vector<RankPackedVarMessage> mg_send_var_msgs_;
@@ -610,9 +674,11 @@ class MultigridBoundaryValues : public MeshBoundaryValuesCC {
     DvceArray1D<Real> sendbuf, recvbuf;
     DvceArray1D<int> send_off, recv_off;
   };
+  // Slot lev holds the u exchange of level lev, slot kMaxMGLevels+lev the u+src
+  // exchange (mg_ca_smooth), so alternating between the two never rebuilds metadata.
   std::vector<MGRankPackLevelState> mg_rp_cache_;
   int mg_rp_cache_seq_ = -1;     // mesh_seq the cache was built for (AMR invalidation)
-  int mg_rp_active_level_ = -1;  // level whose state currently lives in the bare members
+  int mg_rp_active_level_ = -1;  // slot whose state currently lives in the bare members
   void SaveRankPackState(MGRankPackLevelState &s);
   void LoadRankPackState(const MGRankPackLevelState &s);
 #endif
@@ -643,6 +709,115 @@ void Multigrid::Smooth(ViewType &u, const ViewType &src, const ViewType &coeff,
       Real lap = stencil.Apply(u, coeff, m, 0, k, j, i);
       u(m,0,k,j,i) -= (lap - src(m,0,k,j,i)*dx2) * odiag;
     }
+  });
+}
+
+// True for a MeshBlock face whose ghosts come from a neighbour exchange.
+KOKKOS_INLINE_FUNCTION
+bool MGExchangeFace(BoundaryFlag f) {
+  return f == BoundaryFlag::block || f == BoundaryFlag::periodic;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void Multigrid::SmoothWide
+//! \brief The red-black update of Smooth over the interior plus the first ghost layer of
+//! each exchanging face (edge and corner ghosts excluded: the 7-point stencil of an
+//! interior cell never reads them). A ghost cell is updated with exactly the arithmetic
+//! and parity the neighbour uses for the same cell, which needs the second ghost layer,
+//! the edge ghosts and src in the first ghost layer to be current. Physical-boundary
+//! faces are left to PhysicalBoundary. Parity matches the neighbour only when the block
+//! has an even number of cells, so it is never called on the 1-cell level.
+
+template <typename ViewType, typename StencilOp>
+void Multigrid::SmoothWide(ViewType &u, const ViewType &src, const ViewType &coeff,
+                           const ViewType &matrix, const StencilOp &stencil, int rlev,
+                           int il, int iu, int jl, int ju, int kl, int ku, int color) {
+  using ExeSpace = typename ViewType::execution_space;
+  auto brdx = [this]() {
+    if constexpr (std::is_same_v<ExeSpace, HostExeSpace>)
+      return block_rdx_.h_view;
+    else
+      return block_rdx_.d_view;
+  }();
+  auto bcs = [this]() {
+    if constexpr (std::is_same_v<ExeSpace, HostExeSpace>)
+      return pmy_pack_->pmb->mb_bcs.h_view;
+    else
+      return pmy_pack_->pmb->mb_bcs.d_view;
+  }();
+  int rlev_l = rlev;
+  Real odiag = stencil.omega_over_diag;
+  color ^= pmy_driver_->GetCoffset();
+  par_for("Multigrid::SmoothWide", ExeSpace(), 0, nmmb_-1, kl-1, ku+1, jl-1, ju+1,
+  KOKKOS_LAMBDA(const int m, const int k, const int j) {
+    const int fk = (k < kl) ? BoundaryFace::inner_x3 : (k > ku) ? BoundaryFace::outer_x3
+                                                                 : -1;
+    const int fj = (j < jl) ? BoundaryFace::inner_x2 : (j > ju) ? BoundaryFace::outer_x2
+                                                                 : -1;
+    if (fk >= 0 && fj >= 0) return;               // edge row
+    const int f = (fk >= 0) ? fk : fj;            // face-ghost row, or -1 if interior
+    if (f >= 0 && !MGExchangeFace(bcs(m, f))) return;
+    int ilo = il, ihi = iu;
+    if (f < 0) {
+      if (MGExchangeFace(bcs(m, BoundaryFace::inner_x1))) ilo = il - 1;
+      if (MGExchangeFace(bcs(m, BoundaryFace::outer_x1))) ihi = iu + 1;
+    }
+    Real dx = (rlev_l <= 0) ? brdx(m) * static_cast<Real>(1<<(-rlev_l))
+                            : brdx(m) / static_cast<Real>(1<<rlev_l);
+    Real dx2 = dx * dx;
+    const int c = (color + k + j) & 1;            // same parity as Smooth
+    int i0 = il + c;
+    if (i0 - 2 >= ilo) i0 -= 2;
+    for (int i = i0; i <= ihi; i += 2) {
+      Real lap = stencil.Apply(u, coeff, m, 0, k, j, i);
+      u(m,0,k,j,i) -= (lap - src(m,0,k,j,i)*dx2) * odiag;
+    }
+  });
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void Multigrid::CalculateFASRHSWide
+//! \brief CalculateFASRHS over the cells SmoothWide updates. The first ghost layer of src
+//! must already hold the neighbour's restricted defect (exchanged with u).
+
+template <typename ViewType, typename StencilOp>
+void Multigrid::CalculateFASRHSWide(ViewType &src, const ViewType &u,
+                                    const ViewType &coeff, const StencilOp &stencil,
+                                    int rlev, int il, int iu, int jl, int ju,
+                                    int kl, int ku) {
+  using ExeSpace = typename ViewType::execution_space;
+  auto brdx = [this]() {
+    if constexpr (std::is_same_v<ExeSpace, HostExeSpace>)
+      return block_rdx_.h_view;
+    else
+      return block_rdx_.d_view;
+  }();
+  auto bcs = [this]() {
+    if constexpr (std::is_same_v<ExeSpace, HostExeSpace>)
+      return pmy_pack_->pmb->mb_bcs.h_view;
+    else
+      return pmy_pack_->pmb->mb_bcs.d_view;
+  }();
+  int rlev_l = rlev;
+  par_for("Multigrid::CalculateFASRHSWide", ExeSpace(), 0, nmmb_-1, kl-1, ku+1,
+          jl-1, ju+1, il-1, iu+1,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    const int fk = (k < kl) ? BoundaryFace::inner_x3 : (k > ku) ? BoundaryFace::outer_x3
+                                                                 : -1;
+    const int fj = (j < jl) ? BoundaryFace::inner_x2 : (j > ju) ? BoundaryFace::outer_x2
+                                                                 : -1;
+    const int fi = (i < il) ? BoundaryFace::inner_x1 : (i > iu) ? BoundaryFace::outer_x1
+                                                                 : -1;
+    const int nout = (fk >= 0) + (fj >= 0) + (fi >= 0);
+    if (nout > 1) return;                         // edge or corner
+    if (nout == 1) {
+      const int f = (fk >= 0) ? fk : (fj >= 0) ? fj : fi;
+      if (!MGExchangeFace(bcs(m, f))) return;
+    }
+    Real dx = (rlev_l <= 0) ? brdx(m) * static_cast<Real>(1<<(-rlev_l))
+                            : brdx(m) / static_cast<Real>(1<<rlev_l);
+    Real idx2 = 1.0 / (dx * dx);
+    src(m,0,k,j,i) += stencil.Apply(u, coeff, m, 0, k, j, i) * idx2;
   });
 }
 
