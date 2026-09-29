@@ -1119,7 +1119,7 @@ void MultigridBoundaryValues::FillCoarseMG(const DvceArray5D<Real> &u) {
 
   // Volume-average restriction: fill coarse_buf_ interior
   Kokkos::parallel_for("FillCoarseMG",
-    Kokkos::MDRangePolicy<Kokkos::Rank<4>, DevExeSpace>(
+    Kokkos::MDRangePolicy<Kokkos::Rank<4>, DevExeSpace>(pmy_mg->DevExec(),
       {0, 0, 0, 0}, {nmb * nvar, cnc, cnc, cnc}),
     KOKKOS_LAMBDA(const int mv, const int ck, const int cj, const int ci) {
       int m = mv / nvar;
@@ -1140,7 +1140,7 @@ void MultigridBoundaryValues::FillCoarseMG(const DvceArray5D<Real> &u) {
   // These are consumed by PackAndSendMG for fine-to-coarse face sends.
   // face_id: 0=x-left, 1=x-right, 2=y-left, 3=y-right, 4=z-left, 5=z-right
   Kokkos::parallel_for("FillCoarseMG_faces",
-    Kokkos::MDRangePolicy<Kokkos::Rank<4>, DevExeSpace>(
+    Kokkos::MDRangePolicy<Kokkos::Rank<4>, DevExeSpace>(pmy_mg->DevExec(),
       {0, 0, 0, 0}, {nmb * nvar, 6, cnc, cnc}),
     KOKKOS_LAMBDA(const int mv, const int face, const int c1, const int c0) {
       int m = mv / nvar;
@@ -1249,7 +1249,7 @@ TaskStatus MultigridBoundaryValues::ProlongateFCMG(DvceArray5D<Real> &u) {
   // are independent. Each slot keeps its serial loops in the original order, which the
   // finer-face correction relies on when mg_nghost > 1. The previous kernel ran one thread
   // per MeshBlock over all 56 slots, which on a GPU left most of the device idle.
-  par_for_outer("ProlongateFCMG", DevExeSpace(), 0, 0, 0, nmb-1,
+  par_for_outer("ProlongateFCMG", pmy_mg->DevExec(), 0, 0, 0, nmb-1,
     KOKKOS_LAMBDA(TeamMember_t tmember, const int m) {
       int m_lev = mblev_d(m);
       int child_x = fc_cx(m);
@@ -1521,7 +1521,7 @@ TaskStatus MultigridBoundaryValues::FillFineCoarseMGGhosts(DvceArray5D<Real> &u)
   constexpr Real ot = 1.0/3.0;
 
   Kokkos::parallel_for("FillFCMGGhosts",
-    Kokkos::RangePolicy<DevExeSpace>(0, nmb),
+    Kokkos::RangePolicy<DevExeSpace>(pmy_mg->DevExec(), 0, nmb),
     KOKKOS_LAMBDA(const int m) {
       int m_lev = mblev_d(m);
       int child_x = fc_cx(m);
@@ -1901,7 +1901,7 @@ TaskStatus MultigridBoundaryValues::FillFineCoarseMGGhosts(DvceArray5D<Real> &u)
     }
 
     if (!pairs.empty()) {
-      Kokkos::fence();
+      pmy_mg->DevExec().fence();
       int ntot = ncells + 2*ngh;
       int blk_sz = nvar * ntot * ntot * ntot;
 
@@ -2340,7 +2340,7 @@ TaskStatus MultigridBoundaryValues::PackAndSendMG(const DvceArray5D<Real> &u,
 
   {
   int nmnv = nmb * nnghbr * nvart;
-  Kokkos::TeamPolicy<> policy(DevExeSpace(), nmnv, Kokkos::AUTO);
+  Kokkos::TeamPolicy<> policy(pmy_mg->DevExec(), nmnv, Kokkos::AUTO);
   Kokkos::parallel_for("PackMG", policy, KOKKOS_LAMBDA(TeamMember_t tmember) {
     const int m = tmember.league_rank() / (nnghbr * nvart);
     const int n = (tmember.league_rank() - m * nnghbr * nvart) / nvart;
@@ -2424,7 +2424,7 @@ TaskStatus MultigridBoundaryValues::PackAndSendMG(const DvceArray5D<Real> &u,
   const bool has_cross_rank = (lex.noffrank > 0);
   pd->MtEnd(MultigridDriver::MT_SUB_PACK, t_sub);
   t_sub = pd->MtBegin(MultigridDriver::MT_SUB_FENCE);
-  if (has_cross_rank) Kokkos::fence();
+  if (has_cross_rank) pmy_mg->DevExec().fence();   // MPI reads what PackMG wrote
   pd->MtEnd(MultigridDriver::MT_SUB_FENCE, t_sub);
   t_sub = pd->MtBegin(MultigridDriver::MT_SUB_ISEND);
 
@@ -2520,7 +2520,7 @@ TaskStatus MultigridBoundaryValues::RecvAndUnpackMG(DvceArray5D<Real> &u,
 
   {
   int nmnv = nmb * nnghbr * nvart;
-  Kokkos::TeamPolicy<> policy(DevExeSpace(), nmnv, Kokkos::AUTO);
+  Kokkos::TeamPolicy<> policy(pmy_mg->DevExec(), nmnv, Kokkos::AUTO);
   Kokkos::parallel_for("UnpackMG", policy, KOKKOS_LAMBDA(TeamMember_t tmember) {
     const int m = tmember.league_rank() / (nnghbr * nvart);
     const int n = (tmember.league_rank() - m * nnghbr * nvart) / nvart;

@@ -160,6 +160,9 @@ class MHD {
   // ...in "stagen_tl" task list
   TaskStatus CopyCons(Driver *d, int stage);
   TaskStatus Fluxes(Driver *d, int stage);
+  // stage whose fluxes the driver already launched ahead of the gravity solve
+  // (<gravity>/mg_overlap); the Fluxes task then only clears this and returns
+  int fluxes_done_stage = -1;
   TaskStatus SendFlux(Driver *d, int stage);
   TaskStatus RecvFlux(Driver *d, int stage);
   TaskStatus RKUpdate(Driver *d, int stage);

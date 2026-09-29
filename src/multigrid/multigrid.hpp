@@ -235,6 +235,18 @@ class Multigrid {
   void PrintActiveRegion(const DvceArray5D<Real> &data);
   void PrintAll(const DvceArray5D<Real> &data);
 
+  // Execution-space instance for this multigrid's device work: the driver's MG stream
+  // (a separate high-priority stream with <gravity>/mg_overlap, else the default one).
+  // ExecFor<ES>() gives it for device views and a default instance for host views.
+  DevExeSpace DevExec() const;
+  template <typename ES> ES ExecFor() const {
+    if constexpr (std::is_same_v<ES, DevExeSpace>) {
+      return DevExec();
+    } else {
+      return ES();
+    }
+  }
+
   // small functions
   int GetCurrentNumberOfCells() { return 1<<current_level_; }
   int GetNumberOfLevels() { return nlevel_; }
@@ -294,7 +306,8 @@ class Multigrid {
         return block_rdx_.d_view;
     }();
     int rlev_l = rlev;
-    par_for("Multigrid::CalculateDefect", ExeSpace(), 0, nmmb_-1, kl, ku, jl, ju, il, iu,
+    par_for("Multigrid::CalculateDefect", ExecFor<ExeSpace>(), 0, nmmb_-1, kl, ku, jl, ju,
+            il, iu,
     KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
       Real dx = (rlev_l <= 0) ? brdx(m) * static_cast<Real>(1<<(-rlev_l))
                               : brdx(m) / static_cast<Real>(1<<rlev_l);
@@ -315,7 +328,8 @@ class Multigrid {
         return block_rdx_.d_view;
     }();
     int rlev_l = rlev;
-    par_for("Multigrid::CalculateFASRHS", ExeSpace(), 0, nmmb_-1, kl, ku, jl, ju, il, iu,
+    par_for("Multigrid::CalculateFASRHS", ExecFor<ExeSpace>(), 0, nmmb_-1, kl, ku, jl, ju,
+            il, iu,
     KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
       Real dx = (rlev_l <= 0) ? brdx(m) * static_cast<Real>(1<<(-rlev_l))
                               : brdx(m) / static_cast<Real>(1<<rlev_l);
@@ -402,6 +416,8 @@ class MultigridDriver {
 
   void PrepareForAMR();
   int GetCoffset() const { return coffset_; }
+  bool Overlap() const { return mg_overlap_; }
+  const DevExeSpace &MGExec() const { return mg_exec_; }
   void MGRootBoundary();
   void TransferFromBlocksToRoot(bool initflag);
   void TransferFromRootToBlocks(bool folddata);
@@ -549,6 +565,13 @@ class MultigridDriver {
   // default schedule as long as every MeshBlock has the same cell width; multipole
   // boundaries are refused (see the MGGravityDriver constructor).
   bool ca_smooth_ = false;
+  // <gravity>/mg_overlap: all multigrid device work runs on mg_exec_, a separate
+  // high-priority CUDA stream, so the driver can launch the (potential-independent)
+  // hydro/MHD flux kernels before the solve and let them fill the GPU while the solve
+  // waits on MPI. Every fence and copy in the solve is on mg_exec_; the default stream is
+  // fenced once before the solve (the source) and mg_exec_ once after it (the potential).
+  bool mg_overlap_ = false;
+  DevExeSpace mg_exec_;
   // Coarse-level agglomeration (<gravity>/mg_root_ncells = K, default 1; uniform meshes).
   // The MeshBlock hierarchy stops at K cells per block side and the root grid,
   // replicated on every rank, gets K cells per MeshBlock, so the V-cycle levels below K
@@ -617,6 +640,8 @@ class MultigridDriver {
   long long mt_calls_[MT_NUM] = {};
   long long mt_polls_ = 0;  // MT_TK_RECV calls that returned incomplete
 };
+
+inline DevExeSpace Multigrid::DevExec() const { return pmy_driver_->mg_exec_; }
 
 struct MGPerLevelIndcs {
   MeshBufferIndcs isame, icoar, ifine;
@@ -761,7 +786,7 @@ void Multigrid::Smooth(ViewType &u, const ViewType &src, const ViewType &coeff,
   int rlev_l = rlev;
   Real odiag = stencil.omega_over_diag;
   color ^= pmy_driver_->GetCoffset();
-  par_for("Multigrid::Smooth", ExeSpace(), 0, nmmb_-1, kl, ku, jl, ju,
+  par_for("Multigrid::Smooth", ExecFor<ExeSpace>(), 0, nmmb_-1, kl, ku, jl, ju,
   KOKKOS_LAMBDA(const int m, const int k, const int j) {
     Real dx = (rlev_l <= 0) ? brdx(m) * static_cast<Real>(1<<(-rlev_l))
                             : brdx(m) / static_cast<Real>(1<<rlev_l);
@@ -810,7 +835,8 @@ void Multigrid::SmoothWide(ViewType &u, const ViewType &src, const ViewType &coe
   int rlev_l = rlev;
   Real odiag = stencil.omega_over_diag;
   color ^= pmy_driver_->GetCoffset();
-  par_for("Multigrid::SmoothWide", ExeSpace(), 0, nmmb_-1, kl-1, ku+1, jl-1, ju+1,
+  par_for("Multigrid::SmoothWide", ExecFor<ExeSpace>(), 0, nmmb_-1, kl-1, ku+1,
+          jl-1, ju+1,
   KOKKOS_LAMBDA(const int m, const int k, const int j) {
     const int fk = (k < kl) ? BoundaryFace::inner_x3 : (k > ku) ? BoundaryFace::outer_x3
                                                                  : -1;
@@ -861,7 +887,7 @@ void Multigrid::CalculateFASRHSWide(ViewType &src, const ViewType &u,
       return pmy_pack_->pmb->mb_bcs.d_view;
   }();
   int rlev_l = rlev;
-  par_for("Multigrid::CalculateFASRHSWide", ExeSpace(), 0, nmmb_-1, kl-1, ku+1,
+  par_for("Multigrid::CalculateFASRHSWide", ExecFor<ExeSpace>(), 0, nmmb_-1, kl-1, ku+1,
           jl-1, ju+1, il-1, iu+1,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
     const int fk = (k < kl) ? BoundaryFace::inner_x3 : (k > ku) ? BoundaryFace::outer_x3

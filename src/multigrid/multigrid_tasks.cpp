@@ -235,7 +235,8 @@ TaskStatus MultigridDriver::PhysicalBoundary(Driver *pdrive, int stage) {
     Kokkos::realloc(d_mpc, 25);
     auto h_mpc = Kokkos::create_mirror_view(d_mpc);
     for (int c = 0; c < 25; ++c) h_mpc(c) = mpcoeff_[c];
-    Kokkos::deep_copy(d_mpc, h_mpc);
+    Kokkos::deep_copy(pmg->DevExec(), d_mpc, h_mpc);
+    pmg->DevExec().fence();   // h_mpc is a local mirror
     d_xo = mpo_[0]; d_yo = mpo_[1]; d_zo = mpo_[2];
     d_order = mporder_;
   }
@@ -245,7 +246,7 @@ TaskStatus MultigridDriver::PhysicalBoundary(Driver *pdrive, int stage) {
   int nx3 = pmg->indcs_.nx3 >> shift;
 
   Kokkos::parallel_for("MGPhysicalBoundary",
-    Kokkos::RangePolicy<DevExeSpace>(0, nmb),
+    Kokkos::RangePolicy<DevExeSpace>(pmg->DevExec(), 0, nmb),
     KOKKOS_LAMBDA(const int m) {
       for (int v = 0; v < nvar; ++v) {
         // inner x1

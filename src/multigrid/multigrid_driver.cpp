@@ -139,7 +139,7 @@ double MultigridDriver::MtBegin(int id) {
     // barrier absorbs is load imbalance, charged to "wait" rather than to the region.
     const double b = std::chrono::duration<double>(
         std::chrono::steady_clock::now().time_since_epoch()).count();
-    Kokkos::fence();
+    mg_exec_.fence();
 #if MPI_PARALLEL_ENABLED
     // never inside a task: tasks are polled a rank-dependent number of times
     if (global_variable::nranks > 1 && id < MT_TK_IRECV) { MPI_Barrier(MPI_COMM_WORLD); }
@@ -153,7 +153,7 @@ double MultigridDriver::MtBegin(int id) {
 
 void MultigridDriver::MtEnd(int id, double t0) {
   if (mt_mode_ <= 0) return;
-  if (mt_mode_ >= 2) { Kokkos::fence(); }  // charge the region its own kernels
+  if (mt_mode_ >= 2) { mg_exec_.fence(); }  // charge the region its own kernels
   const double dt = std::chrono::duration<double>(
       std::chrono::steady_clock::now().time_since_epoch()).count() - t0;
   mt_time_[id] += dt;
@@ -284,9 +284,10 @@ void MultigridDriver::SyncRootToHost() {
   if (mgroot_->on_host_) return;
   if (root_sync_state_ != RootSyncState::DEVICE_MODIFIED) return;
   int lev = mgroot_->current_level_;
-  Kokkos::deep_copy(mgroot_->u_[lev].h_view, mgroot_->u_[lev].d_view);
-  Kokkos::deep_copy(mgroot_->uold_[lev].h_view, mgroot_->uold_[lev].d_view);
-  Kokkos::deep_copy(mgroot_->src_[lev].h_view, mgroot_->src_[lev].d_view);
+  Kokkos::deep_copy(mg_exec_, mgroot_->u_[lev].h_view, mgroot_->u_[lev].d_view);
+  Kokkos::deep_copy(mg_exec_, mgroot_->uold_[lev].h_view, mgroot_->uold_[lev].d_view);
+  Kokkos::deep_copy(mg_exec_, mgroot_->src_[lev].h_view, mgroot_->src_[lev].d_view);
+  mg_exec_.fence();   // the host reads these next
   root_sync_state_ = RootSyncState::SYNCED;
 }
 
@@ -299,8 +300,9 @@ void MultigridDriver::SyncRootToDevice() {
   if (mgroot_->on_host_) return;
   if (root_sync_state_ != RootSyncState::HOST_MODIFIED) return;
   int lev = mgroot_->current_level_;
-  Kokkos::deep_copy(mgroot_->u_[lev].d_view, mgroot_->u_[lev].h_view);
-  Kokkos::deep_copy(mgroot_->src_[lev].d_view, mgroot_->src_[lev].h_view);
+  Kokkos::deep_copy(mg_exec_, mgroot_->u_[lev].d_view, mgroot_->u_[lev].h_view);
+  Kokkos::deep_copy(mg_exec_, mgroot_->src_[lev].d_view, mgroot_->src_[lev].h_view);
+  mg_exec_.fence();   // the host may rewrite the root host arrays
   root_sync_state_ = RootSyncState::SYNCED;
 }
 
@@ -650,7 +652,7 @@ void MultigridDriver::TransferFromBlocksToRoot(bool initflag) {
   const int ngh_mb = mglevels_->ngh_;
   int nmmb = mglevels_->nmmb_ - 1;
   int padding = nslist_[global_variable::my_rank];
-  par_for("Multigrid:SaveToRoot", DevExeSpace(), 0, nmmb, KOKKOS_LAMBDA(const int m) {
+  par_for("Multigrid:SaveToRoot", mg_exec_, 0, nmmb, KOKKOS_LAMBDA(const int m) {
     for (int v = 0; v < nv; ++v) {
       rootbuf.d_view(v,    m+padding) = src(m, v, ngh_mb, ngh_mb, ngh_mb);
       if (!initflag)
@@ -658,7 +660,8 @@ void MultigridDriver::TransferFromBlocksToRoot(bool initflag) {
     }
   });
   rootbuf.template modify<DevExeSpace>();
-  rootbuf.template sync<HostExeSpace>();
+  rootbuf.template sync<HostExeSpace>(mg_exec_);
+  mg_exec_.fence();   // the host gathers and scatters rootbuf next
 #if MPI_PARALLEL_ENABLED
   int ncomm = initflag ? nv : 2*nv;
   MGTimerScope _mt_ag(this, MT_ALLGATHER);
@@ -734,7 +737,7 @@ void MultigridDriver::TransferFromBlocksToRootAgg(bool initflag) {
   auto u = mglevels_->u_[0].d_view;
   const int ngh = mglevels_->ngh_;
   const int gid0 = nslist_[global_variable::my_rank];
-  par_for("Multigrid:SaveToRootAgg", DevExeSpace(), 0, mglevels_->nmmb_-1, 0, nv-1,
+  par_for("Multigrid:SaveToRootAgg", mg_exec_, 0, mglevels_->nmmb_-1, 0, nv-1,
           0, K-1, 0, K-1, 0, K-1,
   KOKKOS_LAMBDA(const int m, const int v, const int k, const int j, const int i) {
     const int b = (m + gid0)*nper + ((v*K + k)*K + j)*K + i;
@@ -743,7 +746,7 @@ void MultigridDriver::TransferFromBlocksToRootAgg(bool initflag) {
   });
 #if MPI_PARALLEL_ENABLED
   if (nranks_ > 1) {
-    Kokkos::fence();                        // MPI reads the device buffer
+    mg_exec_.fence();                       // MPI reads the device buffer
     std::vector<int> cnt(nranks_), dsp(nranks_);
     for (int r = 0; r < nranks_; ++r) {
       cnt[r] = nblist_[r]*nper;
@@ -759,7 +762,7 @@ void MultigridDriver::TransferFromBlocksToRootAgg(bool initflag) {
   auto ru = mgroot_->u_[rl].d_view;
   const int rngh = mgroot_->ngh_;
   auto loc = agg_loc_;
-  par_for("Multigrid:ScatterToRootAgg", DevExeSpace(), 0, nbtotal_-1, 0, nv-1,
+  par_for("Multigrid:ScatterToRootAgg", mg_exec_, 0, nbtotal_-1, 0, nv-1,
           0, K-1, 0, K-1, 0, K-1,
   KOKKOS_LAMBDA(const int n, const int v, const int k, const int j, const int i) {
     const int b = n*nper + ((v*K + k)*K + j)*K + i;
@@ -1070,7 +1073,7 @@ void MultigridDriver::SolveIterative(Driver *pdriver) {
       break;
     }
   }
-  Kokkos::fence();
+  mg_exec_.fence();
   return;
 }
 
@@ -1101,7 +1104,7 @@ void MultigridDriver::SolveIterativeFixedTimes(Driver *pdriver) {
       }
     }
   }
-  Kokkos::fence();
+  mg_exec_.fence();
   return;
 }
 
@@ -2085,7 +2088,8 @@ void MultigridDriver::SyncMultipoleToDevice() {
     Kokkos::realloc(d_mpcoeff_, 25);
   auto h_mpc = Kokkos::create_mirror_view(d_mpcoeff_);
   for (int c = 0; c < 25; ++c) h_mpc(c) = mpcoeff_[c];
-  Kokkos::deep_copy(d_mpcoeff_, h_mpc);
+  Kokkos::deep_copy(mg_exec_, d_mpcoeff_, h_mpc);
+  mg_exec_.fence();   // h_mpc is a local mirror
 }
 
 
@@ -2112,7 +2116,7 @@ void MultigridDriver::MGRootBoundary() {
 
     // x1 boundaries
     Kokkos::parallel_for("MGRootBnd_x1",
-      Kokkos::RangePolicy<DevExeSpace>(0, nvar * nz * ny),
+      Kokkos::RangePolicy<DevExeSpace>(mg_exec_, 0, nvar * nz * ny),
       KOKKOS_LAMBDA(const int idx) {
         int v = idx / (nz * ny);
         int rem = idx - v * nz * ny;
@@ -2137,7 +2141,7 @@ void MultigridDriver::MGRootBoundary() {
       });
     // x2 boundaries (x1 ghost cells already filled)
     Kokkos::parallel_for("MGRootBnd_x2",
-      Kokkos::RangePolicy<DevExeSpace>(0, nvar * nz * nx),
+      Kokkos::RangePolicy<DevExeSpace>(mg_exec_, 0, nvar * nz * nx),
       KOKKOS_LAMBDA(const int idx) {
         int v = idx / (nz * nx);
         int rem = idx - v * nz * nx;
@@ -2162,7 +2166,7 @@ void MultigridDriver::MGRootBoundary() {
       });
     // x3 boundaries (x1,x2 ghost cells already filled)
     Kokkos::parallel_for("MGRootBnd_x3",
-      Kokkos::RangePolicy<DevExeSpace>(0, nvar * ny * nx),
+      Kokkos::RangePolicy<DevExeSpace>(mg_exec_, 0, nvar * ny * nx),
       KOKKOS_LAMBDA(const int idx) {
         int v = idx / (ny * nx);
         int rem = idx - v * ny * nx;
@@ -2205,7 +2209,7 @@ void MultigridDriver::MGRootBoundary() {
       auto d_mpc = d_mpcoeff_;
 
       Kokkos::parallel_for("MGRootBnd_multipole",
-        Kokkos::RangePolicy<DevExeSpace>(0, 1),
+        Kokkos::RangePolicy<DevExeSpace>(mg_exec_, 0, 1),
         KOKKOS_LAMBDA(const int) {
           if (bc_ix1 == BoundaryFlag::mg_multipole) {
             Real xf = x1min_v - xo;
@@ -2486,7 +2490,7 @@ void MultigridDriver::CalculateMultipoleCoefficients() {
 
   DvceArray2D<Real> partial("mp_partial", nmb, nmpcoeff_);
 
-  par_for("MGMultipoleCoeffs", DevExeSpace(), 0, nmb-1,
+  par_for("MGMultipoleCoeffs", mg_exec_, 0, nmb-1,
   KOKKOS_LAMBDA(const int m) {
     Real dx1 = (mb_size.d_view(m).x1max - mb_size.d_view(m).x1min)
                / static_cast<Real>(nx1);
@@ -2556,7 +2560,9 @@ void MultigridDriver::CalculateMultipoleCoefficients() {
       partial(m, c) = mp[c];
   });
 
-  auto partial_h = Kokkos::create_mirror_view_and_copy(HostMemSpace(), partial);
+  auto partial_h = Kokkos::create_mirror_view(HostMemSpace(), partial);
+  Kokkos::deep_copy(mg_exec_, partial_h, partial);
+  mg_exec_.fence();
   for (int m = 0; m < nmb; ++m) {
     for (int c = 0; c < nmpcoeff_; ++c) {
       mpcoeff_[c] += partial_h(m, c);
@@ -2641,7 +2647,7 @@ void MultigridDriver::CalculateCenterOfMass() {
 
   DvceArray2D<Real> partial("com_partial", nmb, 4);
 
-  par_for("MGCenterOfMass", DevExeSpace(), 0, nmb-1,
+  par_for("MGCenterOfMass", mg_exec_, 0, nmb-1,
   KOKKOS_LAMBDA(const int m) {
     Real dx1 = (mb_size.d_view(m).x1max - mb_size.d_view(m).x1min)
                / static_cast<Real>(nx1);
@@ -2671,7 +2677,9 @@ void MultigridDriver::CalculateCenterOfMass() {
     partial(m, 3) = m3;
   });
 
-  auto partial_h = Kokkos::create_mirror_view_and_copy(HostMemSpace(), partial);
+  auto partial_h = Kokkos::create_mirror_view(HostMemSpace(), partial);
+  Kokkos::deep_copy(mg_exec_, partial_h, partial);
+  mg_exec_.fence();
   Real totals[4] = {};
   for (int m = 0; m < nmb; ++m) {
     for (int c = 0; c < 4; ++c) {

@@ -141,6 +141,24 @@ MGGravityDriver::MGGravityDriver(MeshBlockPack *pmbp, ParameterInput *pin)
     std::exit(EXIT_FAILURE);
   }
   bool root_on_host = pin->GetOrAddBoolean("gravity", "root_on_host", false);
+  // overlap the solve with the flux kernels: MG device work on its own stream (see
+  // MultigridDriver::mg_overlap_; the driver launches the fluxes before the solve)
+  mg_overlap_ = pin->GetOrAddBoolean("gravity", "mg_overlap", false);
+  if (mg_overlap_) {
+#if defined(KOKKOS_ENABLE_CUDA)
+    int prio_low = 0, prio_high = 0;
+    cudaDeviceGetStreamPriorityRange(&prio_low, &prio_high);
+    cudaStream_t stream;
+    cudaStreamCreateWithPriority(&stream, cudaStreamNonBlocking, prio_high);
+    mg_exec_ = Kokkos::Cuda(stream, Kokkos::Impl::ManageStream::yes);
+#else
+    if (global_variable::my_rank == 0) {
+      std::cout << "### WARNING in MGGravityDriver: mg_overlap runs the multigrid on the "
+                << "default execution space instance without CUDA, so nothing overlaps."
+                << std::endl;
+    }
+#endif
+  }
   // coarse-level agglomeration onto the root grid (see MultigridDriver::agg_ncells_)
   agg_ncells_ = pin->GetOrAddInteger("gravity", "mg_root_ncells", 1);
   {
@@ -269,7 +287,7 @@ void MGGravityDriver::Solve(Driver *pdriver, int stage, Real dt) {
   else
     SolveMG(pdriver);
 
-  Kokkos::fence();
+  mg_exec_.fence();
 
   if (fshowdef_ >= 1) {
     auto t_end = std::chrono::high_resolution_clock::now();
@@ -286,6 +304,8 @@ void MGGravityDriver::Solve(Driver *pdriver, int stage, Real dt) {
   }
 
   mglevels_->RetrieveResult(pmy_pack_->pgrav->phi, 0, indcs_.ng);
+  // with mg_overlap the source terms that read phi run on the default stream
+  if (mg_overlap_) mg_exec_.fence();
 
   return;
 }

@@ -411,6 +411,21 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
         // into pgrav->rho first, so the solver only consumes that field.
         if (pmesh->pmb_pack->pgrav != nullptr) {
           pmesh->pmb_pack->pgrav->AssembleSource();
+          if (pmesh->pmb_pack->pgrav->pmgd->Overlap()) {
+            // <gravity>/mg_overlap: the solve runs on its own stream and reads the
+            // source just assembled on the default one; then the flux kernels, which do
+            // not need the potential, are launched first so they fill the GPU while the
+            // solve waits on MPI. The stage task lists skip their flux tasks this stage.
+            DevExeSpace().fence();
+            if (pmesh->pmb_pack->phydro != nullptr) {
+              pmesh->pmb_pack->phydro->Fluxes(this, stage);
+              pmesh->pmb_pack->phydro->fluxes_done_stage = stage;
+            }
+            if (pmesh->pmb_pack->pmhd != nullptr) {
+              pmesh->pmb_pack->pmhd->Fluxes(this, stage);
+              pmesh->pmb_pack->pmhd->fluxes_done_stage = stage;
+            }
+          }
           pmesh->pmb_pack->pgrav->pmgd->Solve(this, stage);
         }
         ExecuteTaskList(pmesh, "stagen", stage);

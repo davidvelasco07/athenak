@@ -157,6 +157,10 @@ TaskStatus Hydro::CopyCons(Driver *pdrive, int stage) {
 //! of conserved variables
 
 TaskStatus Hydro::Fluxes(Driver *pdrive, int stage) {
+  if (fluxes_done_stage == stage) {   // launched by the driver before the gravity solve
+    fluxes_done_stage = -1;
+    return TaskStatus::complete;
+  }
   // select which calculate_flux function to call based on rsolver_method
   if (rsolver_method == Hydro_RSolver::advect) {
     CalculateFluxes<Hydro_RSolver::advect>(pdrive, stage);
