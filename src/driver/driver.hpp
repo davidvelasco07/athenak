@@ -13,6 +13,7 @@
 // called in Finalize().
 
 #include <ctime>
+#include <deque>
 #include <limits>
 #include <memory>
 #include <string>
@@ -65,6 +66,7 @@ class Driver {
   Real gamma;                      // gamma value for the IMEX_new integrator
   Kokkos::Timer* pwall_clock_;     // timer for tracking the wall clock
   Real wall_time;
+  bool dt_guard_tripped = false;   // Execute() stopped on a collapsing timestep
 
   // functions
   void ExecuteTaskList(Mesh *pm, std::string tl, int stage);
@@ -84,6 +86,11 @@ class Driver {
   void BeginSTSSweep(Mesh *pm, STSSweep sweep);
   void SetSTSStage(int stage);
   void EndSTSSweep();
+  // <time>/dt_guard: stop when dt < dt_guard * max(dt over the last dt_guard_window
+  // cycles). 0 disables it.
+  Real dt_guard_ = 0.0;
+  int dt_guard_window_ = 100;
+  std::deque<Real> recent_dt_;
   void OutputCycleDiagnostics(Mesh *pm);
   Real UpdateWallClock();
 };

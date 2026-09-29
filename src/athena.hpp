@@ -46,7 +46,7 @@ class Coordinates;
 // virtually every library allows this limit to be exceeded. As of 2025, the Intel MPI
 // library provided the most stringent limit of 20 bits per tag. Six bits are needed to
 // store the buffer ID, leaving NUM_BITS_LID=14
-#define NUM_BITS_LID 14
+#define NUM_BITS_LID 16
 
 #define SQR(x) ( (x)*(x) )
 #define SIGN(x) ( ((x) < 0.0) ? -1.0 : 1.0 )
@@ -69,7 +69,30 @@ enum BFieldIndex {IBX=0, IBY=1, IBZ=2, NMAG=3};
 enum MetricIndex {I00=0, I01=1, I02=2, I03=3, I11=4, I12=5, I13=6, I22=7, I23=8, I33=9,
                   NMETRIC=10};
 // array indices for particle arrays
-enum ParticlesIndex {PGID=0, PTAG=1, IPX=0, IPVX=1, IPY=2, IPVY=3, IPZ=4, IPVZ=5};
+// integer columns (prtcl_idata):
+//   PGID -- GID of MeshBlock that owns the particle
+//   PTAG -- unique particle tag (assigned at creation)
+// real columns (prtcl_rdata):
+//   IPX,IPVX,IPY,IPVY,IPZ,IPVZ -- position/velocity interleaved by axis
+//   IPM                        -- mass (sink type only)
+//   IPGX,IPGY,IPGZ             -- gravity force scratch (filled each step by
+//                                 ParticleGravity::InterpolateForceToParticles;
+//                                 not communicated on MB migration)
+//   IPX0,IPY0,IPZ0             -- position at the start of the current step (saved in
+//                                 the stage-1 leapfrog push immediately before the
+//                                 drift); used by AccreteMass to detect sink-cell
+//                                 crossings (old control-volume correction)
+//   IPVX0,IPVY0,IPVZ0          -- start-of-step velocity registers, RK3 pusher only
+//   NRDATA_SINK -- total real columns for sink type (3D layout always; 2D
+//                  runs leave IPZ/IPVZ/IPGZ at zero)
+enum ParticlesIndex {PGID=0, PTAG=1,
+                     IPX=0, IPVX=1, IPY=2, IPVY=3, IPZ=4, IPVZ=5,
+                     IPM=6,
+                     IPGX=7, IPGY=8, IPGZ=9,
+                     IPX0=10, IPY0=11, IPZ0=12,
+                     NRDATA_SINK=13,
+                     IPVX0=13, IPVY0=14, IPVZ0=15,
+                     NRDATA_SINK_RK3=16};
 
 // integer constants to specify spatial reconstruction methods
 // ppm = unlimited 4th-order parabolic (the MOOD candidate scheme, hydro only)
