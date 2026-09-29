@@ -663,6 +663,11 @@ class MultigridBoundaryValues : public MeshBoundaryValuesCC {
     int nbuffered = 0;            // same-rank payloads through mg_selfbuf_
     int noffrank = 0;             // payloads to/from other ranks
     DvceArray1D<int> self_off;    // (nmb*nnghbr) receiver offsets into mg_selfbuf_, or -1
+    // (m*nnghbr + n) of every slot the pack / the unpack has work for, so the kernels
+    // launch over these instead of all nmb*nnghbr slots (most are empty or are copied
+    // directly)
+    DvceArray1D<int> pack_list, unpack_list;
+    int npack = 0, nunpack = 0;
   };
   std::vector<MGLevelExchange> mg_lex_;
   int mg_lex_seq_ = -2;
