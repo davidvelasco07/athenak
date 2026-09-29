@@ -25,6 +25,7 @@
 #include "mesh_refinement.hpp"
 #include "refinement_criteria.hpp"
 
+#include "coordinates/coordinates.hpp"
 #include "hydro/hydro.hpp"
 #include "eos/eos.hpp"
 #include "mhd/mhd.hpp"
@@ -72,6 +73,7 @@ MeshRefinement::MeshRefinement(Mesh *pm, ParameterInput *pin) :
     // into newly refined MeshBlocks and into fine ghost zones at coarse/fine boundaries.
     // Independent limiting of rho and rho*v let a low-density child inherit a velocity far
     // outside its neighbours' range, which emptied the cell and collapsed dt (GMTF AMR).
+    // Newtonian hydro only: see ProlongHydroVelocity().
     prolong_velocity = pin->GetOrAddBoolean("mesh_refinement", "prolong_velocity", true);
   }
 
@@ -596,7 +598,7 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
 
   if (nnew > 0) {
     if (phydro != nullptr) {
-      if (prolong_velocity) {
+      if (ProlongHydroVelocity(pm->pmb_pack)) {
         RefineHydroCC(new_to_old, phydro->u0, phydro->coarse_u0, phydro->nhydro,
                       phydro->nscalars, phydro->peos->eos_data.is_ideal);
       } else {
@@ -1085,6 +1087,21 @@ void MeshRefinement::RefineCC(DualArray1D<int> &n2o, DvceArray5D<Real> &a,
   });
 
   return;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn bool MeshRefinement::ProlongHydroVelocity
+//! \brief Whether hydro uses the velocity-bounded prolongation (RefineHydroCC for new
+//! MeshBlocks, ProlongateHydroCC for fine ghost zones). It rebuilds velocity and internal
+//! energy from Newtonian conserved variables (rho, rho*v, E), so SR/GR hydro, whose
+//! conserved variables are D, S and tau, falls back to prolong_primitives or conservative
+//! prolongation as before.
+
+bool MeshRefinement::ProlongHydroVelocity(const MeshBlockPack *pmbp) const {
+  const Coordinates *pc = pmbp->pcoord;
+  return prolong_velocity && !(pc->is_special_relativistic ||
+                               pc->is_general_relativistic ||
+                               pc->is_dynamical_relativistic);
 }
 
 //----------------------------------------------------------------------------------------

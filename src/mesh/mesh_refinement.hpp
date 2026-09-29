@@ -54,6 +54,8 @@ class MeshRefinement {
   int refinement_interval;   // # of cycles between allowing successive ref/derefinement
   bool prolong_prims;        // flag to enable prolongation of primitive vars
   bool prolong_velocity;     // hydro: velocity-bounded conservative prolongation
+  // prolong_velocity for this pack's hydro: Newtonian only (see mesh_refinement.cpp)
+  bool ProlongHydroVelocity(const MeshBlockPack *pmbp) const;
   RefinementCriteria* pmrc=nullptr;   // object to control various refinement criteria
 
   // following 2x Views are dimensioned [nmb_total]

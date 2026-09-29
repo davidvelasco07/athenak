@@ -398,7 +398,7 @@ TaskStatus Hydro::ApplyPhysicalBCs(Driver *pdrive, int stage) {
 TaskStatus Hydro::Prolongate(Driver *pdrive, int stage) {
   if (pmy_pack->pmesh->multilevel) {  // only prolongate with SMR/AMR
     pbval_u->FillCoarseInBndryCC(u0, coarse_u0);
-    if (pmy_pack->pmesh->pmr->prolong_velocity) {
+    if (pmy_pack->pmesh->pmr->ProlongHydroVelocity(pmy_pack)) {
       // velocity-bounded conservative prolongation (as for newly refined MeshBlocks)
       pbval_u->ProlongateHydroCC(u0, coarse_u0, nhydro, nscalars, peos->eos_data.is_ideal);
     } else if (pmy_pack->pmesh->pmr->prolong_prims) {
