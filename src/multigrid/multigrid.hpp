@@ -391,6 +391,7 @@ class MultigridDriver {
   double MtBegin(int id);
   void   MtEnd(int id, double t0);
   void   ReportMGTimers(double wall_seconds);
+  void   ReportMGLevelTimers(std::int64_t nsolve);
   // scope guard, so a region with early returns still stops its timer
   struct MGTimerScope {
     MultigridDriver *d; int id; double t0;
@@ -592,6 +593,11 @@ class MultigridDriver {
   int nb_rank_;
   // MG_TIMERS accumulators (see the block above MGTimerId)
   int mt_mode_ = 0;
+  // block-level task regions (MT_TK_*) split by the MG level current when each ran
+  static constexpr int kMtLev = 20;
+  static constexpr int kMtTask = MT_TK_CLEAR - MT_TK_IRECV + 1;
+  double mt_lev_time_[kMtLev][kMtTask] = {};
+  std::int64_t mt_lev_calls_[kMtLev][kMtTask] = {};
   double mt_time_[MT_NUM] = {};
   double mt_wait_[MT_NUM] = {};
   long long mt_calls_[MT_NUM] = {};

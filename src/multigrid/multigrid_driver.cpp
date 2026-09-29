@@ -154,9 +154,19 @@ double MultigridDriver::MtBegin(int id) {
 void MultigridDriver::MtEnd(int id, double t0) {
   if (mt_mode_ <= 0) return;
   if (mt_mode_ >= 2) { Kokkos::fence(); }  // charge the region its own kernels
-  mt_time_[id] += std::chrono::duration<double>(
+  const double dt = std::chrono::duration<double>(
       std::chrono::steady_clock::now().time_since_epoch()).count() - t0;
+  mt_time_[id] += dt;
   mt_calls_[id] += 1;
+  // block-level tasks are also charged to the MG level they ran on (in the prolongation
+  // step, tasks before Prolongate run on the coarse level and the rest on the fine one)
+  if (id >= MT_TK_IRECV && id <= MT_TK_CLEAR && pmg == mglevels_ && pmg != nullptr) {
+    const int l = pmg->GetCurrentLevel();
+    if (l >= 0 && l < kMtLev) {
+      mt_lev_time_[l][id - MT_TK_IRECV] += dt;
+      mt_lev_calls_[l][id - MT_TK_IRECV] += 1;
+    }
+  }
 }
 
 //----------------------------------------------------------------------------------------
@@ -191,6 +201,12 @@ void MultigridDriver::ReportMGTimers(double wall_seconds) {
     MPI_Allreduce(MPI_IN_PLACE, wmax, n, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
     MPI_Allreduce(MPI_IN_PLACE, csum, n, MPI_LONG_LONG, MPI_SUM, MPI_COMM_WORLD);
     MPI_Allreduce(MPI_IN_PLACE, &polls, 1, MPI_LONG_LONG, MPI_SUM, MPI_COMM_WORLD);
+    // per-level task times, reduced in place here on every rank (printed by rank 0 in
+    // ReportMGLevelTimers; this report runs once, at Finalize)
+    MPI_Allreduce(MPI_IN_PLACE, &mt_lev_time_[0][0], kMtLev*kMtTask, MPI_DOUBLE, MPI_SUM,
+                  MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, &mt_lev_calls_[0][0], kMtLev*kMtTask, MPI_INT64_T,
+                  MPI_SUM, MPI_COMM_WORLD);
   }
 #endif
   if (global_variable::my_rank != 0) return;
@@ -223,8 +239,40 @@ void MultigridDriver::ReportMGTimers(double wall_seconds) {
   std::printf("### %-18s %10s %11s %11.4f %11s %10.3f\n", "rest of solve", "", "",
               rest/nr, "", (nsolve > 0) ? 1e3*rest/nr/nsolve : 0.0);
   std::printf("###   task:recv_unpack returned incomplete %lld times per rank "
-              "(%.1f per solve)\n\n", polls/nr,
+              "(%.1f per solve)\n", polls/nr,
               (nsolve > 0) ? static_cast<double>(polls)/nr/nsolve : 0.0);
+  ReportMGLevelTimers(nsolve);
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void MultigridDriver::ReportMGLevelTimers(std::int64_t nsolve)
+//! \brief The block-level task regions split by MG level (ms/solve, rank mean), from the
+//! sums ReportMGTimers reduced over ranks. "xch" is exchanges (pack_send calls) per
+//! solve.
+
+void MultigridDriver::ReportMGLevelTimers(std::int64_t nsolve) {
+  if (global_variable::my_rank != 0 || nsolve <= 0 || mglevels_ == nullptr) return;
+  const double nr = global_variable::nranks;
+  auto ms = [&](int l, int id) {
+    return 1e3*mt_lev_time_[l][id - MT_TK_IRECV]/nr/nsolve;
+  };
+  std::printf("### per MG block level (ms/solve, rank mean)\n");
+  std::printf("### %5s %6s %6s %9s %9s %9s %9s %9s %9s\n", "level", "cells", "xch",
+              "irecv", "pack_send", "recv", "smooth", "other", "total");
+  const int nlev = mglevels_->GetNumberOfLevels();
+  for (int l = std::min(nlev, kMtLev) - 1; l >= 0; --l) {
+    double tot = 0.0;
+    for (int id = MT_TK_IRECV; id <= MT_TK_CLEAR; ++id) tot += ms(l, id);
+    if (tot <= 0.0) continue;
+    const double other = tot - ms(l, MT_TK_IRECV) - ms(l, MT_TK_SEND) - ms(l, MT_TK_RECV)
+                         - ms(l, MT_TK_SMOOTH);
+    const double xch =
+        static_cast<double>(mt_lev_calls_[l][MT_TK_SEND - MT_TK_IRECV])/nr/nsolve;
+    std::printf("### %5d %6d %6.1f %9.3f %9.3f %9.3f %9.3f %9.3f %9.3f\n", l,
+                mglevels_->GetSize() >> (nlev - 1 - l), xch, ms(l, MT_TK_IRECV),
+                ms(l, MT_TK_SEND), ms(l, MT_TK_RECV), ms(l, MT_TK_SMOOTH), other, tot);
+  }
+  std::printf("\n");
 }
 
 
