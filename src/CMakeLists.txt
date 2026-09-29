@@ -131,6 +131,10 @@ add_executable(
         particles/particles.cpp
         particles/particles_pushers.cpp
         particles/particles_tasks.cpp
+        particles/particles_accretion.cpp
+        particles/particles_creation.cpp
+        particles/particles_merger.cpp
+        particles/particle_mesh.cpp
         outputs/pdf.cpp
 
         pgen/pgen.cpp

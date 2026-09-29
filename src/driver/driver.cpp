@@ -28,6 +28,7 @@
 #include "driver.hpp"
 #include "gravity/gravity.hpp"
 #include "utils/utils.hpp"
+#include "particles/particles.hpp"
 
 #if MPI_PARALLEL_ENABLED
 #include <mpi.h>
@@ -79,6 +80,8 @@ Driver::Driver(ParameterInput *pin, Mesh *pmesh, Real wtlim, Kokkos::Timer* ptim
   nmb_updated_(0),
   npart_updated_(0),
   lb_efficiency_(0) {
+  // let problem generators reach tlim (see Mesh::pmy_driver)
+  pmesh->pmy_driver = this;
   // set time-evolution option (no default)
   {
     std::string evolution_t = pin->GetString("time","evolution");
@@ -101,6 +104,8 @@ Driver::Driver(ParameterInput *pin, Mesh *pmesh, Real wtlim, Kokkos::Timer* ptim
     tlim = pin->GetReal("time", "tlim");
     nlim = pin->GetOrAddInteger("time", "nlim", -1);
     ndiag = pin->GetOrAddInteger("time", "ndiag", 1);
+    dt_guard_ = pin->GetOrAddReal("time", "dt_guard", 0.0);
+    dt_guard_window_ = pin->GetOrAddInteger("time", "dt_guard_window", 100);
 
     if (integrator == "rk1") {
       // RK1: first-order Runge-Kutta / the forward Euler (FE) method
@@ -563,9 +568,13 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout, bool wdfla
       for (int stage=1; stage<=(nexp_stages); ++stage) {
         ExecuteTaskList(pmesh, "before_stagen", stage);
         // solve gravity at each RK stage so the potential is consistent
-        // with the current density (required for 2nd-order accuracy)
-        if (pmesh->pmb_pack->pgrav != nullptr)
-            {pmesh->pmb_pack->pgrav->pmgd->Solve(this, stage);}
+        // with the current density (required for 2nd-order accuracy).
+        // AssembleSource() sums the registered contributions (gas, particles, ...)
+        // into pgrav->rho first, so the solver only consumes that field.
+        if (pmesh->pmb_pack->pgrav != nullptr) {
+          pmesh->pmb_pack->pgrav->AssembleSource();
+          pmesh->pmb_pack->pgrav->pmgd->Solve(this, stage);
+        }
         ExecuteTaskList(pmesh, "stagen", stage);
         ExecuteTaskList(pmesh, "after_stagen", stage);
       }
@@ -627,6 +636,30 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout, bool wdfla
       pmesh->NewTimeStep(tlim);
       RefreshSTSCycleState(pmesh);
 
+      // Fail fast on a collapsing timestep instead of spinning at frozen time until the
+      // wall-clock limit. dt is already reduced over all ranks, so every rank takes the
+      // same branch; Finalize() then writes every output at the failing state.
+      if (dt_guard_ > 0.0) {
+        if (!recent_dt_.empty()) {
+          Real dt_ref = *std::max_element(recent_dt_.begin(), recent_dt_.end());
+          if (pmesh->dt < dt_guard_*dt_ref) {
+            dt_guard_tripped = true;
+            if (global_variable::my_rank == 0) {
+              std::cout << std::endl << "### DT GUARD: dt=" << pmesh->dt << " < "
+                        << dt_guard_
+                        << " * max(dt over last " << recent_dt_.size() << " cycles)="
+                        << dt_ref << " at cycle=" << pmesh->ncycle << " time="
+                        << pmesh->time << "; writing outputs and stopping" << std::endl;
+            }
+            break;
+          }
+        }
+        recent_dt_.push_back(pmesh->dt);
+        if (static_cast<int>(recent_dt_.size()) > dt_guard_window_) {
+          recent_dt_.pop_front();
+        }
+      }
+
       // Update wall clock time if needed.
       if (wall_time > 0.) {
         elapsed_time = UpdateWallClock();
@@ -642,6 +675,23 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout, bool wdfla
 //!  and printing diagnostic messages
 
 void Driver::Finalize(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
+  // Refresh particle->MeshBlock ownership (PGID) before the final output. The per-cycle
+  // SetGIDFromPosition runs at the TOP of each cycle (before_timeintegrator), so it fixes
+  // PGIDs left stale by the PREVIOUS cycle's end-of-cycle AMR regrid. After the LAST
+  // cycle there is no next cycle, so the final regrid's renumbering is never reconciled
+  // and the particle positions/PGIDs seen here are stale -- particle-mesh deposits (e.g.
+  // the prtcl_d output) would then bin sinks into the wrong/out-of-range block and
+  // silently drop them (or, unguarded, fault). Re-derive PGID from position once more
+  // here. ReconcileOwnership also completes the cross-rank migration this can imply (the
+  // final regrid may have handed a particle's block to another rank), so the output below
+  // sees every particle on the rank that owns its block. All ranks call it (MPI
+  // collectives).
+  if (pmesh->pmb_pack->ppart != nullptr) {
+    pmesh->pmb_pack->ppart->ReconcileOwnership(this, nexp_stages);
+    // host/MPI phase breakdown, when SINK_TIMERS is set (no-op otherwise)
+    pmesh->pmb_pack->ppart->ReportSinkTimers(pwall_clock_->seconds());
+  }
+
   // cycle through output Types and load data / write files
   //  This design allows for asynchronous outputs to implemented in the future.
   for (auto &out : pout->pout_list) {
@@ -667,7 +717,10 @@ void Driver::Finalize(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
     if (global_variable::my_rank == 0) {
       // Print diagnostic messages related to the end of the simulation
       OutputCycleDiagnostics(pmesh);
-      if (pmesh->ncycle == nlim) {
+      if (dt_guard_tripped) {
+        std::cout << std::endl << "Terminating on dt guard (collapsing timestep)"
+                  << std::endl;
+      } else if (pmesh->ncycle == nlim) {
         std::cout << std::endl << "Terminating on cycle limit" << std::endl;
       } else if (pmesh->time >= tlim) {
         std::cout << std::endl << "Terminating on time limit" << std::endl;
