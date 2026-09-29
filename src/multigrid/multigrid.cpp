@@ -797,7 +797,10 @@ Real Multigrid::CalculateAverage(MGVariable type) {
   }
 
   Real volume = 0.0;
-  {
+  if (pmy_pack_ == nullptr) {
+    // root grid: one block spanning the whole (not necessarily cubic) domain
+    volume = (rdx_*indcs_.nx1) * (rdy_*indcs_.nx2) * (rdz_*indcs_.nx3);
+  } else {
     Real nx = static_cast<Real>(indcs_.nx1);
     for (int m = 0; m < nmmb_; ++m) {
       Real len = block_rdx_.h_view(m) * nx;
