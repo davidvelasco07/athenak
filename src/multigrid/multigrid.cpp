@@ -822,27 +822,30 @@ Real Multigrid::CalculateAverage(MGVariable type) {
 //! \brief subtract the average value (type: 0=src, 1=u)
 
 void Multigrid::SubtractAverage(MGVariable type, int n, Real ave) {
+  // on the current level, where CalculateAverage measured it: SolveCoarsestGrid calls
+  // this on the coarsest root level (it used to hit the finest root level instead)
+  int ll = nlevel_ - 1 - current_level_;
   int is, ie, js, je, ks, ke;
   is = js = ks = 0;
-  ie = is + indcs_.nx1 + 2*ngh_ - 1;
-  je = js + indcs_.nx2 + 2*ngh_ - 1;
-  ke = ks + indcs_.nx3 + 2*ngh_ - 1;
+  ie = is + (indcs_.nx1 >> ll) + 2*ngh_ - 1;
+  je = js + (indcs_.nx2 >> ll) + 2*ngh_ - 1;
+  ke = ks + (indcs_.nx3 >> ll) + 2*ngh_ - 1;
 
   const int m0 = 0, m1 = nmmb_ - 1;
   const int vn = n;
   const Real lave = ave;
 
   if (on_host_) {
-    auto dst = (type == MGVariable::src) ? src_[nlevel_-1].h_view
-                                         : u_[nlevel_-1].h_view;
+    auto dst = (type == MGVariable::src) ? src_[current_level_].h_view
+                                         : u_[current_level_].h_view;
     par_for("Multigrid::SubtractAverage", HostExeSpace(),
             m0, m1, ks, ke, js, je, is, ie,
     KOKKOS_LAMBDA(const int m, const int mk, const int mj, const int mi) {
       dst(m, vn, mk, mj, mi) -= lave;
     });
   } else {
-    auto dst = (type == MGVariable::src) ? src_[nlevel_-1].d_view
-                                         : u_[nlevel_-1].d_view;
+    auto dst = (type == MGVariable::src) ? src_[current_level_].d_view
+                                         : u_[current_level_].d_view;
     par_for("Multigrid::SubtractAverage", DevExeSpace(),
             m0, m1, ks, ke, js, je, is, ie,
     KOKKOS_LAMBDA(const int m, const int mk, const int mj, const int mi) {
