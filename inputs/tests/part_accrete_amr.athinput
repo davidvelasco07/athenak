@@ -1,0 +1,112 @@
+# AthenaK input: sink control-volume accretion ACROSS A REFINEMENT LEVEL JUMP.
+#
+# Same problem as part_accrete.athinput (one sink in uniform isothermal self-gravitating
+# gas, periodic, total gas+sink mass must be conserved), but the mesh is decomposed into
+# 4x4x4 blocks of 16^3 and the +x+y+z octant touching the box centre is statically refined.
+# The sink is offset half a FINE cell (1/256) off the centre in each direction, which puts
+# it in the first interior cell of the refined block: the owner is FINE and its 27-cell
+# control volume reaches one cell into the ghost zone that overlies the COARSE blocks on
+# all three low sides. This exercises the coarser-target branch of the reset scatter
+# (conservative partial restriction into a coarse cell that the control volume covers only
+# in part). Before that branch existed the sink was skipped entirely: it accreted EXACTLY
+# nothing while gas kept falling in.
+#
+# The offset is not cosmetic. Exactly at the box centre the sink sits on the corner where
+# 8 blocks meet, and the lower-inclusive containment test that assigns ownership is then
+# decided by round-off in the block bounds -- ownership falls to the COARSE block on the
+# low side, so the intended case is not tested at all.
+#
+# Pass criteria: M_sink grows, (M_gas + M_sink) is conserved to round-off, and no
+# "sink control volume(s) skipped" warning appears.
+#
+# The mirror case -- coarse owner, finer neighbours (uniform-split branch) -- is the same
+# input with the refined region moved to the opposite octant and the offset made half a
+# COARSE cell (1/128):
+#   athena -i part_accrete_amr.athinput \
+#     refined_region1/x1min=-0.25 refined_region1/x1max=0.0 \
+#     refined_region1/x2min=-0.25 refined_region1/x2max=0.0 \
+#     refined_region1/x3min=-0.25 refined_region1/x3max=0.0 \
+#     problem/offx=0.0078125 problem/offy=0.0078125 problem/offz=0.0078125
+
+<job>
+basename = part_accrete_amr
+
+<mesh>
+nghost = 4
+nx1 = 64
+x1min = -0.5
+x1max =  0.5
+ix1_bc = periodic
+ox1_bc = periodic
+nx2 = 64
+x2min = -0.5
+x2max =  0.5
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 64
+x3min = -0.5
+x3max =  0.5
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 16
+nx2 = 16
+nx3 = 16
+
+<mesh_refinement>
+refinement = static
+
+<refined_region1>
+level = 1
+x1min = 0.0
+x1max = 0.25
+x2min = 0.0
+x2max = 0.25
+x3min = 0.0
+x3max = 0.25
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.3
+tlim       = 0.1
+nlim       = -1
+ndiag      = 50
+
+<hydro>
+eos             = isothermal
+reconstruct     = plm
+rsolver         = llf
+iso_sound_speed = 1.0
+
+<gravity>
+four_pi_G      = 1.0
+threshold      = -1
+niteration     = 10
+npresmooth     = 1
+npostsmooth    = 1
+full_multigrid = true
+fmg_ncycle     = 1
+show_defect    = 0
+mg_verbose     = 0
+mg_nghost      = 1
+root_on_host   = false
+
+<hydro_srcterms>
+self_gravity = true
+
+<particles>
+type      = sink
+pusher    = leapfrog
+accretion = true
+# 1 / 64^3 = 2^-18 (exact) -> exactly 1 particle
+ppc    = 3.814697265625e-06
+
+<problem>
+mass = 1.0
+rho0 = 0.1
+# half a fine cell (dx_fine = 1/128), exactly representable
+offx = 0.00390625
+offy = 0.00390625
+offz = 0.00390625

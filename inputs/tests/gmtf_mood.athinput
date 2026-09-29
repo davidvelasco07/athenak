@@ -1,0 +1,126 @@
+# GMTF sink ladder, PPM+MOOD+RK3 hydro.
+#
+# Same physics as gmtf_sink.athinput (isothermal, HLLE, rseed=0, sfe_term=0.15,
+# merge_bound=true).  The hydro scheme is the unlimited PPM base with the MOOD
+# a-posteriori cascade (base -> PLM -> DC) and RK3.
+#
+# nghost = 7 is required: unlimited PPM needs 3 ghosts plus mood_max_revs=4
+# for the parallel-MOOD light cone.
+#
+# Gravity uses niteration=5 / no threshold, matching the later PLM+RK2 rungs
+# (N1024 and above).  Override nx1/nx2/nx3 (and meshblock) per resolution.
+
+<comment>
+problem = gravo-turbulent fragmentation with sinks (PPM+MOOD+RK3)
+
+<job>
+basename = GMTF_mood
+
+<mesh>
+nghost = 7
+nx1    = 64
+x1min  = -2.0
+x1max  =  2.0
+ix1_bc = periodic
+ox1_bc = periodic
+
+nx2    = 64
+x2min  = -2.0
+x2max  =  2.0
+ix2_bc = periodic
+ox2_bc = periodic
+
+nx3    = 64
+x3min  = -2.0
+x3max  =  2.0
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 32
+nx2 = 32
+nx3 = 32
+
+<time>
+evolution  = dynamic
+integrator = rk3
+cfl_number = 0.3
+nlim       = -1
+tlim       = 0.35
+ndiag      = 10
+
+<hydro>
+eos             = isothermal
+reconstruct     = ppm
+rsolver         = hlle
+iso_sound_speed = 1.0
+mood            = true
+# Four passes resolve neighbors newly troubled by revised fluxes.
+mood_max_revs   = 4
+mood_nad_scale  = gcfl
+mood_rtol       = 1.0e-5
+mood_sed        = true
+mood_nad_energy = true
+# Velocity NAD follows fallback-validation MHD; isothermal hydro has no energy test.
+mood_nad_v      = comps
+
+<hydro_srcterms>
+self_gravity = true
+
+<gravity>
+four_pi_G      = 39.47841760435743
+niteration     = 5
+npresmooth     = 1
+npostsmooth    = 1
+full_multigrid = true
+fmg_ncycle     = 1
+mg_nghost      = 1
+
+<particles>
+type        = sink
+pusher      = rk3
+accretion   = true
+creation    = true
+merging     = true
+merge_bound = true
+cfl_par     = 0.5
+ppc         = 0.0
+
+<problem>
+Mach      = 10
+mu_phi    = 2
+sfe_term  = 0.15
+user_hist = true
+rseed     = 0
+nlow      = 0
+nhigh     = 16
+expo      = 2.0
+
+<output1>
+file_type = hst
+dt        = 0.002
+last_time = 0.0
+
+<output2>
+file_type = bin
+single_file_per_rank = true
+variable  = hydro_w_d
+dt        = 0.01
+last_time = 0.0
+
+<output3>
+file_type = log
+dt        = 0.002
+last_time = 0.0
+
+<output5>
+file_type = trk
+variable  = prtcl
+dt        = 0.01
+last_time = 0.0
+
+<output4>
+file_type = rst
+single_file_per_rank = true
+dt        = 0.2
+last_time = 0.0

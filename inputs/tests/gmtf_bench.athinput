@@ -1,0 +1,130 @@
+# Gravo-turbulent box with a SEEDED sink population -- the performance-benchmark variant
+# of gmtf_sink.athinput.
+#
+# WHY A SEEDED VARIANT. gmtf_sink creates its sinks from the gas, and past the first
+# creation the outcome is not decomposition-invariant: which cell first crosses the
+# Larson-Penston threshold differs between rank counts, so every rung of a scaling ladder
+# ends with a different sink count and the rungs cannot be compared. Here the sinks are
+# placed on a deterministic jittered lattice computed from global quantities only, and
+# creation and merging are OFF, so N is exactly <problem>/nsink_seed for the whole run on
+# every decomposition.
+#
+# The knobs that define a measurement point:
+#   problem/nsink_seed    number of sinks (0 = none; the N=0 control is the one that
+#                         isolates the module's fixed per-step overhead, since every sink
+#                         kernel is then a no-op but every collective still fires)
+#   problem/sink_mass_cv  mass of each sink, in units of the 27-cell control-volume gas
+#                         mass. NOT an absolute number, because that is the scale that
+#                         governs whether accretion is well-posed: a seeded sink does not
+#                         sit at a density peak the way a created one does, so dm can be
+#                         NEGATIVE, and v_new = (m*v + dM)/(m + dm) divides by m + dm. Below
+#                         ~1 the sinks are flung to hundreds of times the sound speed and
+#                         the particle CFL collapses dt -- which destroys the measurement
+#                         without ever looking like an error. Raising N eats the mass
+#                         budget, so the pgen warns from both sides (< 1 CV mass, and
+#                         > 10% of the gas mass).
+#   problem/sink_min_sep  required separation in CELLS. The accretion conflict radius is
+#                         5 cells, so >= 6 guarantees a single colour and fully parallel
+#                         accretion; set 0 to deliberately measure the serialized regime.
+#   problem/sink_jitter   lattice jitter as a fraction of the lattice spacing
+#
+# The separation requirement caps N at a given resolution -- the pgen FATALs with the
+# maximum it can honour rather than silently placing sinks on top of each other. At this
+# 64^3 root grid that maximum is 216 (a 6^3 lattice); the Horizon ladders run at far
+# higher resolution, where thousands fit.
+#
+# Timed runs use nlim, never tlim: sinks change dt through cfl_par, and runs with
+# different cycle counts measure nothing. Outputs are history-only for the same reason.
+# Build with -DPROBLEM=gmtf.
+
+<comment>
+problem = gravo-turbulent fragmentation, seeded sinks (benchmark)
+
+<job>
+basename = gmtf_bench
+
+<mesh>
+nghost = 4
+nx1    = 64
+x1min  = -2.0
+x1max  =  2.0
+ix1_bc = periodic
+ox1_bc = periodic
+
+nx2    = 64
+x2min  = -2.0
+x2max  =  2.0
+ix2_bc = periodic
+ox2_bc = periodic
+
+nx3    = 64
+x3min  = -2.0
+x3max  =  2.0
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+# 8 blocks, so the same input runs on 1, 2, 4 and 8 ranks unchanged
+nx1 = 32
+nx2 = 32
+nx3 = 32
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.3
+nlim       = 20
+tlim       = 1.0e30
+ndiag      = 10
+
+<hydro>
+eos             = isothermal
+reconstruct     = plm
+rsolver         = hlle
+iso_sound_speed = 1.0
+
+<hydro_srcterms>
+self_gravity = true
+
+<gravity>
+four_pi_G      = 39.47841760435743
+threshold      = 1.0e-6
+niteration     = 100
+npresmooth     = 1
+npostsmooth    = 1
+full_multigrid = true
+fmg_ncycle     = 1
+mg_nghost      = 1
+
+<particles>
+type        = sink
+pusher      = leapfrog
+accretion   = true
+creation    = false      # MUST stay false: N has to be constant across the run
+merging     = false      # MUST stay false: a merge changes N mid-run
+cfl_par     = 0.5
+ppc         = 0.0        # the seeding does not go through ppc -- see gmtf.cpp SeedSinks
+
+<problem>
+Mach     = 10
+mu_phi   = 2
+rseed    = 0
+nlow     = 0
+nhigh    = 16
+expo     = 2.0
+sfe_term = -1.0          # no early stop: a timed run must reach exactly nlim cycles
+user_hist = true
+
+nsink_seed   = 64
+sink_mass_cv = 10.0      # sink mass in units of the 27-cell control-volume gas mass
+sink_min_sep = 6.0
+sink_jitter  = 0.2
+
+<output1>
+file_type = hst
+dt        = 0.001
+# Full double precision, NOT the %12.5e default. The 1-vs-N-rank gate is a comparison of
+# these numbers, and at 6 significant figures it reports "identical" for anything agreeing
+# to 1e-6 -- which is far looser than the agreement actually being claimed, and would hide
+# a real decomposition dependence.
+data_format = %26.17e
