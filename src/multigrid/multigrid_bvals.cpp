@@ -1068,7 +1068,6 @@ void MultigridBoundaryValues::ClassifyMGExchanges() {
     x.direct = direct_copy_ && ((nxmin >> shift) >= ngh);
     x.self_off = DvceArray1D<int>("mg_self_off", std::max(1, nmb*nnghbr));
     auto off_h = Kokkos::create_mirror_view(x.self_off);
-    std::vector<int> plist, ulist;
     std::size_t tot = 0;
     for (int m = 0; m < std::max(1, nmb*nnghbr); ++m) off_h(m) = -1;
     for (int m = 0; m < nmb; ++m) {
@@ -1076,14 +1075,8 @@ void MultigridBoundaryValues::ClassifyMGExchanges() {
         if (nghbr.h_view(m, n).gid < 0) continue;
         const int nlev = nghbr.h_view(m, n).lev, mlev = mblev.h_view(m);
         if (nlev != mlev && skip_fc) continue;
-        plist.push_back(m*nnghbr + n);   // block m sends to its neighbour in slot n
-        if (nghbr.h_view(m, n).rank != my_rank) {
-          ++x.noffrank;
-          ulist.push_back(m*nnghbr + n);
-          continue;
-        }
+        if (nghbr.h_view(m, n).rank != my_rank) { ++x.noffrank; continue; }
         if (nlev == mlev && x.direct) continue;
-        ulist.push_back(m*nnghbr + n);
         // block m receives this payload from its same-rank neighbour in slot n
         const MGPerLevelIndcs &r = recv_mg_indcs_[n][lev];
         const int ndat = (nlev < mlev) ? r.icoar_ndat
@@ -1100,14 +1093,6 @@ void MultigridBoundaryValues::ClassifyMGExchanges() {
       }
     }
     Kokkos::deep_copy(x.self_off, off_h);
-    auto to_dev = [](const std::vector<int> &v, DvceArray1D<int> &d) {
-      d = DvceArray1D<int>("mg_xch_list", std::max<std::size_t>(1, v.size()));
-      auto h = Kokkos::create_mirror_view(d);
-      for (std::size_t i = 0; i < v.size(); ++i) h(i) = v[i];
-      Kokkos::deep_copy(d, h);
-    };
-    to_dev(plist, x.pack_list);   x.npack = static_cast<int>(plist.size());
-    to_dev(ulist, x.unpack_list); x.nunpack = static_cast<int>(ulist.size());
     maxtot = std::max(maxtot, tot);
   }
   if (mg_selfbuf_.extent(0) < maxtot) {
@@ -2318,6 +2303,7 @@ TaskStatus MultigridBoundaryValues::PackAndSendMG(const DvceArray5D<Real> &u,
   MultigridDriver *pd = pmy_mg->pmy_driver_;
   double t_sub = pd->MtBegin(MultigridDriver::MT_SUB_PACK);
 
+  int nmb = pmy_pack->nmb_thispack;
   int nnghbr = pmy_pack->pmb->nnghbr;
   int nvar = u.extent_int(1);
   // optional second array: message variables [nvar, nvart) come from w
@@ -2330,6 +2316,10 @@ TaskStatus MultigridBoundaryValues::PackAndSendMG(const DvceArray5D<Real> &u,
   auto &mblev = pmy_pack->pmb->mb_lev;
 
   int lev_ = pmy_mg->GetCurrentLevel();
+  int nlev_total = pmy_mg->GetNumberOfLevels();
+  int shift_ps = nlev_total - 1 - lev_;
+  int ncells_ps = pmy_mg->GetSize() >> shift_ps;
+  bool skip_fc_this_level = (ncells_ps < 2);
   ClassifyMGExchanges();
   const MGLevelExchange &lex = mg_lex_[lev_];
   const bool direct = lex.direct;
@@ -2348,24 +2338,29 @@ TaskStatus MultigridBoundaryValues::PackAndSendMG(const DvceArray5D<Real> &u,
   }
 #endif
 
-  auto plist = lex.pack_list;
-  if (lex.npack > 0) {
-  int nmnv = lex.npack * nvart;
+  {
+  int nmnv = nmb * nnghbr * nvart;
   Kokkos::TeamPolicy<> policy(DevExeSpace(), nmnv, Kokkos::AUTO);
   Kokkos::parallel_for("PackMG", policy, KOKKOS_LAMBDA(TeamMember_t tmember) {
-    // one team per (listed slot, variable); the list holds only slots with a neighbour
-    // that is not skipped at this level (see ClassifyMGExchanges)
-    const int e = plist(tmember.league_rank() / nvart);
-    const int v = tmember.league_rank() % nvart;
-    const int m = e / nnghbr;
-    const int n = e - m * nnghbr;
+    const int m = tmember.league_rank() / (nnghbr * nvart);
+    const int n = (tmember.league_rank() - m * nnghbr * nvart) / nvart;
+    const int v = tmember.league_rank() - m * nnghbr * nvart - n * nvart;
     const auto &a = (v < nvar) ? u : w;           // array holding variable v
     const int va = (v < nvar) ? v : v - nvar;
+
+    if (nghbr.d_view(m, n).gid < 0) {
+      tmember.team_barrier();
+      return;
+    }
 
     int nlev = nghbr.d_view(m, n).lev;
     int mlev = mblev.d_view(m);
 
     bool is_fc = (nlev != mlev);
+    if (is_fc && skip_fc_this_level) {
+      tmember.team_barrier();
+      return;
+    }
 
     bool is_coarser = (nlev < mlev);
     const int s = (nlev == mlev) ? 0 : (is_coarser ? 6 : 12);   // isame|icoar|ifine
@@ -2471,9 +2466,13 @@ TaskStatus MultigridBoundaryValues::RecvAndUnpackMG(DvceArray5D<Real> &u,
   if (pmy_mg == nullptr) return TaskStatus::complete;
   MultigridDriver *pd = pmy_mg->pmy_driver_;
   // create local references for variables in kernel
+  int nmb = pmy_pack->nmb_thispack;
   int nnghbr = pmy_pack->pmb->nnghbr;
   auto &nghbr = pmy_pack->pmb->nghbr;
   auto &mblev = pmy_pack->pmb->mb_lev;
+  int shift_ru = pmy_mg->GetNumberOfLevels() - 1 - pmy_mg->GetCurrentLevel();
+  int ncells_ru = pmy_mg->GetSize() >> shift_ru;
+  bool skip_fc_this_level = (ncells_ru < 2);
 
   #if MPI_PARALLEL_ENABLED
   //----- STEP 1: check that recv boundary buffer communications have all completed
@@ -2519,25 +2518,30 @@ TaskStatus MultigridBoundaryValues::RecvAndUnpackMG(DvceArray5D<Real> &u,
   auto aggrbuf = mg_rank_recvbuf_vars_;
   auto roff = mg_recv_agg_offset_;
 
-  auto ulist = lex.unpack_list;
   {
-  int nmnv = lex.nunpack * nvart;
+  int nmnv = nmb * nnghbr * nvart;
   Kokkos::TeamPolicy<> policy(DevExeSpace(), nmnv, Kokkos::AUTO);
   Kokkos::parallel_for("UnpackMG", policy, KOKKOS_LAMBDA(TeamMember_t tmember) {
-    // one team per (listed slot, variable): off-rank payloads and same-rank ones that
-    // went through mg_selfbuf_ (direct copies are already in place)
-    const int e = ulist(tmember.league_rank() / nvart);
-    const int v = tmember.league_rank() % nvart;
-    const int m = e / nnghbr;
-    const int n = e - m * nnghbr;
+    const int m = tmember.league_rank() / (nnghbr * nvart);
+    const int n = (tmember.league_rank() - m * nnghbr * nvart) / nvart;
+    const int v = tmember.league_rank() - m * nnghbr * nvart - n * nvart;
     const auto &a = (v < nvar) ? u : w;           // array receiving variable v
     const int va = (v < nvar) ? v : v - nvar;
+
+    if (nghbr.d_view(m, n).gid < 0) {
+      tmember.team_barrier();
+      return;
+    }
 
     int nlev = nghbr.d_view(m, n).lev;
     int mlev = mblev.d_view(m);
 
     bool is_fc = (nlev != mlev);
     const bool onrank = (nghbr.d_view(m, n).rank == my_rank);
+    if ((is_fc && skip_fc_this_level) || (onrank && !is_fc && direct)) {
+      tmember.team_barrier();
+      return;
+    }
 
     bool from_coarser = (nlev < mlev);
     const int s = (nlev == mlev) ? 0 : (from_coarser ? 6 : 12);   // isame|icoar|ifine
