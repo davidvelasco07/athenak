@@ -8,6 +8,7 @@
 //! throughout the code to a log file.  Checks whether there is data to be written
 //! every time step, but only writes data if one or more counters are non-zero
 
+#include <cinttypes>
 #include <cstdio>
 #include <cstdlib>
 #include <iomanip>
@@ -42,6 +43,7 @@ void EventLogOutput::LoadOutputData(Mesh *pm) {
   int* pfail   = &(pm->ecounter.neos_fail);
   int* pmaxit  = &(pm->ecounter.maxit_c2p);
   int* pfofc   = &(pm->ecounter.nfofc);
+  std::int64_t* pmood = &(pm->ecounter.nmood);
   MPI_Allreduce(MPI_IN_PLACE, pdfloor, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
   MPI_Allreduce(MPI_IN_PLACE, pefloor, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
   MPI_Allreduce(MPI_IN_PLACE, ptfloor, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
@@ -49,6 +51,7 @@ void EventLogOutput::LoadOutputData(Mesh *pm) {
   MPI_Allreduce(MPI_IN_PLACE, pfail,   1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
   MPI_Allreduce(MPI_IN_PLACE, pmaxit,  1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
   MPI_Allreduce(MPI_IN_PLACE, pfofc,   1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+  MPI_Allreduce(MPI_IN_PLACE, pmood,   1, MPI_INT64_T, MPI_SUM, MPI_COMM_WORLD);
 #endif
 
   // check if there is any data to be written
@@ -59,6 +62,7 @@ void EventLogOutput::LoadOutputData(Mesh *pm) {
       pm->ecounter.neos_vceil  > 0 ||
       pm->ecounter.neos_fail   > 0 ||
       pm->ecounter.nfofc > 0 ||
+      pm->ecounter.nmood > 0 ||
       pm->ecounter.maxit_c2p > 0) {
     no_output=false;
   }
@@ -69,10 +73,9 @@ void EventLogOutput::LoadOutputData(Mesh *pm) {
 //! \brief writes event counter data to log file
 
 void EventLogOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
-  if (header_written && no_output) return;
-
-  // only the master rank writes the file
-  if (global_variable::my_rank == 0) {
+  // All ranks must advance the output schedule, even when no events occurred.
+  // Only the master rank writes the header or nonempty event records.
+  if (global_variable::my_rank == 0 && (!header_written || !no_output)) {
     // create filename: "file_basename" + ".log"
     // There is no file number or id in event log output filenames.
     std::string fname;
@@ -91,9 +94,8 @@ void EventLogOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     if (!(header_written)) {
       std::fprintf(pfile,"# Athena event counter data\n");
       std::fprintf(pfile,"#  cycle eos_dfloor eos_efloor eos_tfloor eos_vceil");
-      std::fprintf(pfile," eos_fail c2p_it fofc");
+      std::fprintf(pfile," eos_fail c2p_it fofc mood");
       std::fprintf(pfile,"\n");  // terminate line
-      header_written = true;
     }
 
     // write event counters
@@ -106,10 +108,14 @@ void EventLogOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
       std::fprintf(pfile, " %8d", pm->ecounter.neos_fail);
       std::fprintf(pfile, " %6d", pm->ecounter.maxit_c2p);
       std::fprintf(pfile, " %8d", pm->ecounter.nfofc);
+      std::fprintf(pfile, " %8" PRId64, pm->ecounter.nmood);
       std::fprintf(pfile,"\n"); // terminate line
     }
     std::fclose(pfile);
   }
+
+  // Keep header state identical across ranks, including empty output intervals.
+  header_written = true;
 
   // reset counters
   pm->ecounter.neos_dfloor = 0;
@@ -119,6 +125,7 @@ void EventLogOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   pm->ecounter.neos_fail = 0;
   pm->ecounter.maxit_c2p = 0;
   pm->ecounter.nfofc = 0;
+  pm->ecounter.nmood = 0;
 
   // increment output time, clean up
   if (out_params.last_time < 0.0) {

@@ -219,8 +219,30 @@ TaskStatus Hydro::Fluxes(Driver *pdrive, int stage) {
   // Terms selected for STS are advanced only in the parabolic half-sweeps.
   AddSelectedDiffusionFluxes(parabolic::DiffusionSelection::explicit_only);
 
-  // call FOFC if necessary
-  if (use_fofc) {
+  // call MOOD a-posteriori fallback if enabled (mutually exclusive with FOFC)
+  if (use_mood) {
+    if (rsolver_method == Hydro_RSolver::advect) {
+      MOODLoop<Hydro_RSolver::advect>(pdrive, stage);
+    } else if (rsolver_method == Hydro_RSolver::llf) {
+      MOODLoop<Hydro_RSolver::llf>(pdrive, stage);
+    } else if (rsolver_method == Hydro_RSolver::hlle) {
+      MOODLoop<Hydro_RSolver::hlle>(pdrive, stage);
+    } else if (rsolver_method == Hydro_RSolver::hllc) {
+      MOODLoop<Hydro_RSolver::hllc>(pdrive, stage);
+    } else if (rsolver_method == Hydro_RSolver::roe) {
+      MOODLoop<Hydro_RSolver::roe>(pdrive, stage);
+    } else if (rsolver_method == Hydro_RSolver::llf_sr) {
+      MOODLoop<Hydro_RSolver::llf_sr>(pdrive, stage);
+    } else if (rsolver_method == Hydro_RSolver::hlle_sr) {
+      MOODLoop<Hydro_RSolver::hlle_sr>(pdrive, stage);
+    } else if (rsolver_method == Hydro_RSolver::hllc_sr) {
+      MOODLoop<Hydro_RSolver::hllc_sr>(pdrive, stage);
+    } else if (rsolver_method == Hydro_RSolver::llf_gr) {
+      MOODLoop<Hydro_RSolver::llf_gr>(pdrive, stage);
+    } else if (rsolver_method == Hydro_RSolver::hlle_gr) {
+      MOODLoop<Hydro_RSolver::hlle_gr>(pdrive, stage);
+    }
+  } else if (use_fofc) {
     FOFC(pdrive, stage);
   } else if (pmy_pack->pcoord->is_general_relativistic) {
     if (pmy_pack->pcoord->coord_data.bh_excise) {

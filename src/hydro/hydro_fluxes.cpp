@@ -86,18 +86,20 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
   int nmb1 = pmy_pack->nmb_thispack - 1;
   const auto recon_method_ = recon_method;
 
-  // Face-normal and transverse flux ranges.  With FOFC the first-order flux correction
-  // reads the main fluxes one cell beyond the active domain in every dimension, so the
-  // reconstruction/solve ranges are extended by one cell on both sides when FOFC is on.
+  // Face-normal and transverse flux ranges.  The a-posteriori schemes read the main
+  // fluxes beyond the active domain in every dimension: FOFC one cell, MOOD one cell per
+  // allowed revision (its light cone).  The reconstruction/solve ranges are extended by
+  // that halo on both sides.
+  const int ext = use_mood ? mood_max_revs : (use_fofc ? 1 : 0);
   int il1 = is, iu1 = ie+1, jl2 = js, ju2 = je+1, kl3 = ks, ku3 = ke+1;
   int itl = is, itu = ie, jtl = js, jtu = je, ktl = ks, ktu = ke;
-  if (use_fofc) {
-    il1 = is-1; iu1 = ie+2;
-    jl2 = js-1; ju2 = je+2;
-    kl3 = ks-1; ku3 = ke+2;
-    itl = is-1; itu = ie+1;
-    if (pmy_pack->pmesh->multi_d) { jtl = js-1; jtu = je+1; }
-    if (pmy_pack->pmesh->three_d) { ktl = ks-1; ktu = ke+1; }
+  if (ext > 0) {
+    il1 = is-ext; iu1 = ie+1+ext;
+    jl2 = js-ext; ju2 = je+1+ext;
+    kl3 = ks-ext; ku3 = ke+1+ext;
+    itl = is-ext; itu = ie+ext;
+    if (pmy_pack->pmesh->multi_d) { jtl = js-ext; jtu = je+ext; }
+    if (pmy_pack->pmesh->three_d) { ktl = ks-ext; ktu = ke+ext; }
   }
 
   auto &eos_ = peos->eos_data;
@@ -131,10 +133,10 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
                                         m, k, j, i, is_, js_, ks_, wl, wr, flx);
       });
 
-    // Scalar fluxes (upwind from sign of mass flux)
+    // Scalar fluxes (upwind from sign of mass flux), over the same faces as the solve
     if (nvars > nhyd_) {
       par_for("hflux_x1_scalars", DevExeSpace(),
-        0, nmb1, ks, ke, js, je, is, ie+1,
+        0, nmb1, ktl, ktu, jtl, jtu, il1, iu1,
         KOKKOS_LAMBDA(int m, int k, int j, int i) {
           for (int n = nhyd_; n < nvars; ++n) {
             if (flx1(m, IDN, k, j, i) >= 0.0) {
@@ -173,7 +175,7 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
 
     if (nvars > nhyd_) {
       par_for("hflux_x2_scalars", DevExeSpace(),
-        0, nmb1, ks, ke, js, je+1, is, ie,
+        0, nmb1, ktl, ktu, jl2, ju2, itl, itu,
         KOKKOS_LAMBDA(int m, int k, int j, int i) {
           for (int n = nhyd_; n < nvars; ++n) {
             if (flx2(m, IDN, k, j, i) >= 0.0) {
@@ -212,7 +214,7 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
 
     if (nvars > nhyd_) {
       par_for("hflux_x3_scalars", DevExeSpace(),
-        0, nmb1, ks, ke+1, js, je, is, ie,
+        0, nmb1, kl3, ku3, jtl, jtu, itl, itu,
         KOKKOS_LAMBDA(int m, int k, int j, int i) {
           for (int n = nhyd_; n < nvars; ++n) {
             if (flx3(m, IDN, k, j, i) >= 0.0) {
