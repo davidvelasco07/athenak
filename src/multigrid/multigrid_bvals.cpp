@@ -2341,7 +2341,7 @@ TaskStatus MultigridBoundaryValues::PackAndSendMG(const DvceArray5D<Real> &u,
   {
   int nmnv = nmb * nnghbr * nvart;
   Kokkos::TeamPolicy<> policy(pmy_mg->DevExec(), nmnv, Kokkos::AUTO);
-  Kokkos::parallel_for("PackMG", policy, KOKKOS_LAMBDA(TeamMember_t tmember) {
+  par_launch("PackMG", policy, KOKKOS_LAMBDA(TeamMember_t tmember) {
     const int m = tmember.league_rank() / (nnghbr * nvart);
     const int n = (tmember.league_rank() - m * nnghbr * nvart) / nvart;
     const int v = tmember.league_rank() - m * nnghbr * nvart - n * nvart;

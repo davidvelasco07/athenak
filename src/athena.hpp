@@ -255,6 +255,27 @@ struct DvceEdgeFld4D {
 };
 
 //----------------------------------------------------------------------------------------
+// Launch a kernel. On CUDA, Kokkos passes a closure of 512 B or more through one
+// per-device constant-memory buffer, and each such launch blocks the host until the
+// previous one, on any stream, has finished (the MHD Riemann-solver closures are ~800 B).
+// Closures that fit in a kernel argument are passed as one instead (HintLightWeight), so
+// the launch returns at once and kernels on different streams can run together
+// (<gravity>/mg_overlap). Larger closures keep the default mechanism. Other backends
+// ignore the hint.
+template <typename Policy, typename Function>
+inline void par_launch(const std::string &name, const Policy &policy,
+                       const Function &function) {
+  // CUDA's 4 kB kernel-argument limit, less room for the policy state Kokkos adds
+  if constexpr (sizeof(Function) + sizeof(Policy) < 3584) {
+    Kokkos::parallel_for(name, Kokkos::Experimental::require(policy,
+                         Kokkos::Experimental::WorkItemProperty::HintLightWeight),
+                         function);
+  } else {
+    Kokkos::parallel_for(name, policy, function);
+  }
+}
+
+//----------------------------------------------------------------------------------------
 // wrappers for Kokkos::parallel_for
 // These wrappers implement a variety of parallel execution strategies, including
 // 1D-range, and thread teams for use with inner vector threads. Experiments in K-Athena
@@ -267,7 +288,7 @@ inline void par_for(const std::string &name, ExeSpace exec_space,
                     const int &il, const int &iu, const Function &function) {
   // compute total number of elements and call Kokkos::parallel_for()
   const int ni = iu - il + 1;
-  Kokkos::parallel_for(name, Kokkos::RangePolicy<ExeSpace>(exec_space, 0, ni),
+  par_launch(name, Kokkos::RangePolicy<ExeSpace>(exec_space, 0, ni),
   KOKKOS_LAMBDA(const int &idx) {
     // compute i indices of thread and call function
     int i = (idx) + il;
@@ -285,7 +306,7 @@ inline void par_for(const std::string &name, ExeSpace exec_space,
   const int nj = ju - jl + 1;
   const int ni = iu - il + 1;
   const int nji  = nj * ni;
-  Kokkos::parallel_for(name, Kokkos::RangePolicy<ExeSpace>(exec_space, 0, nji),
+  par_launch(name, Kokkos::RangePolicy<ExeSpace>(exec_space, 0, nji),
   KOKKOS_LAMBDA(const int &idx) {
     // compute j,i indices of thread and call function
     int j = (idx)/ni;
@@ -307,7 +328,7 @@ inline void par_for(const std::string &name, ExeSpace exec_space,
   const int ni = iu - il + 1;
   const int nkji = nk * nj * ni;
   const int nji  = nj * ni;
-  Kokkos::parallel_for(name, Kokkos::RangePolicy<ExeSpace>(exec_space, 0, nkji),
+  par_launch(name, Kokkos::RangePolicy<ExeSpace>(exec_space, 0, nkji),
   KOKKOS_LAMBDA(const int &idx) {
     // compute k,j,i indices of thread and call function
     int k = (idx)/nji;
@@ -334,7 +355,7 @@ inline void par_for(const std::string &name, ExeSpace exec_space,
   const int nnkji = nn * nk * nj * ni;
   const int nkji  = nk * nj * ni;
   const int nji   = nj * ni;
-  Kokkos::parallel_for(name, Kokkos::RangePolicy<ExeSpace>(exec_space, 0, nnkji),
+  par_launch(name, Kokkos::RangePolicy<ExeSpace>(exec_space, 0, nnkji),
   KOKKOS_LAMBDA(const int &idx) {
     // compute n,k,j,i indices of thread and call function
     int n = (idx)/nkji;
@@ -366,7 +387,7 @@ inline void par_for(const std::string &name, ExeSpace exec_space,
   const int nnkji  = nn * nk * nj * ni;
   const int nkji   = nk * nj * ni;
   const int nji    = nj * ni;
-  Kokkos::parallel_for(name, Kokkos::RangePolicy<ExeSpace>(exec_space, 0, nmnkji),
+  par_launch(name, Kokkos::RangePolicy<ExeSpace>(exec_space, 0, nmnkji),
   KOKKOS_LAMBDA(const int &idx) {
     // compute m,n,k,j,i indices of thread and call function
     int m = (idx)/nnkji;
@@ -390,7 +411,7 @@ inline void par_for_outer(const std::string &name, DevExeSpace exec_space,
                           const int kl, const int ku, const Function &function) {
   const int nk = ku - kl + 1;
   Kokkos::TeamPolicy<> policy(exec_space, nk, Kokkos::AUTO);
-  Kokkos::parallel_for(name, policy.set_scratch_size(scr_level,Kokkos::PerTeam(scr_size)),
+  par_launch(name, policy.set_scratch_size(scr_level,Kokkos::PerTeam(scr_size)),
   KOKKOS_LAMBDA(TeamMember_t tmember) {
     const int k = tmember.league_rank() + kl;
     function(tmember, k);
@@ -408,7 +429,7 @@ inline void par_for_outer(const std::string &name, DevExeSpace exec_space,
   const int nj = ju - jl + 1;
   const int nkj = nk*nj;
   Kokkos::TeamPolicy<> policy(exec_space, nkj, Kokkos::AUTO);
-  Kokkos::parallel_for(name, policy.set_scratch_size(scr_level,Kokkos::PerTeam(scr_size)),
+  par_launch(name, policy.set_scratch_size(scr_level,Kokkos::PerTeam(scr_size)),
   KOKKOS_LAMBDA(TeamMember_t tmember) {
     const int k = tmember.league_rank()/nj + kl;
     const int j = tmember.league_rank()%nj + jl;
@@ -429,7 +450,7 @@ inline void par_for_outer(const std::string &name, DevExeSpace exec_space,
   const int nkj  = nk*nj;
   const int nnkj = nn*nk*nj;
   Kokkos::TeamPolicy<> policy(exec_space, nnkj, Kokkos::AUTO);
-  Kokkos::parallel_for(name, policy.set_scratch_size(scr_level,Kokkos::PerTeam(scr_size)),
+  par_launch(name, policy.set_scratch_size(scr_level,Kokkos::PerTeam(scr_size)),
   KOKKOS_LAMBDA(TeamMember_t tmember) {
     int n = (tmember.league_rank())/nkj;
     int k = (tmember.league_rank() - n*nkj)/nj;
@@ -456,7 +477,7 @@ inline void par_for_outer(const std::string &name, DevExeSpace exec_space,
   const int nnkj  = nn*nk*nj;
   const int nmnkj = nm*nn*nk*nj;
   Kokkos::TeamPolicy<> policy(exec_space, nmnkj, Kokkos::AUTO);
-  Kokkos::parallel_for(name, policy.set_scratch_size(scr_level,Kokkos::PerTeam(scr_size)),
+  par_launch(name, policy.set_scratch_size(scr_level,Kokkos::PerTeam(scr_size)),
   KOKKOS_LAMBDA(TeamMember_t tmember) {
     int m = (tmember.league_rank())/nnkj;
     int n = (tmember.league_rank() - m*nnkj)/nkj;
