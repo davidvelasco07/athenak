@@ -14,12 +14,14 @@
 #include <cstdint>  // std::int64_t
 #include <cstdio> // std::size_t
 #include <cstring> // memcpy
+#include <functional>
 #include <iostream>
 #include <map>
 #include <memory>
 #include <string>
 #include <type_traits>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 // AthenaK headers
@@ -395,7 +397,7 @@ class MultigridDriver {
   // messages arrive), so in mode 2 task regions fence but never barrier: a barrier there
   // would deadlock.
   enum MGTimerId {MT_SOLVE=0, MT_PREPARE, MT_BLOCKS, MT_TO_ROOT, MT_ALLGATHER, MT_FROM_ROOT,
-                  MT_ROOT, MT_OCT_BND, MT_OCT_SMOOTH, MT_OCT_OTHER,
+                  MT_ROOT, MT_OCT_BND, MT_OCT_SMOOTH, MT_OCT_OTHER, MT_HOOK,
                   MT_TK_IRECV, MT_TK_SEND, MT_TK_RECV, MT_TK_FILLC, MT_TK_PROLFC,
                   MT_TK_SMOOTH, MT_TK_RESTRICT, MT_TK_PROLONG, MT_TK_FAS, MT_TK_CLEAR,
                   MT_SUB_RPBUILD, MT_SUB_IRECV, MT_SUB_PACK, MT_SUB_FENCE, MT_SUB_ISEND,
@@ -418,6 +420,10 @@ class MultigridDriver {
   int GetCoffset() const { return coffset_; }
   bool Overlap() const { return mg_overlap_; }
   const DevExeSpace &MGExec() const { return mg_exec_; }
+  // work to start once, when the solve first leaves the finest block level (see
+  // mg_overlap_); a hook still pending when the solve ends is dropped
+  void SetCoarseHook(std::function<void()> f) { coarse_hook_ = std::move(f); }
+  void FireCoarseHook();
   void MGRootBoundary();
   void TransferFromBlocksToRoot(bool initflag);
   void TransferFromRootToBlocks(bool folddata);
@@ -566,12 +572,17 @@ class MultigridDriver {
   // boundaries are refused (see the MGGravityDriver constructor).
   bool ca_smooth_ = false;
   // <gravity>/mg_overlap: all multigrid device work runs on mg_exec_, a separate
-  // high-priority CUDA stream, so the driver can launch the (potential-independent)
-  // hydro/MHD flux kernels before the solve and let them fill the GPU while the solve
-  // waits on MPI. Every fence and copy in the solve is on mg_exec_; the default stream is
-  // fenced once before the solve (the source) and mg_exec_ once after it (the potential).
+  // high-priority CUDA stream, so the (potential-independent) hydro/MHD flux kernels can
+  // run on the default stream while the solve waits on MPI. Every fence and copy in the
+  // solve is on mg_exec_; the default stream is fenced once before the solve (the source)
+  // and mg_exec_ once after it (the potential). The driver hands the flux launch over as
+  // coarse_hook_, fired right after the finest block level: launched before the solve,
+  // the flux blocks occupy the GPU during the finest-level smoothing (a high-priority
+  // stream only reorders pending blocks, it does not preempt running ones) and finish
+  // before the latency-bound coarse levels, where the GPU is idle.
   bool mg_overlap_ = false;
   DevExeSpace mg_exec_;
+  std::function<void()> coarse_hook_;
   // Coarse-level agglomeration (<gravity>/mg_root_ncells = K, default 1; uniform meshes).
   // The MeshBlock hierarchy stops at K cells per block side and the root grid,
   // replicated on every rank, gets K cells per MeshBlock, so the V-cycle levels below K

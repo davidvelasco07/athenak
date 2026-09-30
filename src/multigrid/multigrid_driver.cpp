@@ -16,12 +16,14 @@
 #include <cstdio>
 #include <cstdint>
 #include <cstdlib>    // abs
+#include <functional>
 #include <iomanip>    // setprecision
 #include <iostream>   // endl
 #include <sstream>    // sstream
 #include <stdexcept>  // runtime_error
 #include <string>     // c_str()
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 // Athena++ headers
@@ -180,7 +182,8 @@ void MultigridDriver::ReportMGTimers(double wall_seconds) {
   const char *name[MT_NUM] = {"solve(total)", "prepare_for_amr", "block_levels",
                               "blocks_to_root", "  MPI_Allgatherv", "root_to_blocks",
                               "root_grid", "octet_boundaries", "octet_smooth",
-                              "octet_other", "  task:init_recv", "  task:pack_send",
+                              "octet_other", "coarse_hook", "  task:init_recv",
+                              "  task:pack_send",
                               "  task:recv_unpack", "  task:fill_coarse",
                               "  task:prolong_fc", "  task:smooth", "  task:restrict",
                               "  task:prolongate", "  task:fas_rhs", "  task:clear",
@@ -908,6 +911,7 @@ void MultigridDriver::OneStepToCoarser(Driver *pdriver, int nsmooth) {
       MGTimerScope _mt(this, MT_BLOCKS);
       pdriver->ExecuteTaskList(pmy_mesh_, "mg_to_coarser", 0);
     }
+    FireCoarseHook();
     if (current_level_ == nrootlevel_ + nreflevel_) {
       TransferFromBlocksToRoot(false);
       if (nreflevel_ > 0) {
@@ -948,6 +952,19 @@ void MultigridDriver::OneStepToCoarser(Driver *pdriver, int nsmooth) {
   }
   current_level_--;
   return;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void MultigridDriver::FireCoarseHook()
+//! \brief run the pending coarse hook once (mg_overlap). Called after each restriction
+//! from a block level; only the first call, from the finest level, finds one.
+
+void MultigridDriver::FireCoarseHook() {
+  if (!coarse_hook_) return;
+  MGTimerScope _mt(this, MT_HOOK);
+  std::function<void()> f = std::move(coarse_hook_);
+  coarse_hook_ = nullptr;
+  f();
 }
 
 //----------------------------------------------------------------------------------------
@@ -1012,6 +1029,7 @@ void MultigridDriver::SolveFMGCoarser() {
   while (current_level_ >= nrootlevel_ + nreflevel_) {
     pmg = mglevels_;
     { MGTimerScope _mt(this, MT_BLOCKS); pmg->RestrictSourcePack(); }
+    FireCoarseHook();
     if (current_level_ == nrootlevel_ + nreflevel_) {
       TransferFromBlocksToRoot(true);
     }

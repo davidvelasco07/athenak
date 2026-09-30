@@ -411,22 +411,28 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
         // into pgrav->rho first, so the solver only consumes that field.
         if (pmesh->pmb_pack->pgrav != nullptr) {
           pmesh->pmb_pack->pgrav->AssembleSource();
-          if (pmesh->pmb_pack->pgrav->pmgd->Overlap()) {
+          auto *pmgd = pmesh->pmb_pack->pgrav->pmgd;
+          if (pmgd->Overlap()) {
             // <gravity>/mg_overlap: the solve runs on its own stream and reads the
-            // source just assembled on the default one; then the flux kernels, which do
-            // not need the potential, are launched first so they fill the GPU while the
-            // solve waits on MPI. The stage task lists skip their flux tasks this stage.
+            // source just assembled on the default one. The flux kernels, which do not
+            // need the potential, are launched from inside the solve once it leaves the
+            // finest level, so they fill the GPU while the coarse levels wait on MPI.
+            // The stage task lists then skip their flux tasks this stage.
             DevExeSpace().fence();
-            if (pmesh->pmb_pack->phydro != nullptr) {
-              pmesh->pmb_pack->phydro->Fluxes(this, stage);
-              pmesh->pmb_pack->phydro->fluxes_done_stage = stage;
-            }
-            if (pmesh->pmb_pack->pmhd != nullptr) {
-              pmesh->pmb_pack->pmhd->Fluxes(this, stage);
-              pmesh->pmb_pack->pmhd->fluxes_done_stage = stage;
-            }
+            hydro::Hydro *phyd = pmesh->pmb_pack->phydro;
+            mhd::MHD *pmhd = pmesh->pmb_pack->pmhd;
+            pmgd->SetCoarseHook([this, phyd, pmhd, stage]() {
+              if (phyd != nullptr) {
+                phyd->Fluxes(this, stage);
+                phyd->fluxes_done_stage = stage;
+              }
+              if (pmhd != nullptr) {
+                pmhd->Fluxes(this, stage);
+                pmhd->fluxes_done_stage = stage;
+              }
+            });
           }
-          pmesh->pmb_pack->pgrav->pmgd->Solve(this, stage);
+          pmgd->Solve(this, stage);
         }
         ExecuteTaskList(pmesh, "stagen", stage);
         ExecuteTaskList(pmesh, "after_stagen", stage);

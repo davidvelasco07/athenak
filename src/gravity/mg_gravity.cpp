@@ -286,6 +286,9 @@ void MGGravityDriver::Solve(Driver *pdriver, int stage, Real dt) {
     SolveFMG(pdriver);
   else
     SolveMG(pdriver);
+  // a hook that never fired (no block level below the finest) is dropped, and the stage
+  // task list launches the fluxes as usual
+  coarse_hook_ = nullptr;
 
   mg_exec_.fence();
 
