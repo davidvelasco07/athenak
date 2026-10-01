@@ -288,6 +288,11 @@ TaskStatus Particles::AccreteMass(Driver *pdriver, int stage) {
   auto pl = plist.d_view;
   StEnd(ST_COLOUR, _st_col);
 
+  // sanity diagnostic (sanity_vmax > 0): record the update that produced a bad velocity
+  const Real svmax2 = (sanity_vmax > 0.0) ? sanity_vmax*sanity_vmax : -1.0;
+  auto sflag = sanity_flag_;
+  auto srec = sanity_rec_;
+
   for (int c = 0; c + 1 < static_cast<int>(coff.size()); ++c) {
     const int c0 = coff[c];
     const int nteam = coff[c+1] - c0;
@@ -665,10 +670,24 @@ TaskStatus Particles::AccreteMass(Driver *pdriver, int stage) {
         const Real mnew = mp + acc(0);
         if (mnew > 0.0) {   // guard pathological dm < -mp (extrapolation outflow)
           const Real minv = 1.0/mnew;
+          const Real vx0 = pr(IPVX, p), vy0 = pr(IPVY, p), vz0 = pr(IPVZ, p);
           pr(IPVX, p) = (mp*pr(IPVX, p) + acc(1))*minv;
           pr(IPVY, p) = (mp*pr(IPVY, p) + acc(2))*minv;
           pr(IPVZ, p) = (mp*pr(IPVZ, p) + acc(3))*minv;
           pr(IPM, p)  = mnew;
+          if (svmax2 > 0.0) {
+            const Real v2 = pr(IPVX, p)*pr(IPVX, p) + pr(IPVY, p)*pr(IPVY, p)
+                          + pr(IPVZ, p)*pr(IPVZ, p);
+            if (!(v2 <= svmax2) &&
+                Kokkos::atomic_compare_exchange(&sflag(0), 0, 2) == 0) {
+              srec(0) = static_cast<Real>(pi(PTAG, p));
+              srec(1) = mp;  srec(2) = acc(0);
+              srec(3) = acc(1);  srec(4) = acc(2);  srec(5) = acc(3);
+              srec(6) = vx0;  srec(7) = vy0;  srec(8) = vz0;
+              srec(9) = pr(IPVX, p);  srec(10) = pr(IPVY, p);  srec(11) = pr(IPVZ, p);
+              srec(12) = pr(IPX, p);  srec(13) = pr(IPY, p);  srec(14) = pr(IPZ, p);
+            }
+          }
         }
       });
       tm.team_barrier();
@@ -698,6 +717,7 @@ TaskStatus Particles::AccreteMass(Driver *pdriver, int stage) {
     }
   }
 
+  CheckSinkSanity("accrete", stage);
   return TaskStatus::complete;
 }
 

@@ -595,6 +595,7 @@ TaskStatus Particles::SendP(Driver *pdrive, int stage) {
 
 TaskStatus Particles::RecvP(Driver *pdrive, int stage) {
   TaskStatus tstat = pbval_part->RecvAndUnpackPrtcls();
+  if (tstat == TaskStatus::complete) CheckSinkSanity("migration receive", stage);
   return tstat;
 }
 
@@ -630,6 +631,7 @@ TaskStatus Particles::ClearRecv(Driver *pdrive, int stage) {
 
 TaskStatus Particles::NewTimeStep(Driver *pdriver, int stage) {
   if (stage != pdriver->nexp_stages) return TaskStatus::complete;  // once per cycle
+  CheckSinkSanity("timestep", stage);
   if (nprtcl_thispack <= 0) return TaskStatus::complete;
 
   auto &pr = prtcl_rdata;

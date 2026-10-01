@@ -98,7 +98,24 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     }
     if (pmy_mesh_->adaptive) user_ref_func = GMTFRefinement;
   }
-  if (restart) return;
+  if (restart) {
+    // Restart files hold no particles, so a sink run must rebuild its sinks from the trk
+    // output. Restarting without it would silently delete every sink and its mass.
+    auto *pp = pmy_mesh_->pmb_pack->ppart;
+    if (pp != nullptr && pp->particle_type == ParticleType::sink) {
+      const std::string trk = pin->GetOrAddString("particles", "restart_trk", "");
+      if (!trk.empty()) {
+        pp->RestoreSinksFromTrk(trk);
+      } else if (!pin->GetOrAddBoolean("particles", "restart_without_sinks", false)) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "restart files hold no sink particles: set "
+                  << "particles/restart_trk to this run's trk file to restore them (or "
+                  << "particles/restart_without_sinks = true to drop them)" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+    }
+    return;
+  }
 
   MeshBlockPack *pmbp = pmy_mesh_->pmb_pack;
   DvceArray5D<Real> u0;

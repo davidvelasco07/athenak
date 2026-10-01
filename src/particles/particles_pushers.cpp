@@ -93,12 +93,31 @@ TaskStatus Particles::Push(Driver *pdriver, int stage) {
       //   stage 1: half-kick v^n -> v^(n+1/2) using a(x^n); drift x^n -> x^(n+1)
       //   stage 2: half-kick v^(n+1/2) -> v^(n+1) using a(x^(n+1))
       const bool do_drift = (stage == 1);
+      // sanity diagnostic (sanity_vmax > 0): record the kick that produced a bad velocity
+      const Real svmax2 = (sanity_vmax > 0.0) ? sanity_vmax*sanity_vmax : -1.0;
+      auto sflag = sanity_flag_;
+      auto srec = sanity_rec_;
+      auto &pid = prtcl_idata;
       par_for("part_kdk",DevExeSpace(),0,(nprtcl_thispack-1),
       KOKKOS_LAMBDA(const int p) {
+        const Real vx0 = pr(IPVX,p), vy0 = pr(IPVY,p), vz0 = pr(IPVZ,p);
         // Half-kick using the gathered acceleration.
         pr(IPVX,p) += hdt_*pr(IPGX,p);
         pr(IPVY,p) += hdt_*pr(IPGY,p);
         pr(IPVZ,p) += hdt_*pr(IPGZ,p);
+        if (svmax2 > 0.0) {
+          const Real v2 = pr(IPVX,p)*pr(IPVX,p) + pr(IPVY,p)*pr(IPVY,p)
+                        + pr(IPVZ,p)*pr(IPVZ,p);
+          if (!(v2 <= svmax2) && Kokkos::atomic_compare_exchange(&sflag(0), 0, 1) == 0) {
+            srec(0) = static_cast<Real>(pid(PTAG,p));
+            srec(1) = vx0;  srec(2) = vy0;  srec(3) = vz0;
+            srec(4) = pr(IPGX,p);  srec(5) = pr(IPGY,p);  srec(6) = pr(IPGZ,p);
+            srec(7) = hdt_;
+            srec(8) = pr(IPVX,p);  srec(9) = pr(IPVY,p);  srec(10) = pr(IPVZ,p);
+            srec(11) = pr(IPX,p);  srec(12) = pr(IPY,p);  srec(13) = pr(IPZ,p);
+            srec(14) = pr(IPM,p);
+          }
+        }
         // Full drift (stage 1 only). Save the pre-drift (start-of-step) position
         // first: AccreteMass uses it to detect sink-cell crossings. Unconditional
         // (once per cycle), so IPX0 is always current when accretion runs.
@@ -117,6 +136,7 @@ TaskStatus Particles::Push(Driver *pdriver, int stage) {
     break;
   }
 
+  CheckSinkSanity("push", stage);
   return TaskStatus::complete;
 }
 } // namespace particles

@@ -8,6 +8,8 @@
 
 #include <iostream>
 #include <string>
+#include <vector>
+#include <cmath>
 #include <algorithm>
 #include <limits>
 #include <cstdlib>
@@ -68,6 +70,9 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
                                               !reference);
   reject_negative_accretion = pin->GetOrAddBoolean(
       "particles", "reject_negative_accretion", reference);
+  sanity_vmax = pin->GetOrAddReal("particles", "sanity_vmax", 0.0);
+  sanity_flag_ = DvceArray1D<int>("sanity_flag", 1);
+  sanity_rec_ = DvceArray1D<Real>("sanity_rec", kSanityRec);
   const std::string convergence = pin->GetOrAddString(
       "particles", "sink_convergence", reference ? "mass_flux" : "off");
   if (convergence != "off" && convergence != "mass_flux" && convergence != "velocity") {
@@ -325,6 +330,143 @@ void Particles::ResizeForSeededParticles(int npart_new) {
 }
 
 //----------------------------------------------------------------------------------------
+//! \fn void Particles::RestoreSinksFromTrk(const std::string &path)
+//! \brief Rebuild the sink population of a restarted run from its trk output (see
+//! particles.hpp). Exact gates: the dump's cycle must equal the restart cycle and its
+//! time the restart time, its record layout must match this build's, and every sink must
+//! be claimed by exactly one MeshBlock globally.
+
+void Particles::RestoreSinksFromTrk(const std::string &path) {
+  auto *pm = pmy_pack->pmesh;
+  const int want_cycle = pm->ncycle;
+  const int nrec = nidata + nrdata;
+  int nsink = 0;
+  double trk_time = 0.0;
+  std::vector<Real> recs;
+  if (global_variable::my_rank == 0) {
+    FILE *f = std::fopen(path.c_str(), "rb");
+    if (f == nullptr) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "particles/restart_trk '" << path
+                << "' could not be opened" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    char line[4096];
+    int found = 0, last_cycle = -1;
+    // each dump: "# AthenaK particle data", "# time=...", "# columns: ...", binary block
+    while (std::fgets(line, sizeof(line), f) != nullptr) {
+      double t; int cyc, nr, np, ni, nd, nc;
+      if (std::fgets(line, sizeof(line), f) == nullptr ||
+          std::sscanf(line, "# time=%lf cycle=%d nranks=%d nparticles=%d nidata=%d "
+                      "nrdata=%d nrec=%d", &t, &cyc, &nr, &np, &ni, &nd, &nc) != 7 ||
+          std::fgets(line, sizeof(line), f) == nullptr) {       // "# columns: ..."
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "malformed dump header in '" << path << "' after cycle "
+                  << last_cycle << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      std::vector<Real> block(static_cast<std::size_t>(np)*nc);
+      if (np > 0 &&
+          std::fread(block.data(), sizeof(Real), block.size(), f) != block.size()) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "truncated dump at cycle " << cyc << " in '" << path
+                  << "'" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      last_cycle = cyc;
+      if (cyc != want_cycle) continue;
+      if (ni != nidata || nd != nrdata || nc != nrec) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "trk record layout (nidata=" << ni << ", nrdata=" << nd
+                  << ") does not match this build (" << nidata << ", " << nrdata << ")"
+                  << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      ++found;          // keep the LAST dump of this cycle (a rerun appends after it)
+      nsink = np;
+      trk_time = t;
+      recs.swap(block);
+    }
+    std::fclose(f);
+    if (found == 0 || std::fabs(trk_time - pm->time) > 1.0e-12*std::max(1.0, pm->time)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "no trk dump in '" << path
+                << "' matches the restart (cycle " << want_cycle << ", time " << pm->time
+                << "); "
+                << (found ? "the cycle matches but the time differs" : "last dump cycle ")
+                << (found ? std::string() : std::to_string(last_cycle)) << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
+#if MPI_PARALLEL_ENABLED
+  MPI_Bcast(&nsink, 1, MPI_INT, 0, MPI_COMM_WORLD);
+  MPI_Bcast(&trk_time, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+  recs.resize(static_cast<std::size_t>(nsink)*nrec);
+  if (nsink > 0) {
+    MPI_Bcast(recs.data(), nsink*nrec, MPI_ATHENA_REAL, 0, MPI_COMM_WORLD);
+  }
+#endif
+
+  // ownership: lower-inclusive containment, as Particles::SetGIDFromPosition
+  const int nmb = pmy_pack->nmb_thispack;
+  auto &mbsz = pmy_pack->pmb->mb_size;
+  std::vector<int> own(nsink, -1);
+  int nloc = 0, maxtag = -1;
+  for (int q = 0; q < nsink; ++q) {
+    const Real *r = &recs[static_cast<std::size_t>(q)*nrec];
+    const Real x = r[nidata + IPX], y = r[nidata + IPY], z = r[nidata + IPZ];
+    maxtag = std::max(maxtag, static_cast<int>(r[PTAG]));
+    for (int m = 0; m < nmb; ++m) {
+      if (x >= mbsz.h_view(m).x1min && x < mbsz.h_view(m).x1max &&
+          y >= mbsz.h_view(m).x2min && y < mbsz.h_view(m).x2max &&
+          z >= mbsz.h_view(m).x3min && z < mbsz.h_view(m).x3max) {
+        own[q] = m;
+        ++nloc;
+        break;
+      }
+    }
+  }
+  int nglob = nloc;
+#if MPI_PARALLEL_ENABLED
+  MPI_Allreduce(MPI_IN_PLACE, &nglob, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+#endif
+  if (nglob != nsink) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+              << "restored sink ownership is inconsistent: " << nglob << " of " << nsink
+              << " sinks were claimed by exactly one MeshBlock." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  ResizeForSeededParticles(nloc);   // collective
+  if (nloc > 0) {
+    auto pr_h = Kokkos::create_mirror_view(prtcl_rdata);
+    auto pi_h = Kokkos::create_mirror_view(prtcl_idata);
+    int slot = 0;
+    for (int q = 0; q < nsink; ++q) {
+      if (own[q] < 0) continue;
+      const Real *r = &recs[static_cast<std::size_t>(q)*nrec];
+      for (int v = 0; v < nrdata; ++v) pr_h(v, slot) = r[nidata + v];
+      pi_h(PGID, slot) = pmy_pack->gids + own[q];
+      pi_h(PTAG, slot) = static_cast<int>(r[PTAG]);
+      ++slot;
+    }
+    Kokkos::deep_copy(prtcl_rdata, pr_h);
+    Kokkos::deep_copy(prtcl_idata, pi_h);
+  }
+  // created sinks are tagged 1000000 + created_total_ + (rank offset), consecutively
+  created_total_ = (maxtag >= 1000000) ? maxtag - 1000000 + 1 : 0;
+  if (global_variable::my_rank == 0) {
+    Real msum = 0.0;
+    for (int q = 0; q < nsink; ++q) {
+      msum += recs[static_cast<std::size_t>(q)*nrec + nidata + IPM];
+    }
+    std::printf("### RESTART: restored %d sink(s), total mass %.17e, from '%s' "
+                "(cycle %d, time %.17e); next created tag %d\n", nsink, msum,
+                path.c_str(), want_cycle, trk_time, 1000000 + created_total_);
+  }
+}
+
+//----------------------------------------------------------------------------------------
 // destructor
 
 Particles::~Particles() {
@@ -376,6 +518,64 @@ void Particles::CreateParticleTags(ParameterInput *pin) {
               << std::endl;
     std::exit(EXIT_FAILURE);
   }
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void Particles::CheckSinkSanity
+//! \brief Abort with a full report on the first non-finite or absurd sink (see the
+//! sanity_vmax comment in particles.hpp). WHERE names the step that just ran; together
+//! with the clean check after the previous step it brackets the update that broke it.
+
+void Particles::CheckSinkSanity(const char *where, int stage) {
+  if (sanity_vmax <= 0.0 || particle_type != ParticleType::sink) return;
+  auto &pr = prtcl_rdata;
+  const Real vmax2 = sanity_vmax*sanity_vmax;
+  int nbad = 0;
+  if (nprtcl_thispack > 0) {
+    Kokkos::parallel_reduce("sink_sanity", Kokkos::RangePolicy<>(DevExeSpace(), 0,
+                            nprtcl_thispack),
+    KOKKOS_LAMBDA(const int p, int &n) {
+      const Real v2 = pr(IPVX, p)*pr(IPVX, p) + pr(IPVY, p)*pr(IPVY, p)
+                    + pr(IPVZ, p)*pr(IPVZ, p);
+      const Real s = pr(IPX, p) + pr(IPY, p) + pr(IPZ, p) + pr(IPM, p);
+      // written so that a NaN fails every comparison
+      if (!(v2 <= vmax2) || !(Kokkos::fabs(s) < 1.0e300) || !(pr(IPM, p) >= 0.0)) n += 1;
+    }, Kokkos::Sum<int>(nbad));
+  }
+  auto flag_h = Kokkos::create_mirror_view_and_copy(HostMemSpace(), sanity_flag_);
+  if (nbad == 0 && flag_h(0) == 0) return;
+
+  auto hr = Kokkos::create_mirror_view_and_copy(HostMemSpace(), prtcl_rdata);
+  auto hi = Kokkos::create_mirror_view_and_copy(HostMemSpace(), prtcl_idata);
+  auto rec = Kokkos::create_mirror_view_and_copy(HostMemSpace(), sanity_rec_);
+  auto *pm = pmy_pack->pmesh;
+  std::printf("### SINK SANITY: %d bad sink(s) after %s (stage %d) on rank %d, cycle=%d "
+              "time=%.17e dt=%.17e, %d local sink(s), sanity_vmax=%g\n", nbad, where,
+              stage, global_variable::my_rank, pm->ncycle, pm->time, pm->dt,
+              nprtcl_thispack, sanity_vmax);
+  if (flag_h(0) == 1) {
+    std::printf("### SINK SANITY: push produced it: tag=%.0f v_old=(%.17e, %.17e, %.17e) "
+                "g=(%.17e, %.17e, %.17e) half_dt=%.17e v_new=(%.17e, %.17e, %.17e) "
+                "x=(%.17e, %.17e, %.17e) m=%.17e\n", rec(0), rec(1), rec(2), rec(3),
+                rec(4), rec(5), rec(6), rec(7), rec(8), rec(9), rec(10), rec(11), rec(12),
+                rec(13), rec(14));
+  } else if (flag_h(0) == 2) {
+    std::printf("### SINK SANITY: accretion produced it: tag=%.0f m_old=%.17e dm=%.17e "
+                "dp=(%.17e, %.17e, %.17e) v_old=(%.17e, %.17e, %.17e) "
+                "v_new=(%.17e, %.17e, %.17e) x=(%.17e, %.17e, %.17e)\n", rec(0), rec(1),
+                rec(2), rec(3), rec(4), rec(5), rec(6), rec(7), rec(8), rec(9), rec(10),
+                rec(11), rec(12), rec(13), rec(14));
+  }
+  for (int p = 0; p < nprtcl_thispack; ++p) {
+    std::printf("### SINK SANITY:   p=%d tag=%d gid=%d", p, hi(PTAG, p), hi(PGID, p));
+    for (int r = 0; r < nrdata; ++r) std::printf(" r%d=%.17e", r, hr(r, p));
+    std::printf("\n");
+  }
+  std::fflush(stdout);
+#if MPI_PARALLEL_ENABLED
+  MPI_Abort(MPI_COMM_WORLD, 86);
+#endif
+  std::exit(EXIT_FAILURE);
 }
 
 } // namespace particles
