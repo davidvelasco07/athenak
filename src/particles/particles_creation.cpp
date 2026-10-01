@@ -280,6 +280,7 @@ TaskStatus Particles::CreateSinks(Driver *pdriver, int stage) {
   // (nprtcl_total / nprtcl_eachrank) that the outputs read. Collective; every rank
   // reaches it because ncreated_global > 0 here implies it on all ranks.
   RefreshMeshParticleCounts();
+  CheckSinkSanity("create", stage);
   return TaskStatus::complete;
 }
 

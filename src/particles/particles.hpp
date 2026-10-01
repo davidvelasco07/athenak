@@ -148,6 +148,19 @@ class Particles {
   bool reject_negative_accretion = true;
   int sink_convergence = 1;  // 0: off; 1: directional mass flux; 2: velocity gradient
 
+  // Sink sanity check (<particles>/sanity_vmax, default 0 = off). When > 0, every step
+  // that changes sink state (push, migration receive, creation, merging, accretion) and
+  // the particle timestep check the rank's sinks for a non-finite position, velocity or
+  // mass, a negative mass, or a speed above sanity_vmax. The first hit prints the full
+  // record of every local sink -- plus, when the push or the accretion update produced
+  // the bad velocity, the inputs it was computed from -- and aborts the run. It only
+  // reads particle state, so a run that never trips it is bit-for-bit unchanged.
+  Real sanity_vmax = 0.0;
+  static constexpr int kSanityRec = 16;
+  DvceArray1D<int>  sanity_flag_;   // [1] 0 = clean, 1 = push, 2 = accretion
+  DvceArray1D<Real> sanity_rec_;    // [kSanityRec] inputs of the first flagged update
+  void CheckSinkSanity(const char *where, int stage);
+
 
   // Cross-rank control-volume reset (MPI). When a sink's control volume reaches into an
   // off-rank neighbour, the accretion kernel stages the off-rank-destined reset cells
@@ -233,6 +246,11 @@ class Particles {
   // staging buffer 64 records deep for every sink on the rank. The overflow is guarded
   // and warned rather than silent, but the reset it drops is gas that never gets removed.
   void ResizeForSeededParticles(int npart_new);
+  // Restart files hold no particles. Rebuild the sinks from the track (trk) output, which
+  // stores every column of every sink and is written in the same cycle as each restart:
+  // take the dump whose cycle equals the restart cycle, give each sink to the block that
+  // contains it, and resume the creation-tag counter after the largest restored tag.
+  void RestoreSinksFromTrk(const std::string &path);
   void AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> tl);
   TaskStatus SetGIDFromPosition(Driver *pdriver, int stage);
   void ReconcileOwnership(Driver *pdriver, int stage);  // setgid + cross-rank migration
