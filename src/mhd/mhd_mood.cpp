@@ -238,7 +238,9 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
   Real gscale0 = 0.0, gscale1 = 0.0, gscale_s = 0.0;
   Real gscaleb[3] = {0.0, 0.0, 0.0};
   Real gscalev[3] = {0.0, 0.0, 0.0};   // velocity NAD scale (|v| in slot 0, or comps)
-  if (scale_mode == 1 || scale_mode == 3) {
+  // rcfl: relative per-bound band x global advective Courant factor (see hydro_mood.cpp)
+  Real rcfl_fac = 1.0;
+  if (scale_mode == 1 || scale_mode == 3 || scale_mode == 4) {
     Real gdmn = std::numeric_limits<Real>::max(), gdmx = -gdmn;
     Real gemn = gdmn, gemx = gdmx;
     Real gvmx = 0.0;
@@ -246,7 +248,7 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
     const int ni = ie-is+1, nji = (je-js+1)*ni, nkji = (ke-ks+1)*nji;
     const int nmkji = nmb*nkji;
     const bool ideal = is_ideal_;
-    const bool want_v = (scale_mode == 3);
+    const bool want_v = (scale_mode == 3 || scale_mode == 4);
     Kokkos::parallel_reduce("mmood_grange",
     Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
     KOKKOS_LAMBDA(const int &idx, Real &dmn, Real &dmx, Real &emn, Real &emx,
@@ -350,7 +352,7 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
       gscalev[1] = fmax(gv1mx - gv1mn, 0.0);
       gscalev[2] = fmax(gv2mx - gv2mn, 0.0);
     }
-    if (scale_mode == 3) {
+    if (scale_mode == 3 || scale_mode == 4) {
       Real dxmin = std::numeric_limits<Real>::max();
       auto &msize = pmy_pack->pmb->mb_size;
       for (int m=0; m<nmb; ++m) {
@@ -360,6 +362,7 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
       }
       Real cfl_adv = (pmy_pack->pmesh->dt)*gvmx/dxmin;
       cfl_fac = fmin(1.0, cfl_adv);
+      rcfl_fac = cfl_fac;
       gscale0 *= cfl_fac;
       gscale1 *= cfl_fac;
       gscaleb[0] *= cfl_fac;
@@ -809,6 +812,9 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
           if (scale_mode == 0) {          // spd-style relative
             eps_m = fmax(rtol*fabs(qmn), atol);
             eps_p = fmax(rtol*fabs(qmx), atol);
+          } else if (scale_mode == 4) {   // rcfl: relative band x advective Courant
+            eps_m = fmax(rtol*rcfl_fac*fabs(qmn), atol);
+            eps_p = fmax(rtol*rcfl_fac*fabs(qmx), atol);
           } else if (scale_mode == 1) {   // grange with Mach-softening exponent theta
             if (theta >= 1.0) {
               Real eps = fmax(rtol*gsc, atol);
@@ -869,9 +875,10 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
             qmx = fmax(qmx, q);
           }}}
           Real eps_m, eps_p;
-          if (scale_mode == 0) {
-            eps_m = fmax(rtol*fabs(qmn), atol);
-            eps_p = fmax(rtol*fabs(qmx), atol);
+          if (scale_mode == 0 || scale_mode == 4) {
+            const Real rf = (scale_mode == 4) ? rcfl_fac : 1.0;
+            eps_m = fmax(rtol*rf*fabs(qmn), atol);
+            eps_p = fmax(rtol*rf*fabs(qmx), atol);
           } else {
             Real eps = fmax(rtol*gscale_s, atol);
             eps_m = eps;

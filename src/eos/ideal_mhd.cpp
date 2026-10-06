@@ -14,6 +14,7 @@
 #include "reconstruct/ppm.hpp"
 #include "reconstruct/wenoz.hpp"
 #include "reconstruct/teno.hpp"
+#include "reconstruct/fv.hpp"
 
 //----------------------------------------------------------------------------------------
 //! \fn FaceToCenterInterp()
@@ -24,18 +25,12 @@
 
 KOKKOS_INLINE_FUNCTION
 Real FaceToCenterInterp(const ReconstructionMethod recon,
-                        const Real &bf_im2, const Real &bf_im1, const Real &bf_i,
-                        const Real &bf_ip1, const Real &bf_ip2, const Real &bf_ip3) {
-  // bf values are face-centered at positions i-3/2, i-1/2, i+1/2, i+3/2, i+5/2, i+7/2
-  // (mapped to face indices i-2, i-1, i, i+1, i+2, i+3)
-  // Cell center i is the midpoint between faces i (pos i-1/2) and i+1 (pos i+1/2)
-  // Reconstruction from face "cells" to the "face" at cell center i:
-  //   qL: left state at cell center from WENOZ centered on face i
-  //   qR: right state at cell center from WENOZ centered on face i+1
-  // Cell center i is midpoint between face i (bf_i at x_{i-1/2}) and
-  // face i+1 (bf_ip1 at x_{i+1/2}).  Reconstruction from dual grid of face values:
-  //   Left state at cell center: ql_ip1 from recon centered on face i
-  //   Right state at cell center: qr_{i+1} from recon centered on face i+1
+                        const Real &bf_im3, const Real &bf_im2, const Real &bf_im1,
+                        const Real &bf_i, const Real &bf_ip1, const Real &bf_ip2,
+                        const Real &bf_ip3, const Real &bf_ip4) {
+  // bf values are face-centered; cell center i is the midpoint between faces i and i+1.
+  // Limited methods reconstruct L/R dual-grid states and average them; unlimited fvN
+  // methods use the matching central interpolant of the dual-grid face averages.
   Real qL, qR, dum;
   switch (recon) {
     case ReconstructionMethod::dc:
@@ -57,11 +52,12 @@ Real FaceToCenterInterp(const ReconstructionMethod recon,
       TENO(bf_im2, bf_im1, bf_i, bf_ip1, bf_ip2, qL, dum);   // center face i → qL at cc
       TENO(bf_im1, bf_i, bf_ip1, bf_ip2, bf_ip3, dum, qR);   // center face i+1 → qR at cc
       return 0.5*(qL + qR);
-    case ReconstructionMethod::ppm:
-      // Unlimited (MOOD-protected) base: cell-centered B uses the 2nd-order face average.
-      // A genuinely 4th-order face-to-center for this path, e.g.
-      //   (7*(bf_i + bf_ip1) - (bf_im1 + bf_ip2))/12, is a deferred accuracy improvement.
-      return 0.5*(bf_i + bf_ip1);
+    case ReconstructionMethod::fv4:
+      return FV4Face(bf_im1, bf_i, bf_ip1, bf_ip2);
+    case ReconstructionMethod::fv6:
+      return FV6Face(bf_im2, bf_im1, bf_i, bf_ip1, bf_ip2, bf_ip3);
+    case ReconstructionMethod::fv8:
+      return FV8Face(bf_im3, bf_im2, bf_im1, bf_i, bf_ip1, bf_ip2, bf_ip3, bf_ip4);
   }
   return 0.5*(bf_i + bf_ip1);  // fallback
 }
@@ -133,36 +129,54 @@ void IdealMHD::ConsToPrim(DvceArray5D<Real> &cons, const DvceFaceFld4D<Real> &b,
       // High-order face-to-center interpolation using the same reconstruction
       // method as the flux computation (UCT EMF path).  Treats face-averaged B
       // values as "cell averages" in a dual grid, consistent with the FV framework.
-      // Falls back to 2nd-order at domain boundaries where stencil doesn't fit.
-      if (i > il+1 && i < iu-1) {
-        u.bx = FaceToCenterInterp(recon,
-          b.x1f(m,k,j,i-2), b.x1f(m,k,j,i-1), b.x1f(m,k,j,i),
-          b.x1f(m,k,j,i+1), b.x1f(m,k,j,i+2), b.x1f(m,k,j,i+3));
-      } else if (i > il && i < iu) {
-        u.bx = (7.0/12.0)*(b.x1f(m,k,j,i) + b.x1f(m,k,j,i+1))
-             - (1.0/12.0)*(b.x1f(m,k,j,i-1) + b.x1f(m,k,j,i+2));
-      } else {
-        u.bx = 0.5*(b.x1f(m,k,j,i) + b.x1f(m,k,j,i+1));
-      }
-      if (j > jl+1 && j < ju-1) {
-        u.by = FaceToCenterInterp(recon,
-          b.x2f(m,k,j-2,i), b.x2f(m,k,j-1,i), b.x2f(m,k,j,i),
-          b.x2f(m,k,j+1,i), b.x2f(m,k,j+2,i), b.x2f(m,k,j+3,i));
-      } else if (j > jl && j < ju) {
-        u.by = (7.0/12.0)*(b.x2f(m,k,j,i) + b.x2f(m,k,j+1,i))
-             - (1.0/12.0)*(b.x2f(m,k,j-1,i) + b.x2f(m,k,j+2,i));
-      } else {
-        u.by = 0.5*(b.x2f(m,k,j,i) + b.x2f(m,k,j+1,i));
-      }
-      if (k > kl+1 && k < ku-1) {
-        u.bz = FaceToCenterInterp(recon,
-          b.x3f(m,k-2,j,i), b.x3f(m,k-1,j,i), b.x3f(m,k,j,i),
-          b.x3f(m,k+1,j,i), b.x3f(m,k+2,j,i), b.x3f(m,k+3,j,i));
-      } else if (k > kl && k < ku) {
-        u.bz = (7.0/12.0)*(b.x3f(m,k,j,i) + b.x3f(m,k+1,j,i))
-             - (1.0/12.0)*(b.x3f(m,k-1,j,i) + b.x3f(m,k+2,j,i));
-      } else {
-        u.bz = 0.5*(b.x3f(m,k,j,i) + b.x3f(m,k+1,j,i));
+      // Falls back to a smaller unlimited stencil (then 2nd-order) near the loop
+      // edges where the full window does not fit.  Limited methods only need a
+      // 6-point window, so they stay on `recon` until the 4-point fallback.
+      {
+        ReconstructionMethod r6 = (recon == ReconstructionMethod::fv8)
+                                ? ReconstructionMethod::fv6 : recon;
+        if (i > il+2 && i < iu-2) {
+          u.bx = FaceToCenterInterp(recon,
+            b.x1f(m,k,j,i-3), b.x1f(m,k,j,i-2), b.x1f(m,k,j,i-1), b.x1f(m,k,j,i),
+            b.x1f(m,k,j,i+1), b.x1f(m,k,j,i+2), b.x1f(m,k,j,i+3), b.x1f(m,k,j,i+4));
+        } else if (i > il+1 && i < iu-1) {
+          u.bx = FaceToCenterInterp(r6,
+            b.x1f(m,k,j,i-2), b.x1f(m,k,j,i-2), b.x1f(m,k,j,i-1), b.x1f(m,k,j,i),
+            b.x1f(m,k,j,i+1), b.x1f(m,k,j,i+2), b.x1f(m,k,j,i+3), b.x1f(m,k,j,i+3));
+        } else if (i > il && i < iu) {
+          u.bx = FV4Face(b.x1f(m,k,j,i-1), b.x1f(m,k,j,i),
+                         b.x1f(m,k,j,i+1), b.x1f(m,k,j,i+2));
+        } else {
+          u.bx = 0.5*(b.x1f(m,k,j,i) + b.x1f(m,k,j,i+1));
+        }
+        if (j > jl+2 && j < ju-2) {
+          u.by = FaceToCenterInterp(recon,
+            b.x2f(m,k,j-3,i), b.x2f(m,k,j-2,i), b.x2f(m,k,j-1,i), b.x2f(m,k,j,i),
+            b.x2f(m,k,j+1,i), b.x2f(m,k,j+2,i), b.x2f(m,k,j+3,i), b.x2f(m,k,j+4,i));
+        } else if (j > jl+1 && j < ju-1) {
+          u.by = FaceToCenterInterp(r6,
+            b.x2f(m,k,j-2,i), b.x2f(m,k,j-2,i), b.x2f(m,k,j-1,i), b.x2f(m,k,j,i),
+            b.x2f(m,k,j+1,i), b.x2f(m,k,j+2,i), b.x2f(m,k,j+3,i), b.x2f(m,k,j+3,i));
+        } else if (j > jl && j < ju) {
+          u.by = FV4Face(b.x2f(m,k,j-1,i), b.x2f(m,k,j,i),
+                         b.x2f(m,k,j+1,i), b.x2f(m,k,j+2,i));
+        } else {
+          u.by = 0.5*(b.x2f(m,k,j,i) + b.x2f(m,k,j+1,i));
+        }
+        if (k > kl+2 && k < ku-2) {
+          u.bz = FaceToCenterInterp(recon,
+            b.x3f(m,k-3,j,i), b.x3f(m,k-2,j,i), b.x3f(m,k-1,j,i), b.x3f(m,k,j,i),
+            b.x3f(m,k+1,j,i), b.x3f(m,k+2,j,i), b.x3f(m,k+3,j,i), b.x3f(m,k+4,j,i));
+        } else if (k > kl+1 && k < ku-1) {
+          u.bz = FaceToCenterInterp(r6,
+            b.x3f(m,k-2,j,i), b.x3f(m,k-2,j,i), b.x3f(m,k-1,j,i), b.x3f(m,k,j,i),
+            b.x3f(m,k+1,j,i), b.x3f(m,k+2,j,i), b.x3f(m,k+3,j,i), b.x3f(m,k+3,j,i));
+        } else if (k > kl && k < ku) {
+          u.bz = FV4Face(b.x3f(m,k-1,j,i), b.x3f(m,k,j,i),
+                         b.x3f(m,k+1,j,i), b.x3f(m,k+2,j,i));
+        } else {
+          u.bz = 0.5*(b.x3f(m,k,j,i) + b.x3f(m,k+1,j,i));
+        }
       }
     }
 

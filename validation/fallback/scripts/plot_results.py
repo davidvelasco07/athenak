@@ -48,7 +48,9 @@ apply_publication_style()
 sys.path.insert(0, str(ROOT / "vis" / "python"))
 
 SCHEME_STYLE = {
-    "ppm_fb": {"label": "PPM + MOOD + RK3", "ls": "-", "color": "C0"},
+    "fv4_fb": {"label": "FV4 + RK3", "ls": "-", "color": "C0"},
+    "fv6_fb": {"label": "FV6 + RK3", "ls": "-", "color": "C4"},
+    "fv8_fb": {"label": "FV8 + RK3", "ls": "-", "color": "C5"},
     "plm": {"label": "PLM + RK2", "ls": "--", "color": "C1"},
     "wenoz": {"label": "WENO-Z + RK3", "ls": "-.", "color": "C2"},
     "teno": {"label": "TENO + RK3", "ls": ":", "color": "C3"},
@@ -205,7 +207,7 @@ def plot_linear_mosaics(analysis):
 
 def plot_nmood_linear(analysis):
     FIGURES.mkdir(parents=True, exist_ok=True)
-    ppm = [f for f in analysis.get("linear", []) if f["scheme"] == "ppm_fb"]
+    ppm = [f for f in analysis.get("linear", []) if f["scheme"] == "fv4_fb"]
     if not ppm:
         return
     # One bar chart per physics
@@ -228,7 +230,7 @@ def plot_nmood_linear(analysis):
         ax.set_xticklabels(labels, rotation=45, ha="right")
         ax.set_ylabel("Total MOOD demotions")
         ax.set_title(
-            f"PPM + MOOD demotions: {PHYSICS_LABEL.get(phys, phys)} "
+            f"FV4 demotions: {PHYSICS_LABEL.get(phys, phys)} "
             "(expected: zero)"
         )
         ax.axhline(0, color="k", lw=0.5)
@@ -237,7 +239,7 @@ def plot_nmood_linear(analysis):
         plt.close(fig)
         print(f"Wrote {out}")
     # Remove old combined nmood figure if present
-    old = FIGURES / "lwave_nmood_ppm_fb.png"
+    old = FIGURES / "lwave_nmood_fv4_fb.png"
     if old.exists():
         old.unlink()
 
@@ -258,7 +260,7 @@ def plot_shock_profiles():
             continue
         name = d.name
         scheme = None
-        for s in ("ppm_fb", "wenoz", "teno", "plm"):
+        for s in ("fv4_fb", "fv6_fb", "fv8_fb", "wenoz", "teno", "plm"):
             suffix = f"_{s}_N512"
             if name.endswith(suffix):
                 scheme = s
@@ -348,7 +350,7 @@ def plot_tolerance_study(analysis):
         samples = []
         for row in sorted(case_rows, key=lambda r: float(r["rtol"]), reverse=True):
             outdir = RESULTS / "tolerance" / (
-                f"{row['case']}_ppm_fb_rtol_{float(row['rtol']):.0e}"
+                f"{row['case']}_fv4_fb_rtol_{float(row['rtol']):.0e}"
             )
             vtks = sorted(outdir.rglob("*.vtk"))
             if not vtks:
@@ -362,7 +364,7 @@ def plot_tolerance_study(analysis):
             # A tolerance that destroys the run must still occupy a panel.  Dropping it
             # silently turns a five-tolerance sweep into a three-tolerance figure and
             # hides the threshold the sweep exists to find -- on both hydro jets
-            # PPM+MOOD is entirely NaN at rtol >= 1e-3 and clean at 1e-4.
+            # FV4+MOOD is entirely NaN at rtol >= 1e-3 and clean at 1e-4.
             if arr is not None and np.isfinite(arr).all():
                 samples.append((row, arr, field))
             else:

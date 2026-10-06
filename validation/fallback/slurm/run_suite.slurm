@@ -15,7 +15,7 @@ set -euo pipefail
 REPO="${REPO:-$HOME/athenak-fallback-validation}"
 ATHENA="${ATHENA:-$REPO/build/src/athena}"
 SUITE="${SUITE:-stress}"
-SCHEMES="${SCHEMES:-ppm_fb,plm,wenoz,teno}"
+SCHEMES="${SCHEMES:-fv4_fb,plm,wenoz,teno}"
 
 cd "$REPO"
 python3 validation/fallback/scripts/run_suite.py \

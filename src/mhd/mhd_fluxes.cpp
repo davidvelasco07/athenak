@@ -56,10 +56,10 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
 
   // For UCT the corner-EMF composition needs the face-stored UCT coefficients over a
   // wider transverse range than the fluxes themselves.  ReconstructEdge at the edge
-  // i-1/2 reads faces i-3..i+2 with the high-order methods, i-2..i+1 with PLM and
-  // i-1..i with donor cell, over an edge range that already runs out to ie+1, so the
-  // fill has to reach ie+3 / ie+2 / ie+1 respectively.  This was previously keyed off
-  // the reconstruction ORDER (3 for the high-order methods, 1 otherwise), which is one
+  // i-1/2 reads faces i-reach..i+(reach-1) (reach = ReconEdgeReach: 1 dc, 2 plm/fv4,
+  // 3 ppm4/ppmx/wenoz/teno/fv6, 4 fv8), over an edge range that already runs out to
+  // ie+1, so the fill has to reach ie+reach.  This was previously keyed off the
+  // reconstruction ORDER (3 for the high-order methods, 1 otherwise), which is one
   // cell short for PLM: the composition then interpolated Kokkos::realloc ZEROS into
   // the upwind weights.  Because the partner weight is formed as (1 - aL) both weights
   // were polluted identically and still summed to one, so the defect never showed up as
@@ -70,13 +70,7 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
   const bool use_uct = (emf_method_ != MHD_EMF::ct_contact);
   int uct_ext = 1;
   if (use_uct) {
-    if (recon_method == ReconstructionMethod::dc) {
-      uct_ext = 1;
-    } else if (recon_method == ReconstructionMethod::plm) {
-      uct_ext = 2;
-    } else {
-      uct_ext = 3;
-    }
+    uct_ext = ReconEdgeReach(recon_method);
   }
   const int ext = std::max(uct_ext, mext);
   const int uct_fl = (emf_method_ == MHD_EMF::uct_hlld) ? 2 : (use_uct ? 1 : 0);

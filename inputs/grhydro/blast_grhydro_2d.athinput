@@ -1,0 +1,85 @@
+# Relativistic hydrodynamic blast wave, 2D, GR machinery on a Minkowski metric.
+#
+# Beckwith & Stone, ApJS 193, 6 (2011).  Derived from inputs/srhydro/blast_srhyd.athinput
+# with three changes, each of which the stock deck needs before it will run under the
+# fallback battery:
+#   - nx3 read "1 0"; the parser takes the first token, so it worked by luck.
+#   - `radius` renamed to the inner_radius/outer_radius pair blast.cpp actually reads.
+#   - rsolver hlle rather than hllc: hllc is not implemented for relativistic dynamics.
+#
+# WHY IT IS HERE.  The battery had no special-relativistic case in any suite, so neither
+# the MOOD fallback nor the UCT EMF had ever been exercised against the SR solvers --
+# a separate code path from both the Newtonian and the GR ones.  Its twin,
+# inputs/grhydro/blast_grhydro_2d.athinput, is the SAME physical problem run through the
+# GR machinery on a flat metric, so the pair is a cross-check and not just two tests:
+# the two paths agree to 1.6e-4 (PLM+FOFC) and 3.4e-4 (PPM+MOOD) in L1 density.
+
+# Athena++ (Kokkos version) input file for SR spherical blast problem
+# blast wave is always initialized at origin
+
+<comment>
+problem   = SR hydro spherical blast wave
+reference = Beckwith, K. & Stone, J.M., ApJS, 193, 6 (2011)
+
+<job>
+basename  = blast_grhydro      # problem ID: basename of output filenames
+
+<mesh>
+nghost    = 3          # Number of ghost cells
+nx1       = 200        # Number of zones in X1-direction
+x1min     = -6.0       # minimum value of X1
+x1max     = 6.0        # maximum value of X1
+ix1_bc    = periodic   # inner-X1 boundary flag
+ox1_bc    = periodic   # outer-X1 boundary flag
+
+nx2       = 200        # Number of zones in X2-direction
+x2min     = -6.0       # minimum value of X2
+x2max     = 6.0        # maximum value of X2
+ix2_bc    = periodic   # inner-X2 boundary flag
+ox2_bc    = periodic   # outer-X2 boundary flag
+
+nx3       = 1        # Number of zones in X3-direction
+x3min     = -6.0       # minimum value of X3
+x3max     = 6.0        # maximum value of X3
+ix3_bc    = periodic   # inner-X3 boundary flag
+ox3_bc    = periodic   # outer-X3 boundary flag
+
+<meshblock>
+nx1       = 200         # Number of cells in each MeshBlock, X1-dir
+nx2       = 200         # Number of cells in each MeshBlock, X2-dir
+nx3       = 1           # Number of cells in each MeshBlock, X3-dir
+
+<coord>
+general_rel = true
+minkowski   = true
+
+<time>
+evolution  = dynamic    # dynamic/kinematic/static
+integrator = rk2        # time integration algorithm
+cfl_number = 0.3        # The Courant, Friedrichs, & Lewy (CFL) Number
+nlim       = -1         # cycle limit
+tlim       = 5.0        # time limit
+ndiag      = 1          # cycles between diagostic output
+
+<hydro>
+eos         = ideal     # EOS type
+reconstruct = ppmx      # spatial reconstruction method
+rsolver     = hlle      # Riemann-solver to be used
+gamma       = 1.3333333333333 # gamma = C_p/C_v
+
+<problem>
+pn_amb      = 5.0e-3    # ambient pressure
+prat        = 200.      # Pressure ratio initially
+dn_amb      = 1.0e-4    # ambient pressure
+drat        = 100.      # Pressure ratio initially
+inner_radius  = 0.8   # blast.cpp wants BOTH radii; equal = a sharp interface
+outer_radius  = 0.8
+
+<output1>
+file_type  = hst        # History data dump
+dt         = 0.01       # time increment between outputs
+
+<output2>
+file_type  = vtk        # Binary data dump
+variable   = hydro_w    # variables to be output
+dt         = 0.1       # time increment between outputs

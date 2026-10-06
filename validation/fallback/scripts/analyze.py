@@ -17,6 +17,8 @@ if VENDOR.is_dir():
     sys.path.insert(0, str(VENDOR))
 
 import numpy as np
+
+UNLIMITED_SCHEMES = {"fv4_fb", "fv6_fb", "fv8_fb"}
 import yaml
 
 PHYSICS_FROM_CASE = {
@@ -122,7 +124,7 @@ def linear_gates(rows, allowed=None):
             if l1s[i - 1] and l1s[i] and l1s[i - 1] > 0:
                 orders.append(float(np.log2(l1s[i - 1] / l1s[i])))
         zero_ok = True
-        if scheme == "ppm_fb":
+        if scheme in UNLIMITED_SCHEMES:
             zero_ok = all((m == 0 or m is None) for m in moods)
         # Prefer clean rc=0; still plot families that wrote L1 then crashed on teardown
         completed = all(dens[n].get("returncode") == 0 for n in ns)
@@ -139,7 +141,7 @@ def linear_gates(rows, allowed=None):
                 "l1": l1s,
                 "orders": orders,
                 "nmood": moods,
-                "zero_demotions_pass": zero_ok if scheme == "ppm_fb" else None,
+                "zero_demotions_pass": zero_ok if scheme in UNLIMITED_SCHEMES else None,
                 "completed": completed,
                 "usable": usable,
             }
@@ -262,14 +264,18 @@ def main():
         "tolerance": tolerance,
     }
     lin = report["linear"]
-    ppm_fb = [f for f in lin if f["scheme"] == "ppm_fb"]
-    report["gates"] = {
-        "ppm_fb_linear_zero_demotions": all(f["zero_demotions_pass"] for f in ppm_fb)
-        if ppm_fb
-        else None,
-        "ppm_fb_linear_completed": all(f["completed"] for f in ppm_fb) if ppm_fb else None,
+    gates = {
         "all_completed": all(r.get("returncode", 1) == 0 for r in rows) if rows else None,
     }
+    for sch in sorted(UNLIMITED_SCHEMES):
+        fam = [f for f in lin if f["scheme"] == sch]
+        gates[f"{sch}_linear_zero_demotions"] = (
+            all(f["zero_demotions_pass"] for f in fam) if fam else None
+        )
+        gates[f"{sch}_linear_completed"] = (
+            all(f["completed"] for f in fam) if fam else None
+        )
+    report["gates"] = gates
     text = json.dumps(report, indent=2)
     print(text[:4000])
     if args.write:

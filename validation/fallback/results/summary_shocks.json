@@ -2,721 +2,361 @@
   {
     "suite": "shocks",
     "case": "sod",
-    "scheme": "ppm_fb",
+    "scheme": "fv6_fb",
     "nx1": 256,
     "returncode": 0,
-    "wall_s": 6.614264249801636,
-    "nmood_total": 22045,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/sod_ppm_fb_N256"
+    "wall_s": 1.628000020980835,
+    "nmood_total": 24379,
+    "outdir": "/Users/velasco/athenak/.claude/worktrees/fallback-validation/validation/fallback/results/shocks/sod_fv6_fb_N256"
   },
   {
     "suite": "shocks",
     "case": "sod",
-    "scheme": "ppm_fb",
+    "scheme": "fv6_fb",
     "nx1": 512,
     "returncode": 0,
-    "wall_s": 6.407215118408203,
-    "nmood_total": 48894,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/sod_ppm_fb_N512"
+    "wall_s": 3.1809728145599365,
+    "nmood_total": 54241,
+    "outdir": "/Users/velasco/athenak/.claude/worktrees/fallback-validation/validation/fallback/results/shocks/sod_fv6_fb_N512"
   },
   {
     "suite": "shocks",
     "case": "sod",
-    "scheme": "ppm_fb",
+    "scheme": "fv6_fb",
     "nx1": 1024,
     "returncode": 0,
-    "wall_s": 8.302880048751831,
-    "nmood_total": 105257,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/sod_ppm_fb_N1024"
+    "wall_s": 7.341597080230713,
+    "nmood_total": 122256,
+    "outdir": "/Users/velasco/athenak/.claude/worktrees/fallback-validation/validation/fallback/results/shocks/sod_fv6_fb_N1024"
   },
   {
     "suite": "shocks",
     "case": "sod",
-    "scheme": "plm",
+    "scheme": "fv8_fb",
     "nx1": 256,
     "returncode": 0,
-    "wall_s": 4.611562728881836,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/sod_plm_N256"
+    "wall_s": 1.5586950778961182,
+    "nmood_total": 25960,
+    "outdir": "/Users/velasco/athenak/.claude/worktrees/fallback-validation/validation/fallback/results/shocks/sod_fv8_fb_N256"
   },
   {
     "suite": "shocks",
     "case": "sod",
-    "scheme": "plm",
+    "scheme": "fv8_fb",
     "nx1": 512,
     "returncode": 0,
-    "wall_s": 4.9116575717926025,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/sod_plm_N512"
+    "wall_s": 3.2086760997772217,
+    "nmood_total": 56740,
+    "outdir": "/Users/velasco/athenak/.claude/worktrees/fallback-validation/validation/fallback/results/shocks/sod_fv8_fb_N512"
   },
   {
     "suite": "shocks",
     "case": "sod",
-    "scheme": "plm",
+    "scheme": "fv8_fb",
     "nx1": 1024,
     "returncode": 0,
-    "wall_s": 5.254113435745239,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/sod_plm_N1024"
-  },
-  {
-    "suite": "shocks",
-    "case": "sod",
-    "scheme": "wenoz",
-    "nx1": 256,
-    "returncode": 0,
-    "wall_s": 4.689580202102661,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/sod_wenoz_N256"
-  },
-  {
-    "suite": "shocks",
-    "case": "sod",
-    "scheme": "wenoz",
-    "nx1": 512,
-    "returncode": 0,
-    "wall_s": 4.921968936920166,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/sod_wenoz_N512"
-  },
-  {
-    "suite": "shocks",
-    "case": "sod",
-    "scheme": "wenoz",
-    "nx1": 1024,
-    "returncode": 0,
-    "wall_s": 5.66727352142334,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/sod_wenoz_N1024"
-  },
-  {
-    "suite": "shocks",
-    "case": "sod",
-    "scheme": "teno",
-    "nx1": 256,
-    "returncode": 0,
-    "wall_s": 4.681830883026123,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/sod_teno_N256"
-  },
-  {
-    "suite": "shocks",
-    "case": "sod",
-    "scheme": "teno",
-    "nx1": 512,
-    "returncode": 0,
-    "wall_s": 4.949263095855713,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/sod_teno_N512"
-  },
-  {
-    "suite": "shocks",
-    "case": "sod",
-    "scheme": "teno",
-    "nx1": 1024,
-    "returncode": 0,
-    "wall_s": 5.4772748947143555,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/sod_teno_N1024"
+    "wall_s": 6.708297967910767,
+    "nmood_total": 126665,
+    "outdir": "/Users/velasco/athenak/.claude/worktrees/fallback-validation/validation/fallback/results/shocks/sod_fv8_fb_N1024"
   },
   {
     "suite": "shocks",
     "case": "shu_osher",
-    "scheme": "ppm_fb",
+    "scheme": "fv6_fb",
     "nx1": 256,
     "returncode": 0,
-    "wall_s": 6.583750009536743,
-    "nmood_total": 27576,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/shu_osher_ppm_fb_N256"
+    "wall_s": 2.9991588592529297,
+    "nmood_total": 30597,
+    "outdir": "/Users/velasco/athenak/.claude/worktrees/fallback-validation/validation/fallback/results/shocks/shu_osher_fv6_fb_N256"
   },
   {
     "suite": "shocks",
     "case": "shu_osher",
-    "scheme": "ppm_fb",
+    "scheme": "fv6_fb",
     "nx1": 512,
     "returncode": 0,
-    "wall_s": 8.699394702911377,
-    "nmood_total": 67195,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/shu_osher_ppm_fb_N512"
+    "wall_s": 6.212106943130493,
+    "nmood_total": 75992,
+    "outdir": "/Users/velasco/athenak/.claude/worktrees/fallback-validation/validation/fallback/results/shocks/shu_osher_fv6_fb_N512"
   },
   {
     "suite": "shocks",
     "case": "shu_osher",
-    "scheme": "ppm_fb",
+    "scheme": "fv6_fb",
     "nx1": 1024,
     "returncode": 0,
-    "wall_s": 12.121439456939697,
-    "nmood_total": 150202,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/shu_osher_ppm_fb_N1024"
+    "wall_s": 14.689929246902466,
+    "nmood_total": 179179,
+    "outdir": "/Users/velasco/athenak/.claude/worktrees/fallback-validation/validation/fallback/results/shocks/shu_osher_fv6_fb_N1024"
   },
   {
     "suite": "shocks",
     "case": "shu_osher",
-    "scheme": "plm",
+    "scheme": "fv8_fb",
     "nx1": 256,
     "returncode": 0,
-    "wall_s": 4.85801362991333,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/shu_osher_plm_N256"
+    "wall_s": 2.95504093170166,
+    "nmood_total": 34559,
+    "outdir": "/Users/velasco/athenak/.claude/worktrees/fallback-validation/validation/fallback/results/shocks/shu_osher_fv8_fb_N256"
   },
   {
     "suite": "shocks",
     "case": "shu_osher",
-    "scheme": "plm",
+    "scheme": "fv8_fb",
     "nx1": 512,
     "returncode": 0,
-    "wall_s": 5.158158779144287,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/shu_osher_plm_N512"
+    "wall_s": 7.0734336376190186,
+    "nmood_total": 78911,
+    "outdir": "/Users/velasco/athenak/.claude/worktrees/fallback-validation/validation/fallback/results/shocks/shu_osher_fv8_fb_N512"
   },
   {
     "suite": "shocks",
     "case": "shu_osher",
-    "scheme": "plm",
+    "scheme": "fv8_fb",
     "nx1": 1024,
     "returncode": 0,
-    "wall_s": 6.00898551940918,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/shu_osher_plm_N1024"
-  },
-  {
-    "suite": "shocks",
-    "case": "shu_osher",
-    "scheme": "wenoz",
-    "nx1": 256,
-    "returncode": 0,
-    "wall_s": 4.977221250534058,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/shu_osher_wenoz_N256"
-  },
-  {
-    "suite": "shocks",
-    "case": "shu_osher",
-    "scheme": "wenoz",
-    "nx1": 512,
-    "returncode": 0,
-    "wall_s": 5.588316202163696,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/shu_osher_wenoz_N512"
-  },
-  {
-    "suite": "shocks",
-    "case": "shu_osher",
-    "scheme": "wenoz",
-    "nx1": 1024,
-    "returncode": 0,
-    "wall_s": 6.855767488479614,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/shu_osher_wenoz_N1024"
-  },
-  {
-    "suite": "shocks",
-    "case": "shu_osher",
-    "scheme": "teno",
-    "nx1": 256,
-    "returncode": 0,
-    "wall_s": 5.015064477920532,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/shu_osher_teno_N256"
-  },
-  {
-    "suite": "shocks",
-    "case": "shu_osher",
-    "scheme": "teno",
-    "nx1": 512,
-    "returncode": 0,
-    "wall_s": 5.576136589050293,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/shu_osher_teno_N512"
-  },
-  {
-    "suite": "shocks",
-    "case": "shu_osher",
-    "scheme": "teno",
-    "nx1": 1024,
-    "returncode": 0,
-    "wall_s": 6.819214582443237,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/shu_osher_teno_N1024"
+    "wall_s": 14.276941061019897,
+    "nmood_total": 174677,
+    "outdir": "/Users/velasco/athenak/.claude/worktrees/fallback-validation/validation/fallback/results/shocks/shu_osher_fv8_fb_N1024"
   },
   {
     "suite": "shocks",
     "case": "rj2a",
-    "scheme": "ppm_fb",
+    "scheme": "fv6_fb",
     "nx1": 256,
     "returncode": 0,
-    "wall_s": 6.194762706756592,
-    "nmood_total": 44934,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/rj2a_ppm_fb_N256"
+    "wall_s": 1.6532340049743652,
+    "nmood_total": 68344,
+    "outdir": "/Users/velasco/athenak/.claude/worktrees/fallback-validation/validation/fallback/results/shocks/rj2a_fv6_fb_N256"
   },
   {
     "suite": "shocks",
     "case": "rj2a",
-    "scheme": "ppm_fb",
+    "scheme": "fv6_fb",
     "nx1": 512,
     "returncode": 0,
-    "wall_s": 7.311729192733765,
-    "nmood_total": 160045,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/rj2a_ppm_fb_N512"
+    "wall_s": 3.3467071056365967,
+    "nmood_total": 213337,
+    "outdir": "/Users/velasco/athenak/.claude/worktrees/fallback-validation/validation/fallback/results/shocks/rj2a_fv6_fb_N512"
   },
   {
     "suite": "shocks",
     "case": "rj2a",
-    "scheme": "ppm_fb",
+    "scheme": "fv6_fb",
     "nx1": 1024,
     "returncode": 0,
-    "wall_s": 10.259937524795532,
-    "nmood_total": 530082,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/rj2a_ppm_fb_N1024"
+    "wall_s": 8.165112018585205,
+    "nmood_total": 649935,
+    "outdir": "/Users/velasco/athenak/.claude/worktrees/fallback-validation/validation/fallback/results/shocks/rj2a_fv6_fb_N1024"
   },
   {
     "suite": "shocks",
     "case": "rj2a",
-    "scheme": "plm",
+    "scheme": "fv8_fb",
     "nx1": 256,
     "returncode": 0,
-    "wall_s": 4.898343086242676,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/rj2a_plm_N256"
+    "wall_s": 1.574977159500122,
+    "nmood_total": 71530,
+    "outdir": "/Users/velasco/athenak/.claude/worktrees/fallback-validation/validation/fallback/results/shocks/rj2a_fv8_fb_N256"
   },
   {
     "suite": "shocks",
     "case": "rj2a",
-    "scheme": "plm",
+    "scheme": "fv8_fb",
     "nx1": 512,
     "returncode": 0,
-    "wall_s": 5.323077917098999,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/rj2a_plm_N512"
+    "wall_s": 3.6153247356414795,
+    "nmood_total": 232156,
+    "outdir": "/Users/velasco/athenak/.claude/worktrees/fallback-validation/validation/fallback/results/shocks/rj2a_fv8_fb_N512"
   },
   {
     "suite": "shocks",
     "case": "rj2a",
-    "scheme": "plm",
+    "scheme": "fv8_fb",
     "nx1": 1024,
     "returncode": 0,
-    "wall_s": 6.295633792877197,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/rj2a_plm_N1024"
-  },
-  {
-    "suite": "shocks",
-    "case": "rj2a",
-    "scheme": "wenoz",
-    "nx1": 256,
-    "returncode": 0,
-    "wall_s": 5.156071424484253,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/rj2a_wenoz_N256"
-  },
-  {
-    "suite": "shocks",
-    "case": "rj2a",
-    "scheme": "wenoz",
-    "nx1": 512,
-    "returncode": 0,
-    "wall_s": 5.787648439407349,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/rj2a_wenoz_N512"
-  },
-  {
-    "suite": "shocks",
-    "case": "rj2a",
-    "scheme": "wenoz",
-    "nx1": 1024,
-    "returncode": 0,
-    "wall_s": 7.087417125701904,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/rj2a_wenoz_N1024"
-  },
-  {
-    "suite": "shocks",
-    "case": "rj2a",
-    "scheme": "teno",
-    "nx1": 256,
-    "returncode": 0,
-    "wall_s": 5.098629713058472,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/rj2a_teno_N256"
-  },
-  {
-    "suite": "shocks",
-    "case": "rj2a",
-    "scheme": "teno",
-    "nx1": 512,
-    "returncode": 0,
-    "wall_s": 5.725203275680542,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/rj2a_teno_N512"
-  },
-  {
-    "suite": "shocks",
-    "case": "rj2a",
-    "scheme": "teno",
-    "nx1": 1024,
-    "returncode": 0,
-    "wall_s": 7.114076614379883,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/rj2a_teno_N1024"
+    "wall_s": 7.934898853302002,
+    "nmood_total": 699868,
+    "outdir": "/Users/velasco/athenak/.claude/worktrees/fallback-validation/validation/fallback/results/shocks/rj2a_fv8_fb_N1024"
   },
   {
     "suite": "shocks",
     "case": "bw",
-    "scheme": "ppm_fb",
+    "scheme": "fv6_fb",
     "nx1": 256,
     "returncode": 0,
-    "wall_s": 5.455307722091675,
-    "nmood_total": 15620,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/bw_ppm_fb_N256"
+    "wall_s": 1.0440690517425537,
+    "nmood_total": 20716,
+    "outdir": "/Users/velasco/athenak/.claude/worktrees/fallback-validation/validation/fallback/results/shocks/bw_fv6_fb_N256"
   },
   {
     "suite": "shocks",
     "case": "bw",
-    "scheme": "ppm_fb",
+    "scheme": "fv6_fb",
     "nx1": 512,
     "returncode": 0,
-    "wall_s": 6.407660722732544,
-    "nmood_total": 46976,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/bw_ppm_fb_N512"
+    "wall_s": 2.2514889240264893,
+    "nmood_total": 64711,
+    "outdir": "/Users/velasco/athenak/.claude/worktrees/fallback-validation/validation/fallback/results/shocks/bw_fv6_fb_N512"
   },
   {
     "suite": "shocks",
     "case": "bw",
-    "scheme": "ppm_fb",
+    "scheme": "fv6_fb",
     "nx1": 1024,
     "returncode": 0,
-    "wall_s": 8.186083555221558,
-    "nmood_total": 139286,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/bw_ppm_fb_N1024"
+    "wall_s": 5.148961067199707,
+    "nmood_total": 202510,
+    "outdir": "/Users/velasco/athenak/.claude/worktrees/fallback-validation/validation/fallback/results/shocks/bw_fv6_fb_N1024"
   },
   {
     "suite": "shocks",
     "case": "bw",
-    "scheme": "plm",
+    "scheme": "fv8_fb",
     "nx1": 256,
     "returncode": 0,
-    "wall_s": 4.831498384475708,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/bw_plm_N256"
+    "wall_s": 1.0830469131469727,
+    "nmood_total": 21156,
+    "outdir": "/Users/velasco/athenak/.claude/worktrees/fallback-validation/validation/fallback/results/shocks/bw_fv8_fb_N256"
   },
   {
     "suite": "shocks",
     "case": "bw",
-    "scheme": "plm",
+    "scheme": "fv8_fb",
     "nx1": 512,
     "returncode": 0,
-    "wall_s": 5.09998893737793,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/bw_plm_N512"
+    "wall_s": 2.3356029987335205,
+    "nmood_total": 67262,
+    "outdir": "/Users/velasco/athenak/.claude/worktrees/fallback-validation/validation/fallback/results/shocks/bw_fv8_fb_N512"
   },
   {
     "suite": "shocks",
     "case": "bw",
-    "scheme": "plm",
+    "scheme": "fv8_fb",
     "nx1": 1024,
     "returncode": 0,
-    "wall_s": 5.740323543548584,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/bw_plm_N1024"
+    "wall_s": 5.349076986312866,
+    "nmood_total": 213808,
+    "outdir": "/Users/velasco/athenak/.claude/worktrees/fallback-validation/validation/fallback/results/shocks/bw_fv8_fb_N1024"
   },
   {
     "suite": "shocks",
-    "case": "bw",
-    "scheme": "wenoz",
+    "case": "mb2_gr",
+    "scheme": "fv6_fb",
     "nx1": 256,
     "returncode": 0,
-    "wall_s": 5.056381940841675,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/bw_wenoz_N256"
+    "wall_s": 1.4876806735992432,
+    "nmood_total": 10970,
+    "outdir": "/Users/velasco/athenak/.claude/worktrees/fallback-validation/validation/fallback/results/shocks/mb2_gr_fv6_fb_N256"
   },
   {
     "suite": "shocks",
-    "case": "bw",
-    "scheme": "wenoz",
+    "case": "mb2_gr",
+    "scheme": "fv6_fb",
     "nx1": 512,
     "returncode": 0,
-    "wall_s": 5.467697620391846,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/bw_wenoz_N512"
+    "wall_s": 3.189343214035034,
+    "nmood_total": 18842,
+    "outdir": "/Users/velasco/athenak/.claude/worktrees/fallback-validation/validation/fallback/results/shocks/mb2_gr_fv6_fb_N512"
   },
   {
     "suite": "shocks",
-    "case": "bw",
-    "scheme": "wenoz",
+    "case": "mb2_gr",
+    "scheme": "fv6_fb",
     "nx1": 1024,
     "returncode": 0,
-    "wall_s": 6.279923915863037,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/bw_wenoz_N1024"
+    "wall_s": 8.998086929321289,
+    "nmood_total": 33205,
+    "outdir": "/Users/velasco/athenak/.claude/worktrees/fallback-validation/validation/fallback/results/shocks/mb2_gr_fv6_fb_N1024"
   },
   {
     "suite": "shocks",
-    "case": "bw",
-    "scheme": "teno",
+    "case": "mb2_gr",
+    "scheme": "fv8_fb",
     "nx1": 256,
     "returncode": 0,
-    "wall_s": 4.895114898681641,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/bw_teno_N256"
-  },
-  {
-    "suite": "shocks",
-    "case": "bw",
-    "scheme": "teno",
-    "nx1": 512,
-    "returncode": 0,
-    "wall_s": 5.3945393562316895,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/bw_teno_N512"
-  },
-  {
-    "suite": "shocks",
-    "case": "bw",
-    "scheme": "teno",
-    "nx1": 1024,
-    "returncode": 0,
-    "wall_s": 6.336426734924316,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/bw_teno_N1024"
+    "wall_s": 1.3129429817199707,
+    "nmood_total": 9913,
+    "outdir": "/Users/velasco/athenak/.claude/worktrees/fallback-validation/validation/fallback/results/shocks/mb2_gr_fv8_fb_N256"
   },
   {
     "suite": "shocks",
     "case": "mb2_gr",
-    "scheme": "ppm_fb",
+    "scheme": "fv8_fb",
+    "nx1": 512,
+    "returncode": 0,
+    "wall_s": 3.2180240154266357,
+    "nmood_total": 16357,
+    "outdir": "/Users/velasco/athenak/.claude/worktrees/fallback-validation/validation/fallback/results/shocks/mb2_gr_fv8_fb_N512"
+  },
+  {
+    "suite": "shocks",
+    "case": "mb2_gr",
+    "scheme": "fv8_fb",
+    "nx1": 1024,
+    "returncode": 0,
+    "wall_s": 9.4079749584198,
+    "nmood_total": 27336,
+    "outdir": "/Users/velasco/athenak/.claude/worktrees/fallback-validation/validation/fallback/results/shocks/mb2_gr_fv8_fb_N1024"
+  },
+  {
+    "suite": "shocks",
+    "case": "mub1_gr",
+    "scheme": "fv6_fb",
     "nx1": 256,
     "returncode": 0,
-    "wall_s": 5.236825466156006,
-    "nmood_total": 13397,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/mb2_gr_ppm_fb_N256"
+    "wall_s": 1.3191649913787842,
+    "nmood_total": 86662,
+    "outdir": "/Users/velasco/athenak/.claude/worktrees/fallback-validation/validation/fallback/results/shocks/mub1_gr_fv6_fb_N256"
   },
   {
     "suite": "shocks",
-    "case": "mb2_gr",
-    "scheme": "ppm_fb",
+    "case": "mub1_gr",
+    "scheme": "fv6_fb",
     "nx1": 512,
     "returncode": 0,
-    "wall_s": 6.132622480392456,
-    "nmood_total": 25142,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/mb2_gr_ppm_fb_N512"
+    "wall_s": 3.160266876220703,
+    "nmood_total": 293940,
+    "outdir": "/Users/velasco/athenak/.claude/worktrees/fallback-validation/validation/fallback/results/shocks/mub1_gr_fv6_fb_N512"
   },
   {
     "suite": "shocks",
-    "case": "mb2_gr",
-    "scheme": "ppm_fb",
+    "case": "mub1_gr",
+    "scheme": "fv6_fb",
     "nx1": 1024,
     "returncode": 0,
-    "wall_s": 7.560010671615601,
-    "nmood_total": 44057,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/mb2_gr_ppm_fb_N1024"
+    "wall_s": 8.895801067352295,
+    "nmood_total": 1021282,
+    "outdir": "/Users/velasco/athenak/.claude/worktrees/fallback-validation/validation/fallback/results/shocks/mub1_gr_fv6_fb_N1024"
   },
   {
     "suite": "shocks",
-    "case": "mb2_gr",
-    "scheme": "plm",
+    "case": "mub1_gr",
+    "scheme": "fv8_fb",
     "nx1": 256,
     "returncode": 0,
-    "wall_s": 5.976938486099243,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/mb2_gr_plm_N256"
+    "wall_s": 1.6509120464324951,
+    "nmood_total": 87413,
+    "outdir": "/Users/velasco/athenak/.claude/worktrees/fallback-validation/validation/fallback/results/shocks/mub1_gr_fv8_fb_N256"
   },
   {
     "suite": "shocks",
-    "case": "mb2_gr",
-    "scheme": "plm",
+    "case": "mub1_gr",
+    "scheme": "fv8_fb",
     "nx1": 512,
     "returncode": 0,
-    "wall_s": 5.3372015953063965,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/mb2_gr_plm_N512"
+    "wall_s": 3.24454402923584,
+    "nmood_total": 297610,
+    "outdir": "/Users/velasco/athenak/.claude/worktrees/fallback-validation/validation/fallback/results/shocks/mub1_gr_fv8_fb_N512"
   },
   {
     "suite": "shocks",
-    "case": "mb2_gr",
-    "scheme": "plm",
+    "case": "mub1_gr",
+    "scheme": "fv8_fb",
     "nx1": 1024,
     "returncode": 0,
-    "wall_s": 6.497895002365112,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/mb2_gr_plm_N1024"
-  },
-  {
-    "suite": "shocks",
-    "case": "mb2_gr",
-    "scheme": "wenoz",
-    "nx1": 256,
-    "returncode": 0,
-    "wall_s": 5.083803415298462,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/mb2_gr_wenoz_N256"
-  },
-  {
-    "suite": "shocks",
-    "case": "mb2_gr",
-    "scheme": "wenoz",
-    "nx1": 512,
-    "returncode": 0,
-    "wall_s": 5.588774919509888,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/mb2_gr_wenoz_N512"
-  },
-  {
-    "suite": "shocks",
-    "case": "mb2_gr",
-    "scheme": "wenoz",
-    "nx1": 1024,
-    "returncode": 0,
-    "wall_s": 6.645209789276123,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/mb2_gr_wenoz_N1024"
-  },
-  {
-    "suite": "shocks",
-    "case": "mb2_gr",
-    "scheme": "teno",
-    "nx1": 256,
-    "returncode": 0,
-    "wall_s": 5.054182767868042,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/mb2_gr_teno_N256"
-  },
-  {
-    "suite": "shocks",
-    "case": "mb2_gr",
-    "scheme": "teno",
-    "nx1": 512,
-    "returncode": 0,
-    "wall_s": 5.706254482269287,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/mb2_gr_teno_N512"
-  },
-  {
-    "suite": "shocks",
-    "case": "mb2_gr",
-    "scheme": "teno",
-    "nx1": 1024,
-    "returncode": 0,
-    "wall_s": 6.717432022094727,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/mb2_gr_teno_N1024"
-  },
-  {
-    "suite": "shocks",
-    "case": "mub1_gr",
-    "scheme": "ppm_fb",
-    "nx1": 256,
-    "returncode": 0,
-    "wall_s": 5.615639686584473,
-    "nmood_total": 18875,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/mub1_gr_ppm_fb_N256"
-  },
-  {
-    "suite": "shocks",
-    "case": "mub1_gr",
-    "scheme": "ppm_fb",
-    "nx1": 512,
-    "returncode": 0,
-    "wall_s": 6.514868259429932,
-    "nmood_total": 49559,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/mub1_gr_ppm_fb_N512"
-  },
-  {
-    "suite": "shocks",
-    "case": "mub1_gr",
-    "scheme": "ppm_fb",
-    "nx1": 1024,
-    "returncode": 0,
-    "wall_s": 8.86355972290039,
-    "nmood_total": 137084,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/mub1_gr_ppm_fb_N1024"
-  },
-  {
-    "suite": "shocks",
-    "case": "mub1_gr",
-    "scheme": "plm",
-    "nx1": 256,
-    "returncode": 0,
-    "wall_s": 5.131254196166992,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/mub1_gr_plm_N256"
-  },
-  {
-    "suite": "shocks",
-    "case": "mub1_gr",
-    "scheme": "plm",
-    "nx1": 512,
-    "returncode": 0,
-    "wall_s": 5.699239015579224,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/mub1_gr_plm_N512"
-  },
-  {
-    "suite": "shocks",
-    "case": "mub1_gr",
-    "scheme": "plm",
-    "nx1": 1024,
-    "returncode": 0,
-    "wall_s": 7.1900458335876465,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/mub1_gr_plm_N1024"
-  },
-  {
-    "suite": "shocks",
-    "case": "mub1_gr",
-    "scheme": "wenoz",
-    "nx1": 256,
-    "returncode": 0,
-    "wall_s": 5.251308441162109,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/mub1_gr_wenoz_N256"
-  },
-  {
-    "suite": "shocks",
-    "case": "mub1_gr",
-    "scheme": "wenoz",
-    "nx1": 512,
-    "returncode": 0,
-    "wall_s": 6.196975946426392,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/mub1_gr_wenoz_N512"
-  },
-  {
-    "suite": "shocks",
-    "case": "mub1_gr",
-    "scheme": "wenoz",
-    "nx1": 1024,
-    "returncode": 0,
-    "wall_s": 7.92611837387085,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/mub1_gr_wenoz_N1024"
-  },
-  {
-    "suite": "shocks",
-    "case": "mub1_gr",
-    "scheme": "teno",
-    "nx1": 256,
-    "returncode": 0,
-    "wall_s": 5.354448318481445,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/mub1_gr_teno_N256"
-  },
-  {
-    "suite": "shocks",
-    "case": "mub1_gr",
-    "scheme": "teno",
-    "nx1": 512,
-    "returncode": 0,
-    "wall_s": 6.118960380554199,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/mub1_gr_teno_N512"
-  },
-  {
-    "suite": "shocks",
-    "case": "mub1_gr",
-    "scheme": "teno",
-    "nx1": 1024,
-    "returncode": 0,
-    "wall_s": 7.702042102813721,
-    "nmood_total": 0,
-    "outdir": "/scratch/11121/davela/fallback_validation/src_tree/validation/fallback/results/shocks/mub1_gr_teno_N1024"
+    "wall_s": 9.393831968307495,
+    "nmood_total": 1039918,
+    "outdir": "/Users/velasco/athenak/.claude/worktrees/fallback-validation/validation/fallback/results/shocks/mub1_gr_fv8_fb_N1024"
   }
 ]

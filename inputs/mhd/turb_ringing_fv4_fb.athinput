@@ -1,12 +1,12 @@
-# Strong guide-field ringing reproducer with unlimited PPM + MOOD fallback (PPM+FB).
+# Strong guide-field ringing reproducer with unlimited FV4 + MOOD fallback (PPM+FB).
 # Same physical/numerical setup as turb_ringing_reproducer.athinput except:
-#   reconstruct = ppm, mood = true, nghost = 5 (MOOD halo requirement).
+#   reconstruct = fv4, mood = true, nghost = 5 (MOOD halo requirement).
 
 <comment>
 problem = strong-guide-field driven turbulence ringing reproducer (PPM+FB)
 
 <job>
-basename = turb_ringing_ppm_fb
+basename = turb_ringing_fv4_fb
 
 <mesh>
 nghost = 6
@@ -44,7 +44,7 @@ ndiag = 1
 
 <mhd>
 eos = ideal
-reconstruct = ppm
+reconstruct = fv4
 mood = true
 mood_rtol = 1.0e-5
 mood_atol = 0.0

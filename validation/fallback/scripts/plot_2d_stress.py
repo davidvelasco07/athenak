@@ -13,6 +13,9 @@ import numpy as np
 
 VAL = Path(__file__).resolve().parents[1]
 RESULTS = VAL / "results" / "stress"
+# Older comparison schemes were archived without VTK under results/stress.
+# New fv6/fv8 dumps land in RESULTS; fill a missing finite dump from these.
+RESULTS_FALLBACK = [VAL / "results" / "stress_local_cpu"]
 FIGURES = VAL / "figures"
 MANIFEST = VAL / "manifest.yaml"
 VENDOR = VAL / "vendor"
@@ -38,9 +41,11 @@ from plot_style import apply_publication_style
 
 apply_publication_style()
 
-SCHEME_ORDER = ["ppm_fb", "plm", "wenoz", "teno"]
+SCHEME_ORDER = ["fv4_fb", "fv6_fb", "fv8_fb", "plm", "wenoz", "teno"]
 SCHEME_LABEL = {
-    "ppm_fb": r"PPM + MOOD + RK3",
+    "fv4_fb": r"FV4 + RK3",
+    "fv6_fb": r"FV6 + RK3",
+    "fv8_fb": r"FV8 + RK3",
     "plm": r"PLM + RK2",
     "wenoz": r"WENO-Z + RK3",
     "teno": r"TENO + RK3",
@@ -122,7 +127,11 @@ def read_vtk_structured(path: Path):
             nbytes = 4 * ncell
             blob = raw[start : start + nbytes]
             arr = np.array(struct.unpack(">" + "f" * ncell, blob), dtype=np.float64)
-            fields[name] = arr.reshape(ncz, ncy, ncx)[0]
+            # MIDPLANE, not k=0.  For 2D data ncz==1 and the two agree, which is why
+            # this went unnoticed until the first 3D case: k=0 is the z-minimum boundary
+            # plane, so a centred blast in a [-6,6] box was rendered at z = -5.94 --
+            # undisturbed ambient, and the panel came out uniformly blank.
+            fields[name] = arr.reshape(ncz, ncy, ncx)[ncz // 2]
         else:
             # VECTORS name float\n then 3*ncell floats
             line_end = raw.find(b"\n", m.end())
@@ -130,7 +139,7 @@ def read_vtk_structured(path: Path):
             nbytes = 12 * ncell
             blob = raw[start : start + nbytes]
             arr = np.array(struct.unpack(">" + "f" * (3 * ncell), blob), dtype=np.float64)
-            fields[name] = arr.reshape(ncz, ncy, ncx, 3)[0]
+            fields[name] = arr.reshape(ncz, ncy, ncx, 3)[ncz // 2]
 
     origin_m = re.search(
         r"ORIGIN\s+([-\d.eE+]+)\s+([-\d.eE+]+)\s+([-\d.eE+]+)", header
@@ -141,6 +150,8 @@ def read_vtk_structured(path: Path):
     meta = {
         "nx": ncx,
         "ny": ncy,
+        "nz": ncz,
+        "slice_k": ncz // 2,
         "origin": tuple(float(origin_m.group(i)) for i in (1, 2, 3)) if origin_m else (0, 0, 0),
         "spacing": tuple(float(spacing_m.group(i)) for i in (1, 2, 3))
         if spacing_m
@@ -314,6 +325,33 @@ def plot_case_mosaic(case_id: str, field: str, schemes_data: dict, out: Path,
     print(f"Wrote {out}")
 
 
+def _smoke_dirs(primary: Path):
+    """One directory per smoke name. Prefer primary when it has a VTK dump."""
+    by_name = {}
+
+    def consider(d: Path):
+        if not d.is_dir():
+            return
+        prev = by_name.get(d.name)
+        if prev is None:
+            by_name[d.name] = d
+            return
+        prev_vtk = any(prev.glob("vtk/*.vtk")) or any(prev.glob("*.vtk"))
+        this_vtk = any(d.glob("vtk/*.vtk")) or any(d.glob("*.vtk"))
+        if this_vtk and not prev_vtk:
+            by_name[d.name] = d
+
+    if primary.is_dir():
+        for d in primary.glob("*_smoke"):
+            consider(d)
+    for root in RESULTS_FALLBACK:
+        if root.resolve() == primary.resolve() or not root.is_dir():
+            continue
+        for d in root.glob("*_smoke"):
+            consider(d)
+    return [by_name[k] for k in sorted(by_name)]
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--case", default=None, help="Only plot this case id")
@@ -332,7 +370,7 @@ def main():
     by_case_health = defaultdict(dict)
     by_case_time = {}
     by_case_unplottable = defaultdict(set)
-    for d in sorted(results_dir.glob("*_smoke")):
+    for d in _smoke_dirs(results_dir):
         if not d.is_dir():
             continue
         name = d.name
@@ -348,6 +386,9 @@ def main():
         if case_id not in active_cases:
             continue
         if args.case and case_id != args.case:
+            continue
+        if not (d / "summary.json").exists():
+            print(f"skip {d.name}: run still in progress")
             continue
         field = field_by_case.get(case_id, "dens")
         vtk = _latest_finite_vtk(d, field)
@@ -392,7 +433,9 @@ def main():
                          unplottable=by_case_unplottable.get(case_id))
 
         phys = physics_by_case.get(case_id, "")
-        if phys == "mhd":
+        # every magnetized physics, not just the Newtonian one: srmhd and grmhd carry a
+        # field too, and gating on the literal "mhd" silently skipped their |B| mosaics
+        if phys in ("mhd", "srmhd", "grmhd"):
             bdata = {}
             for scheme, fields in scheme_fields.items():
                 arr = _field_array(fields, "bmag")

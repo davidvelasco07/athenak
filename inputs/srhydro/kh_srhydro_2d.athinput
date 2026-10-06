@@ -1,0 +1,86 @@
+# Relativistic Kelvin-Helmholtz, 2D.
+#
+# Derived from inputs/srhydro/kh_srhyd1.athinput (iprob=1, the smooth shear layer with a
+# single sinusoidal perturbation).  Two changes: rsolver hlle rather than hllc, which is
+# not implemented for relativistic dynamics, and the output section reduced to the two
+# blocks the validation harness rewrites.
+#
+# WHY IT IS HERE.  Every other relativistic case in this battery is a blast -- shocks into
+# a quiescent medium.  A shear layer exercises the fallback on a completely different
+# failure mode: the detector has to leave a smooth, rolling interface alone while it grows,
+# rather than catch a discontinuity.  A limiter that is merely diffusive passes a blast and
+# flattens this.
+#
+# Its GR-on-a-flat-metric twin is inputs/grhydro/kh_grhydro_2d.athinput; the two solve the
+# same problem through independent machinery.
+
+# Athena++ (Kokkos version) input file for SR hydro KH test, iprob=1
+
+<comment>
+problem   = Kelvin-Helmholtz instability
+reference = Mignone et al.
+
+<job>
+basename  = kh_srhydro         # problem ID: basename of output filenames
+
+<mesh>
+nghost    = 3
+nx1       = 256         # Number of zones in X1-direction
+x1min     = -0.5        # minimum value of X1
+x1max     =  0.5        # maximum value of X1
+ix1_bc    = periodic    # inner-X1 boundary flag
+ox1_bc    = periodic    # inner-X1 boundary flag
+
+nx2       = 128          # Number of zones in X2-direction
+x2min     = -0.25        # minimum value of X2
+x2max     = 0.25         # maximum value of X2
+ix2_bc    = reflect      # inner-X2 boundary flag
+ox2_bc    = reflect     # inner-X2 boundary flag
+
+nx3       = 1           # Number of zones in X3-direction
+x3min     = -0.5        # minimum value of X3
+x3max     = 0.5         # maximum value of X3
+ix3_bc    = periodic    # inner-X3 boundary flag
+ox3_bc    = periodic    # inner-X3 boundary flag
+
+<meshblock>
+nx1       = 256         # Number of cells in each MeshBlock, X1-dir
+nx2       = 128         # Number of cells in each MeshBlock, X2-dir
+nx3       = 1           # Number of cells in each MeshBlock, X3-dir
+
+<coord>
+special_rel = true
+
+<time>
+evolution  = dynamic    # dynamic/kinematic/static
+integrator = rk3        # time integration algorithm
+cfl_number = 0.4        # The Courant, Friedrichs, & Lewy (CFL) Number
+nlim       = 100000     # cycle limit
+tlim       = 5.0        # time limit
+ndiag      = 1          # cycles between diagostic output
+
+<hydro>
+eos         = ideal     # EOS type
+reconstruct = ppmx      # spatial reconstruction method
+rsolver     = hlle      # Riemann-solver to be used
+nscalars    = 1         # number of passive scalars in hydro
+gamma       = 1.3333333  # gamma = C_p/C_v
+
+<problem>
+iprob = 1        # flag to select test
+amp   = 0.01     # amplitude of sinusoidal perturbation
+sigma = 0.01     # width of tanh profile
+vshear = 0.25    # 1/2 of shear velocity
+rho0   = 1.0     # density in L-going-state
+rho1   = 1.0     # density in R-going-state
+
+<output1>
+file_type   = vtk
+variable    = hydro_w
+data_format = %12.5e
+dt          = 2.0
+
+<output2>
+file_type   = log
+data_format = %12.5e
+dcycle      = 1

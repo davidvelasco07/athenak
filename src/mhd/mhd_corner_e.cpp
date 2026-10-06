@@ -27,21 +27,25 @@
 #include "reconstruct/ppm.hpp"
 #include "reconstruct/wenoz.hpp"
 #include "reconstruct/teno.hpp"
+#include "reconstruct/fv.hpp"
 
 //----------------------------------------------------------------------------------------
 //! \fn ReconstructEdge()
 //! \brief Reconstruct a scalar field to L/R states at the interface between positions
 //! i-1 and i (i.e., at i-1/2), using the same spatial reconstruction as the main solver.
 //!
-//! Takes 6 values at positions i-3, i-2, i-1, i, i+1, i+2 (PLM only uses i-2..i+1).
+//! Takes 8 values at positions i-4, i-3, i-2, i-1, i, i+1, i+2, i+3.  PLM uses
+//! i-2..i+1, the limited 5-point methods (PPM4/PPMX/WENOZ/TENO) use i-3..i+2, and
+//! the unlimited fv8 interpolant uses the whole window (fv4/fv6 use the inner part).
 //! Returns: qL = left state at i-1/2 (reconstructed from cell i-1 toward right)
 //!          qR = right state at i-1/2 (reconstructed from cell i toward left)
+//! For fv4/fv6/fv8 the two states are the same central interpolant.
 
 KOKKOS_INLINE_FUNCTION
 void ReconstructEdge(const ReconstructionMethod recon,
-                     const Real &q_im3, const Real &q_im2,
+                     const Real &q_im4, const Real &q_im3, const Real &q_im2,
                      const Real &q_im1, const Real &q_i,
-                     const Real &q_ip1, const Real &q_ip2,
+                     const Real &q_ip1, const Real &q_ip2, const Real &q_ip3,
                      Real &qL, Real &qR) {
   Real dum;  // unused output
   switch (recon) {
@@ -61,9 +65,16 @@ void ReconstructEdge(const ReconstructionMethod recon,
       PPMX(q_im3, q_im2, q_im1, q_i, q_ip1, qL, dum);
       PPMX(q_im2, q_im1, q_i, q_ip1, q_ip2, dum, qR);
       break;
-    case ReconstructionMethod::ppm:
-      // unlimited 4th-order interface interpolation; single-valued at the edge
-      qL = (7.0*(q_im1 + q_i) - (q_im2 + q_ip1))/12.0;
+    case ReconstructionMethod::fv4:
+      qL = FV4Face(q_im2, q_im1, q_i, q_ip1);
+      qR = qL;
+      break;
+    case ReconstructionMethod::fv6:
+      qL = FV6Face(q_im3, q_im2, q_im1, q_i, q_ip1, q_ip2);
+      qR = qL;
+      break;
+    case ReconstructionMethod::fv8:
+      qL = FV8Face(q_im4, q_im3, q_im2, q_im1, q_i, q_ip1, q_ip2, q_ip3);
       qR = qL;
       break;
     case ReconstructionMethod::wenoz:
@@ -85,11 +96,12 @@ void ReconstructEdge(const ReconstructionMethod recon,
 
 KOKKOS_INLINE_FUNCTION
 Real InterpolateEdge(const ReconstructionMethod recon,
-                     const Real &q_im3, const Real &q_im2,
+                     const Real &q_im4, const Real &q_im3, const Real &q_im2,
                      const Real &q_im1, const Real &q_i,
-                     const Real &q_ip1, const Real &q_ip2) {
+                     const Real &q_ip1, const Real &q_ip2, const Real &q_ip3) {
   Real qL, qR;
-  ReconstructEdge(recon, q_im3, q_im2, q_im1, q_i, q_ip1, q_ip2, qL, qR);
+  ReconstructEdge(recon, q_im4, q_im3, q_im2, q_im1, q_i, q_ip1, q_ip2, q_ip3,
+                  qL, qR);
   return 0.5*(qL + qR);
 }
 
@@ -103,20 +115,20 @@ Real InterpolateEdge(const ReconstructionMethod recon,
 
 KOKKOS_INLINE_FUNCTION
 Real InterpolateEdgeA(const ReconstructionMethod recon,
-                      const Real &q_im3, const Real &q_im2,
+                      const Real &q_im4, const Real &q_im3, const Real &q_im2,
                       const Real &q_im1, const Real &q_i,
-                      const Real &q_ip1, const Real &q_ip2) {
+                      const Real &q_ip1, const Real &q_ip2, const Real &q_ip3) {
   return fmin(1.0, fmax(0.0,
-      InterpolateEdge(recon, q_im3, q_im2, q_im1, q_i, q_ip1, q_ip2)));
+      InterpolateEdge(recon, q_im4, q_im3, q_im2, q_im1, q_i, q_ip1, q_ip2, q_ip3)));
 }
 
 KOKKOS_INLINE_FUNCTION
 Real InterpolateEdgeD(const ReconstructionMethod recon,
-                      const Real &q_im3, const Real &q_im2,
+                      const Real &q_im4, const Real &q_im3, const Real &q_im2,
                       const Real &q_im1, const Real &q_i,
-                      const Real &q_ip1, const Real &q_ip2) {
+                      const Real &q_ip1, const Real &q_ip2, const Real &q_ip3) {
   return fmax(0.0,
-      InterpolateEdge(recon, q_im3, q_im2, q_im1, q_i, q_ip1, q_ip2));
+      InterpolateEdge(recon, q_im4, q_im3, q_im2, q_im1, q_i, q_ip1, q_ip2, q_ip3));
 }
 
 namespace mhd {
@@ -176,44 +188,44 @@ void MHD::ComposeCornerEMF(int il, int iu, int jl, int ju, int kl, int ku) {
         else if (t >= 1) { er = ReconstructionMethod::plm; }
       }
       Real ax_W = InterpolateEdgeA(er,
-        aL1(m,ks,j-3,i), aL1(m,ks,j-2,i), aL1(m,ks,j-1,i),
-        aL1(m,ks,j,i),   aL1(m,ks,j+1,i), aL1(m,ks,j+2,i));
+        aL1(m,ks,j-4,i), aL1(m,ks,j-3,i), aL1(m,ks,j-2,i), aL1(m,ks,j-1,i),
+        aL1(m,ks,j,i), aL1(m,ks,j+1,i), aL1(m,ks,j+2,i), aL1(m,ks,j+3,i));
       Real ax_E = 1.0 - ax_W;
       Real dx_W = InterpolateEdgeD(er,
-        dL1(m,ks,j-3,i), dL1(m,ks,j-2,i), dL1(m,ks,j-1,i),
-        dL1(m,ks,j,i),   dL1(m,ks,j+1,i), dL1(m,ks,j+2,i));
+        dL1(m,ks,j-4,i), dL1(m,ks,j-3,i), dL1(m,ks,j-2,i), dL1(m,ks,j-1,i),
+        dL1(m,ks,j,i), dL1(m,ks,j+1,i), dL1(m,ks,j+2,i), dL1(m,ks,j+3,i));
       Real dx_E = InterpolateEdgeD(er,
-        dR1(m,ks,j-3,i), dR1(m,ks,j-2,i), dR1(m,ks,j-1,i),
-        dR1(m,ks,j,i),   dR1(m,ks,j+1,i), dR1(m,ks,j+2,i));
+        dR1(m,ks,j-4,i), dR1(m,ks,j-3,i), dR1(m,ks,j-2,i), dR1(m,ks,j-1,i),
+        dR1(m,ks,j,i), dR1(m,ks,j+1,i), dR1(m,ks,j+2,i), dR1(m,ks,j+3,i));
       Real ay_S = InterpolateEdgeA(er,
-        aL2(m,ks,j,i-3), aL2(m,ks,j,i-2), aL2(m,ks,j,i-1),
-        aL2(m,ks,j,i),   aL2(m,ks,j,i+1), aL2(m,ks,j,i+2));
+        aL2(m,ks,j,i-4), aL2(m,ks,j,i-3), aL2(m,ks,j,i-2), aL2(m,ks,j,i-1),
+        aL2(m,ks,j,i), aL2(m,ks,j,i+1), aL2(m,ks,j,i+2), aL2(m,ks,j,i+3));
       Real ay_N = 1.0 - ay_S;
       Real dy_S = InterpolateEdgeD(er,
-        dL2(m,ks,j,i-3), dL2(m,ks,j,i-2), dL2(m,ks,j,i-1),
-        dL2(m,ks,j,i),   dL2(m,ks,j,i+1), dL2(m,ks,j,i+2));
+        dL2(m,ks,j,i-4), dL2(m,ks,j,i-3), dL2(m,ks,j,i-2), dL2(m,ks,j,i-1),
+        dL2(m,ks,j,i), dL2(m,ks,j,i+1), dL2(m,ks,j,i+2), dL2(m,ks,j,i+3));
       Real dy_N = InterpolateEdgeD(er,
-        dR2(m,ks,j,i-3), dR2(m,ks,j,i-2), dR2(m,ks,j,i-1),
-        dR2(m,ks,j,i),   dR2(m,ks,j,i+1), dR2(m,ks,j,i+2));
+        dR2(m,ks,j,i-4), dR2(m,ks,j,i-3), dR2(m,ks,j,i-2), dR2(m,ks,j,i-1),
+        dR2(m,ks,j,i), dR2(m,ks,j,i+1), dR2(m,ks,j,i+2), dR2(m,ks,j,i+3));
       Real vy_S, vy_N;
       ReconstructEdge(er,
-        vy1(m,ks,j-3,i), vy1(m,ks,j-2,i), vy1(m,ks,j-1,i),
-        vy1(m,ks,j,i),   vy1(m,ks,j+1,i), vy1(m,ks,j+2,i),
+        vy1(m,ks,j-4,i), vy1(m,ks,j-3,i), vy1(m,ks,j-2,i), vy1(m,ks,j-1,i),
+        vy1(m,ks,j,i), vy1(m,ks,j+1,i), vy1(m,ks,j+2,i), vy1(m,ks,j+3,i),
         vy_S, vy_N);
       Real vx_W, vx_E;
       ReconstructEdge(er,
-        vx2(m,ks,j,i-3), vx2(m,ks,j,i-2), vx2(m,ks,j,i-1),
-        vx2(m,ks,j,i),   vx2(m,ks,j,i+1), vx2(m,ks,j,i+2),
+        vx2(m,ks,j,i-4), vx2(m,ks,j,i-3), vx2(m,ks,j,i-2), vx2(m,ks,j,i-1),
+        vx2(m,ks,j,i), vx2(m,ks,j,i+1), vx2(m,ks,j,i+2), vx2(m,ks,j,i+3),
         vx_W, vx_E);
       Real By_W, By_E;
       ReconstructEdge(er,
-        bx2f_(m,ks,j,i-3), bx2f_(m,ks,j,i-2), bx2f_(m,ks,j,i-1),
-        bx2f_(m,ks,j,i),   bx2f_(m,ks,j,i+1), bx2f_(m,ks,j,i+2),
+        bx2f_(m,ks,j,i-4), bx2f_(m,ks,j,i-3), bx2f_(m,ks,j,i-2), bx2f_(m,ks,j,i-1),
+        bx2f_(m,ks,j,i), bx2f_(m,ks,j,i+1), bx2f_(m,ks,j,i+2), bx2f_(m,ks,j,i+3),
         By_W, By_E);
       Real Bx_S, Bx_N;
       ReconstructEdge(er,
-        bx1f_(m,ks,j-3,i), bx1f_(m,ks,j-2,i), bx1f_(m,ks,j-1,i),
-        bx1f_(m,ks,j,i),   bx1f_(m,ks,j+1,i), bx1f_(m,ks,j+2,i),
+        bx1f_(m,ks,j-4,i), bx1f_(m,ks,j-3,i), bx1f_(m,ks,j-2,i), bx1f_(m,ks,j-1,i),
+        bx1f_(m,ks,j,i), bx1f_(m,ks,j+1,i), bx1f_(m,ks,j+2,i), bx1f_(m,ks,j+3,i),
         Bx_S, Bx_N);
       e3(m,ks,j,i) = -(ax_W*vx_W*By_W + ax_E*vx_E*By_E)
                      +(ay_S*vy_S*Bx_S + ay_N*vy_N*Bx_N)
@@ -237,44 +249,44 @@ void MHD::ComposeCornerEMF(int il, int iu, int jl, int ju, int kl, int ku) {
           else if (t >= 1) { er1 = ReconstructionMethod::plm; }
         }
         Real ay_S = InterpolateEdgeA(er1,
-          aL2(m,k-3,j,i), aL2(m,k-2,j,i), aL2(m,k-1,j,i),
-          aL2(m,k,j,i),   aL2(m,k+1,j,i), aL2(m,k+2,j,i));
+          aL2(m,k-4,j,i), aL2(m,k-3,j,i), aL2(m,k-2,j,i), aL2(m,k-1,j,i),
+          aL2(m,k,j,i), aL2(m,k+1,j,i), aL2(m,k+2,j,i), aL2(m,k+3,j,i));
         Real ay_N = 1.0 - ay_S;
         Real dy_S = InterpolateEdgeD(er1,
-          dL2(m,k-3,j,i), dL2(m,k-2,j,i), dL2(m,k-1,j,i),
-          dL2(m,k,j,i),   dL2(m,k+1,j,i), dL2(m,k+2,j,i));
+          dL2(m,k-4,j,i), dL2(m,k-3,j,i), dL2(m,k-2,j,i), dL2(m,k-1,j,i),
+          dL2(m,k,j,i), dL2(m,k+1,j,i), dL2(m,k+2,j,i), dL2(m,k+3,j,i));
         Real dy_N = InterpolateEdgeD(er1,
-          dR2(m,k-3,j,i), dR2(m,k-2,j,i), dR2(m,k-1,j,i),
-          dR2(m,k,j,i),   dR2(m,k+1,j,i), dR2(m,k+2,j,i));
+          dR2(m,k-4,j,i), dR2(m,k-3,j,i), dR2(m,k-2,j,i), dR2(m,k-1,j,i),
+          dR2(m,k,j,i), dR2(m,k+1,j,i), dR2(m,k+2,j,i), dR2(m,k+3,j,i));
         Real az_B = InterpolateEdgeA(er1,
-          aL3(m,k,j-3,i), aL3(m,k,j-2,i), aL3(m,k,j-1,i),
-          aL3(m,k,j,i),   aL3(m,k,j+1,i), aL3(m,k,j+2,i));
+          aL3(m,k,j-4,i), aL3(m,k,j-3,i), aL3(m,k,j-2,i), aL3(m,k,j-1,i),
+          aL3(m,k,j,i), aL3(m,k,j+1,i), aL3(m,k,j+2,i), aL3(m,k,j+3,i));
         Real az_T = 1.0 - az_B;
         Real dz_B = InterpolateEdgeD(er1,
-          dL3(m,k,j-3,i), dL3(m,k,j-2,i), dL3(m,k,j-1,i),
-          dL3(m,k,j,i),   dL3(m,k,j+1,i), dL3(m,k,j+2,i));
+          dL3(m,k,j-4,i), dL3(m,k,j-3,i), dL3(m,k,j-2,i), dL3(m,k,j-1,i),
+          dL3(m,k,j,i), dL3(m,k,j+1,i), dL3(m,k,j+2,i), dL3(m,k,j+3,i));
         Real dz_T = InterpolateEdgeD(er1,
-          dR3(m,k,j-3,i), dR3(m,k,j-2,i), dR3(m,k,j-1,i),
-          dR3(m,k,j,i),   dR3(m,k,j+1,i), dR3(m,k,j+2,i));
+          dR3(m,k,j-4,i), dR3(m,k,j-3,i), dR3(m,k,j-2,i), dR3(m,k,j-1,i),
+          dR3(m,k,j,i), dR3(m,k,j+1,i), dR3(m,k,j+2,i), dR3(m,k,j+3,i));
         Real vz_B, vz_T;
         ReconstructEdge(er1,
-          vz2(m,k-3,j,i), vz2(m,k-2,j,i), vz2(m,k-1,j,i),
-          vz2(m,k,j,i),   vz2(m,k+1,j,i), vz2(m,k+2,j,i),
+          vz2(m,k-4,j,i), vz2(m,k-3,j,i), vz2(m,k-2,j,i), vz2(m,k-1,j,i),
+          vz2(m,k,j,i), vz2(m,k+1,j,i), vz2(m,k+2,j,i), vz2(m,k+3,j,i),
           vz_B, vz_T);
         Real vy_S, vy_N;
         ReconstructEdge(er1,
-          vy3(m,k,j-3,i), vy3(m,k,j-2,i), vy3(m,k,j-1,i),
-          vy3(m,k,j,i),   vy3(m,k,j+1,i), vy3(m,k,j+2,i),
+          vy3(m,k,j-4,i), vy3(m,k,j-3,i), vy3(m,k,j-2,i), vy3(m,k,j-1,i),
+          vy3(m,k,j,i), vy3(m,k,j+1,i), vy3(m,k,j+2,i), vy3(m,k,j+3,i),
           vy_S, vy_N);
         Real By_B, By_T;
         ReconstructEdge(er1,
-          bx2f_(m,k-3,j,i), bx2f_(m,k-2,j,i), bx2f_(m,k-1,j,i),
-          bx2f_(m,k,j,i),   bx2f_(m,k+1,j,i), bx2f_(m,k+2,j,i),
+          bx2f_(m,k-4,j,i), bx2f_(m,k-3,j,i), bx2f_(m,k-2,j,i), bx2f_(m,k-1,j,i),
+          bx2f_(m,k,j,i), bx2f_(m,k+1,j,i), bx2f_(m,k+2,j,i), bx2f_(m,k+3,j,i),
           By_B, By_T);
         Real Bz_S, Bz_N;
         ReconstructEdge(er1,
-          bx3f_(m,k,j-3,i), bx3f_(m,k,j-2,i), bx3f_(m,k,j-1,i),
-          bx3f_(m,k,j,i),   bx3f_(m,k,j+1,i), bx3f_(m,k,j+2,i),
+          bx3f_(m,k,j-4,i), bx3f_(m,k,j-3,i), bx3f_(m,k,j-2,i), bx3f_(m,k,j-1,i),
+          bx3f_(m,k,j,i), bx3f_(m,k,j+1,i), bx3f_(m,k,j+2,i), bx3f_(m,k,j+3,i),
           Bz_S, Bz_N);
         e1(m,k,j,i) = -(ay_S*vy_S*Bz_S + ay_N*vy_N*Bz_N)
                       +(az_B*vz_B*By_B + az_T*vz_T*By_T)
@@ -293,44 +305,44 @@ void MHD::ComposeCornerEMF(int il, int iu, int jl, int ju, int kl, int ku) {
           else if (t >= 1) { er2 = ReconstructionMethod::plm; }
         }
         Real az_B = InterpolateEdgeA(er2,
-          aL3(m,k,j,i-3), aL3(m,k,j,i-2), aL3(m,k,j,i-1),
-          aL3(m,k,j,i),   aL3(m,k,j,i+1), aL3(m,k,j,i+2));
+          aL3(m,k,j,i-4), aL3(m,k,j,i-3), aL3(m,k,j,i-2), aL3(m,k,j,i-1),
+          aL3(m,k,j,i), aL3(m,k,j,i+1), aL3(m,k,j,i+2), aL3(m,k,j,i+3));
         Real az_T = 1.0 - az_B;
         Real dz_B = InterpolateEdgeD(er2,
-          dL3(m,k,j,i-3), dL3(m,k,j,i-2), dL3(m,k,j,i-1),
-          dL3(m,k,j,i),   dL3(m,k,j,i+1), dL3(m,k,j,i+2));
+          dL3(m,k,j,i-4), dL3(m,k,j,i-3), dL3(m,k,j,i-2), dL3(m,k,j,i-1),
+          dL3(m,k,j,i), dL3(m,k,j,i+1), dL3(m,k,j,i+2), dL3(m,k,j,i+3));
         Real dz_T = InterpolateEdgeD(er2,
-          dR3(m,k,j,i-3), dR3(m,k,j,i-2), dR3(m,k,j,i-1),
-          dR3(m,k,j,i),   dR3(m,k,j,i+1), dR3(m,k,j,i+2));
+          dR3(m,k,j,i-4), dR3(m,k,j,i-3), dR3(m,k,j,i-2), dR3(m,k,j,i-1),
+          dR3(m,k,j,i), dR3(m,k,j,i+1), dR3(m,k,j,i+2), dR3(m,k,j,i+3));
         Real ax_W = InterpolateEdgeA(er2,
-          aL1(m,k-3,j,i), aL1(m,k-2,j,i), aL1(m,k-1,j,i),
-          aL1(m,k,j,i),   aL1(m,k+1,j,i), aL1(m,k+2,j,i));
+          aL1(m,k-4,j,i), aL1(m,k-3,j,i), aL1(m,k-2,j,i), aL1(m,k-1,j,i),
+          aL1(m,k,j,i), aL1(m,k+1,j,i), aL1(m,k+2,j,i), aL1(m,k+3,j,i));
         Real ax_E = 1.0 - ax_W;
         Real dx_W = InterpolateEdgeD(er2,
-          dL1(m,k-3,j,i), dL1(m,k-2,j,i), dL1(m,k-1,j,i),
-          dL1(m,k,j,i),   dL1(m,k+1,j,i), dL1(m,k+2,j,i));
+          dL1(m,k-4,j,i), dL1(m,k-3,j,i), dL1(m,k-2,j,i), dL1(m,k-1,j,i),
+          dL1(m,k,j,i), dL1(m,k+1,j,i), dL1(m,k+2,j,i), dL1(m,k+3,j,i));
         Real dx_E = InterpolateEdgeD(er2,
-          dR1(m,k-3,j,i), dR1(m,k-2,j,i), dR1(m,k-1,j,i),
-          dR1(m,k,j,i),   dR1(m,k+1,j,i), dR1(m,k+2,j,i));
+          dR1(m,k-4,j,i), dR1(m,k-3,j,i), dR1(m,k-2,j,i), dR1(m,k-1,j,i),
+          dR1(m,k,j,i), dR1(m,k+1,j,i), dR1(m,k+2,j,i), dR1(m,k+3,j,i));
         Real vx_W, vx_E;
         ReconstructEdge(er2,
-          vx3(m,k,j,i-3), vx3(m,k,j,i-2), vx3(m,k,j,i-1),
-          vx3(m,k,j,i),   vx3(m,k,j,i+1), vx3(m,k,j,i+2),
+          vx3(m,k,j,i-4), vx3(m,k,j,i-3), vx3(m,k,j,i-2), vx3(m,k,j,i-1),
+          vx3(m,k,j,i), vx3(m,k,j,i+1), vx3(m,k,j,i+2), vx3(m,k,j,i+3),
           vx_W, vx_E);
         Real vz_B, vz_T;
         ReconstructEdge(er2,
-          vz1(m,k-3,j,i), vz1(m,k-2,j,i), vz1(m,k-1,j,i),
-          vz1(m,k,j,i),   vz1(m,k+1,j,i), vz1(m,k+2,j,i),
+          vz1(m,k-4,j,i), vz1(m,k-3,j,i), vz1(m,k-2,j,i), vz1(m,k-1,j,i),
+          vz1(m,k,j,i), vz1(m,k+1,j,i), vz1(m,k+2,j,i), vz1(m,k+3,j,i),
           vz_B, vz_T);
         Real Bz_W, Bz_E;
         ReconstructEdge(er2,
-          bx3f_(m,k,j,i-3), bx3f_(m,k,j,i-2), bx3f_(m,k,j,i-1),
-          bx3f_(m,k,j,i),   bx3f_(m,k,j,i+1), bx3f_(m,k,j,i+2),
+          bx3f_(m,k,j,i-4), bx3f_(m,k,j,i-3), bx3f_(m,k,j,i-2), bx3f_(m,k,j,i-1),
+          bx3f_(m,k,j,i), bx3f_(m,k,j,i+1), bx3f_(m,k,j,i+2), bx3f_(m,k,j,i+3),
           Bz_W, Bz_E);
         Real Bx_B, Bx_T;
         ReconstructEdge(er2,
-          bx1f_(m,k-3,j,i), bx1f_(m,k-2,j,i), bx1f_(m,k-1,j,i),
-          bx1f_(m,k,j,i),   bx1f_(m,k+1,j,i), bx1f_(m,k+2,j,i),
+          bx1f_(m,k-4,j,i), bx1f_(m,k-3,j,i), bx1f_(m,k-2,j,i), bx1f_(m,k-1,j,i),
+          bx1f_(m,k,j,i), bx1f_(m,k+1,j,i), bx1f_(m,k+2,j,i), bx1f_(m,k+3,j,i),
           Bx_B, Bx_T);
         e2(m,k,j,i) = -(az_B*vz_B*Bx_B + az_T*vz_T*Bx_T)
                       +(ax_W*vx_W*Bz_W + ax_E*vx_E*Bz_E)
@@ -349,44 +361,44 @@ void MHD::ComposeCornerEMF(int il, int iu, int jl, int ju, int kl, int ku) {
           else if (t >= 1) { er3 = ReconstructionMethod::plm; }
         }
         Real ax_W = InterpolateEdgeA(er3,
-          aL1(m,k,j-3,i), aL1(m,k,j-2,i), aL1(m,k,j-1,i),
-          aL1(m,k,j,i),   aL1(m,k,j+1,i), aL1(m,k,j+2,i));
+          aL1(m,k,j-4,i), aL1(m,k,j-3,i), aL1(m,k,j-2,i), aL1(m,k,j-1,i),
+          aL1(m,k,j,i), aL1(m,k,j+1,i), aL1(m,k,j+2,i), aL1(m,k,j+3,i));
         Real ax_E = 1.0 - ax_W;
         Real dx_W = InterpolateEdgeD(er3,
-          dL1(m,k,j-3,i), dL1(m,k,j-2,i), dL1(m,k,j-1,i),
-          dL1(m,k,j,i),   dL1(m,k,j+1,i), dL1(m,k,j+2,i));
+          dL1(m,k,j-4,i), dL1(m,k,j-3,i), dL1(m,k,j-2,i), dL1(m,k,j-1,i),
+          dL1(m,k,j,i), dL1(m,k,j+1,i), dL1(m,k,j+2,i), dL1(m,k,j+3,i));
         Real dx_E = InterpolateEdgeD(er3,
-          dR1(m,k,j-3,i), dR1(m,k,j-2,i), dR1(m,k,j-1,i),
-          dR1(m,k,j,i),   dR1(m,k,j+1,i), dR1(m,k,j+2,i));
+          dR1(m,k,j-4,i), dR1(m,k,j-3,i), dR1(m,k,j-2,i), dR1(m,k,j-1,i),
+          dR1(m,k,j,i), dR1(m,k,j+1,i), dR1(m,k,j+2,i), dR1(m,k,j+3,i));
         Real ay_S = InterpolateEdgeA(er3,
-          aL2(m,k,j,i-3), aL2(m,k,j,i-2), aL2(m,k,j,i-1),
-          aL2(m,k,j,i),   aL2(m,k,j,i+1), aL2(m,k,j,i+2));
+          aL2(m,k,j,i-4), aL2(m,k,j,i-3), aL2(m,k,j,i-2), aL2(m,k,j,i-1),
+          aL2(m,k,j,i), aL2(m,k,j,i+1), aL2(m,k,j,i+2), aL2(m,k,j,i+3));
         Real ay_N = 1.0 - ay_S;
         Real dy_S = InterpolateEdgeD(er3,
-          dL2(m,k,j,i-3), dL2(m,k,j,i-2), dL2(m,k,j,i-1),
-          dL2(m,k,j,i),   dL2(m,k,j,i+1), dL2(m,k,j,i+2));
+          dL2(m,k,j,i-4), dL2(m,k,j,i-3), dL2(m,k,j,i-2), dL2(m,k,j,i-1),
+          dL2(m,k,j,i), dL2(m,k,j,i+1), dL2(m,k,j,i+2), dL2(m,k,j,i+3));
         Real dy_N = InterpolateEdgeD(er3,
-          dR2(m,k,j,i-3), dR2(m,k,j,i-2), dR2(m,k,j,i-1),
-          dR2(m,k,j,i),   dR2(m,k,j,i+1), dR2(m,k,j,i+2));
+          dR2(m,k,j,i-4), dR2(m,k,j,i-3), dR2(m,k,j,i-2), dR2(m,k,j,i-1),
+          dR2(m,k,j,i), dR2(m,k,j,i+1), dR2(m,k,j,i+2), dR2(m,k,j,i+3));
         Real vx_W, vx_E;
         ReconstructEdge(er3,
-          vx2(m,k,j,i-3), vx2(m,k,j,i-2), vx2(m,k,j,i-1),
-          vx2(m,k,j,i),   vx2(m,k,j,i+1), vx2(m,k,j,i+2),
+          vx2(m,k,j,i-4), vx2(m,k,j,i-3), vx2(m,k,j,i-2), vx2(m,k,j,i-1),
+          vx2(m,k,j,i), vx2(m,k,j,i+1), vx2(m,k,j,i+2), vx2(m,k,j,i+3),
           vx_W, vx_E);
         Real vy_S, vy_N;
         ReconstructEdge(er3,
-          vy1(m,k,j-3,i), vy1(m,k,j-2,i), vy1(m,k,j-1,i),
-          vy1(m,k,j,i),   vy1(m,k,j+1,i), vy1(m,k,j+2,i),
+          vy1(m,k,j-4,i), vy1(m,k,j-3,i), vy1(m,k,j-2,i), vy1(m,k,j-1,i),
+          vy1(m,k,j,i), vy1(m,k,j+1,i), vy1(m,k,j+2,i), vy1(m,k,j+3,i),
           vy_S, vy_N);
         Real By_W, By_E;
         ReconstructEdge(er3,
-          bx2f_(m,k,j,i-3), bx2f_(m,k,j,i-2), bx2f_(m,k,j,i-1),
-          bx2f_(m,k,j,i),   bx2f_(m,k,j,i+1), bx2f_(m,k,j,i+2),
+          bx2f_(m,k,j,i-4), bx2f_(m,k,j,i-3), bx2f_(m,k,j,i-2), bx2f_(m,k,j,i-1),
+          bx2f_(m,k,j,i), bx2f_(m,k,j,i+1), bx2f_(m,k,j,i+2), bx2f_(m,k,j,i+3),
           By_W, By_E);
         Real Bx_S, Bx_N;
         ReconstructEdge(er3,
-          bx1f_(m,k,j-3,i), bx1f_(m,k,j-2,i), bx1f_(m,k,j-1,i),
-          bx1f_(m,k,j,i),   bx1f_(m,k,j+1,i), bx1f_(m,k,j+2,i),
+          bx1f_(m,k,j-4,i), bx1f_(m,k,j-3,i), bx1f_(m,k,j-2,i), bx1f_(m,k,j-1,i),
+          bx1f_(m,k,j,i), bx1f_(m,k,j+1,i), bx1f_(m,k,j+2,i), bx1f_(m,k,j+3,i),
           Bx_S, Bx_N);
         e3(m,k,j,i) = -(ax_W*vx_W*By_W + ax_E*vx_E*By_E)
                       +(ay_S*vy_S*Bx_S + ay_N*vy_N*Bx_N)
@@ -609,49 +621,49 @@ TaskStatus MHD::CornerE(Driver *pdriver, int stage) {
         // --- UCT coefficients: reconstruct to edge via high-order interp ---
         // x1-face coefficients at (i-1/2, j): reconstruct along j to j-1/2
         Real ax_W = InterpolateEdgeA(er,
-          aL1(m,ks,j-3,i), aL1(m,ks,j-2,i), aL1(m,ks,j-1,i),
-          aL1(m,ks,j,i),   aL1(m,ks,j+1,i), aL1(m,ks,j+2,i));
+          aL1(m,ks,j-4,i), aL1(m,ks,j-3,i), aL1(m,ks,j-2,i), aL1(m,ks,j-1,i),
+          aL1(m,ks,j,i), aL1(m,ks,j+1,i), aL1(m,ks,j+2,i), aL1(m,ks,j+3,i));
         Real ax_E = 1.0 - ax_W;
         Real dx_W = InterpolateEdgeD(er,
-          dL1(m,ks,j-3,i), dL1(m,ks,j-2,i), dL1(m,ks,j-1,i),
-          dL1(m,ks,j,i),   dL1(m,ks,j+1,i), dL1(m,ks,j+2,i));
+          dL1(m,ks,j-4,i), dL1(m,ks,j-3,i), dL1(m,ks,j-2,i), dL1(m,ks,j-1,i),
+          dL1(m,ks,j,i), dL1(m,ks,j+1,i), dL1(m,ks,j+2,i), dL1(m,ks,j+3,i));
         Real dx_E = InterpolateEdgeD(er,
-          dR1(m,ks,j-3,i), dR1(m,ks,j-2,i), dR1(m,ks,j-1,i),
-          dR1(m,ks,j,i),   dR1(m,ks,j+1,i), dR1(m,ks,j+2,i));
+          dR1(m,ks,j-4,i), dR1(m,ks,j-3,i), dR1(m,ks,j-2,i), dR1(m,ks,j-1,i),
+          dR1(m,ks,j,i), dR1(m,ks,j+1,i), dR1(m,ks,j+2,i), dR1(m,ks,j+3,i));
         // x2-face coefficients at (i, j-1/2): reconstruct along i to i-1/2
         Real ay_S = InterpolateEdgeA(er,
-          aL2(m,ks,j,i-3), aL2(m,ks,j,i-2), aL2(m,ks,j,i-1),
-          aL2(m,ks,j,i),   aL2(m,ks,j,i+1), aL2(m,ks,j,i+2));
+          aL2(m,ks,j,i-4), aL2(m,ks,j,i-3), aL2(m,ks,j,i-2), aL2(m,ks,j,i-1),
+          aL2(m,ks,j,i), aL2(m,ks,j,i+1), aL2(m,ks,j,i+2), aL2(m,ks,j,i+3));
         Real ay_N = 1.0 - ay_S;
         Real dy_S = InterpolateEdgeD(er,
-          dL2(m,ks,j,i-3), dL2(m,ks,j,i-2), dL2(m,ks,j,i-1),
-          dL2(m,ks,j,i),   dL2(m,ks,j,i+1), dL2(m,ks,j,i+2));
+          dL2(m,ks,j,i-4), dL2(m,ks,j,i-3), dL2(m,ks,j,i-2), dL2(m,ks,j,i-1),
+          dL2(m,ks,j,i), dL2(m,ks,j,i+1), dL2(m,ks,j,i+2), dL2(m,ks,j,i+3));
         Real dy_N = InterpolateEdgeD(er,
-          dR2(m,ks,j,i-3), dR2(m,ks,j,i-2), dR2(m,ks,j,i-1),
-          dR2(m,ks,j,i),   dR2(m,ks,j,i+1), dR2(m,ks,j,i+2));
+          dR2(m,ks,j,i-4), dR2(m,ks,j,i-3), dR2(m,ks,j,i-2), dR2(m,ks,j,i-1),
+          dR2(m,ks,j,i), dR2(m,ks,j,i+1), dR2(m,ks,j,i+2), dR2(m,ks,j,i+3));
 
         // --- Transverse velocities: reconstruct to L/R at edge ---
         Real vy_S, vy_N;
         ReconstructEdge(er,
-          vy1(m,ks,j-3,i), vy1(m,ks,j-2,i), vy1(m,ks,j-1,i),
-          vy1(m,ks,j,i),   vy1(m,ks,j+1,i), vy1(m,ks,j+2,i),
+          vy1(m,ks,j-4,i), vy1(m,ks,j-3,i), vy1(m,ks,j-2,i), vy1(m,ks,j-1,i),
+          vy1(m,ks,j,i), vy1(m,ks,j+1,i), vy1(m,ks,j+2,i), vy1(m,ks,j+3,i),
           vy_S, vy_N);
         Real vx_W, vx_E;
         ReconstructEdge(er,
-          vx2(m,ks,j,i-3), vx2(m,ks,j,i-2), vx2(m,ks,j,i-1),
-          vx2(m,ks,j,i),   vx2(m,ks,j,i+1), vx2(m,ks,j,i+2),
+          vx2(m,ks,j,i-4), vx2(m,ks,j,i-3), vx2(m,ks,j,i-2), vx2(m,ks,j,i-1),
+          vx2(m,ks,j,i), vx2(m,ks,j,i+1), vx2(m,ks,j,i+2), vx2(m,ks,j,i+3),
           vx_W, vx_E);
 
         // --- Staggered B: reconstruct to L/R at edge ---
         Real By_W, By_E;
         ReconstructEdge(er,
-          bx2f_(m,ks,j,i-3), bx2f_(m,ks,j,i-2), bx2f_(m,ks,j,i-1),
-          bx2f_(m,ks,j,i),   bx2f_(m,ks,j,i+1), bx2f_(m,ks,j,i+2),
+          bx2f_(m,ks,j,i-4), bx2f_(m,ks,j,i-3), bx2f_(m,ks,j,i-2), bx2f_(m,ks,j,i-1),
+          bx2f_(m,ks,j,i), bx2f_(m,ks,j,i+1), bx2f_(m,ks,j,i+2), bx2f_(m,ks,j,i+3),
           By_W, By_E);
         Real Bx_S, Bx_N;
         ReconstructEdge(er,
-          bx1f_(m,ks,j-3,i), bx1f_(m,ks,j-2,i), bx1f_(m,ks,j-1,i),
-          bx1f_(m,ks,j,i),   bx1f_(m,ks,j+1,i), bx1f_(m,ks,j+2,i),
+          bx1f_(m,ks,j-4,i), bx1f_(m,ks,j-3,i), bx1f_(m,ks,j-2,i), bx1f_(m,ks,j-1,i),
+          bx1f_(m,ks,j,i), bx1f_(m,ks,j+1,i), bx1f_(m,ks,j+2,i), bx1f_(m,ks,j+3,i),
           Bx_S, Bx_N);
 
         // UCT composition (Eq. 39, Berta et al. 2024):
@@ -937,53 +949,53 @@ TaskStatus MHD::CornerE(Driver *pdriver, int stage) {
           // UCT coefficients: reconstruct to edge using high-order interpolation
           // x2-face coefficients at (i, j-1/2, k): reconstruct along k to k-1/2
           Real ay_S = InterpolateEdgeA(er1,
-            aL2(m,k-3,j,i), aL2(m,k-2,j,i), aL2(m,k-1,j,i),
-            aL2(m,k,j,i),   aL2(m,k+1,j,i), aL2(m,k+2,j,i));
+            aL2(m,k-4,j,i), aL2(m,k-3,j,i), aL2(m,k-2,j,i), aL2(m,k-1,j,i),
+            aL2(m,k,j,i), aL2(m,k+1,j,i), aL2(m,k+2,j,i), aL2(m,k+3,j,i));
           Real ay_N = 1.0 - ay_S;
           Real dy_S = InterpolateEdgeD(er1,
-            dL2(m,k-3,j,i), dL2(m,k-2,j,i), dL2(m,k-1,j,i),
-            dL2(m,k,j,i),   dL2(m,k+1,j,i), dL2(m,k+2,j,i));
+            dL2(m,k-4,j,i), dL2(m,k-3,j,i), dL2(m,k-2,j,i), dL2(m,k-1,j,i),
+            dL2(m,k,j,i), dL2(m,k+1,j,i), dL2(m,k+2,j,i), dL2(m,k+3,j,i));
           Real dy_N = InterpolateEdgeD(er1,
-            dR2(m,k-3,j,i), dR2(m,k-2,j,i), dR2(m,k-1,j,i),
-            dR2(m,k,j,i),   dR2(m,k+1,j,i), dR2(m,k+2,j,i));
+            dR2(m,k-4,j,i), dR2(m,k-3,j,i), dR2(m,k-2,j,i), dR2(m,k-1,j,i),
+            dR2(m,k,j,i), dR2(m,k+1,j,i), dR2(m,k+2,j,i), dR2(m,k+3,j,i));
           // x3-face coefficients at (i, j, k-1/2): reconstruct along j to j-1/2
           Real az_B = InterpolateEdgeA(er1,
-            aL3(m,k,j-3,i), aL3(m,k,j-2,i), aL3(m,k,j-1,i),
-            aL3(m,k,j,i),   aL3(m,k,j+1,i), aL3(m,k,j+2,i));
+            aL3(m,k,j-4,i), aL3(m,k,j-3,i), aL3(m,k,j-2,i), aL3(m,k,j-1,i),
+            aL3(m,k,j,i), aL3(m,k,j+1,i), aL3(m,k,j+2,i), aL3(m,k,j+3,i));
           Real az_T = 1.0 - az_B;
           Real dz_B = InterpolateEdgeD(er1,
-            dL3(m,k,j-3,i), dL3(m,k,j-2,i), dL3(m,k,j-1,i),
-            dL3(m,k,j,i),   dL3(m,k,j+1,i), dL3(m,k,j+2,i));
+            dL3(m,k,j-4,i), dL3(m,k,j-3,i), dL3(m,k,j-2,i), dL3(m,k,j-1,i),
+            dL3(m,k,j,i), dL3(m,k,j+1,i), dL3(m,k,j+2,i), dL3(m,k,j+3,i));
           Real dz_T = InterpolateEdgeD(er1,
-            dR3(m,k,j-3,i), dR3(m,k,j-2,i), dR3(m,k,j-1,i),
-            dR3(m,k,j,i),   dR3(m,k,j+1,i), dR3(m,k,j+2,i));
+            dR3(m,k,j-4,i), dR3(m,k,j-3,i), dR3(m,k,j-2,i), dR3(m,k,j-1,i),
+            dR3(m,k,j,i), dR3(m,k,j+1,i), dR3(m,k,j+2,i), dR3(m,k,j+3,i));
 
           // Transverse velocities: reconstruct to L/R at edge
           // vz from x2-faces: reconstruct along k to B/T
           Real vz_B, vz_T;
           ReconstructEdge(er1,
-            vz2(m,k-3,j,i), vz2(m,k-2,j,i), vz2(m,k-1,j,i),
-            vz2(m,k,j,i),   vz2(m,k+1,j,i), vz2(m,k+2,j,i),
+            vz2(m,k-4,j,i), vz2(m,k-3,j,i), vz2(m,k-2,j,i), vz2(m,k-1,j,i),
+            vz2(m,k,j,i), vz2(m,k+1,j,i), vz2(m,k+2,j,i), vz2(m,k+3,j,i),
             vz_B, vz_T);
           // vy from x3-faces: reconstruct along j to S/N
           Real vy_S, vy_N;
           ReconstructEdge(er1,
-            vy3(m,k,j-3,i), vy3(m,k,j-2,i), vy3(m,k,j-1,i),
-            vy3(m,k,j,i),   vy3(m,k,j+1,i), vy3(m,k,j+2,i),
+            vy3(m,k,j-4,i), vy3(m,k,j-3,i), vy3(m,k,j-2,i), vy3(m,k,j-1,i),
+            vy3(m,k,j,i), vy3(m,k,j+1,i), vy3(m,k,j+2,i), vy3(m,k,j+3,i),
             vy_S, vy_N);
 
           // Staggered B: reconstruct to L/R at edge
           // By from x2-faces: reconstruct along k to B/T
           Real By_B, By_T;
           ReconstructEdge(er1,
-            bx2f_(m,k-3,j,i), bx2f_(m,k-2,j,i), bx2f_(m,k-1,j,i),
-            bx2f_(m,k,j,i),   bx2f_(m,k+1,j,i), bx2f_(m,k+2,j,i),
+            bx2f_(m,k-4,j,i), bx2f_(m,k-3,j,i), bx2f_(m,k-2,j,i), bx2f_(m,k-1,j,i),
+            bx2f_(m,k,j,i), bx2f_(m,k+1,j,i), bx2f_(m,k+2,j,i), bx2f_(m,k+3,j,i),
             By_B, By_T);
           // Bz from x3-faces: reconstruct along j to S/N
           Real Bz_S, Bz_N;
           ReconstructEdge(er1,
-            bx3f_(m,k,j-3,i), bx3f_(m,k,j-2,i), bx3f_(m,k,j-1,i),
-            bx3f_(m,k,j,i),   bx3f_(m,k,j+1,i), bx3f_(m,k,j+2,i),
+            bx3f_(m,k,j-4,i), bx3f_(m,k,j-3,i), bx3f_(m,k,j-2,i), bx3f_(m,k,j-1,i),
+            bx3f_(m,k,j,i), bx3f_(m,k,j+1,i), bx3f_(m,k,j+2,i), bx3f_(m,k,j+3,i),
             Bz_S, Bz_N);
 
           // UCT composition: E_x = +vz*By - vy*Bz (with dissipation)
@@ -1012,53 +1024,53 @@ TaskStatus MHD::CornerE(Driver *pdriver, int stage) {
           // UCT coefficients: reconstruct to edge using high-order interpolation
           // x3-face coefficients at (i, j, k-1/2): reconstruct along i to i-1/2
           Real az_B = InterpolateEdgeA(er2,
-            aL3(m,k,j,i-3), aL3(m,k,j,i-2), aL3(m,k,j,i-1),
-            aL3(m,k,j,i),   aL3(m,k,j,i+1), aL3(m,k,j,i+2));
+            aL3(m,k,j,i-4), aL3(m,k,j,i-3), aL3(m,k,j,i-2), aL3(m,k,j,i-1),
+            aL3(m,k,j,i), aL3(m,k,j,i+1), aL3(m,k,j,i+2), aL3(m,k,j,i+3));
           Real az_T = 1.0 - az_B;
           Real dz_B = InterpolateEdgeD(er2,
-            dL3(m,k,j,i-3), dL3(m,k,j,i-2), dL3(m,k,j,i-1),
-            dL3(m,k,j,i),   dL3(m,k,j,i+1), dL3(m,k,j,i+2));
+            dL3(m,k,j,i-4), dL3(m,k,j,i-3), dL3(m,k,j,i-2), dL3(m,k,j,i-1),
+            dL3(m,k,j,i), dL3(m,k,j,i+1), dL3(m,k,j,i+2), dL3(m,k,j,i+3));
           Real dz_T = InterpolateEdgeD(er2,
-            dR3(m,k,j,i-3), dR3(m,k,j,i-2), dR3(m,k,j,i-1),
-            dR3(m,k,j,i),   dR3(m,k,j,i+1), dR3(m,k,j,i+2));
+            dR3(m,k,j,i-4), dR3(m,k,j,i-3), dR3(m,k,j,i-2), dR3(m,k,j,i-1),
+            dR3(m,k,j,i), dR3(m,k,j,i+1), dR3(m,k,j,i+2), dR3(m,k,j,i+3));
           // x1-face coefficients at (i-1/2, j, k): reconstruct along k to k-1/2
           Real ax_W = InterpolateEdgeA(er2,
-            aL1(m,k-3,j,i), aL1(m,k-2,j,i), aL1(m,k-1,j,i),
-            aL1(m,k,j,i),   aL1(m,k+1,j,i), aL1(m,k+2,j,i));
+            aL1(m,k-4,j,i), aL1(m,k-3,j,i), aL1(m,k-2,j,i), aL1(m,k-1,j,i),
+            aL1(m,k,j,i), aL1(m,k+1,j,i), aL1(m,k+2,j,i), aL1(m,k+3,j,i));
           Real ax_E = 1.0 - ax_W;
           Real dx_W = InterpolateEdgeD(er2,
-            dL1(m,k-3,j,i), dL1(m,k-2,j,i), dL1(m,k-1,j,i),
-            dL1(m,k,j,i),   dL1(m,k+1,j,i), dL1(m,k+2,j,i));
+            dL1(m,k-4,j,i), dL1(m,k-3,j,i), dL1(m,k-2,j,i), dL1(m,k-1,j,i),
+            dL1(m,k,j,i), dL1(m,k+1,j,i), dL1(m,k+2,j,i), dL1(m,k+3,j,i));
           Real dx_E = InterpolateEdgeD(er2,
-            dR1(m,k-3,j,i), dR1(m,k-2,j,i), dR1(m,k-1,j,i),
-            dR1(m,k,j,i),   dR1(m,k+1,j,i), dR1(m,k+2,j,i));
+            dR1(m,k-4,j,i), dR1(m,k-3,j,i), dR1(m,k-2,j,i), dR1(m,k-1,j,i),
+            dR1(m,k,j,i), dR1(m,k+1,j,i), dR1(m,k+2,j,i), dR1(m,k+3,j,i));
 
           // Transverse velocities: reconstruct to L/R at edge
           // vx from x3-faces: reconstruct along i to W/E
           Real vx_W, vx_E;
           ReconstructEdge(er2,
-            vx3(m,k,j,i-3), vx3(m,k,j,i-2), vx3(m,k,j,i-1),
-            vx3(m,k,j,i),   vx3(m,k,j,i+1), vx3(m,k,j,i+2),
+            vx3(m,k,j,i-4), vx3(m,k,j,i-3), vx3(m,k,j,i-2), vx3(m,k,j,i-1),
+            vx3(m,k,j,i), vx3(m,k,j,i+1), vx3(m,k,j,i+2), vx3(m,k,j,i+3),
             vx_W, vx_E);
           // vz from x1-faces: reconstruct along k to B/T
           Real vz_B, vz_T;
           ReconstructEdge(er2,
-            vz1(m,k-3,j,i), vz1(m,k-2,j,i), vz1(m,k-1,j,i),
-            vz1(m,k,j,i),   vz1(m,k+1,j,i), vz1(m,k+2,j,i),
+            vz1(m,k-4,j,i), vz1(m,k-3,j,i), vz1(m,k-2,j,i), vz1(m,k-1,j,i),
+            vz1(m,k,j,i), vz1(m,k+1,j,i), vz1(m,k+2,j,i), vz1(m,k+3,j,i),
             vz_B, vz_T);
 
           // Staggered B: reconstruct to L/R at edge
           // Bz from x3-faces: reconstruct along i to W/E
           Real Bz_W, Bz_E;
           ReconstructEdge(er2,
-            bx3f_(m,k,j,i-3), bx3f_(m,k,j,i-2), bx3f_(m,k,j,i-1),
-            bx3f_(m,k,j,i),   bx3f_(m,k,j,i+1), bx3f_(m,k,j,i+2),
+            bx3f_(m,k,j,i-4), bx3f_(m,k,j,i-3), bx3f_(m,k,j,i-2), bx3f_(m,k,j,i-1),
+            bx3f_(m,k,j,i), bx3f_(m,k,j,i+1), bx3f_(m,k,j,i+2), bx3f_(m,k,j,i+3),
             Bz_W, Bz_E);
           // Bx from x1-faces: reconstruct along k to B/T
           Real Bx_B, Bx_T;
           ReconstructEdge(er2,
-            bx1f_(m,k-3,j,i), bx1f_(m,k-2,j,i), bx1f_(m,k-1,j,i),
-            bx1f_(m,k,j,i),   bx1f_(m,k+1,j,i), bx1f_(m,k+2,j,i),
+            bx1f_(m,k-4,j,i), bx1f_(m,k-3,j,i), bx1f_(m,k-2,j,i), bx1f_(m,k-1,j,i),
+            bx1f_(m,k,j,i), bx1f_(m,k+1,j,i), bx1f_(m,k+2,j,i), bx1f_(m,k+3,j,i),
             Bx_B, Bx_T);
 
           // UCT composition: E_y = +vx*Bz - vz*Bx (with dissipation)
@@ -1087,53 +1099,53 @@ TaskStatus MHD::CornerE(Driver *pdriver, int stage) {
           // UCT coefficients: reconstruct to edge using high-order interpolation
           // x1-face coefficients at (i-1/2, j, k): reconstruct along j to j-1/2
           Real ax_W = InterpolateEdgeA(er3,
-            aL1(m,k,j-3,i), aL1(m,k,j-2,i), aL1(m,k,j-1,i),
-            aL1(m,k,j,i),   aL1(m,k,j+1,i), aL1(m,k,j+2,i));
+            aL1(m,k,j-4,i), aL1(m,k,j-3,i), aL1(m,k,j-2,i), aL1(m,k,j-1,i),
+            aL1(m,k,j,i), aL1(m,k,j+1,i), aL1(m,k,j+2,i), aL1(m,k,j+3,i));
           Real ax_E = 1.0 - ax_W;
           Real dx_W = InterpolateEdgeD(er3,
-            dL1(m,k,j-3,i), dL1(m,k,j-2,i), dL1(m,k,j-1,i),
-            dL1(m,k,j,i),   dL1(m,k,j+1,i), dL1(m,k,j+2,i));
+            dL1(m,k,j-4,i), dL1(m,k,j-3,i), dL1(m,k,j-2,i), dL1(m,k,j-1,i),
+            dL1(m,k,j,i), dL1(m,k,j+1,i), dL1(m,k,j+2,i), dL1(m,k,j+3,i));
           Real dx_E = InterpolateEdgeD(er3,
-            dR1(m,k,j-3,i), dR1(m,k,j-2,i), dR1(m,k,j-1,i),
-            dR1(m,k,j,i),   dR1(m,k,j+1,i), dR1(m,k,j+2,i));
+            dR1(m,k,j-4,i), dR1(m,k,j-3,i), dR1(m,k,j-2,i), dR1(m,k,j-1,i),
+            dR1(m,k,j,i), dR1(m,k,j+1,i), dR1(m,k,j+2,i), dR1(m,k,j+3,i));
           // x2-face coefficients at (i, j-1/2, k): reconstruct along i to i-1/2
           Real ay_S = InterpolateEdgeA(er3,
-            aL2(m,k,j,i-3), aL2(m,k,j,i-2), aL2(m,k,j,i-1),
-            aL2(m,k,j,i),   aL2(m,k,j,i+1), aL2(m,k,j,i+2));
+            aL2(m,k,j,i-4), aL2(m,k,j,i-3), aL2(m,k,j,i-2), aL2(m,k,j,i-1),
+            aL2(m,k,j,i), aL2(m,k,j,i+1), aL2(m,k,j,i+2), aL2(m,k,j,i+3));
           Real ay_N = 1.0 - ay_S;
           Real dy_S = InterpolateEdgeD(er3,
-            dL2(m,k,j,i-3), dL2(m,k,j,i-2), dL2(m,k,j,i-1),
-            dL2(m,k,j,i),   dL2(m,k,j,i+1), dL2(m,k,j,i+2));
+            dL2(m,k,j,i-4), dL2(m,k,j,i-3), dL2(m,k,j,i-2), dL2(m,k,j,i-1),
+            dL2(m,k,j,i), dL2(m,k,j,i+1), dL2(m,k,j,i+2), dL2(m,k,j,i+3));
           Real dy_N = InterpolateEdgeD(er3,
-            dR2(m,k,j,i-3), dR2(m,k,j,i-2), dR2(m,k,j,i-1),
-            dR2(m,k,j,i),   dR2(m,k,j,i+1), dR2(m,k,j,i+2));
+            dR2(m,k,j,i-4), dR2(m,k,j,i-3), dR2(m,k,j,i-2), dR2(m,k,j,i-1),
+            dR2(m,k,j,i), dR2(m,k,j,i+1), dR2(m,k,j,i+2), dR2(m,k,j,i+3));
 
           // Transverse velocities: reconstruct to L/R at edge
           // vx from x2-faces: reconstruct along i to W/E
           Real vx_W, vx_E;
           ReconstructEdge(er3,
-            vx2(m,k,j,i-3), vx2(m,k,j,i-2), vx2(m,k,j,i-1),
-            vx2(m,k,j,i),   vx2(m,k,j,i+1), vx2(m,k,j,i+2),
+            vx2(m,k,j,i-4), vx2(m,k,j,i-3), vx2(m,k,j,i-2), vx2(m,k,j,i-1),
+            vx2(m,k,j,i), vx2(m,k,j,i+1), vx2(m,k,j,i+2), vx2(m,k,j,i+3),
             vx_W, vx_E);
           // vy from x1-faces: reconstruct along j to S/N
           Real vy_S, vy_N;
           ReconstructEdge(er3,
-            vy1(m,k,j-3,i), vy1(m,k,j-2,i), vy1(m,k,j-1,i),
-            vy1(m,k,j,i),   vy1(m,k,j+1,i), vy1(m,k,j+2,i),
+            vy1(m,k,j-4,i), vy1(m,k,j-3,i), vy1(m,k,j-2,i), vy1(m,k,j-1,i),
+            vy1(m,k,j,i), vy1(m,k,j+1,i), vy1(m,k,j+2,i), vy1(m,k,j+3,i),
             vy_S, vy_N);
 
           // Staggered B: reconstruct to L/R at edge
           // By from x2-faces: reconstruct along i to W/E
           Real By_W, By_E;
           ReconstructEdge(er3,
-            bx2f_(m,k,j,i-3), bx2f_(m,k,j,i-2), bx2f_(m,k,j,i-1),
-            bx2f_(m,k,j,i),   bx2f_(m,k,j,i+1), bx2f_(m,k,j,i+2),
+            bx2f_(m,k,j,i-4), bx2f_(m,k,j,i-3), bx2f_(m,k,j,i-2), bx2f_(m,k,j,i-1),
+            bx2f_(m,k,j,i), bx2f_(m,k,j,i+1), bx2f_(m,k,j,i+2), bx2f_(m,k,j,i+3),
             By_W, By_E);
           // Bx from x1-faces: reconstruct along j to S/N
           Real Bx_S, Bx_N;
           ReconstructEdge(er3,
-            bx1f_(m,k,j-3,i), bx1f_(m,k,j-2,i), bx1f_(m,k,j-1,i),
-            bx1f_(m,k,j,i),   bx1f_(m,k,j+1,i), bx1f_(m,k,j+2,i),
+            bx1f_(m,k,j-4,i), bx1f_(m,k,j-3,i), bx1f_(m,k,j-2,i), bx1f_(m,k,j-1,i),
+            bx1f_(m,k,j,i), bx1f_(m,k,j+1,i), bx1f_(m,k,j+2,i), bx1f_(m,k,j+3,i),
             Bx_S, Bx_N);
 
           // UCT composition: E_z = vy*Bx - vx*By (with dissipation)

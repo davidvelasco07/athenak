@@ -24,8 +24,8 @@ MEDIA = VAL / "figures" / "apollo_grmhd"
 PANELS = [
     ("plm", "PLM"),
     ("wenoz", "WENO-Z"),
-    ("ppm_fb", "PPM + MOOD"),
-    ("ppm_fb_fields", "PPM + MOOD fields"),
+    ("fv4_fb", "FV4"),
+    ("fv4_fb_fields", "FV4 fields"),
 ]
 
 

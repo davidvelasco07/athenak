@@ -57,7 +57,7 @@ CUDA_VISIBLE_DEVICES=0 PYTHONUNBUFFERED=1 \
   python3 "$VAL/scripts/run_suite.py" \
     --athena "$ROOT/build/src/athena" \
     --suite stress \
-    --schemes ppm_fb,plm,wenoz,teno \
+    --schemes fv4_fb,plm,wenoz,teno \
   2>&1 | tee "$VAL/results/_logs/stress_apollo_gpu.log"
 
 python3 "$VAL/scripts/analyze.py" --write

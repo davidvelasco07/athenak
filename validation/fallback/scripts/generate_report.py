@@ -23,6 +23,8 @@ if VENDOR.is_dir():
 PHYSICS = [
     ("hydro", "Hydrodynamics"),
     ("mhd", "Magnetohydrodynamics"),
+    ("srhydro", "SR hydrodynamics"),
+    ("srmhd", "SR MHD"),
     ("grhydro", "GR hydrodynamics (Minkowski)"),
     ("grmhd", "GRMHD (Minkowski)"),
 ]
@@ -84,15 +86,19 @@ def write_markdown(analysis, commit, manif):
     lines.append("")
     gates = analysis.get("gates") or {}
     lines.append(f"- Records analyzed: **{analysis.get('n_records', 0)}**")
-    lines.append(
-        f"- PPM+MOOD linear-wave zero demotions: **{gates.get('ppm_fb_linear_zero_demotions')}**"
-    )
+    for sch, lab in (("fv4_fb", "FV4"), ("fv6_fb", "FV6"), ("fv8_fb", "FV8")):
+        key = f"{sch}_linear_zero_demotions"
+        val = gates.get(key)
+        if val is not None:
+            lines.append(f"- {lab} linear-wave zero demotions: **{val}**")
+        else:
+            lines.append(f"- {lab} linear-wave zero demotions: _pending (no runs yet)_")
     lines.append(f"- All runs completed (rc=0): **{gates.get('all_completed')}**")
     lines.append("")
     lines.append("## Method")
     lines.append("")
     lines.append(
-        "We compare unlimited PPM with a-posteriori MOOD fallback (RK3) against "
+        "We compare unlimited central finite-volume face interpolation at 4th, 6th and 8th order (`reconstruct=fv4|fv6|fv8`) with a-posteriori MOOD fallback (RK3) against "
         "PLM+RK2, WENOZ+RK3, and TENO-5+RK3. Detection uses NAD "
         "(`mood_nad_scale=gcfl`, `mood_rtol=1e-5`; `mood_nad_v=off` for MHD *linear waves* "
         "only -- see the note below) plus "
@@ -100,8 +106,8 @@ def write_markdown(analysis, commit, manif):
         "so scalar discontinuities can trigger fallback even on a uniform-density "
         "kinematic background. NAD demotions are floored at PLM.\n\n"
         "**Each scheme carries its own a-posteriori protection.** MOOD and FOFC are "
-        "mutually exclusive in the code, and unlimited PPM *requires* `mood=true`, so "
-        "the like-for-like comparison gives PPM the MOOD cascade and gives "
+        "mutually exclusive in the code, and unlimited FV4/FV6/FV8 *require* `mood=true`, so "
+        "the like-for-like comparison gives the unlimited schemes the MOOD cascade and gives "
         "PLM / WENO-Z / TENO first-order flux correction (`fofc=true`). Benchmarking "
         "MOOD against unprotected competitors would overstate it: on the current "
         "sheet, TENO fails outright without FOFC and survives with it. `fofc` is a "
@@ -151,20 +157,21 @@ def write_markdown(analysis, commit, manif):
                 lines.append(
                     "_Note: some local CPU GRMHD multi-D linear-wave exits were "
                     "incomplete; Apollo SRMHD blast movies below are the multi-D "
-                    "stress reference for PPM+MOOD._"
+                    "stress reference for the unlimited MOOD schemes._"
                 )
                 lines.append("")
             demoting = []
             for f in items:
-                if f.get("scheme") != "ppm_fb":
+                if f.get("scheme") not in ("fv4_fb", "fv6_fb", "fv8_fb"):
                     continue
                 if any((m or 0) > 0 for m in (f.get("nmood") or [])):
-                    demoting.append(f.get("wave_name", f.get("wave")))
+                    demoting.append(
+                        f"{f.get('scheme')}:{f.get('wave_name', f.get('wave'))}"
+                    )
             if demoting:
                 lines.append(
-                    "_Zero-demotion gate fails for PPM+MOOD in this panel: "
-                    + ", ".join(sorted(set(demoting)))
-                    + "._"
+                    "_Zero-demotion gate fails for an unlimited MOOD scheme in this "
+                    "panel: " + ", ".join(sorted(set(demoting))) + "._"
                 )
                 lines.append("")
             mosaic = FIGURES / f"lwave_{phys_id}_{dim_id}_mosaic.png"
@@ -177,7 +184,7 @@ def write_markdown(analysis, commit, manif):
             nmood = FIGURES / f"lwave_nmood_{phys_id}.png"
             if dim_id == "1d" and nmood.exists():
                 lines.append(
-                    f"![PPM+MOOD demotions {phys_id}]({nmood.relative_to(VAL)})"
+                    f"![FV4 demotions {phys_id}]({nmood.relative_to(VAL)})"
                 )
                 lines.append("")
             lines.append("| Scheme | Wave | N | L1 | Order | nmood | ok |")
@@ -251,7 +258,7 @@ def write_markdown(analysis, commit, manif):
                     lines.append(
                         "The slotted-cylinder test advects a bounded passive scalar "
                         "through one full rotation on a $200^2$ mesh. Scalar-aware NAD "
-                        "confines fallback to the discontinuity and suppresses PPM ringing."
+                        "confines fallback to the discontinuity and suppresses unlimited-FV ringing."
                     )
                     lines.append("")
                 elif cid == "orszag_tang":
@@ -294,9 +301,9 @@ def write_markdown(analysis, commit, manif):
                         "\\to8.0\\times10^{-3}$ over $N=128/256/512$.\n\n"
                         "With the corrected IC every scheme reaches $t=5$ **when "
                         "given its own a-posteriori protection** -- MOOD for "
-                        "unlimited PPM, FOFC for the others (the two are mutually "
-                        "exclusive, and unlimited PPM requires `mood=true`). The "
-                        "difference is cost, not survival: PPM+MOOD reaches $t=5$ "
+                        "unlimited FV4/FV6/FV8, FOFC for the others (the two are mutually "
+                        "exclusive, and unlimited FV schemes require `mood=true`). The "
+                        "difference is cost, not survival: FV4 reaches $t=5$ "
                         "with no EOS floor events at all, while TENO needs 2173 FOFC "
                         "demotions, $\\sim10^5$ floor hits, 48\\% more cycles and "
                         "half the timestep. FOFC never fires for PLM or WENO-Z."
@@ -400,15 +407,15 @@ def write_markdown(analysis, commit, manif):
             lines.append("### Multi-D blast (Apollo SRMHD)")
             lines.append("")
             lines.append(
-                "Apollo `~/srmhd_blast` scheme comparison with PPM+MOOD "
-                f"({gcfg.get('source', 'ppm_fb vs PLM/WENOZ/PPMX/DC')}). "
+                "Apollo `~/srmhd_blast` scheme comparison with FV4 "
+                f"({gcfg.get('source', 'fv4_fb vs PLM/WENOZ/PPMX/DC')}). "
                 "The mosaic uses the exact final frame ($t=4$) of each movie; full movies "
                 "are linked below."
             )
             lines.append("")
             if gmos.exists():
                 lines.append(
-                    f"![SRMHD blast PPM+MOOD mosaic]"
+                    f"![SRMHD blast FV4 mosaic]"
                     f"({gmos.relative_to(VAL)})"
                 )
                 lines.append("")
@@ -449,7 +456,7 @@ def write_markdown(analysis, commit, manif):
         "MHD Orszag–Tang (400², $t=1$) / current sheet (256², $t=1$ tearing seed) / "
         "Lecoanet KH (256×512). "
         "Apollo multi-D stress: MHD ringing (`figures/apollo_ringing/`) and "
-        "SRMHD blast with PPM+MOOD (`figures/apollo_grmhd/`, from `~/srmhd_blast`)."
+        "SRMHD blast with FV4 (`figures/apollo_grmhd/`, from `~/srmhd_blast`)."
     )
     lines.append(
         "- The stock current-sheet input is a resistive-diffusion test "
@@ -499,12 +506,13 @@ def write_latex(analysis, commit, manif):
     body.append(r"\section{Summary}")
     body.append(
         f"Records: {analysis.get('n_records', 0)}. "
-        f"PPM+MOOD linear zero demotions: {gates.get('ppm_fb_linear_zero_demotions')}. "
+        f"Unlimited-MOOD linear zero demotions (FV4 gate): {gates.get('fv4_fb_linear_zero_demotions')}. "
         f"All completed: {gates.get('all_completed')}."
     )
     body.append(r"\section{Method}")
     body.append(
-        r"Unlimited PPM with RK3 and a-posteriori MOOD fallback is compared with "
+        r"Unlimited central FV face interpolation (FV4/FV6/FV8) with RK3 and "
+        r"a-posteriori MOOD fallback is compared with "
         r"PLM+RK2, WENOZ+RK3, and TENO-5+RK3. The relaxed-DMP detector includes "
         r"passive-scalar concentrations; scalar discontinuities therefore trigger "
         r"fallback even for uniform-density kinematic advection."
@@ -561,7 +569,7 @@ def write_latex(analysis, commit, manif):
                     body.append(
                         r"The bounded passive scalar is advected through one complete "
                         r"rotation on a $200^2$ mesh. Scalar-aware NAD confines fallback "
-                        r"to the discontinuity and suppresses unlimited-PPM ringing."
+                        r"to the discontinuity and suppresses unlimited-FV ringing."
                     )
                 elif cid == "kh_mhd":
                     body.append(
@@ -649,7 +657,7 @@ def write_latex(analysis, commit, manif):
                 )
                 body.append(
                     r"\caption{Apollo SRMHD blast final frames at $t=4$: "
-                    r"PLM / WENOZ / PPM+MOOD density and PPM+MOOD fields}"
+                    r"PLM / WENOZ / FV4 density and FV4 fields}"
                 )
                 body.append(r"\end{figure}")
     body.append(r"\section{Limitations}")
@@ -657,7 +665,7 @@ def write_latex(analysis, commit, manif):
         r"No dyn-GRMHD MOOD; \texttt{uct\_hlld} Newtonian-only (it needs \texttt{hlld}); "
         r"2D/3D linear waves use diagonal wavevectors and test left/right "
         r"acoustic or fast-magnetosonic propagation. Apollo SRMHD blast movies "
-        r"are the multi-D PPM+MOOD stress reference. "
+        r"are the multi-D FV4 stress reference. "
         r"The Orszag--Tang vortex is shown at $t=1$. The current sheet uses the "
         r"tearing seed and is shown at the last common finite time ($t=1$)."
     )
@@ -715,7 +723,7 @@ def compile_pdf_matplotlib(analysis, commit, manif):
             0.1,
             0.55,
             f"Records: {analysis.get('n_records', 0)}\n"
-            f"PPM+MOOD linear zero demotions: {gates.get('ppm_fb_linear_zero_demotions')}\n"
+            f"Unlimited-MOOD linear zero demotions (FV4 gate): {gates.get('fv4_fb_linear_zero_demotions')}\n"
             f"All completed: {gates.get('all_completed')}\n\n"
             "Organized by physics: hydro / mhd / grhydro / grmhd\n"
             "with 1D, 2D, and 3D linear-wave mosaics.",

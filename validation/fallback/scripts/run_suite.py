@@ -83,12 +83,18 @@ def scheme_overrides(manif, scheme_name, soe, use_uct=False, linear=False,
         f"mesh/nghost={ng}",
     ]
     # FOFC is the non-MOOD schemes' a-posteriori safety net and is the counterpart of
-    # MOOD (the two are mutually exclusive in the code, and unlimited PPM *requires*
-    # mood=true).  Giving ppm_fb MOOD while leaving PLM/WENOZ/TENO bare is not a like-
+    # MOOD (the two are mutually exclusive in the code, and unlimited FV schemes *require*
+    # mood=true).  Giving fv4_fb MOOD while leaving PLM/WENOZ/TENO bare is not a like-
     # for-like robustness comparison, so every non-MOOD scheme gets fofc unless the
     # manifest says otherwise.  It is a no-op wherever no floor is hit.
-    if not s["mood"] and s.get("fofc", True):
-        args.append(f"{soe}/fofc=true")
+    # Always emit an explicit value.  Setting only fofc=true leaves a deck's own
+    # `fofc = true` standing under a MOOD scheme, and the two are mutually exclusive
+    # in the code -- the stock SR MHD blast deck presets it, so every MOOD run on it
+    # died at startup until this was made explicit.
+    if s["mood"]:
+        args.append(f"{soe}/fofc=false")
+    else:
+        args.append(f"{soe}/fofc={'true' if s.get('fofc', True) else 'false'}")
 
     if soe == "hydro":
         args.append(f"hydro/mood={'true' if s['mood'] else 'false'}")
@@ -141,7 +147,7 @@ def case_emf(case):
 
 
 def mhd_use_uct(scheme_name, case=None, general_rel=False, special_rel=False):
-    """UCT for all NR MHD schemes (plm/wenoz/teno/ppm_fb).
+    """UCT for all NR MHD schemes (plm/wenoz/teno/fv4_fb/fv6_fb/fv8_fb).
 
     SR/GR default to ct_contact but may opt in with `emf: uct_hll` on the case.  That
     used to be impossible: the relativistic solvers fed the UCT composition the spatial
@@ -167,6 +173,41 @@ def apply_athinput_overrides(src: Path, dst: Path, overrides):
     suite materializes a per-run athinput that contains every override.
     """
     text = Path(src).read_text()
+
+    # Guard the output section.  AthenaK permits at most ONE history, ONE event-log and
+    # ONE restart block, and the suite rewrites output blocks BY INDEX -- so a deck whose
+    # unmanaged blocks already contain the type an override introduces makes AthenaK abort
+    # before taking a step.  The run then records rc!=0 with no dumps, which reads like a
+    # physics failure rather than a deck mismatch.  Measured: the stock SR MHD blast deck
+    # has four output blocks, output4 is a log, and the suite turns output2 into one too.
+    #
+    # The condition is a DUPLICATE of a singleton type, not merely an extra block: the
+    # Brio-Wu shock deck carries an unmanaged hst alongside the suite's log and is fine.
+    _SINGLETON = {"hst", "log", "rst"}
+    _eff = {}
+    for _m in re.finditer(r"^<output(\d+)>(.*?)(?=^<|\Z)", text, flags=re.M | re.S):
+        _i = int(_m.group(1))
+        _ft = re.search(r"^\s*file_type\s*=\s*(\w+)", _m.group(2), flags=re.M)
+        _eff[_i] = _ft.group(1) if _ft else None
+    for _o in overrides:
+        _k, _, _v = _o.partition("=")
+        _blk, _, _key = _k.partition("/")
+        if _blk.startswith("output") and _key == "file_type" and _blk[6:].isdigit():
+            _eff[int(_blk[6:])] = _v
+    _dupes = {}
+    for _i, _ft in sorted(_eff.items()):
+        if _ft in _SINGLETON:
+            _dupes.setdefault(_ft, []).append(_i)
+    _bad = {k: v for k, v in _dupes.items() if len(v) > 1}
+    if _bad:
+        raise SystemExit(
+            f"{Path(src).name}: after the suite's overrides this deck would define "
+            + ", ".join(f"{len(v)} '{k}' blocks (output{v})" for k, v in _bad.items())
+            + ". AthenaK allows at most one of each and aborts at startup, which the run "
+              "records as rc!=0 with no dumps. Give the case a deck whose output section "
+              "is exactly the blocks the suite writes."
+        )
+
     lines = text.splitlines(keepends=True)
     blocks = {}
     order = []
@@ -395,9 +436,9 @@ def run_linear(
                             use_uct=(soe == "mhd" and mhd_use_uct(scheme, case)),
                             linear=True,
                         )
-                        if scheme == "ppm_fb" and mood_rtol is not None:
+                        if scheme in ("fv4_fb", "fv6_fb", "fv8_fb") and mood_rtol is not None:
                             ov.append(f"{soe}/mood_rtol={mood_rtol:.17g}")
-                        if scheme == "ppm_fb" and mood_atol is not None:
+                        if scheme in ("fv4_fb", "fv6_fb", "fv8_fb") and mood_atol is not None:
                             ov.append(f"{soe}/mood_atol={mood_atol:.17g}")
                         # Newtonian zero-speed characteristic families need a nonzero
                         # background advection speed for a finite wave period. Hydro
@@ -471,12 +512,12 @@ def run_linear(
                             "nmood_total": None if dry_run else parse_nmood(outdir / "run.log"),
                             "mood_rtol": (
                                 mood_rtol
-                                if scheme == "ppm_fb" and mood_rtol is not None
+                                if scheme in ("fv4_fb", "fv6_fb", "fv8_fb") and mood_rtol is not None
                                 else manif["defaults"]["mood_rtol"]
                             ),
                             "mood_atol": (
                                 mood_atol
-                                if scheme == "ppm_fb" and mood_atol is not None
+                                if scheme in ("fv4_fb", "fv6_fb", "fv8_fb") and mood_atol is not None
                                 else manif["defaults"].get("mood_atol", 0.0)
                             ),
                             "outdir": str(outdir),
@@ -715,7 +756,15 @@ def run_stress_smoke(manif, athena, dry_run, schemes, case_ids=None, force=False
         case_athena = Path(ROOT / case["binary"]) if case.get("binary") else default_athena
         if not case_athena.is_absolute():
             case_athena = ROOT / case_athena
+        # `schemes` whitelists; `schemes_exclude` subtracts.  Prefer the latter -- a
+        # whitelist silently stops covering any scheme added to the manifest afterwards,
+        # whereas an exclusion keeps the case in step with the suite.  Bondi needs it:
+        # BH excision is incompatible with mood=true, so fv4_fb cannot run that case at
+        # all and would otherwise record a spurious rc!=0 in the matrix.
         case_schemes = case.get("schemes") or schemes
+        _excl = set(case.get("schemes_exclude") or [])
+        if _excl:
+            case_schemes = [s for s in case_schemes if s not in _excl]
         for scheme in case_schemes:
             name = f"{case['id']}_{scheme}_smoke"
             outdir = RESULTS / "stress" / name
@@ -755,6 +804,13 @@ def run_stress_smoke(manif, athena, dry_run, schemes, case_ids=None, force=False
             # above any healthy run here (the most is ~14k cycles, current_sheet at
             # 1024^2), so it truncates only runs that have already failed -- and the
             # health gate flags them either way.
+            # The stress suite used to hard-wire nx3=1.  A case may now ask for a third
+            # dimension; `dim` is what the report groups on, so keep the two consistent.
+            nx3 = int(case.get("nx3", 1))
+            if (nx3 > 1) != (case.get("dim") == "3d"):
+                raise SystemExit(
+                    f"{case['id']}: nx3={nx3} but dim={case.get('dim')!r} -- a 3D case "
+                    f"needs both, or the report files it under the wrong heading.")
             nlim = case.get("nlim", 200000)
             ov += [
                 f"time/cfl_number={cfl}",
@@ -762,10 +818,10 @@ def run_stress_smoke(manif, athena, dry_run, schemes, case_ids=None, force=False
                 "time/ndiag=100",
                 f"mesh/nx1={nx1}",
                 f"mesh/nx2={nx2}",
-                "mesh/nx3=1",
+                f"mesh/nx3={nx3}",
                 f"meshblock/nx1={nx1}",
                 f"meshblock/nx2={nx2}",
-                "meshblock/nx3=1",
+                f"meshblock/nx3={nx3}",
                 "mesh_refinement/refinement=none",
                 f"{soe}/rsolver={rsolver}",
                 "output1/file_type=vtk",
@@ -864,7 +920,7 @@ def run_tolerance(manif, athena, dry_run, case_ids=None, force=False):
             raise FileNotFoundError(
                 f"Athena binary for {cfg['id']} not found: {case_athena}"
             )
-        use_uct = soe == "mhd" and mhd_use_uct("ppm_fb", cfg)
+        use_uct = soe == "mhd" and mhd_use_uct("fv4_fb", cfg)
         # Relativistic FIRST, and not conditioned on UCT -- same rule as
         # run_stress_smoke: GR/SR MHD must never get the Newtonian hlld.
         if soe == "mhd":
@@ -880,7 +936,7 @@ def run_tolerance(manif, athena, dry_run, case_ids=None, force=False):
         for rtol in cfg["rtols"]:
             rtol = float(rtol)
             tag = f"{rtol:.0e}"
-            name = f"{cfg['id']}_ppm_fb_rtol_{tag}"
+            name = f"{cfg['id']}_fv4_fb_rtol_{tag}"
             outdir = RESULTS / "tolerance" / name
             if force and outdir.exists():
                 shutil.rmtree(outdir)
@@ -888,7 +944,7 @@ def run_tolerance(manif, athena, dry_run, case_ids=None, force=False):
                 print(f"skip existing {name}")
                 summary.append(json.loads((outdir / "summary.json").read_text()))
                 continue
-            ov = scheme_overrides(manif, "ppm_fb", soe, use_uct=use_uct,
+            ov = scheme_overrides(manif, "fv4_fb", soe, use_uct=use_uct,
                                   emf_name=case_emf(cfg))
             ov += [
                 f"{soe}/mood_rtol={rtol:.17g}",
@@ -929,7 +985,7 @@ def run_tolerance(manif, athena, dry_run, case_ids=None, force=False):
                 "case": cfg["id"],
                 "physics": cfg.get("physics", soe),
                 "dim": cfg.get("dim", "2d"),
-                "scheme": "ppm_fb",
+                "scheme": "fv4_fb",
                 "rtol": rtol,
                 "nx1": nx1,
                 "nx2": nx2,
@@ -957,7 +1013,7 @@ def main():
         choices=["linear", "shocks", "stress", "tolerance", "all"],
         default="all",
     )
-    ap.add_argument("--schemes", default="ppm_fb,plm,wenoz,teno")
+    ap.add_argument("--schemes", default="fv4_fb,fv6_fb,fv8_fb,plm,wenoz,teno")
     ap.add_argument(
         "--cases",
         default="",

@@ -192,10 +192,13 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
       mood_nad_scale = 2;
     } else if (nadsc.compare("gcfl") == 0) {
       mood_nad_scale = 3;
+    } else if (nadsc.compare("rcfl") == 0) {
+      // relative (per-bound |m|,|M|) band scaled by the global advective Courant number
+      mood_nad_scale = 4;
     } else {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
         << std::endl << "<hydro> mood_nad_scale = '" << nadsc
-        << "' not implemented (relative|grange|gdu|gcfl)" << std::endl;
+        << "' not implemented (relative|grange|gdu|gcfl|rcfl)" << std::endl;
       std::exit(EXIT_FAILURE);
     }
     mood_eps0  = pin->GetOrAddReal("hydro","mood_eps0",1.0e-12);
@@ -204,13 +207,13 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
     mood_nad_theta = pin->GetOrAddReal("hydro","mood_nad_theta",1.0);
     mood_nad_energy = pin->GetOrAddBoolean("hydro","mood_nad_energy",true);
     mood_nad_scalars = pin->GetOrAddBoolean("hydro","mood_nad_scalars",true);
-    // DETECTION OFF -- the negative control for the whole cascade.  reconstruct=ppm is
-    // unlimited and requires mood=true, so before this flag existed there was no way to
+    // DETECTION OFF -- the negative control for the whole cascade.  reconstruct=fv4/fv6/fv8
+    // is unlimited and requires mood=true, so before this flag existed there was no way to
     // run the base scheme on its own and ask which of its properties the detector is
     // actually responsible for.  mood_detect=false keeps mood=true (so the guard above
     // is satisfied and the halos are sized as usual) but skips the detect/revise loop
-    // entirely, leaving pure unlimited PPM.  Expect it to be unstable on hard problems:
-    // that is the point of the control, not a defect to work around.
+    // entirely, leaving the pure unlimited scheme.  Expect it to be unstable on hard
+    // problems: that is the point of the control, not a defect to work around.
     mood_detect = pin->GetOrAddBoolean("hydro","mood_detect",true);
     if (mood_nad_theta < 0.0 || mood_nad_theta > 1.0) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -248,8 +251,7 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
     } else if (xorder.compare("ppm4") == 0 ||
                xorder.compare("ppmx") == 0 ||
                xorder.compare("teno") == 0 ||
-               xorder.compare("wenoz") == 0 ||
-               xorder.compare("ppm") == 0) {
+               xorder.compare("wenoz") == 0) {
       // check that nghost > 2 (the +/-2 stencil requires at least 3 ghost zones)
       auto &indcs = pmy_pack->pmesh->mb_indcs;
       if (indcs.ng < 3) {
@@ -273,15 +275,38 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
         recon_method = ReconstructionMethod::wenoz;
       } else if (xorder.compare("teno") == 0) {
         recon_method = ReconstructionMethod::teno;
-      } else if (xorder.compare("ppm") == 0) {
-        recon_method = ReconstructionMethod::ppm;
-        if (!use_mood) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-            << std::endl << "<hydro> reconstruct=ppm (unlimited) requires "
-            << "mood=true" << std::endl;
-          std::exit(EXIT_FAILURE);
-        }
       }
+    } else if (xorder.compare("fv4") == 0 ||
+               xorder.compare("fv6") == 0 ||
+               xorder.compare("fv8") == 0) {
+      // Unlimited central face interpolation.  No upwind dissipation of its own, so it
+      // is only stable behind the MOOD fallback.  Stencil half-width is 2/3/4.
+      if (xorder.compare("fv4") == 0) {
+        recon_method = ReconstructionMethod::fv4;
+      } else if (xorder.compare("fv6") == 0) {
+        recon_method = ReconstructionMethod::fv6;
+      } else {
+        recon_method = ReconstructionMethod::fv8;
+      }
+      if (!use_mood) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+          << std::endl << "<hydro> reconstruct=" << xorder
+          << " (unlimited) requires mood=true" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      auto &indcs = pmy_pack->pmesh->mb_indcs;
+      int ng_base = ReconStencilRadius(recon_method) + 1;
+      if (indcs.ng < ng_base) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+          << std::endl << xorder << " reconstruction requires at least " << ng_base
+          << " ghost zones, but <mesh>/nghost=" << indcs.ng << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+    } else if (xorder.compare("ppm") == 0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+        << std::endl << "<hydro> reconstruct=ppm was renamed to fv4 "
+        << "(unlimited 4th-order; also available: fv6, fv8)" << std::endl;
+      std::exit(EXIT_FAILURE);
     } else {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "<hydro> reconstruct = '" << xorder << "' not implemented"
@@ -298,8 +323,9 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
           << std::endl << "<hydro> mood_max_revs must be >= 1" << std::endl;
         std::exit(EXIT_FAILURE);
       }
-      int ng_need = ((recon_method == ReconstructionMethod::plm) ? 2 : 3)
-                    + mood_max_revs;
+      // radius+1 covers the reconstruction stencil; each revision consumes one more
+      // ghost layer of the light-cone halo.
+      int ng_need = ReconStencilRadius(recon_method) + 1 + mood_max_revs;
       auto &indcs = pmy_pack->pmesh->mb_indcs;
       if (indcs.ng < ng_need) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__

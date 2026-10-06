@@ -1,6 +1,6 @@
 # MOOD fallback validation
 
-Reproducible matrix comparing **PPM+MOOD+RK3** against **PLM+RK2**, **WENOZ+RK3**, and **TENO-5+RK3** for Newtonian and fixed-background GR hydro/MHD.
+Reproducible matrix comparing **FV4/FV6/FV8+MOOD+RK3** against **PLM+RK2**, **WENOZ+RK3**, and **TENO-5+RK3** for Newtonian and fixed-background GR hydro/MHD. The unlimited schemes (`reconstruct=fv4|fv6|fv8`) are central finite-volume face interpolants with no built-in limiting; they require `mood=true`.
 
 ## Build
 
@@ -34,6 +34,7 @@ python3 validation/fallback/scripts/generate_report.py --pdf
 ```
 
 Suites: `linear`, `shocks`, `stress`, `all`.
+Default schemes: `fv4_fb,fv6_fb,fv8_fb,plm,wenoz,teno`.
 
 ## Outputs
 
@@ -48,8 +49,8 @@ Suites: `linear`, `shocks`, `stress`, `all`.
 
 ## Regenerating the figures
 
-`figures/` is **not tracked** -- 91 plots, ~25 MB, and every one of them is reproducible
-from the tracked `results/*.json` plus the per-run dumps.  The report's image links are
+`figures/` is **not tracked** -- plots are reproducible from the tracked
+`results/*.json` plus the per-run dumps.  The report's image links are
 therefore dead in a fresh clone until you rebuild them.
 
 With `results/` already populated (i.e. the suites have been run), no simulation is

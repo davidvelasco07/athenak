@@ -41,7 +41,7 @@ ndiag      = 1        # cycles between diagostic output
 
 <hydro>
 eos         = ideal   # EOS type
-reconstruct = ppm     # unlimited PPM base scheme (requires MOOD fallback)
+reconstruct = fv4     # unlimited FV4 base scheme (requires MOOD fallback)
 mood        = true    # enable a-posteriori MOOD fallback (PPM -> PLM -> DC)
 rsolver     = hllc    # Riemann-solver to be used
 gamma       = 1.4     # gamma = C_p/C_v

@@ -122,7 +122,7 @@ def write_frames(rundir: Path, framedir: Path, dt: float):
         for cb in (cb0, cb1, cb2):
             cb.outline.set_linewidth(0.6)
         t = idx * dt
-        fig.suptitle(rf"Current sheet, PPM + MOOD + RK3 ($t={t:.2f}$)", y=1.04)
+        fig.suptitle(rf"Current sheet, FV4 + RK3 ($t={t:.2f}$)", y=1.04)
         out = framedir / f"frame_{i:05d}.png"
         fig.savefig(out, dpi=200)
         plt.close(fig)

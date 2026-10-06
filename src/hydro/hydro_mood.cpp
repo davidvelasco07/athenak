@@ -178,7 +178,10 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
   //           (computed after the first candidate below).
   // Both reduce over ACTIVE cells only (never ghosts) for layout independence.
   Real gscale0 = 0.0, gscale1 = 0.0, gscale_s = 0.0;
-  if (scale_mode == 1 || scale_mode == 3) {
+  // rcfl: the relative per-bound band (Paper I) multiplied by the same global advective
+  // Courant factor gcfl uses, so the tolerance is both local and timestep-aware.
+  Real rcfl_fac = 1.0;
+  if (scale_mode == 1 || scale_mode == 3 || scale_mode == 4) {
     Real gdmn = std::numeric_limits<Real>::max(), gdmx = -gdmn;
     Real gemn = gdmn, gemx = gdmx;
     Real gvmx = 0.0;
@@ -186,7 +189,7 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
     const int ni = ie-is+1, nji = (je-js+1)*ni, nkji = (ke-ks+1)*nji;
     const int nmkji = nmb*nkji;
     const bool ideal = is_ideal_;
-    const bool want_v = (scale_mode == 3);
+    const bool want_v = (scale_mode == 3 || scale_mode == 4);
     Kokkos::parallel_reduce("mood_grange",
     Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
     KOKKOS_LAMBDA(const int &idx, Real &dmn, Real &dmx, Real &emn, Real &emx,
@@ -214,7 +217,7 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
 #endif
     gscale0 = fmax(gdmx - gdmn, 0.0);
     gscale1 = fmax(gemx - gemn, 0.0);
-    if (scale_mode == 3) {
+    if (scale_mode == 3 || scale_mode == 4) {
       // global advective Courant number of the full step (min over blocks of dx)
       Real dxmin = std::numeric_limits<Real>::max();
       auto &msize = pmy_pack->pmb->mb_size;
@@ -227,6 +230,7 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
       cfl_fac = fmin(1.0, cfl_adv);
       gscale0 *= cfl_fac;
       gscale1 *= cfl_fac;
+      rcfl_fac = cfl_fac;
     }
     if (nad_scalars) {
       // Global dynamic range of the passive-scalar CONCENTRATION, minimized/maximized
@@ -496,6 +500,9 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
           if (scale_mode == 0) {          // spd-style relative
             eps_m = fmax(rtol*fabs(qmn), atol);
             eps_p = fmax(rtol*fabs(qmx), atol);
+          } else if (scale_mode == 4) {   // rcfl: relative band x advective Courant
+            eps_m = fmax(rtol*rcfl_fac*fabs(qmn), atol);
+            eps_p = fmax(rtol*rcfl_fac*fabs(qmx), atol);
           } else if (scale_mode == 1) {   // grange with Mach-softening exponent theta:
             // eps = rtol * G^theta * |bound|^(1-theta); theta=1 -> pure global range
             const Real gsc = (pass == 0) ? gscale0 : gscale1;
@@ -546,9 +553,10 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
             qmx = fmax(qmx, q);
           }}}
           Real eps_m, eps_p;
-          if (scale_mode == 0) {
-            eps_m = fmax(rtol*fabs(qmn), atol);
-            eps_p = fmax(rtol*fabs(qmx), atol);
+          if (scale_mode == 0 || scale_mode == 4) {
+            const Real rf = (scale_mode == 4) ? rcfl_fac : 1.0;
+            eps_m = fmax(rtol*rf*fabs(qmn), atol);
+            eps_p = fmax(rtol*rf*fabs(qmx), atol);
           } else {
             Real eps = fmax(rtol*gscale_s, atol);
             eps_m = eps;

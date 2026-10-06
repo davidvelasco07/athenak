@@ -278,10 +278,13 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
       mood_nad_scale = 2;
     } else if (nadsc.compare("gcfl") == 0) {
       mood_nad_scale = 3;
+    } else if (nadsc.compare("rcfl") == 0) {
+      // relative (per-bound |m|,|M|) band scaled by the global advective Courant number
+      mood_nad_scale = 4;
     } else {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
         << std::endl << "<mhd> mood_nad_scale = '" << nadsc
-        << "' not implemented (relative|grange|gdu|gcfl)" << std::endl;
+        << "' not implemented (relative|grange|gdu|gcfl|rcfl)" << std::endl;
       std::exit(EXIT_FAILURE);
     }
     mood_eps0  = pin->GetOrAddReal("mhd","mood_eps0",1.0e-12);
@@ -352,21 +355,36 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
           << std::endl;
         std::exit(EXIT_FAILURE);
       }
-    } else if (xorder.compare("ppm") == 0) {
-      recon_method = ReconstructionMethod::ppm;
+    } else if (xorder.compare("fv4") == 0 ||
+               xorder.compare("fv6") == 0 ||
+               xorder.compare("fv8") == 0) {
+      // Unlimited central face interpolation (no upwind dissipation of its own).
+      if (xorder.compare("fv4") == 0) {
+        recon_method = ReconstructionMethod::fv4;
+      } else if (xorder.compare("fv6") == 0) {
+        recon_method = ReconstructionMethod::fv6;
+      } else {
+        recon_method = ReconstructionMethod::fv8;
+      }
       if (!use_mood) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-          << std::endl << "reconstruct=ppm has no built-in limiting and "
-          << "requires <mhd>/mood=true" << std::endl;
+          << std::endl << "reconstruct=" << xorder
+          << " has no built-in limiting and requires <mhd>/mood=true" << std::endl;
         std::exit(EXIT_FAILURE);
       }
       auto &indcs = pmy_pack->pmesh->mb_indcs;
-      if (indcs.ng < 3) {
+      int ng_base = ReconStencilRadius(recon_method) + 1;
+      if (indcs.ng < ng_base) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-          << std::endl << xorder << " reconstruction requires at least 3 ghost zones, "
-          << "but <mesh>/nghost=" << indcs.ng << std::endl;
+          << std::endl << xorder << " reconstruction requires at least " << ng_base
+          << " ghost zones, but <mesh>/nghost=" << indcs.ng << std::endl;
         std::exit(EXIT_FAILURE);
       }
+    } else if (xorder.compare("ppm") == 0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+        << std::endl << "<mhd> reconstruct=ppm was renamed to fv4 "
+        << "(unlimited 4th-order; also available: fv6, fv8)" << std::endl;
+      std::exit(EXIT_FAILURE);
     } else if (xorder.compare("plm") == 0) {
       recon_method = ReconstructionMethod::plm;
       // check that nghost > 2 with PLM+FOFC
@@ -531,14 +549,15 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
                 << std::endl;
       std::exit(EXIT_FAILURE);
     }
-    // Ghost-zone requirements for UCT
+    // Ghost-zone requirements for UCT.  The corner composition at an edge reads
+    // `reach` faces to either side, and each of those faces was reconstructed from a
+    // stencil of half-width `radius`, so the ghost layer has to cover both.
     if (emf_method != MHD_EMF::ct_contact) {
-      bool ho = !(recon_method == ReconstructionMethod::dc ||
-                  recon_method == ReconstructionMethod::plm);
-      int ng_need = ho ? 5 : 3;
+      int ng_need = ReconEdgeReach(recon_method) + ReconStencilRadius(recon_method);
+      if (ng_need < 3) { ng_need = 3; }
       if (pmy_pack->pmesh->mb_indcs.ng < ng_need) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                  << std::endl << "UCT EMF with " << (ho ? "high-order" : "dc/plm")
+                  << std::endl << "UCT EMF with " << xorder
                   << " reconstruction requires at least " << ng_need
                   << " ghost zones, but <mesh>/nghost="
                   << pmy_pack->pmesh->mb_indcs.ng << std::endl;
@@ -565,20 +584,17 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
           << std::endl << "<mhd> mood_max_revs must be >= 1" << std::endl;
         std::exit(EXIT_FAILURE);
       }
+      // ct_contact composes edges from the two adjacent faces (reach 1).  UCT
+      // reconstructs along the edge, so the light-cone halo must cover that reach.
       int h_f = 1;
       if (emf_method != MHD_EMF::ct_contact) {
-        if (recon_method == ReconstructionMethod::dc) {
-          h_f = 1;
-        } else if (recon_method == ReconstructionMethod::plm ||
-                   recon_method == ReconstructionMethod::ppm) {
-          h_f = 2;
-        } else {
-          h_f = 3;  // wenoz/ppm4/ppmx/teno
-        }
+        h_f = ReconEdgeReach(recon_method);
       }
       mood_halo0 = h_f + mood_max_revs - 1;
-      int stencil = 2;
-      if (recon_method == ReconstructionMethod::plm && !mood_sed) { stencil = 1; }
+      // SED reads a +/-2 neighborhood even for PLM; otherwise the stencil is the
+      // reconstruction half-width.
+      int stencil = ReconStencilRadius(recon_method);
+      if (mood_sed && stencil < 2) { stencil = 2; }
       int ng_need = mood_halo0 + 1 + stencil;
       auto &indcs = pmy_pack->pmesh->mb_indcs;
       if (indcs.ng < ng_need) {

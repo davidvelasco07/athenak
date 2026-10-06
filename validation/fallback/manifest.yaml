@@ -1,6 +1,8 @@
 # MOOD fallback validation matrix
 # Schemes compared (fixed within each test: RS, CFL, EOS, grid, tlim):
-#   ppm_fb  = reconstruct=ppm + mood=true + rk3
+#   fv4_fb  = reconstruct=fv4 + mood=true + rk3
+#   fv6_fb  = reconstruct=fv6 + mood=true + rk3
+#   fv8_fb  = reconstruct=fv8 + mood=true + rk3
 #   plm     = reconstruct=plm + mood=false + rk2
 #   wenoz   = reconstruct=wenoz + mood=false + rk3
 #   teno    = reconstruct=teno + mood=false + rk3
@@ -9,13 +11,29 @@
 # Each physics covers 1D / 2D / 3D linear waves (+ 1D shocks, multi-D stress).
 
 schemes:
-  ppm_fb:
+  fv4_fb:
     fofc: false         # mutually exclusive with mood=true
     integrator: rk3
-    reconstruct: ppm
+    reconstruct: fv4
     mood: true
     nghost_hydro: 5
     nghost_mhd_uct: 6
+  fv6_fb:
+    fofc: false
+    integrator: rk3
+    reconstruct: fv6
+    mood: true
+    # radius 3 + 1 + mood_max_revs 2
+    nghost_hydro: 6
+    # UCT edge reach 3 + mood halo: see mhd.cpp
+    nghost_mhd_uct: 8
+  fv8_fb:
+    fofc: false
+    integrator: rk3
+    reconstruct: fv8
+    mood: true
+    nghost_hydro: 7
+    nghost_mhd_uct: 10
   plm:
     fofc: true          # a-posteriori counterpart of MOOD (see scheme_overrides)
     integrator: rk2
@@ -43,8 +61,8 @@ schemes:
 
   # --- unprotected variants -------------------------------------------------------
   # Same base schemes with their a-posteriori safety net switched OFF.  Not the
-  # like-for-like comparison (PPM cannot be run bare -- unlimited PPM requires
-  # mood=true), but they show how load-bearing FOFC actually is for each scheme:
+  # like-for-like comparison (FV4/6/8 cannot be run bare -- unlimited central
+  # interpolation requires mood=true), but they show how load-bearing FOFC is:
   # where bare and protected agree, FOFC never fired and the run is bit-identical.
   # Ghost counts revert to the non-FOFC requirement.
   plm_bare:
@@ -85,7 +103,7 @@ defaults:
 linear_waves:
   amp: 1.0e-6
   tlim_periods: 1.0
-  require_zero_demotions_for: [ppm_fb]
+  require_zero_demotions_for: [fv4_fb, fv6_fb, fv8_fb]
   # Grid setup by dimension (diagonal wavevector in 2D/3D when along_x1=false)
   dimensions:
     "1d":
@@ -237,6 +255,21 @@ tolerance:
     - mhd_jet
     - ha_jet
     - fu_jet_m80
+    # The relativistic KH pair.  Worth sweeping specifically because this is the one case
+    # where the cascade's dissipation decides the PHYSICS: PPM+MOOD is the only scheme
+    # whose numerical dissipation falls below the Kelvin-Helmholtz growth rate, so rtol --
+    # which sets how readily a cell is demoted -- controls whether the fastest-growing
+    # mode (linear theory: n=7.0) survives at all.  A looser rtol widens the allowed band
+    # and demotes less, so the expected trend is MORE instability as rtol grows.
+    - kh_srhydro
+    - kh_grhydro
+    # Also swept: the SR/GR blast twins and the new 3D case, so every relativistic case
+    # in the battery has a tolerance panel rather than only the ones added first.
+    - blast_srhydro
+    - blast_grhydro
+    - blast_srmhd
+    - blast_srmhd_uct
+    - blast_grhydro_3d
   cases:
     - id: implode_hydro
       physics: hydro
@@ -622,7 +655,7 @@ stress:
       # detection halo, hence nghost = 9.  The companion `mhd_jet` case keeps the
       # default-depth failure in the matrix, since the contrast is the result.
       scheme_overrides:
-        ppm_fb:
+        fv4_fb:
           - "mhd/mood_max_revs=4"
           - "mesh/nghost=9"
       overrides:
@@ -747,6 +780,168 @@ stress:
       plot_field: dens
       overrides:
         - "time/nlim=-1"
+    - id: blast_srhydro
+      physics: srhydro
+      dim: "2d"
+      input: inputs/srhydro/blast_srhydro_2d.athinput
+      soe: hydro
+      binary: build_blast/src/athena
+      # must be a CASE key: the harness uses it to pick the relativistic Riemann solver
+      special_rel: true
+      # Beckwith & Stone (2011) relativistic blast.  The battery had NO special-
+      # relativistic case in any suite, so neither the MOOD cascade nor FOFC had ever
+      # been exercised against the SR solvers -- a code path distinct from both the
+      # Newtonian and the GR ones.  Paired with blast_grhydro below: same physical
+      # problem, GR machinery on a flat metric, so the two must agree.
+      nx1: 200
+      nx2: 200
+      # t=4 is the stock deck's own stopping time.  At t=2 the shell sits at r~2 in a
+      # box of half-width 6, using a small fraction of the grid; by t=4 it is at r~4.
+      tlim: 4.0
+      plot_field: dens
+      plot_log: true
+      overrides:
+        - "time/nlim=-1"
+    - id: blast_grhydro
+      physics: grhydro
+      dim: "2d"
+      input: inputs/grhydro/blast_grhydro_2d.athinput
+      soe: hydro
+      binary: build_blast/src/athena
+      general_rel: true
+      # The GR-hydro half of the pair, and the first multi-D GR hydrodynamics case in
+      # the battery -- grhydro previously had linear waves and shock tubes only.
+      # Measured against blast_srhydro: L1 relative density 1.6e-4 (PLM+FOFC) and
+      # 3.4e-4 (PPM+MOOD).  Two independent solver paths on one problem agreeing to a
+      # few parts in 10^4 is a stronger statement than either run alone.
+      nx1: 200
+      nx2: 200
+      # t=4 is the stock deck's own stopping time.  At t=2 the shell sits at r~2 in a
+      # box of half-width 6, using a small fraction of the grid; by t=4 it is at r~4.
+      tlim: 4.0
+      plot_field: dens
+      plot_log: true
+      overrides:
+        - "time/nlim=-1"
+    - id: blast_srmhd
+      physics: srmhd
+      dim: "2d"
+      input: inputs/srmhd/blast_srmhd_2d.athinput
+      soe: mhd
+      binary: build_blast/src/athena
+      special_rel: true
+      # SR magnetized blast.  The stock deck presets `fofc = true`, which is mutually
+      # exclusive with mood=true -- run_suite now emits an explicit fofc value for
+      # every scheme rather than only ever setting it true.
+      nx1: 200
+      nx2: 200
+      tlim: 2.0
+      plot_field: dens
+      plot_log: true
+      overrides:
+        - "time/nlim=-1"
+    - id: blast_srmhd_uct
+      physics: srmhd
+      dim: "2d"
+      input: inputs/srmhd/blast_srmhd_2d.athinput
+      soe: mhd
+      binary: build_blast/src/athena
+      special_rel: true
+      # The UCT half of the SR pair.  Same fix as the GR case: the SR solvers were
+      # handing the corner-EMF composition the spatial four-velocity instead of the
+      # coordinate transport velocity.  Here uct_hll is the CLEANER of the two EMFs
+      # (903 EOS floors against ct_contact's 1,754 under PPM+MOOD), which is the
+      # opposite of what the GR blast shows -- so neither EMF is uniformly better.
+      emf: uct_hll
+      nx1: 200
+      nx2: 200
+      tlim: 2.0
+      plot_field: dens
+      plot_log: true
+      overrides:
+        - "time/nlim=-1"
+    - id: blast_grhydro_3d
+      physics: grhydro
+      dim: "3d"
+      input: inputs/grhydro/blast_grhydro_2d.athinput
+      soe: hydro
+      binary: build_blast/src/athena
+      general_rel: true
+      # The 2D blast's three-dimensional twin -- the first 3D entry in the stress suite,
+      # which was 2D by construction until `nx3` became a case key.  96^3 rather than
+      # 200^3: the point is that the fallback behaves in three dimensions, and 8.6x the
+      # cells buys no additional statement.
+      nx1: 96
+      nx2: 96
+      nx3: 96
+      tlim: 4.0
+      plot_field: dens
+      plot_log: true
+      overrides:
+        - "time/nlim=-1"
+    - id: kh_srhydro
+      physics: srhydro
+      dim: "2d"
+      input: inputs/srhydro/kh_srhydro_2d.athinput
+      soe: hydro
+      binary: build_kh/src/athena
+      special_rel: true
+      # Shear rather than shocks.  Every other relativistic case here is a blast, and a
+      # detector that is merely diffusive passes a blast while flattening a shear layer.
+      nx1: 256
+      nx2: 128
+      tlim: 2.0
+      # s_00, NOT dens: iprob=1 starts at UNIFORM density 1.0 and puts the contrast in a
+      # passive scalar, so a density panel shows almost nothing for a correct run.
+      plot_field: s_00
+      overrides:
+        - "time/nlim=-1"
+    - id: kh_grhydro
+      physics: grhydro
+      dim: "2d"
+      input: inputs/grhydro/kh_grhydro_2d.athinput
+      soe: hydro
+      binary: build_kh/src/athena
+      general_rel: true
+      # The GR half of the KH pair, and a second multi-D GR hydrodynamics case with
+      # physics unlike the blast's.
+      nx1: 256
+      nx2: 128
+      tlim: 2.0
+      # s_00, NOT dens: iprob=1 starts at UNIFORM density 1.0 and puts the contrast in a
+      # passive scalar, so a density panel shows almost nothing for a correct run.
+      plot_field: s_00
+      overrides:
+        - "time/nlim=-1"
+    - id: bondi_gr
+      physics: grhydro
+      dim: "3d"
+      input: inputs/tests/bondi.athinput
+      soe: hydro
+      binary: build_bondi/src/athena
+      general_rel: true
+      # Spherical BH accretion with an ANALYTIC solution -- the only accuracy gate in
+      # multi-D relativistic hydrodynamics here.  Every other stress case can say a run
+      # stayed finite and how often it hit a floor; this one says how far the answer is
+      # from the truth (the pgen writes <basename>-errs.dat automatically).
+      #
+      # PPM+MOOD IS EXCLUDED BY THE CODE, not by choice: the problem needs BH excision,
+      # and `mood=true` rejects excision outright ("<hydro> mood=true does not support BH
+      # excision (use fofc)").  Recording that as an exclusion rather than as a crashed
+      # run is the honest presentation -- and it is the sharpest statement of the MOOD
+      # cascade's scope in this report.
+      schemes_exclude: [fv4_fb, fv6_fb, fv8_fb]
+      # Built-in pgen selected by <job>/pgen_name, so it needs a plain build rather than
+      # a -DPROBLEM one; see scripts/build_2d_problem_binaries.sh.
+      nx1: 32
+      nx2: 32
+      nx3: 32
+      tlim: 100.0
+      plot_field: dens
+      plot_log: true
+      overrides:
+        - "time/nlim=-1"
+        - "mesh_refinement/refinement=none"
     - id: blast_grmhd
       physics: grmhd
       dim: "2d"
@@ -801,7 +996,7 @@ stress:
     - id: ringing_128
       physics: mhd
       dim: "3d"
-      input: inputs/mhd/turb_ringing_ppm_fb_128.athinput
+      input: inputs/mhd/turb_ringing_fv4_fb_128.athinput
       soe: mhd
       note: "Strong guide-field ringing; requires -DPROBLEM=fluids/turb"
     - id: blast_grmhd_minkowski
@@ -828,4 +1023,4 @@ apollo_grmhd_blast:
     - figures/apollo_grmhd/ppm_fb_fields.mp4
     - figures/apollo_grmhd/plm.mp4
     - figures/apollo_grmhd/wenoz.mp4
-  source: "~/srmhd_blast on Apollo (ppm_fb vs plm/wenoz/ppmx/dc)"
+  source: "~/srmhd_blast on Apollo (fv4_fb vs plm/wenoz/ppmx/dc)"
