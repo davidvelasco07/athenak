@@ -42,6 +42,8 @@ Real njeans_ = 0.0, jeans_derefine_ = 2.5, sink_buffer_ = 4.0;
 bool sink_protect_ = true, amr_diagnostics_ = false;
 void GMTFRefinement(MeshBlockPack *pmbp);
 void GMTFHistory(HistoryData *pdata, Mesh *pm);
+DvceArray5D<Real> &GasU0(MeshBlockPack *pmbp);
+EquationOfState *GasEOS(MeshBlockPack *pmbp);
 void SeedSinks(ParameterInput *pin, MeshBlockPack *pmbp);
 }  // namespace
 
@@ -83,13 +85,15 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     sink_buffer_ = pin->GetOrAddReal("problem", "sink_buffer_cells", 4.0);
     sink_protect_ = pin->GetOrAddBoolean("problem", "sink_protect", true);
     auto pack = pmy_mesh_->pmb_pack;
-    if (pack->phydro == nullptr || pack->pgrav == nullptr ||
-        pack->phydro->peos->eos_data.is_ideal || pack->pgrav->four_pi_G <= 0.0 ||
+    EquationOfState *peos = GasEOS(pack);
+    if (peos == nullptr || pack->pgrav == nullptr ||
+        peos->eos_data.is_ideal || pack->pgrav->four_pi_G <= 0.0 ||
         !std::isfinite(njeans_) || njeans_ <= 0.0 ||
         !std::isfinite(jeans_derefine_) || jeans_derefine_ <= 2.0 ||
         !std::isfinite(sink_buffer_) || (sink_protect_ && sink_buffer_ < 4.0)) {
-      Kokkos::abort("GMTF Jeans AMR needs isothermal hydro, positive gravity/NJeans, "
-                    "derefinement ratio > 2 and protected sink buffer >= 4 cells");
+      Kokkos::abort("GMTF Jeans AMR needs isothermal hydro or MHD, positive gravity/"
+                    "NJeans, derefinement ratio > 2 and protected sink buffer >= 4 "
+                    "cells");
     }
     for (int face=0; face<6; ++face) {
       if (pmy_mesh_->mesh_bcs[face] != BoundaryFlag::periodic) {
@@ -440,6 +444,20 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
 
 namespace {
 //----------------------------------------------------------------------------------------
+//! \fn GasU0(), GasEOS()
+//! \brief the gas lives in Hydro or in MHD; UserProblem takes Hydro when both exist, and
+//! the Jeans criterion and the history follow the same choice.
+
+DvceArray5D<Real> &GasU0(MeshBlockPack *pmbp) {
+  return (pmbp->phydro != nullptr) ? pmbp->phydro->u0 : pmbp->pmhd->u0;
+}
+
+EquationOfState *GasEOS(MeshBlockPack *pmbp) {
+  if (pmbp->phydro != nullptr) return pmbp->phydro->peos;
+  return (pmbp->pmhd != nullptr) ? pmbp->pmhd->peos : nullptr;
+}
+
+//----------------------------------------------------------------------------------------
 //! \fn void GMTFHistory()
 //! \brief gas mass/momenta, sink mass and count, and the star-formation efficiency.
 //! Also applies the sfe_term stopping criterion: once SFE reaches it, tlim is pulled back
@@ -455,9 +473,9 @@ void GMTFRefinement(MeshBlockPack *pmbp) {
   const auto ix = pm->mb_indcs;
   const int ni=ix.nx1+2*ix.ng, nj=ix.nx2+2*ix.ng, nk=ix.nx3+2*ix.ng;
   const int nmb=pmbp->nmb_thispack, gids=pmbp->gids;
-  auto u=pmbp->phydro->u0;
+  auto u=GasU0(pmbp);
   auto sizes=pmbp->pmb->mb_size.d_view;
-  const Real cs=pmbp->phydro->peos->eos_data.iso_cs;
+  const Real cs=GasEOS(pmbp)->eos_data.iso_cs;
   const Real factor=4.0*M_PI*M_PI*cs*cs/pmbp->pgrav->four_pi_G;
   const Real target2=njeans_*njeans_, derefine2=target2*jeans_derefine_*jeans_derefine_;
   const Real buffer=sink_buffer_;
@@ -510,7 +528,7 @@ void GMTFHistory(HistoryData *pdata, Mesh *pm) {
   pdata->label[5] = "n_sink";
   pdata->label[6] = "SFE";
 
-  auto &u0 = pmbp->phydro->u0;
+  auto &u0 = GasU0(pmbp);
   auto &sz = pmbp->pmb->mb_size;
   auto &ix = pm->mb_indcs;
   const int is = ix.is, nx1 = ix.nx1, js = ix.js, nx2 = ix.nx2, ks = ix.ks, nx3 = ix.nx3;
@@ -577,7 +595,7 @@ void GMTFHistory(HistoryData *pdata, Mesh *pm) {
         pdata->hdata[15]+=(b.x1max-b.x1min)*(b.x2max-b.x2min)*(b.x3max-b.x3min);
       }
     }
-    const Real cs=pmbp->phydro->peos->eos_data.iso_cs;
+    const Real cs=GasEOS(pmbp)->eos_data.iso_cs;
     const Real fac=4.0*M_PI*M_PI*cs*cs/(pmbp->pgrav->four_pi_G*njeans_*njeans_);
     auto levels=pmbp->pmb->mb_lev.d_view;
     const int maxlevel=pm->max_level;
@@ -594,6 +612,30 @@ void GMTFHistory(HistoryData *pdata, Mesh *pm) {
         if ((levels(m)==maxlevel)==(capped==1) && u0(m,IDN,k,j,i)>fac/(dx*dx)) sum+=1;
       },Kokkos::Sum<Real>(count));
       pdata->hdata[12+capped]=count;
+    }
+  }
+
+  // MHD: volume integrals of the cell-centred field, appended after the other columns. In
+  // a periodic box constrained transport conserves the net flux through every plane, and
+  // accretion leaves B untouched, so these stay at their initial values to round-off.
+  if (pmbp->phydro == nullptr && pmbp->pmhd != nullptr) {
+    auto &bcc = pmbp->pmhd->bcc0;
+    const int n0 = pdata->nhist;
+    pdata->nhist = n0 + 3;
+    const char *blab[] = {"B1_vol", "B2_vol", "B3_vol"};
+    for (int v = 0; v < 3; ++v) {
+      Real sum = 0.0;
+      Kokkos::parallel_reduce("gmtf_hist_b",
+                              Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+      KOKKOS_LAMBDA(const int &idx, Real &psum) {
+        const int m = idx/nkji;
+        const int k = (idx - m*nkji)/nji + ks;
+        const int j = (idx - m*nkji - (k-ks)*nji)/nx1 + js;
+        const int i = (idx - m*nkji - (k-ks)*nji - (j-js)*nx1) + is;
+        psum += bcc(m, v, k, j, i)*sz.d_view(m).dx1*sz.d_view(m).dx2*sz.d_view(m).dx3;
+      }, Kokkos::Sum<Real>(sum));
+      pdata->label[n0 + v] = blab[v];
+      pdata->hdata[n0 + v] = sum;
     }
   }
 
