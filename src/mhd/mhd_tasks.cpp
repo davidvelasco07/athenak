@@ -277,6 +277,13 @@ TaskStatus MHD::Fluxes(Driver *pdrive, int stage) {
     } else if (rsolver_method == MHD_RSolver::hlle_gr) {
       MOODLoop<MHD_RSolver::hlle_gr>(pdrive, stage);
     }
+    // MOOD revises newly troubled faces, but GR excision also needs its permanent
+    // first-order LLF fluxes at every stage.  With use_fofc=false, FOFC applies only
+    // that excision correction and leaves the MOOD flags alone.
+    if (pmy_pack->pcoord->is_general_relativistic &&
+        pmy_pack->pcoord->coord_data.bh_excise) {
+      FOFC(pdrive, stage);
+    }
   } else if (use_fofc) {
     FOFC(pdrive, stage);
   } else if (pmy_pack->pcoord->is_general_relativistic) {
