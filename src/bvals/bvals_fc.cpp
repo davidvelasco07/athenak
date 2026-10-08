@@ -334,10 +334,22 @@ TaskStatus MeshBoundaryValuesFC::RecvAndUnpackFC(DvceFaceFld4D<Real> &b,
     const int m = tmember.league_rank()/3;
     const int v = tmember.league_rank()%3;
 
-    // scalar loop over neighbors to prevent race condition in overlapping assignments
+    // Scalar loops over neighbors to prevent race condition in overlapping assignments.
+    // A face on the boundary between two ghost regions (e.g. between the region filled
+    // by a same-level face neighbor and the region filled by a finer edge neighbor) is
+    // written by both buffers, and the later write wins. The same-level neighbor's value
+    // must win: it is that neighbor's own copy of the face, the one it evolves and uses,
+    // so the two blocks on either side of their shared face then reconstruct from the
+    // same data. A finer neighbor's restricted value differs from it wherever the coarse
+    // and fine copies of a fine/coarse face differ, and left in place it makes the two
+    // same-level blocks compute different fluxes on their shared face, which breaks the
+    // conservation of mass, momentum and energy under SMR/AMR. So unpack neighbors at a
+    // different level first (pass 0) and neighbors at the same level last (pass 1).
+    for (int pass=0; pass<2; ++pass) {
     for (int n=0; n<nnghbr; ++n) {
-      // only unpack buffers when neighbor exists
-      if (nghbr.d_view(m,n).gid >= 0) {
+      // only unpack buffers when neighbor exists, in the pass for its level
+      if ((nghbr.d_view(m,n).gid >= 0) &&
+          ((nghbr.d_view(m,n).lev == mblev.d_view(m)) == (pass == 1))) {
         // if neighbor is at coarser level, use cindices to unpack buffer
         int il, iu, jl, ju, kl, ku, ndat;
         if (nghbr.d_view(m,n).lev < mblev.d_view(m)) {
@@ -430,6 +442,7 @@ TaskStatus MeshBoundaryValuesFC::RecvAndUnpackFC(DvceFaceFld4D<Real> &b,
         tmember.team_barrier();
       }  // end if-neighbor-exists block
     }
+    }  // end loop over passes
   });  // end par_for_outer
 
   return TaskStatus::complete;
