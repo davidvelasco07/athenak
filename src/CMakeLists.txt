@@ -88,6 +88,7 @@ add_executable(
         ion-neutral/ion-neutral.cpp
         ion-neutral/ion-neutral_tasks.cpp
 
+        mesh/amr_shared_faces.cpp
         mesh/build_tree.cpp
         mesh/load_balance.cpp
         mesh/mesh.cpp
