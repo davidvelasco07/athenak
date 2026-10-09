@@ -55,6 +55,7 @@ MeshRefinement::MeshRefinement(Mesh *pm, ParameterInput *pin) :
   prolong_velocity(true),
   refine_flag("rflag",pm->nmb_total),
   fc_amr_repair("fc_amr_repair",pm->nmb_total),
+  amr_origin("amr_origin",pm->nmb_total),
   ncyc_since_ref("cyc_since_ref",pm->nmb_total),
 #if MPI_PARALLEL_ENABLED
   sendbuf("lb send buff",1),
@@ -92,12 +93,15 @@ MeshRefinement::MeshRefinement(Mesh *pm, ParameterInput *pin) :
   for (int m=0; m<(pm->nmb_total); ++m) {
     refine_flag.h_view(m) = 0;
     fc_amr_repair.h_view(m) = 0;
+    amr_origin.h_view(m) = 0;
     ncyc_since_ref(m) = 0;
   }
   refine_flag.template modify<HostMemSpace>();
   refine_flag.template sync<DevExeSpace>();
   fc_amr_repair.template modify<HostMemSpace>();
   fc_amr_repair.template sync<DevExeSpace>();
+  amr_origin.template modify<HostMemSpace>();
+  amr_origin.template sync<DevExeSpace>();
 
   // initialize interpolation weights for prolongation and restriction
   InitInterpWghts();
@@ -105,6 +109,7 @@ MeshRefinement::MeshRefinement(Mesh *pm, ParameterInput *pin) :
 #if MPI_PARALLEL_ENABLED
   // create unique communicators for AMR
   MPI_Comm_dup(MPI_COMM_WORLD, &amr_comm);
+  MPI_Comm_dup(MPI_COMM_WORLD, &fc_share_comm);
   // allocate fixed-length send/recv data buffers as work around on Aurora and other
   // machines where frequent reallocation of Kokkos:Views causes memory issues
   // count number of cell- and face-centered variables communicated depending on physics
@@ -173,6 +178,9 @@ void MeshRefinement::AdaptiveMeshRefinement(Driver *pdriver, ParameterInput *pin
 
     MeshBlockPack* pmbp = pmy_mesh->pmb_pack;
     if (pmbp->pmhd != nullptr) {
+      // Make every shared face touched by the regrid hold one value on both sides,
+      // then rebuild the interior faces of new children from the final exterior faces.
+      ReconcileSharedFacesFC(pmbp->pmhd->b0);
       RepairAMRFC(pmbp->pmhd->b0);
       // Repair changes internal faces after the first exchange finalized exterior
       // faces. Refresh neighboring ghost fields and their primitives before the next
@@ -684,6 +692,15 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
   }
   fc_amr_repair.template modify<HostMemSpace>();
   fc_amr_repair.template sync<DevExeSpace>();
+
+  // origin of each new MB, used by ReconcileSharedFacesFC
+  Kokkos::realloc(amr_origin, new_nmb_total);
+  for (int m=0; m<new_nmb_total; ++m) {
+    const int f = refine_flag.h_view(newtoold[m]);
+    amr_origin.h_view(m) = (f > 0) ? 1 : ((f < 0) ? -1 : 0);
+  }
+  amr_origin.template modify<HostMemSpace>();
+  amr_origin.template sync<DevExeSpace>();
 
   // clean-up
   delete [] newtoold;

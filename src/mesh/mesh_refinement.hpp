@@ -61,6 +61,7 @@ class MeshRefinement {
   // following 2x Views are dimensioned [nmb_total]
   DualArray1D<int> refine_flag;    // refinement flag for each MeshBlock
   DualArray1D<int> fc_amr_repair;  // marks MBs needing post-AMR FC interior repair
+  DualArray1D<int> amr_origin;     // last regrid: -1 derefined, 0 unchanged, +1 refined
   HostArray1D<int> ncyc_since_ref; // # of cycles since MB last refined/derefined
 
   // following 4x arrays allocated with length [nranks] only with AMR
@@ -95,6 +96,7 @@ class MeshRefinement {
 #if MPI_PARALLEL_ENABLED
   int nmb_send, nmb_recv;
   MPI_Comm amr_comm;                           // unique communicator for AMR
+  MPI_Comm fc_share_comm;                      // communicator for ReconcileSharedFacesFC
   DualArray1D<AMRBufferData> sendbuf, recvbuf; // send/recv buffer metadata
   MPI_Request *send_req, *recv_req;
   DvceArray1D<Real> send_data, recv_data;      // send/recv device data
@@ -119,6 +121,7 @@ class MeshRefinement {
                 bool is_z4c=false);
   void RefineFC(DualArray1D<int> &n2o, DvceFaceFld4D<Real> &b, DvceFaceFld4D<Real> &cb);
   void RepairAMRFC(DvceFaceFld4D<Real> &b);
+  void ReconcileSharedFacesFC(DvceFaceFld4D<Real> &b);  // in amr_shared_faces.cpp
   void RefineHydroCC(DualArray1D<int> &n2o, DvceArray5D<Real> &a, DvceArray5D<Real> &ca,
                      int nhydro, int nscalars, bool is_ideal);
 
