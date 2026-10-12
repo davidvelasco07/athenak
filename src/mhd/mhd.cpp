@@ -269,7 +269,10 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
 
     // MOOD a-posteriori fallback (mhd_mood.cpp).
     use_mood = pin->GetOrAddBoolean("mhd","mood",false);
-    std::string nadsc = pin->GetOrAddString("mhd","mood_nad_scale","gcfl");
+    // default rcfl with rtol 1e-4 (below): the setting of the 2026-09 NAD study that keeps
+    // low-Mach flow clean, and the only Courant-aware scale that needs no global range
+    // reductions (one Allreduce per stage instead of four)
+    std::string nadsc = pin->GetOrAddString("mhd","mood_nad_scale","rcfl");
     if (nadsc.compare("relative") == 0) {
       mood_nad_scale = 0;
     } else if (nadsc.compare("grange") == 0) {
@@ -288,7 +291,10 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
       std::exit(EXIT_FAILURE);
     }
     mood_eps0  = pin->GetOrAddReal("mhd","mood_eps0",1.0e-12);
-    mood_rtol = pin->GetOrAddReal("mhd","mood_rtol",1.0e-5);
+    // the default rtol follows the scale: rcfl is calibrated at 1e-4, the range-based
+    // scales (gcfl etc.) at 1e-5, so an explicit gcfl without mood_rtol is unchanged
+    mood_rtol = pin->GetOrAddReal("mhd","mood_rtol",
+                                  (mood_nad_scale == 4) ? 1.0e-4 : 1.0e-5);
     mood_atol = pin->GetOrAddReal("mhd","mood_atol",0.0);
     mood_nad_theta = pin->GetOrAddReal("mhd","mood_nad_theta",1.0);
     mood_nad_energy = pin->GetOrAddBoolean("mhd","mood_nad_energy",true);
@@ -338,6 +344,10 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
       std::exit(EXIT_FAILURE);
     }
     mood_sed = pin->GetOrAddBoolean("mhd","mood_sed",true);
+    // Restrict revisions >= 2 to the cells a revised face can reach (mhd_mood.cpp).
+    // Same answer bit for bit; skips the candidate update, the floor test (the GR
+    // inversion) and the detection everywhere else.
+    mood_touched_only = pin->GetOrAddBoolean("mhd","mood_touched_only",false);
     if (use_mood && use_fofc) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
         << std::endl << "<mhd> mood=true and fofc=true are mutually exclusive"
@@ -705,6 +715,10 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
       }
       if (use_mood) {
         Kokkos::realloc(fb_level, nmb, ncells3, ncells2, ncells1);
+        if (mood_touched_only) {
+          Kokkos::realloc(mood_touched, nmb, ncells3, ncells2, ncells1);
+          Kokkos::realloc(mood_tmp,     nmb, ncells3, ncells2, ncells1);
+        }
         if (mood_nad_b == 0) {
           Kokkos::realloc(bmag_ref, nmb, ncells3, ncells2, ncells1);
         }

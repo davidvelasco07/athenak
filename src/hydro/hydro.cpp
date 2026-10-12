@@ -183,7 +183,10 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
     // MOOD a-posteriori fallback (hydro_mood.cpp).  Requires a flux-range extension of
     // mood_max_revs cells (see hydro_fluxes.cpp).  Mutually exclusive with FOFC.
     use_mood = pin->GetOrAddBoolean("hydro","mood",false);
-    std::string nadsc = pin->GetOrAddString("hydro","mood_nad_scale","gcfl");
+    // default rcfl with rtol 1e-4 (below): the setting of the 2026-09 NAD study that keeps
+    // the Gresho vortex to M = 1e-4 and RTI at P0 = 1000 clean, and the only Courant-aware
+    // scale that needs no global range reductions (one Allreduce per stage)
+    std::string nadsc = pin->GetOrAddString("hydro","mood_nad_scale","rcfl");
     if (nadsc.compare("relative") == 0) {
       mood_nad_scale = 0;
     } else if (nadsc.compare("grange") == 0) {
@@ -202,7 +205,10 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
       std::exit(EXIT_FAILURE);
     }
     mood_eps0  = pin->GetOrAddReal("hydro","mood_eps0",1.0e-12);
-    mood_rtol = pin->GetOrAddReal("hydro","mood_rtol",1.0e-5);
+    // the default rtol follows the scale: rcfl is calibrated at 1e-4, the range-based
+    // scales (gcfl etc.) at 1e-5, so an explicit gcfl without mood_rtol is unchanged
+    mood_rtol = pin->GetOrAddReal("hydro","mood_rtol",
+                                  (mood_nad_scale == 4) ? 1.0e-4 : 1.0e-5);
     mood_atol = pin->GetOrAddReal("hydro","mood_atol",0.0);
     mood_nad_theta = pin->GetOrAddReal("hydro","mood_nad_theta",1.0);
     mood_nad_energy = pin->GetOrAddBoolean("hydro","mood_nad_energy",true);

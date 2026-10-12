@@ -240,7 +240,40 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
   Real gscalev[3] = {0.0, 0.0, 0.0};   // velocity NAD scale (|v| in slot 0, or comps)
   // rcfl: relative per-bound band x global advective Courant factor (see hydro_mood.cpp)
   Real rcfl_fac = 1.0;
-  if (scale_mode == 1 || scale_mode == 3 || scale_mode == 4) {
+  if (scale_mode == 4) {
+    // rcfl needs only the global advective Courant factor: one reduction (max |v|) and
+    // ONE Allreduce that also carries -dxmin (MAX of -dx == -MIN of dx), so the
+    // SMR/AMR-safe global dxmin costs no extra collective.  No range reductions.
+    Real gvmx = 0.0;
+    const int ni = ie-is+1, nji = (je-js+1)*ni, nkji = (ke-ks+1)*nji;
+    const int nmkji = nmb*nkji;
+    Kokkos::parallel_reduce("mmood_gvmax",
+    Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+    KOKKOS_LAMBDA(const int &idx, Real &vmx) {
+      int m = idx/nkji;
+      int k = (idx - m*nkji)/nji;
+      int j = (idx - m*nkji - k*nji)/ni;
+      int i = (idx - m*nkji - k*nji - j*ni) + is;
+      j += js; k += ks;
+      Real v = fmax(fabs(w0_(m,IVX,k,j,i)),
+               fmax(fabs(w0_(m,IVY,k,j,i)), fabs(w0_(m,IVZ,k,j,i))));
+      vmx = fmax(vmx, v);
+    }, Kokkos::Max<Real>(gvmx));
+    Real dxmin = std::numeric_limits<Real>::max();
+    auto &msize = pmy_pack->pmb->mb_size;
+    for (int m=0; m<nmb; ++m) {
+      dxmin = std::min(dxmin, static_cast<Real>(msize.h_view(m).dx1));
+      if (multi_d) dxmin = std::min(dxmin, static_cast<Real>(msize.h_view(m).dx2));
+      if (three_d) dxmin = std::min(dxmin, static_cast<Real>(msize.h_view(m).dx3));
+    }
+#if MPI_PARALLEL_ENABLED
+    Real rmx[2] = {gvmx, -dxmin};
+    MPI_Allreduce(MPI_IN_PLACE, rmx, 2, MPI_ATHENA_REAL, MPI_MAX, MPI_COMM_WORLD);
+    gvmx = rmx[0];
+    dxmin = -rmx[1];
+#endif
+    rcfl_fac = fmin(1.0, (pmy_pack->pmesh->dt)*gvmx/dxmin);
+  } else if (scale_mode == 1 || scale_mode == 3) {
     Real gdmn = std::numeric_limits<Real>::max(), gdmx = -gdmn;
     Real gemn = gdmn, gemx = gdmx;
     Real gvmx = 0.0;
@@ -248,7 +281,7 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
     const int ni = ie-is+1, nji = (je-js+1)*ni, nkji = (ke-ks+1)*nji;
     const int nmkji = nmb*nkji;
     const bool ideal = is_ideal_;
-    const bool want_v = (scale_mode == 3 || scale_mode == 4);
+    const bool want_v = (scale_mode == 3);
     Kokkos::parallel_reduce("mmood_grange",
     Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
     KOKKOS_LAMBDA(const int &idx, Real &dmn, Real &dmx, Real &emn, Real &emx,
@@ -352,7 +385,10 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
       gscalev[1] = fmax(gv1mx - gv1mn, 0.0);
       gscalev[2] = fmax(gv2mx - gv2mn, 0.0);
     }
-    if (scale_mode == 3 || scale_mode == 4) {
+    if (scale_mode == 3) {
+      // min over ALL blocks of dx: with SMR/AMR a rank owning only coarse blocks would
+      // otherwise get a smaller Courant number, hence a different tolerance, than its
+      // neighbours, and the shared detection halo would be demoted inconsistently
       Real dxmin = std::numeric_limits<Real>::max();
       auto &msize = pmy_pack->pmb->mb_size;
       for (int m=0; m<nmb; ++m) {
@@ -360,9 +396,11 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
         if (multi_d) dxmin = std::min(dxmin, static_cast<Real>(msize.h_view(m).dx2));
         if (three_d) dxmin = std::min(dxmin, static_cast<Real>(msize.h_view(m).dx3));
       }
+#if MPI_PARALLEL_ENABLED
+      MPI_Allreduce(MPI_IN_PLACE, &dxmin, 1, MPI_ATHENA_REAL, MPI_MIN, MPI_COMM_WORLD);
+#endif
       Real cfl_adv = (pmy_pack->pmesh->dt)*gvmx/dxmin;
       cfl_fac = fmin(1.0, cfl_adv);
-      rcfl_fac = cfl_fac;
       gscale0 *= cfl_fac;
       gscale1 *= cfl_fac;
       gscaleb[0] *= cfl_fac;
@@ -436,8 +474,22 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
     }
   }
 
+  // Touched-cell restriction (mood_touched_only).  A revision changes only the faces
+  // adjacent to the cells it demoted, so from the second revision on the candidate,
+  // the floor test and the detection need to run only where those faces can reach:
+  // one cell for the flux divergence and the face-E proxy of B; with UCT the composed
+  // edge EMF reads faces i-reach..i+reach-1 (cells within reach+1), and the CT update
+  // plus the cell average add one more cell.  Every other cell keeps its accepted
+  // candidate and flags from the previous pass, so the result is bitwise identical.
+  const bool touched_only = mood_touched_only;
+  auto touched_ = mood_touched;
+  auto tmp_ = mood_tmp;
+  const int r_touch = (uct_fl > 0 && multi_d) ? ReconEdgeReach(recon_method) + 2 : 1;
+  peos->c2p_mask = mood_touched;
+
   int ndemoted_total = 0;
   for (int rev=1; rev<=nrevs; ++rev) {
+    const bool masked = touched_only && (rev > 1);
     const int dh = h_f + (nrevs - rev);
     int il = is-dh, iu = ie+dh, jl = js, ju = je, kl = ks, ku = ke;
     if (multi_d) { jl = js-dh; ju = je+dh; }
@@ -451,9 +503,48 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
     //------------------------------------------------------------------------------------
     // (1) candidate update: conserved hydro variables from the flux divergence, and the
     // candidate cell-averaged B from face-E finite differences (the FOFC estimate).
+    if (masked) {
+      // dilate the previous revision's demotion flags (still in fofc_) by r_touch with
+      // a separable max filter over the full array (clamped at the array edges):
+      // 1D: fofc->touched; 2D: fofc->tmp->touched; 3D: fofc->touched->tmp->touched
+      const int r = r_touch;
+      const int n1 = ncells1, n2 = ncells2, n3 = ncells3;
+      auto dst1 = (multi_d && !three_d) ? tmp_ : touched_;
+      par_for("mmood_touch1", DevExeSpace(), 0, nmb1, 0, n3-1, 0, n2-1, 0, n1-1,
+      KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+        const int lo = (i-r < 0) ? 0 : i-r;
+        const int hi = (i+r > n1-1) ? n1-1 : i+r;
+        bool t = false;
+        for (int ii=lo; ii<=hi; ++ii) { t = t || fofc_(m,k,j,ii); }
+        dst1(m,k,j,i) = t;
+      });
+      if (multi_d) {
+        auto src2 = dst1;
+        auto dst2 = (three_d) ? tmp_ : touched_;
+        par_for("mmood_touch2", DevExeSpace(), 0, nmb1, 0, n3-1, 0, n2-1, 0, n1-1,
+        KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+          const int lo = (j-r < 0) ? 0 : j-r;
+          const int hi = (j+r > n2-1) ? n2-1 : j+r;
+          bool t = false;
+          for (int jj=lo; jj<=hi; ++jj) { t = t || src2(m,k,jj,i); }
+          dst2(m,k,j,i) = t;
+        });
+      }
+      if (three_d) {
+        par_for("mmood_touch3", DevExeSpace(), 0, nmb1, 0, n3-1, 0, n2-1, 0, n1-1,
+        KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+          const int lo = (k-r < 0) ? 0 : k-r;
+          const int hi = (k+r > n3-1) ? n3-1 : k+r;
+          bool t = false;
+          for (int kk=lo; kk<=hi; ++kk) { t = t || tmp_(m,kk,j,i); }
+          touched_(m,k,j,i) = t;
+        });
+      }
+    }
     Kokkos::deep_copy(fofc_, false);
     par_for("mmood_newu", DevExeSpace(), 0, nmb1, kl, ku, jl, ju, il, iu,
     KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      if (masked && !touched_(m,k,j,i)) return;
       Real dtodx1 = beta_dt/size_.d_view(m).dx1;
       Real dtodx2 = beta_dt/size_.d_view(m).dx2;
       Real dtodx3 = beta_dt/size_.d_view(m).dx3;
@@ -498,13 +589,14 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
     // keeps the proxy, so multi-block demotion in the outer halo is approximate until the
     // composition is extended over the light-cone halo (needs +3 flux/ghost coverage).
     if (uct_fl > 0 && multi_d) {
-      ComposeCornerEMF(is, ie+1, js, je+1, ks, (three_d ? ke+1 : ks));
+      ComposeCornerEMF(is, ie+1, js, je+1, ks, (three_d ? ke+1 : ks), masked);
       auto bt1 = b0_test.x1f;  auto bt2 = b0_test.x2f;  auto bt3 = b0_test.x3f;
       auto e1c = efld.x1e;  auto e2c = efld.x2e;  auto e3c = efld.x3e;
       const bool td = three_d;
       // CT update of candidate face-B (mirrors mhd_ct.cpp)
       par_for("mmood_ctB1", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie+1,
       KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+        if (masked && !touched_(m,k,j,i)) return;
         Real b = gam0*b0x1(m,k,j,i) + gam1*b1_.x1f(m,k,j,i);
         b -= beta_dt*(e3c(m,k,j+1,i) - e3c(m,k,j,i))/size_.d_view(m).dx2;
         if (td) b += beta_dt*(e2c(m,k+1,j,i) - e2c(m,k,j,i))/size_.d_view(m).dx3;
@@ -512,6 +604,7 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
       });
       par_for("mmood_ctB2", DevExeSpace(), 0, nmb1, ks, ke, js, je+1, is, ie,
       KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+        if (masked && !touched_(m,k,j,i)) return;
         Real b = gam0*b0x2(m,k,j,i) + gam1*b1_.x2f(m,k,j,i);
         b += beta_dt*(e3c(m,k,j,i+1) - e3c(m,k,j,i))/size_.d_view(m).dx1;
         if (td) b -= beta_dt*(e1c(m,k+1,j,i) - e1c(m,k,j,i))/size_.d_view(m).dx3;
@@ -519,6 +612,7 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
       });
       par_for("mmood_ctB3", DevExeSpace(), 0, nmb1, ks, ke+td, js, je, is, ie,
       KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+        if (masked && !touched_(m,k,j,i)) return;
         Real b = gam0*b0x3(m,k,j,i) + gam1*b1_.x3f(m,k,j,i);
         b -= beta_dt*(e2c(m,k,j,i+1) - e2c(m,k,j,i))/size_.d_view(m).dx1;
         b += beta_dt*(e1c(m,k,j+1,i) - e1c(m,k,j,i))/size_.d_view(m).dx2;
@@ -527,6 +621,7 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
       // average candidate face-B to cell centers -> bcctest (interior)
       par_for("mmood_avgB", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
       KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+        if (masked && !touched_(m,k,j,i)) return;
         bcctest_(m,IBX,k,j,i) = 0.5*(bt1(m,k,j,i) + bt1(m,k,j,i+1));
         bcctest_(m,IBY,k,j,i) = 0.5*(bt2(m,k,j,i) + bt2(m,k,j+1,i));
         bcctest_(m,IBZ,k,j,i) = (td) ? 0.5*(bt3(m,k,j,i) + bt3(m,k+1,j,i))
@@ -664,7 +759,9 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
     //------------------------------------------------------------------------------------
     // (2) PAD: flag cells where conversion to primitives would require floors
     // (sets fofc; b0/w0 passed but not used/changed)
+    peos->use_c2p_mask = masked;
     peos->ConsToPrim(utest_, b0, w0_, bcctest_, true, il, iu, jl, ju, kl, ku);
+    peos->use_c2p_mask = false;
 
     //------------------------------------------------------------------------------------
     // (3) NaN + NAD detection; combine with PAD; demote survivors and count them.
@@ -682,6 +779,7 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
       int i = (idx - m*nkji - k*nji - j*ni) + il;
       j += jl;
       k += kl;
+      if (masked && !touched_(m,k,j,i)) return;
 
       const int lv = fb_level_(m,k,j,i);
       if (lv >= n_fb) {

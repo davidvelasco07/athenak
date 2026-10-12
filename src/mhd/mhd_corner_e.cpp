@@ -144,7 +144,8 @@ namespace mhd {
 //! is responsible for the 1D copy and for ct_contact.  Ranges are edge-point ranges:
 //! 2D uses k = ks (pass kl=ku=ks); 3D loops k in [kl,ku].
 
-void MHD::ComposeCornerEMF(int il, int iu, int jl, int ju, int kl, int ku) {
+void MHD::ComposeCornerEMF(int il, int iu, int jl, int ju, int kl, int ku,
+                           bool masked) {
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   int ks = indcs.ks, ke = indcs.ke;
   int nmb1 = pmy_pack->nmb_thispack - 1;
@@ -167,10 +168,14 @@ void MHD::ComposeCornerEMF(int il, int iu, int jl, int ju, int kl, int ku) {
   auto fb_ = fb_level;
   const bool eflag_ = use_mood && mood_edge_flag;
   const int nfb_ = n_fb_tiers;
+  // MOOD touched-cell restriction: skip edge points no revised face can reach
+  const bool masked_ = masked;
+  auto touched_ = mood_touched;
 
   if (pmy_pack->pmesh->two_d) {
     par_for("compose_emf2_uct", DevExeSpace(), 0, nmb1, jl, ju, il, iu,
     KOKKOS_LAMBDA(const int m, const int j, const int i) {
+      if (masked_ && !touched_(m,ks,j,i)) return;
       // Copy face-centered E1 and E2 to edges (same as GS07)
       e2(m,ks  ,j,i) = e2x1_(m,ks,j,i);
       e2(m,ke+1,j,i) = e2x1_(m,ks,j,i);
@@ -237,6 +242,7 @@ void MHD::ComposeCornerEMF(int il, int iu, int jl, int ju, int kl, int ku) {
   if (pmy_pack->pmesh->three_d) {
     par_for("compose_emf3_uct", DevExeSpace(), 0, nmb1, kl, ku, jl, ju, il, iu,
     KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      if (masked_ && !touched_(m,k,j,i)) return;
       // ---- E1 at x-edge (i, j-1/2, k-1/2) ----
       {
         ReconstructionMethod er1 = recon;

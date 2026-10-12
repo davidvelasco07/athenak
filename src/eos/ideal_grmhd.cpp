@@ -62,6 +62,10 @@ void IdealGRMHD::ConsToPrim(DvceArray5D<Real> &cons, const DvceFaceFld4D<Real> &
   const int nkji = (ku - kl + 1)*nji;
   const int nmkji = nmb*nkji;
 
+  // MOOD touched-cell mask (see EquationOfState::c2p_mask): skip untouched cells
+  const bool masked_ = use_c2p_mask && only_testfloors;
+  auto mask_ = c2p_mask;
+
   int nfloord_=0, nfloore_=0, nceilv_=0, nfail_=0, maxit_=0;
   Kokkos::parallel_reduce("grmhd_c2p",Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
   KOKKOS_LAMBDA(const int &idx, int &sumd, int &sume, int &sumv, int &sumf, int &max_it) {
@@ -71,6 +75,7 @@ void IdealGRMHD::ConsToPrim(DvceArray5D<Real> &cons, const DvceFaceFld4D<Real> &
     int i = (idx - m*nkji - k*nji - j*ni) + il;
     j += jl;
     k += kl;
+    if (masked_ && !mask_(m,k,j,i)) return;
 
     // load single state conserved variables
     MHDCons1D u;

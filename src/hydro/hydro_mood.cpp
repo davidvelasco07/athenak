@@ -181,7 +181,40 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
   // rcfl: the relative per-bound band (Paper I) multiplied by the same global advective
   // Courant factor gcfl uses, so the tolerance is both local and timestep-aware.
   Real rcfl_fac = 1.0;
-  if (scale_mode == 1 || scale_mode == 3 || scale_mode == 4) {
+  if (scale_mode == 4) {
+    // rcfl needs only the global advective Courant factor: one reduction (max |v|) and
+    // ONE Allreduce that also carries -dxmin (MAX of -dx == -MIN of dx), so the
+    // SMR/AMR-safe global dxmin costs no extra collective.  No range reductions.
+    Real gvmx = 0.0;
+    const int ni = ie-is+1, nji = (je-js+1)*ni, nkji = (ke-ks+1)*nji;
+    const int nmkji = nmb*nkji;
+    Kokkos::parallel_reduce("mood_gvmax",
+    Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+    KOKKOS_LAMBDA(const int &idx, Real &vmx) {
+      int m = idx/nkji;
+      int k = (idx - m*nkji)/nji;
+      int j = (idx - m*nkji - k*nji)/ni;
+      int i = (idx - m*nkji - k*nji - j*ni) + is;
+      j += js; k += ks;
+      Real v = fmax(fabs(w0_(m,IVX,k,j,i)),
+               fmax(fabs(w0_(m,IVY,k,j,i)), fabs(w0_(m,IVZ,k,j,i))));
+      vmx = fmax(vmx, v);
+    }, Kokkos::Max<Real>(gvmx));
+    Real dxmin = std::numeric_limits<Real>::max();
+    auto &msize = pmy_pack->pmb->mb_size;
+    for (int m=0; m<nmb; ++m) {
+      dxmin = std::min(dxmin, static_cast<Real>(msize.h_view(m).dx1));
+      if (multi_d) dxmin = std::min(dxmin, static_cast<Real>(msize.h_view(m).dx2));
+      if (three_d) dxmin = std::min(dxmin, static_cast<Real>(msize.h_view(m).dx3));
+    }
+#if MPI_PARALLEL_ENABLED
+    Real rmx[2] = {gvmx, -dxmin};
+    MPI_Allreduce(MPI_IN_PLACE, rmx, 2, MPI_ATHENA_REAL, MPI_MAX, MPI_COMM_WORLD);
+    gvmx = rmx[0];
+    dxmin = -rmx[1];
+#endif
+    rcfl_fac = fmin(1.0, (pmy_pack->pmesh->dt)*gvmx/dxmin);
+  } else if (scale_mode == 1 || scale_mode == 3) {
     Real gdmn = std::numeric_limits<Real>::max(), gdmx = -gdmn;
     Real gemn = gdmn, gemx = gdmx;
     Real gvmx = 0.0;
@@ -189,7 +222,7 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
     const int ni = ie-is+1, nji = (je-js+1)*ni, nkji = (ke-ks+1)*nji;
     const int nmkji = nmb*nkji;
     const bool ideal = is_ideal_;
-    const bool want_v = (scale_mode == 3 || scale_mode == 4);
+    const bool want_v = (scale_mode == 3);
     Kokkos::parallel_reduce("mood_grange",
     Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
     KOKKOS_LAMBDA(const int &idx, Real &dmn, Real &dmx, Real &emn, Real &emx,
@@ -217,8 +250,11 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
 #endif
     gscale0 = fmax(gdmx - gdmn, 0.0);
     gscale1 = fmax(gemx - gemn, 0.0);
-    if (scale_mode == 3 || scale_mode == 4) {
-      // global advective Courant number of the full step (min over blocks of dx)
+    if (scale_mode == 3) {
+      // global advective Courant number of the full step
+      // min over ALL blocks of dx: with SMR/AMR a rank owning only coarse blocks would
+      // otherwise get a smaller Courant number, hence a different tolerance, than its
+      // neighbours, and the shared detection halo would be demoted inconsistently
       Real dxmin = std::numeric_limits<Real>::max();
       auto &msize = pmy_pack->pmb->mb_size;
       for (int m=0; m<nmb; ++m) {
@@ -226,11 +262,13 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
         if (multi_d) dxmin = std::min(dxmin, static_cast<Real>(msize.h_view(m).dx2));
         if (three_d) dxmin = std::min(dxmin, static_cast<Real>(msize.h_view(m).dx3));
       }
+#if MPI_PARALLEL_ENABLED
+      MPI_Allreduce(MPI_IN_PLACE, &dxmin, 1, MPI_ATHENA_REAL, MPI_MIN, MPI_COMM_WORLD);
+#endif
       Real cfl_adv = (pmy_pack->pmesh->dt)*gvmx/dxmin;
       cfl_fac = fmin(1.0, cfl_adv);
       gscale0 *= cfl_fac;
       gscale1 *= cfl_fac;
-      rcfl_fac = cfl_fac;
     }
     if (nad_scalars) {
       // Global dynamic range of the passive-scalar CONCENTRATION, minimized/maximized

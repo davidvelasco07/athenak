@@ -185,6 +185,12 @@ class MHD {
   int mood_halo0;
   DvceArray4D<int> fb_level;
   DvceArray4D<Real> bmag_ref;
+  // Touched-cell restriction of revisions >= 2 (mhd_mood.cpp): only cells within the
+  // dependency radius of a face revised in the previous pass are re-candidated,
+  // re-tested and re-detected.  Bitwise-identical to the full re-test; mood_touched and
+  // mood_tmp hold the dilated flag (separable max filter scratch).
+  bool mood_touched_only;
+  DvceArray4D<bool> mood_touched, mood_tmp;
 
   bool has_explicit_viscosity = false;
   bool has_explicit_conduction = false;
@@ -224,7 +230,9 @@ class MHD {
   TaskStatus CornerE(Driver *d, int stage);
   // Compose edge-centered corner EMFs from face-centered E and UCT face coefficients
   // over [il,iu]x[jl,ju]x[kl,ku]. Newtonian UCT path (also used by MOOD candidate B).
-  void ComposeCornerEMF(int il, int iu, int jl, int ju, int kl, int ku);
+  // masked=true composes only edge points whose mood_touched flag is set
+  void ComposeCornerEMF(int il, int iu, int jl, int ju, int kl, int ku,
+                        bool masked = false);
   TaskStatus EField(Driver *d, int stage);
   TaskStatus SendE(Driver *d, int stage);
   TaskStatus RecvE(Driver *d, int stage);

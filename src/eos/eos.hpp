@@ -203,6 +203,13 @@ class EquationOfState {
   MeshBlockPack* pmy_pack;
   EOS_Data eos_data;
 
+  // Optional cell mask for ConsToPrim(only_testfloors=true): when use_c2p_mask is set,
+  // cells with c2p_mask(m,k,j,i)==false are skipped (their flag is left untouched).  Set
+  // by the MOOD revision loop (mood_touched_only) so later revisions only re-test the
+  // cells whose candidate state can have changed.  Never consulted by the full inversion.
+  DvceArray4D<bool> c2p_mask;
+  bool use_c2p_mask = false;
+
   // virtual functions to convert cons to prim in either Hydro or MHD (depending on
   // arguments), overwritten in derived eos classes
   virtual void ConsToPrim(DvceArray5D<Real> &cons, DvceArray5D<Real> &prim,
