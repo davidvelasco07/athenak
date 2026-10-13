@@ -136,8 +136,8 @@ Real InterpolateEdgeD(const ReconstructionMethod recon,
 //! \fn ReconstructEdgeB<dir>()
 //! \brief Staggered face-field reconstruction to the edge at index-1/2 along direction
 //! `dir` (1: i, 2: j, 3: k), for the UCT corner EMF.  With the well-balanced scheme the
-//! reconstruction acts on b - b_eq and a single-valued equilibrium edge value (4th-order
-//! interpolation of b_eq) is added to both states: otherwise the UCT dissipation
+//! reconstruction acts on b - b_eq and a single-valued equilibrium edge value (central
+//! interpolation of b_eq at the scheme's order, FVFaceAt) is added to both states: otherwise the UCT dissipation
 //! d*(B_E - B_W) would be non-zero for a static equilibrium whose field varies along the
 //! reconstruction direction.  Also returns the perturbation states pL,pR and the
 //! equilibrium edge value qe (pL=qL, pR=qR, qe=0 without WB), so that the WB corner EMF
@@ -190,8 +190,9 @@ void ReconstructEdgeB(const ReconstructionMethod recon, const bool wb,
     b(m,KK(2),JJ(2),II(2)) - beq(m,KK(2),JJ(2),II(2)),
     b(m,KK(3),JJ(3),II(3)) - beq(m,KK(3),JJ(3),II(3)),
     pL, pR);
-  qe = (7.0*(beq(m,KK(-1),JJ(-1),II(-1)) + beq(m,KK(0),JJ(0),II(0)))
-        - (beq(m,KK(-2),JJ(-2),II(-2)) + beq(m,KK(1),JJ(1),II(1))))/12.0;
+  // same-order central interpolant of b_eq (fv6/fv8: theirs, else 4th order), so that
+  // for the unlimited methods qL = fvN(b - b_eq) + fvN(b_eq) is fvN(b) up to round-off
+  qe = FVFaceAt(recon, [&](const int o) {return beq(m,KK(o),JJ(o),II(o));});
   qL = pL + qe;
   qR = pR + qe;
 }

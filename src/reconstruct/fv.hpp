@@ -101,4 +101,23 @@ void FV8(const Real &q_im4, const Real &q_im3, const Real &q_im2, const Real &q_
   return;
 }
 
+//----------------------------------------------------------------------------------------
+//! \fn FVFaceAt()
+//! \brief Face value at i-1/2 from the cell averages returned by the accessor q(o)
+//! (o = offset from cell i, so the face lies between q(-1) and q(0)): the fv6/fv8
+//! interpolant for reconstruct=fv6/fv8 and the fv4 one for every other method.  Reads
+//! q(-FVFaceRadius(rm)) .. q(FVFaceRadius(rm)-1) (athena.hpp).  Used by the well-balanced
+//! scheme for its single-valued face equilibrium and UCT equilibrium edge value.
+
+template <typename F>
+KOKKOS_INLINE_FUNCTION
+Real FVFaceAt(const ReconstructionMethod rm, const F &q) {
+  if (rm == ReconstructionMethod::fv6) {
+    return FV6Face(q(-3), q(-2), q(-1), q(0), q(1), q(2));
+  } else if (rm == ReconstructionMethod::fv8) {
+    return FV8Face(q(-4), q(-3), q(-2), q(-1), q(0), q(1), q(2), q(3));
+  }
+  return FV4Face(q(-2), q(-1), q(0), q(1));
+}
+
 #endif // RECONSTRUCT_FV_HPP_

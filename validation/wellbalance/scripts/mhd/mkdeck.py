@@ -5,9 +5,11 @@ P = dict(basename='hse', nx1=64, nx2=64, mbx1=0, mbx2=0, x1min=0.0, x1max=1.0,
          x2min=0.0, x2max=1.0, ix1='user', ox1='user', ix2='periodic', ox2='periodic',
          ng=3, integrator='rk2', cfl=0.4, tlim=1.0, recon='plm', rsolver='hllc',
          wb='true', mood='false', fofc='false', gdir=1, gval=-1.0, g1=0.0, g2=0.0,
-         fluid='hydro', emf='ct_contact', mood_edge='auto', nad_b='comps', b1=0.0, b2=0.0, b3=0.0, beta=1.0, iprob=1, amp=0.0, hst_dt=0.01, bin_dt=0.25, nlim=-1, extra='', tail='')
+         fluid='hydro', emf='ct_contact', mood_edge='auto', nad_b='comps', b1=0.0, b2=0.0, b3=0.0, beta=1.0, iprob=1, amp=0.0, pulse_x1=0.3, pulse_x2=0.3, mood_eps0_eq=0, mood_detect='true', hst_dt=0.01, bin_dt=0.25, nlim=-1, extra='', tail='')
 for kv in sys.argv[2:]:
     k, v = kv.split('=', 1)
+    if k not in P:
+        sys.exit(f'mkdeck.py: unknown key {k!r} (use extra= / tail= for free-form lines)')
     P[k] = v
 if P['mbx1'] in (0, '0'): P['mbx1'] = P['nx1']
 if P['mbx2'] in (0, '0'): P['mbx2'] = P['nx2']
@@ -58,6 +60,8 @@ rsolver = {P['rsolver']}
 well_balanced = {P['wb']}
 mood = {P['mood']}
 fofc = {P['fofc']}
+mood_eps0_eq = {P['mood_eps0_eq']}
+mood_detect = {P['mood_detect']}
 {mhdblk}
 
 <{P['fluid']}_srcterms>
@@ -68,6 +72,8 @@ const_accel = true
 pgen_name = hydrostatic
 iprob = {P['iprob']}
 pulse_amp = {P['amp']}
+pulse_x1 = {P['pulse_x1']}
+pulse_x2 = {P['pulse_x2']}
 b1 = {P['b1']}
 b2 = {P['b2']}
 b3 = {P['b3']}

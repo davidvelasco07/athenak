@@ -34,6 +34,7 @@
 #include "mhd.hpp"
 #include "hydro/well_balance.hpp"
 #include "reconstruct/recon.hpp"
+#include "reconstruct/fv.hpp"
 #include "mhd/rsolvers/solve_face_mhd.hpp"
 #include "mhd/mhd_wb.hpp"
 
@@ -220,61 +221,71 @@ void MHD::WBSetEquilibrium() {
   }
   if (!well_balanced) return;
 
-  // face equilibrium: 4th-order interpolation of the cell averages (fluid and cc-B)
+  // face equilibrium: central interpolation of the cell averages (fluid and cc-B) at the
+  // order of the base scheme (fv6/fv8: their own interpolant, 4th order otherwise; see
+  // Hydro::WBSetEquilibrium), valid on faces req .. n-req, which has to cover every
+  // face the flux kernels visit (is-ext .. ie+1+ext, ext = the MOOD / FOFC halo)
+  const int req = FVFaceRadius(recon_method);
+  const auto rm_ = recon_method;
+  {
+    const int ext = use_mood ? mood_halo0 : (use_fofc ? 1 : 0);
+    if (ng < req + ext) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "<mhd> well_balanced=true needs nghost >= "
+                << req + ext << " (face-equilibrium stencil " << req
+                << " + fallback halo " << ext << "), but <mesh>/nghost=" << ng
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
   auto &weq_ = w_eq;
   auto &beq_ = bcc_eq;
   auto &eos_ = peos->eos_data;
   {
     auto wf = w_eq_face.x1f;
     auto bf = bcc_eq_face.x1f;
-    par_for("wb_eqface_x1_mhd", DevExeSpace(), 0, nmb1, 0, n3m1, 0, n2m1, 2, n1m1-1,
+    par_for("wb_eqface_x1_mhd", DevExeSpace(), 0, nmb1, 0, n3m1, 0, n2m1, req, n1m1-req+1,
     KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
       for (int n=0; n<nmhd_; ++n) {
-        Real q = (7.0*(weq_(m,n,k,j,i-1) + weq_(m,n,k,j,i))
-                    - (weq_(m,n,k,j,i-2) + weq_(m,n,k,j,i+1)))/12.0;
+        Real q = FVFaceAt(rm_, [&](const int o) {return weq_(m,n,k,j,i+o);});
         if (n == IDN) {q = fmax(q, eos_.dfloor);}
         if (n == IEN) {q = fmax(q, eos_.pfloor/(eos_.gamma - 1.0));}
         wf(m,n,k,j,i) = q;
       }
       for (int n=0; n<3; ++n) {
-        bf(m,n,k,j,i) = (7.0*(beq_(m,n,k,j,i-1) + beq_(m,n,k,j,i))
-                           - (beq_(m,n,k,j,i-2) + beq_(m,n,k,j,i+1)))/12.0;
+        bf(m,n,k,j,i) = FVFaceAt(rm_, [&](const int o) {return beq_(m,n,k,j,i+o);});
       }
     });
   }
   if (pm->multi_d) {
     auto wf = w_eq_face.x2f;
     auto bf = bcc_eq_face.x2f;
-    par_for("wb_eqface_x2_mhd", DevExeSpace(), 0, nmb1, 0, n3m1, 2, n2m1-1, 0, n1m1,
+    par_for("wb_eqface_x2_mhd", DevExeSpace(), 0, nmb1, 0, n3m1, req, n2m1-req+1, 0, n1m1,
     KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
       for (int n=0; n<nmhd_; ++n) {
-        Real q = (7.0*(weq_(m,n,k,j-1,i) + weq_(m,n,k,j,i))
-                    - (weq_(m,n,k,j-2,i) + weq_(m,n,k,j+1,i)))/12.0;
+        Real q = FVFaceAt(rm_, [&](const int o) {return weq_(m,n,k,j+o,i);});
         if (n == IDN) {q = fmax(q, eos_.dfloor);}
         if (n == IEN) {q = fmax(q, eos_.pfloor/(eos_.gamma - 1.0));}
         wf(m,n,k,j,i) = q;
       }
       for (int n=0; n<3; ++n) {
-        bf(m,n,k,j,i) = (7.0*(beq_(m,n,k,j-1,i) + beq_(m,n,k,j,i))
-                           - (beq_(m,n,k,j-2,i) + beq_(m,n,k,j+1,i)))/12.0;
+        bf(m,n,k,j,i) = FVFaceAt(rm_, [&](const int o) {return beq_(m,n,k,j+o,i);});
       }
     });
   }
   if (pm->three_d) {
     auto wf = w_eq_face.x3f;
     auto bf = bcc_eq_face.x3f;
-    par_for("wb_eqface_x3_mhd", DevExeSpace(), 0, nmb1, 2, n3m1-1, 0, n2m1, 0, n1m1,
+    par_for("wb_eqface_x3_mhd", DevExeSpace(), 0, nmb1, req, n3m1-req+1, 0, n2m1, 0, n1m1,
     KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
       for (int n=0; n<nmhd_; ++n) {
-        Real q = (7.0*(weq_(m,n,k-1,j,i) + weq_(m,n,k,j,i))
-                    - (weq_(m,n,k-2,j,i) + weq_(m,n,k+1,j,i)))/12.0;
+        Real q = FVFaceAt(rm_, [&](const int o) {return weq_(m,n,k+o,j,i);});
         if (n == IDN) {q = fmax(q, eos_.dfloor);}
         if (n == IEN) {q = fmax(q, eos_.pfloor/(eos_.gamma - 1.0));}
         wf(m,n,k,j,i) = q;
       }
       for (int n=0; n<3; ++n) {
-        bf(m,n,k,j,i) = (7.0*(beq_(m,n,k-1,j,i) + beq_(m,n,k,j,i))
-                           - (beq_(m,n,k-2,j,i) + beq_(m,n,k+1,j,i)))/12.0;
+        bf(m,n,k,j,i) = FVFaceAt(rm_, [&](const int o) {return beq_(m,n,k+o,j,i);});
       }
     });
   }
@@ -318,13 +329,14 @@ void MHD::WBEquilibriumFluxes() {
   // of an unperturbed equilibrium then sees the same theta and f - f_eq cancels exactly
   if constexpr (rsolver_method_ == MHD_RSolver::lhlld) { Kokkos::deep_copy(sdet, 0.0); }
   auto sdet_ = sdet;
+  const int req = FVFaceRadius(recon_method);   // faces with a valid face equilibrium
 
   {
     auto wf = w_eq_face.x1f;  auto bf = bcc_eq_face.x1f;  auto bx_ = b_eq.x1f;
     auto fe = f_eq.x1f;  auto ey_ = e3x1_eq;  auto ez_ = e2x1_eq;
     auto aL1 = aL_x1f;  auto dl1 = dL_x1f;  auto dr1 = dR_x1f;
     auto vt1 = vy_x1f;  auto vt2 = vz_x1f;
-    par_for("wb_feq_x1_mhd", DevExeSpace(), 0, nmb1, 0, n3m1, 0, n2m1, 2, n1m1-1,
+    par_for("wb_feq_x1_mhd", DevExeSpace(), 0, nmb1, 0, n3m1, 0, n2m1, req, n1m1-req+1,
     KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
       auto eos = eos_;  auto indcs = indcs_;  auto size = size_;  auto coord = coord_;
       const int is_ = is, js_ = js, ks_ = ks;
@@ -338,7 +350,7 @@ void MHD::WBEquilibriumFluxes() {
     auto fe = f_eq.x2f;  auto ey_ = e1x2_eq;  auto ez_ = e3x2_eq;
     auto aL2 = aL_x2f;  auto dl2 = dL_x2f;  auto dr2 = dR_x2f;
     auto vt1 = vz_x2f;  auto vt2 = vx_x2f;
-    par_for("wb_feq_x2_mhd", DevExeSpace(), 0, nmb1, 0, n3m1, 2, n2m1-1, 0, n1m1,
+    par_for("wb_feq_x2_mhd", DevExeSpace(), 0, nmb1, 0, n3m1, req, n2m1-req+1, 0, n1m1,
     KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
       auto eos = eos_;  auto indcs = indcs_;  auto size = size_;  auto coord = coord_;
       const int is_ = is, js_ = js, ks_ = ks;
@@ -352,7 +364,7 @@ void MHD::WBEquilibriumFluxes() {
     auto fe = f_eq.x3f;  auto ey_ = e2x3_eq;  auto ez_ = e1x3_eq;
     auto aL3 = aL_x3f;  auto dl3 = dL_x3f;  auto dr3 = dR_x3f;
     auto vt1 = vx_x3f;  auto vt2 = vy_x3f;
-    par_for("wb_feq_x3_mhd", DevExeSpace(), 0, nmb1, 2, n3m1-1, 0, n2m1, 0, n1m1,
+    par_for("wb_feq_x3_mhd", DevExeSpace(), 0, nmb1, req, n3m1-req+1, 0, n2m1, 0, n1m1,
     KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
       auto eos = eos_;  auto indcs = indcs_;  auto size = size_;  auto coord = coord_;
       const int is_ = is, js_ = js, ks_ = ks;

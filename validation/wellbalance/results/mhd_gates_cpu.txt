@@ -1,0 +1,79 @@
+--- base scheme (plm)
+m3_plm_ct                      wb=true  rc=0 ranks=1 Mmax:0.000e+00 t=0.5 dpert:0.000e+00 vxpert:0.000e+00 vypert:0.000e+00 vzpert:0.000e+00 epert:0.000e+00 b1pert:0.000e+00 b2pert:0.000e+00 b3pert:0.
+m3_plm_ct                      wb=false rc=0 ranks=1 Mmax:5.629e-06 t=0.5 dpert:3.077e-06 vxpert:6.931e-06 vypert:1.976e-06 vzpert:9.879e-07 epert:8.930e-06 b1pert:0.000e+00 b2pert:1.022e-06 b3pert:5.
+m3_plm_ucthlld                 wb=true  rc=0 ranks=1 Mmax:0.000e+00 t=0.5 dpert:0.000e+00 vxpert:0.000e+00 vypert:0.000e+00 vzpert:0.000e+00 epert:0.000e+00 b1pert:0.000e+00 b2pert:0.000e+00 b3pert:0.
+m3_plm_ucthlld                 wb=false rc=0 ranks=1 Mmax:5.629e-06 t=0.5 dpert:3.077e-06 vxpert:6.931e-06 vypert:1.976e-06 vzpert:9.879e-07 epert:8.930e-06 b1pert:0.000e+00 b2pert:1.022e-06 b3pert:5.
+m3_plm_ct_lhlld                wb=true  rc=0 ranks=1 Mmax:0.000e+00 t=0.5 dpert:0.000e+00 vxpert:0.000e+00 vypert:0.000e+00 vzpert:0.000e+00 epert:0.000e+00 b1pert:0.000e+00 b2pert:0.000e+00 b3pert:0.
+m3_plm_ct_lhlld                wb=false rc=0 ranks=1 Mmax:5.644e-06 t=0.5 dpert:3.061e-06 vxpert:6.954e-06 vypert:1.963e-06 vzpert:9.816e-07 epert:8.923e-06 b1pert:0.000e+00 b2pert:1.021e-06 b3pert:5.
+m4_plm_ucthll                  wb=true  rc=0 ranks=1 Mmax:0.000e+00 t=0.5 dpert:0.000e+00 vxpert:0.000e+00 vypert:0.000e+00 vzpert:0.000e+00 epert:0.000e+00 b1pert:0.000e+00 b2pert:0.000e+00 b3pert:0.
+m4_plm_ucthll                  wb=false rc=0 ranks=1 Mmax:3.790e-01 t=0.5 dpert:4.130e-01 vxpert:1.426e-01 vypert:4.779e-01 vzpert:0.000e+00 epert:6.927e-01 b1pert:3.197e-01 b2pert:2.487e-01 b3pert:0.
+m5_plm_ucthlld_16              wb=true  rc=0 ranks=1 Mmax:0.000e+00 t=0.5 dpert:0.000e+00 vxpert:0.000e+00 vypert:0.000e+00 vzpert:0.000e+00 epert:0.000e+00 b1pert:0.000e+00 b2pert:0.000e+00 b3pert:0.
+m5_plm_ucthlld_16              wb=false rc=0 ranks=1 Mmax:6.558e-01 t=0.5 dpert:4.008e-01 vxpert:4.283e-01 vypert:7.426e-01 vzpert:0.000e+00 epert:8.110e-01 b1pert:4.142e-01 b2pert:2.880e-01 b3pert:0.
+--- fv4 + MOOD
+m3_fv4_ct                      wb=true  rc=0 ranks=1 Mmax:0.000e+00 t=0.5 dpert:0.000e+00 vxpert:0.000e+00 vypert:0.000e+00 vzpert:0.000e+00 epert:0.000e+00 b1pert:0.000e+00 b2pert:0.000e+00 b3pert:0.
+m3_fv4_ct                      wb=false rc=0 ranks=1 Mmax:5.650e-06 t=0.5 dpert:3.118e-06 vxpert:7.013e-06 vypert:1.880e-06 vzpert:9.401e-07 epert:9.033e-06 b1pert:0.000e+00 b2pert:1.051e-06 b3pert:5.
+m3_fv4_ucthlld                 wb=true  rc=0 ranks=1 Mmax:0.000e+00 t=0.5 dpert:0.000e+00 vxpert:0.000e+00 vypert:0.000e+00 vzpert:0.000e+00 epert:0.000e+00 b1pert:0.000e+00 b2pert:0.000e+00 b3pert:0.
+m3_fv4_ucthlld                 wb=false rc=0 ranks=1 Mmax:5.580e-06 t=0.5 dpert:3.053e-06 vxpert:6.891e-06 vypert:1.934e-06 vzpert:9.669e-07 epert:8.871e-06 b1pert:0.000e+00 b2pert:1.096e-06 b3pert:5.
+m4_fv4_ct_lhlld                wb=true  rc=0 ranks=1 Mmax:0.000e+00 t=0.5 dpert:0.000e+00 vxpert:0.000e+00 vypert:0.000e+00 vzpert:0.000e+00 epert:0.000e+00 b1pert:0.000e+00 b2pert:0.000e+00 b3pert:0.
+m4_fv4_ct_lhlld                wb=false rc=0 ranks=1 Mmax:3.767e-01 t=0.5 dpert:4.127e-01 vxpert:1.525e-01 vypert:4.751e-01 vzpert:0.000e+00 epert:7.000e-01 b1pert:3.809e-01 b2pert:2.646e-01 b3pert:0.
+m4_fv4_ucthll                  wb=true  rc=0 ranks=1 Mmax:0.000e+00 t=0.5 dpert:0.000e+00 vxpert:0.000e+00 vypert:0.000e+00 vzpert:0.000e+00 epert:0.000e+00 b1pert:0.000e+00 b2pert:0.000e+00 b3pert:0.
+m4_fv4_ucthll                  wb=false rc=0 ranks=1 Mmax:3.770e-01 t=0.5 dpert:4.145e-01 vxpert:1.539e-01 vypert:4.744e-01 vzpert:0.000e+00 epert:6.978e-01 b1pert:3.365e-01 b2pert:2.482e-01 b3pert:0.
+m5_fv4_ucthlld_16              wb=true  rc=0 ranks=1 Mmax:0.000e+00 t=0.5 dpert:0.000e+00 vxpert:0.000e+00 vypert:0.000e+00 vzpert:0.000e+00 epert:0.000e+00 b1pert:0.000e+00 b2pert:0.000e+00 b3pert:0.
+m5_fv4_ucthlld_16              wb=false rc=0 ranks=1 Mmax:7.069e-01 t=0.5 dpert:3.956e-01 vxpert:4.319e-01 vypert:7.836e-01 vzpert:0.000e+00 epert:8.135e-01 b1pert:4.379e-01 b2pert:2.939e-01 b3pert:0.
+m5_fv4_ucthlld_lhlld           wb=true  rc=0 ranks=1 Mmax:0.000e+00 t=0.5 dpert:0.000e+00 vxpert:0.000e+00 vypert:0.000e+00 vzpert:0.000e+00 epert:0.000e+00 b1pert:0.000e+00 b2pert:0.000e+00 b3pert:0.
+m5_fv4_ucthlld_lhlld           wb=false rc=0 ranks=1 Mmax:7.022e-01 t=0.5 dpert:3.980e-01 vxpert:5.304e-01 vypert:7.650e-01 vzpert:0.000e+00 epert:8.127e-01 b1pert:4.625e-01 b2pert:2.680e-01 b3pert:0.
+m5_fv4_ucthll_blend            wb=true  rc=0 ranks=1 Mmax:0.000e+00 t=0.5 dpert:0.000e+00 vxpert:0.000e+00 vypert:0.000e+00 vzpert:0.000e+00 epert:0.000e+00 b1pert:0.000e+00 b2pert:0.000e+00 b3pert:0.
+m5_fv4_ucthll_blend            wb=false rc=0 ranks=1 Mmax:6.425e-01 t=0.5 dpert:3.577e-01 vxpert:4.010e-01 vypert:7.442e-01 vzpert:0.000e+00 epert:7.625e-01 b1pert:3.792e-01 b2pert:9.617e-01 b3pert:0.
+m5_fv4_ucthll_mag              wb=true  rc=0 ranks=1 Mmax:0.000e+00 t=0.5 dpert:0.000e+00 vxpert:0.000e+00 vypert:0.000e+00 vzpert:0.000e+00 epert:0.000e+00 b1pert:0.000e+00 b2pert:0.000e+00 b3pert:0.
+m5_fv4_ucthll_mag              wb=false rc=0 ranks=1 Mmax:6.017e-01 t=0.5 dpert:3.926e-01 vxpert:4.430e-01 vypert:7.535e-01 vzpert:0.000e+00 epert:7.853e-01 b1pert:3.960e-01 b2pert:2.693e-01 b3pert:0.
+m3_fv4_ct_4ranks               wb=true  rc=0 ranks=1 Mmax:0.000e+00 t=0.5 dpert:0.000e+00 vxpert:0.000e+00 vypert:0.000e+00 vzpert:0.000e+00 epert:0.000e+00 b1pert:0.000e+00 b2pert:0.000e+00 b3pert:0.
+m3_fv4_ct_4ranks               wb=false rc=0 ranks=1 Mmax:5.650e-06 t=0.5 dpert:3.118e-06 vxpert:7.013e-06 vypert:1.880e-06 vzpert:9.401e-07 epert:9.033e-06 b1pert:0.000e+00 b2pert:1.051e-06 b3pert:5.
+--- fv6 / fv8 + MOOD (face equilibrium at the scheme's order; emf=uct follows the solver)
+m3_fv6_ct                      wb=true  rc=0 ranks=1 Mmax:0.000e+00 t=0.5 dpert:0.000e+00 vxpert:0.000e+00 vypert:0.000e+00 vzpert:0.000e+00 epert:0.000e+00 b1pert:0.000e+00 b2pert:0.000e+00 b3pert:0.
+m3_fv6_ct                      wb=false rc=0 ranks=1 Mmax:5.678e-06 t=0.5 dpert:3.096e-06 vxpert:7.054e-06 vypert:2.000e-06 vzpert:9.998e-07 epert:8.978e-06 b1pert:0.000e+00 b2pert:1.061e-06 b3pert:5.
+m3_fv6_uct                     wb=true  rc=0 ranks=1 Mmax:0.000e+00 t=0.5 dpert:0.000e+00 vxpert:0.000e+00 vypert:0.000e+00 vzpert:0.000e+00 epert:0.000e+00 b1pert:0.000e+00 b2pert:0.000e+00 b3pert:0.
+m3_fv6_uct                     wb=false rc=0 ranks=1 Mmax:5.678e-06 t=0.5 dpert:3.096e-06 vxpert:7.054e-06 vypert:2.000e-06 vzpert:9.998e-07 epert:8.978e-06 b1pert:0.000e+00 b2pert:1.061e-06 b3pert:5.
+m4_fv6_uct_hlle                wb=true  rc=0 ranks=1 Mmax:0.000e+00 t=0.5 dpert:0.000e+00 vxpert:0.000e+00 vypert:0.000e+00 vzpert:0.000e+00 epert:0.000e+00 b1pert:0.000e+00 b2pert:0.000e+00 b3pert:0.
+m4_fv6_uct_hlle                wb=false rc=0 ranks=1 Mmax:3.790e-01 t=0.5 dpert:4.149e-01 vxpert:1.553e-01 vypert:4.757e-01 vzpert:0.000e+00 epert:6.980e-01 b1pert:3.503e-01 b2pert:2.490e-01 b3pert:0.
+m5_fv6_uct_lhlld_16            wb=true  rc=0 ranks=1 Mmax:0.000e+00 t=0.5 dpert:0.000e+00 vxpert:0.000e+00 vypert:0.000e+00 vzpert:0.000e+00 epert:0.000e+00 b1pert:0.000e+00 b2pert:0.000e+00 b3pert:0.
+m5_fv6_uct_lhlld_16            wb=false rc=0 ranks=1 Mmax:7.158e-01 t=0.5 dpert:3.996e-01 vxpert:5.299e-01 vypert:7.730e-01 vzpert:0.000e+00 epert:8.106e-01 b1pert:4.788e-01 b2pert:2.690e-01 b3pert:0.
+m3_fv8_ct                      wb=true  rc=0 ranks=1 Mmax:0.000e+00 t=0.5 dpert:0.000e+00 vxpert:0.000e+00 vypert:0.000e+00 vzpert:0.000e+00 epert:0.000e+00 b1pert:0.000e+00 b2pert:0.000e+00 b3pert:0.
+m3_fv8_ct                      wb=false rc=0 ranks=1 Mmax:5.635e-06 t=0.5 dpert:3.093e-06 vxpert:7.038e-06 vypert:1.979e-06 vzpert:9.895e-07 epert:8.975e-06 b1pert:0.000e+00 b2pert:1.125e-06 b3pert:5.
+m4_fv8_uct                     wb=true  rc=0 ranks=1 Mmax:0.000e+00 t=0.5 dpert:0.000e+00 vxpert:0.000e+00 vypert:0.000e+00 vzpert:0.000e+00 epert:0.000e+00 b1pert:0.000e+00 b2pert:0.000e+00 b3pert:0.
+m4_fv8_uct                     wb=false rc=0 ranks=1 Mmax:3.775e-01 t=0.5 dpert:4.100e-01 vxpert:1.487e-01 vypert:4.749e-01 vzpert:0.000e+00 epert:6.968e-01 b1pert:3.831e-01 b2pert:2.464e-01 b3pert:0.
+m5_fv8_uct_llf_16              wb=true  rc=0 ranks=1 Mmax:0.000e+00 t=0.5 dpert:0.000e+00 vxpert:0.000e+00 vypert:0.000e+00 vzpert:0.000e+00 epert:0.000e+00 b1pert:0.000e+00 b2pert:0.000e+00 b3pert:0.
+m5_fv8_uct_llf_16              wb=false rc=0 ranks=1 Mmax:5.973e-01 t=0.5 dpert:3.993e-01 vxpert:4.148e-01 vypert:7.441e-01 vzpert:0.000e+00 epert:7.823e-01 b1pert:4.238e-01 b2pert:2.711e-01 b3pert:0.
+--- hydro fv4 / fv6 / fv8 + MOOD (iprob 1 isothermal-T, iprob 2 polytrope)
+h1_fv4                         wb=true  rc=0 ranks=1 Mmax:0.000e+00 t=0.5 dpert:0.000e+00 vxpert:0.000e+00 vypert:0.000e+00 vzpert:0.000e+00 epert:0.000e+00
+h1_fv4                         wb=false rc=0 ranks=1 Mmax:1.473e-08 t=0.5 dpert:1.185e-08 vxpert:1.902e-08 vypert:0.000e+00 vzpert:0.000e+00 epert:2.477e-08
+h1_fv6                         wb=true  rc=0 ranks=1 Mmax:0.000e+00 t=0.5 dpert:0.000e+00 vxpert:0.000e+00 vypert:0.000e+00 vzpert:0.000e+00 epert:0.000e+00
+h1_fv6                         wb=false rc=0 ranks=1 Mmax:3.981e-14 t=0.5 dpert:2.687e-14 vxpert:5.139e-14 vypert:0.000e+00 vzpert:0.000e+00 epert:6.750e-14
+h2_fv8                         wb=true  rc=0 ranks=1 Mmax:0.000e+00 t=0.5 dpert:0.000e+00 vxpert:0.000e+00 vypert:0.000e+00 vzpert:0.000e+00 epert:0.000e+00
+h2_fv8                         wb=false rc=0 ranks=1 Mmax:4.100e-01 t=0.5 dpert:2.755e-01 vxpert:8.233e-01 vypert:9.052e-01 vzpert:0.000e+00 epert:2.323e+00
+h2_fv6_16                      wb=true  rc=0 ranks=1 Mmax:0.000e+00 t=0.5 dpert:0.000e+00 vxpert:0.000e+00 vypert:0.000e+00 vzpert:0.000e+00 epert:0.000e+00
+h2_fv6_16                      wb=false rc=0 ranks=1 Mmax:3.247e-01 t=0.5 dpert:2.588e-01 vxpert:4.507e-01 vypert:7.269e-01 vzpert:0.000e+00 epert:1.974e+00
+--- plm + FOFC
+m3_plm_fofc_ct                 wb=true  rc=0 ranks=1 Mmax:0.000e+00 t=0.5 dpert:0.000e+00 vxpert:0.000e+00 vypert:0.000e+00 vzpert:0.000e+00 epert:0.000e+00 b1pert:0.000e+00 b2pert:0.000e+00 b3pert:0.
+m3_plm_fofc_ct                 wb=false rc=0 ranks=1 Mmax:5.629e-06 t=0.5 dpert:3.077e-06 vxpert:6.931e-06 vypert:1.976e-06 vzpert:9.879e-07 epert:8.930e-06 b1pert:0.000e+00 b2pert:1.022e-06 b3pert:5.
+m4_plm_fofc_ucthll             wb=true  rc=0 ranks=1 Mmax:0.000e+00 t=0.5 dpert:0.000e+00 vxpert:0.000e+00 vypert:0.000e+00 vzpert:0.000e+00 epert:0.000e+00 b1pert:0.000e+00 b2pert:0.000e+00 b3pert:0.
+m4_plm_fofc_ucthll             wb=false rc=0 ranks=1 Mmax:3.790e-01 t=0.5 dpert:4.130e-01 vxpert:1.426e-01 vypert:4.779e-01 vzpert:0.000e+00 epert:6.927e-01 b1pert:3.197e-01 b2pert:2.487e-01 b3pert:0.
+m5_plm_fofc_ucthlld_16         wb=true  rc=0 ranks=1 Mmax:0.000e+00 t=0.5 dpert:0.000e+00 vxpert:0.000e+00 vypert:0.000e+00 vzpert:0.000e+00 epert:0.000e+00 b1pert:0.000e+00 b2pert:0.000e+00 b3pert:0.
+m5_plm_fofc_ucthlld_16         wb=false rc=0 ranks=1 Mmax:6.558e-01 t=0.5 dpert:4.008e-01 vxpert:4.283e-01 vypert:7.426e-01 vzpert:0.000e+00 epert:8.110e-01 b1pert:4.142e-01 b2pert:2.880e-01 b3pert:0.
+--- SMR (level-1 region straddling the stratification)
+smr_plm_ct                     wb=true  rc=0 ranks=1 Mmax:0.000e+00 t=0.5 dpert:0.000e+00 vxpert:0.000e+00 vypert:0.000e+00 vzpert:0.000e+00 epert:0.000e+00 b1pert:0.000e+00 b2pert:0.000e+00 b3pert:0.
+smr_plm_ct                     wb=false rc=0 ranks=1 Mmax:1.895e-05 t=0.5 dpert:1.736e-05 vxpert:2.338e-05 vypert:6.442e-06 vzpert:3.221e-06 epert:3.357e-05 b1pert:0.000e+00 b2pert:3.085e-06 b3pert:1.
+smr_fv4mood_uct                wb=true  rc=0 ranks=1 Mmax:0.000e+00 t=0.5 dpert:0.000e+00 vxpert:0.000e+00 vypert:0.000e+00 vzpert:0.000e+00 epert:0.000e+00 b1pert:0.000e+00 b2pert:0.000e+00 b3pert:0.
+smr_fv4mood_uct                wb=false rc=0 ranks=1 Mmax:1.890e-05 t=0.5 dpert:1.736e-05 vxpert:2.335e-05 vypert:6.359e-06 vzpert:3.179e-06 epert:3.358e-05 b1pert:0.000e+00 b2pert:3.120e-06 b3pert:1.
+smr_plm_fofc_4rk               wb=true  rc=0 ranks=1 Mmax:0.000e+00 t=0.5 dpert:0.000e+00 vxpert:0.000e+00 vypert:0.000e+00 vzpert:0.000e+00 epert:0.000e+00 b1pert:0.000e+00 b2pert:0.000e+00 b3pert:0.
+smr_plm_fofc_4rk               wb=false rc=0 ranks=1 Mmax:2.035e-05 t=0.5 dpert:3.812e-05 vxpert:2.447e-05 vypert:8.972e-06 vzpert:3.333e-06 epert:3.447e-05 b1pert:0.000e+00 b2pert:2.984e-06 b3pert:1.
+--- physical walls (gravity -x2: reflect bottom, outflow top)
+bc_plm_ct                      wb=true  rc=0 ranks=1 Mmax:0.000e+00 t=0.5 dpert:0.000e+00 vxpert:0.000e+00 vypert:0.000e+00 vzpert:0.000e+00 epert:0.000e+00 b1pert:0.000e+00 b2pert:0.000e+00 b3pert:0.
+bc_plm_ct                      wb=false rc=0 ranks=1 Mmax:1.661e-01 t=0.5 dpert:6.975e-02 vxpert:1.563e-01 vypert:2.232e-01 vzpert:3.907e-02 epert:1.819e-01 b1pert:1.263e-01 b2pert:0.000e+00 b3pert:3.
+bc_fv4mood_uct                 wb=true  rc=0 ranks=1 Mmax:0.000e+00 t=0.5 dpert:0.000e+00 vxpert:0.000e+00 vypert:0.000e+00 vzpert:0.000e+00 epert:0.000e+00 b1pert:0.000e+00 b2pert:0.000e+00 b3pert:0.
+bc_fv4mood_uct                 wb=false rc=0 ranks=1 Mmax:1.678e-01 t=0.5 dpert:9.300e-02 vxpert:2.027e-01 vypert:2.258e-01 vzpert:5.047e-02 epert:2.422e-01 b1pert:1.655e-01 b2pert:8.333e-02 b3pert:4.
+--- AMR: refinement band sweeping across x1 every 5 steps, reflect walls
+amr_plm_ct                     wb=true  rc=0 ranks=1 Mmax:0.000e+00 t=0.5 dpert:0.000e+00 vxpert:0.000e+00 vypert:0.000e+00 vzpert:0.000e+00 epert:0.000e+00 b1pert:0.000e+00 b2pert:0.000e+00 b3pert:0.
+amr_plm_ct                     wb=false rc=0 ranks=1 Mmax:3.486e-01 t=0.5 dpert:1.976e-01 vxpert:4.803e-01 vypert:2.281e-01 vzpert:1.226e-01 epert:5.815e-01 b1pert:4.087e-01 b2pert:7.136e-02 b3pert:1.
+amr_fv4mood_uct_4rk            wb=true  rc=0 ranks=1 Mmax:0.000e+00 t=0.5 dpert:0.000e+00 vxpert:0.000e+00 vypert:0.000e+00 vzpert:0.000e+00 epert:0.000e+00 b1pert:0.000e+00 b2pert:0.000e+00 b3pert:0.
+amr_fv4mood_uct_4rk            wb=false rc=0 ranks=1 Mmax:4.334e-01 t=0.5 dpert:2.613e-01 vxpert:6.163e-01 vypert:2.303e-01 vzpert:1.558e-01 epert:7.582e-01 b1pert:5.241e-01 b2pert:1.997e-01 b3pert:1.
+GATES DONE

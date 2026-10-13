@@ -1,0 +1,17 @@
+--- exact gates on 4 ranks
+r4_m3_fv4_ct                   wb=true  rc=0 ranks=4 Mmax:0.000e+00 t=0.5 dpert:0.000e+00 vxpert:0.000e+00 vypert:0.000e+00 vzpert:0.000e+00 epert:0.000e+00 b1pert:0.000e+00 b2pert:0.000e+00 b3pert:0.
+r4_m3_fv4_ct                   wb=false rc=0 ranks=4 Mmax:5.650e-06 t=0.5 dpert:3.118e-06 vxpert:7.013e-06 vypert:1.880e-06 vzpert:9.401e-07 epert:9.033e-06 b1pert:0.000e+00 b2pert:1.051e-06 b3pert:5.
+r4_m3_fv6_uct                  wb=true  rc=0 ranks=4 Mmax:0.000e+00 t=0.5 dpert:0.000e+00 vxpert:0.000e+00 vypert:0.000e+00 vzpert:0.000e+00 epert:0.000e+00 b1pert:0.000e+00 b2pert:0.000e+00 b3pert:0.
+r4_m3_fv6_uct                  wb=false rc=0 ranks=4 Mmax:5.678e-06 t=0.5 dpert:3.096e-06 vxpert:7.054e-06 vypert:2.000e-06 vzpert:9.998e-07 epert:8.978e-06 b1pert:0.000e+00 b2pert:1.061e-06 b3pert:5.
+r4_smr_plm_fofc                wb=true  rc=0 ranks=4 Mmax:0.000e+00 t=0.5 dpert:0.000e+00 vxpert:0.000e+00 vypert:0.000e+00 vzpert:0.000e+00 epert:0.000e+00 b1pert:0.000e+00 b2pert:0.000e+00 b3pert:0.
+r4_smr_plm_fofc                wb=false rc=0 ranks=4 Mmax:1.928e-05 t=0.5 dpert:1.746e-05 vxpert:2.380e-05 vypert:6.517e-06 vzpert:3.258e-06 epert:3.370e-05 b1pert:0.000e+00 b2pert:3.089e-06 b3pert:1.
+r4_amr_fv4_uct                 wb=true  rc=0 ranks=4 Mmax:0.000e+00 t=0.5 dpert:0.000e+00 vxpert:0.000e+00 vypert:0.000e+00 vzpert:0.000e+00 epert:0.000e+00 b1pert:0.000e+00 b2pert:0.000e+00 b3pert:0.
+r4_amr_fv4_uct                 wb=false rc=0 ranks=4 Mmax:4.334e-01 t=0.5 dpert:2.613e-01 vxpert:6.163e-01 vypert:2.303e-01 vzpert:1.558e-01 epert:7.582e-01 b1pert:5.241e-01 b2pert:1.997e-01 b3pert:1.
+r4_h1_fv8                      wb=true  rc=0 ranks=4 Mmax:0.000e+00 t=0.5 dpert:0.000e+00 vxpert:0.000e+00 vypert:0.000e+00 vzpert:0.000e+00 epert:0.000e+00
+r4_h1_fv8                      wb=false rc=0 ranks=4 Mmax:3.105e-15 t=0.5 dpert:3.886e-15 vxpert:4.008e-15 vypert:0.000e+00 vzpert:0.000e+00 epert:3.553e-15
+--- 1 vs 4 ranks bitwise (perturbed, amp 1e-2), same binary
+m3_fv4_uct_wb        ranks=1/4 IDENTICAL rk/m3_fv4_uct_wb_np1 vs rk/m3_fv4_uct_wb_np4
+m3_fv4_uct_nowb      ranks=1/4 IDENTICAL rk/m3_fv4_uct_nowb_np1 vs rk/m3_fv4_uct_nowb_np4
+m4_fv6_ct_wb         ranks=1/4 IDENTICAL rk/m4_fv6_ct_wb_np1 vs rk/m4_fv6_ct_wb_np4
+m5_fv8_uct_wb        ranks=1/4 IDENTICAL rk/m5_fv8_uct_wb_np1 vs rk/m5_fv8_uct_wb_np4
+h1_fv6_wb            ranks=1/4 IDENTICAL rk/h1_fv6_wb_np1 vs rk/h1_fv6_wb_np4

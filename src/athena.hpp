@@ -90,6 +90,18 @@ inline constexpr int ReconStencilRadius(ReconstructionMethod r) {
   }
 }
 
+// Half-width of the symmetric central face interpolant FVFaceAt (reconstruct/fv.hpp)
+// that the well-balanced scheme uses for the single-valued face equilibrium: the
+// scheme's own interpolant for the unlimited fvN methods (so fvN(w_eq) + fvN(w') is the
+// base scheme applied to w_eq + w'), the 4th-order one otherwise.
+inline constexpr int FVFaceRadius(ReconstructionMethod r) {
+  switch (r) {
+    case ReconstructionMethod::fv6:  return 3;
+    case ReconstructionMethod::fv8:  return 4;
+    default:                         return 2;
+  }
+}
+
 // Reach of the UCT edge reconstruction (mhd_corner_e.cpp ReconstructEdge): the edge at
 // i-1/2 reads face values i-reach .. i+reach-1.  The limited methods reconstruct L/R
 // states from the two cells sharing the edge (reach = radius+1); the unlimited fvN

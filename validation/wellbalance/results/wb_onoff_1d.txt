@@ -1,0 +1,11 @@
+# max|e'_WBon - e'_WBoff|, 1D hydro pulse (iprob 1, amp 1e-3 at x=0.5, t=0.1, max|e'| ~ 8e-4),
+# MOOD detection off (pure unlimited scheme), rk4 with cfl = 0.3*32/N (dt ~ h^2).
+# ref: face equilibrium always the 4th-order interpolant (715a0bde2)
+# new: face equilibrium at the scheme's order (this commit).  fv4 is bitwise unchanged.
+scheme N    ref        new
+fv4    32   2.62e-07   2.62e-07
+fv4    64   1.90e-08   1.90e-08
+fv6    32   5.82e-11   8.40e-13
+fv6    64   2.91e-11   2.27e-13
+fv8    32   2.91e-11   5.68e-14
+fv8    64   4.55e-13   4.55e-13

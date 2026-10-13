@@ -17,6 +17,9 @@ for wb in true false; do
   last_w=$(ls $d/bin/*_w.0*.bin 2>/dev/null | tail -1)
   s=$(python3 -I stats.py $last_u 2>/dev/null | sed 's/.*t=/t=/')
   m=$(python3 -I stats.py $last_w 2>/dev/null | grep -o "Mmax:[^ ]*")
-  printf "%-30s wb=%-5s rc=%d %s %s\n" "$name" "$wb" "$rc" "$m" "$s"
+  # rank count as the code reports it: mpirun on a binary built without MPI runs np
+  # serial copies of the whole mesh, which would pass every rank gate vacuously
+  nr=$(grep -m1 "Number of parallel ranks" $d/log.txt 2>/dev/null | awk '{print $NF}')
+  printf "%-30s wb=%-5s rc=%d ranks=%s %s %s\n" "$name" "$wb" "$rc" "${nr:-?}" "$m" "$s"
   [ $rc -ne 0 ] && tail -3 $d/log.txt
 done

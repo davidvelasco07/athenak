@@ -36,6 +36,7 @@
 #include "hydro.hpp"
 #include "hydro/well_balance.hpp"
 #include "reconstruct/recon.hpp"
+#include "reconstruct/fv.hpp"
 #include "reconstruct/ppm_closure.hpp"
 #include "hydro/rsolvers/solve_face_hyd.hpp"
 
@@ -197,29 +198,44 @@ void Hydro::WBSetEquilibrium() {
 
   if (!well_balanced) return;   // wb_diagnostics: cell averages are all that is needed
 
-  // (4) single-valued face equilibrium: the unlimited 4th-order interpolation of the
-  //     equilibrium cell averages (the formula of the `ppm` base scheme), shared by every
-  //     reconstruction method and MOOD tier.  Floored like a reconstructed state.
+  // (4) single-valued face equilibrium: the unlimited central interpolation of the
+  //     equilibrium cell averages at the order of the base scheme (fv6/fv8: their own
+  //     interpolant, so that fvN(w_eq) + fvN(w') is fvN(w_eq + w') up to round-off;
+  //     4th order for every other method), shared by every reconstruction method and
+  //     MOOD tier.  Floored like a reconstructed state.  Valid on faces
+  //     req .. n-req (FVFaceRadius), which has to cover every face the flux kernels
+  //     visit (is-ext .. ie+1+ext, ext = the MOOD / FOFC halo).
+  const int req = FVFaceRadius(recon_method);
+  const auto rm_ = recon_method;
+  {
+    const int ext = use_mood ? mood_max_revs : (use_fofc ? 1 : 0);
+    if (ng < req + ext) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "<hydro> well_balanced=true needs nghost >= "
+                << req + ext << " (face-equilibrium stencil " << req
+                << " + fallback halo " << ext << "), but <mesh>/nghost=" << ng
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
   {
     auto &weq_ = w_eq;
     auto &eos_ = peos->eos_data;
     auto wf1 = w_eq_face.x1f;
     par_for("wb_eqface_x1", DevExeSpace(), 0, nmb1, 0, nhyd-1, 0, n3m1, 0, n2m1,
-            2, n1m1-1,
+            req, n1m1-req+1,
     KOKKOS_LAMBDA(const int m, const int n, const int k, const int j, const int i) {
-      Real q = (7.0*(weq_(m,n,k,j,i-1) + weq_(m,n,k,j,i))
-                  - (weq_(m,n,k,j,i-2) + weq_(m,n,k,j,i+1)))/12.0;
+      Real q = FVFaceAt(rm_, [&](const int o) {return weq_(m,n,k,j,i+o);});
       if (n == IDN) {q = fmax(q, eos_.dfloor);}
       if (eos_.is_ideal && n == IEN) {q = fmax(q, eos_.pfloor/(eos_.gamma - 1.0));}
       wf1(m,n,k,j,i) = q;
     });
     if (pm->multi_d) {
       auto wf2 = w_eq_face.x2f;
-      par_for("wb_eqface_x2", DevExeSpace(), 0, nmb1, 0, nhyd-1, 0, n3m1, 2, n2m1-1,
+      par_for("wb_eqface_x2", DevExeSpace(), 0, nmb1, 0, nhyd-1, 0, n3m1, req, n2m1-req+1,
               0, n1m1,
       KOKKOS_LAMBDA(const int m, const int n, const int k, const int j, const int i) {
-        Real q = (7.0*(weq_(m,n,k,j-1,i) + weq_(m,n,k,j,i))
-                    - (weq_(m,n,k,j-2,i) + weq_(m,n,k,j+1,i)))/12.0;
+        Real q = FVFaceAt(rm_, [&](const int o) {return weq_(m,n,k,j+o,i);});
         if (n == IDN) {q = fmax(q, eos_.dfloor);}
         if (eos_.is_ideal && n == IEN) {q = fmax(q, eos_.pfloor/(eos_.gamma - 1.0));}
         wf2(m,n,k,j,i) = q;
@@ -227,11 +243,10 @@ void Hydro::WBSetEquilibrium() {
     }
     if (pm->three_d) {
       auto wf3 = w_eq_face.x3f;
-      par_for("wb_eqface_x3", DevExeSpace(), 0, nmb1, 0, nhyd-1, 2, n3m1-1, 0, n2m1,
+      par_for("wb_eqface_x3", DevExeSpace(), 0, nmb1, 0, nhyd-1, req, n3m1-req+1, 0, n2m1,
               0, n1m1,
       KOKKOS_LAMBDA(const int m, const int n, const int k, const int j, const int i) {
-        Real q = (7.0*(weq_(m,n,k-1,j,i) + weq_(m,n,k,j,i))
-                    - (weq_(m,n,k-2,j,i) + weq_(m,n,k+1,j,i)))/12.0;
+        Real q = FVFaceAt(rm_, [&](const int o) {return weq_(m,n,k+o,j,i);});
         if (n == IDN) {q = fmax(q, eos_.dfloor);}
         if (eos_.is_ideal && n == IEN) {q = fmax(q, eos_.pfloor/(eos_.gamma - 1.0));}
         wf3(m,n,k,j,i) = q;
@@ -272,11 +287,12 @@ void Hydro::WBEquilibriumFluxes() {
   auto &eos_ = peos->eos_data;
   auto &size_ = pmy_pack->pmb->mb_size;
   auto &coord_ = pmy_pack->pcoord->coord_data;
+  const int req = FVFaceRadius(recon_method);   // faces with a valid face equilibrium
 
   {
     auto wf = w_eq_face.x1f;
     auto fe = f_eq.x1f;
-    par_for("wb_feq_x1", DevExeSpace(), 0, nmb1, 0, n3m1, 0, n2m1, 2, n1m1-1,
+    par_for("wb_feq_x1", DevExeSpace(), 0, nmb1, 0, n3m1, 0, n2m1, req, n1m1-req+1,
     KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
       auto eos = eos_;
       auto indcs = indcs_;
@@ -290,7 +306,7 @@ void Hydro::WBEquilibriumFluxes() {
   if (pm->multi_d) {
     auto wf = w_eq_face.x2f;
     auto fe = f_eq.x2f;
-    par_for("wb_feq_x2", DevExeSpace(), 0, nmb1, 0, n3m1, 2, n2m1-1, 0, n1m1,
+    par_for("wb_feq_x2", DevExeSpace(), 0, nmb1, 0, n3m1, req, n2m1-req+1, 0, n1m1,
     KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
       auto eos = eos_;
       auto indcs = indcs_;
@@ -304,7 +320,7 @@ void Hydro::WBEquilibriumFluxes() {
   if (pm->three_d) {
     auto wf = w_eq_face.x3f;
     auto fe = f_eq.x3f;
-    par_for("wb_feq_x3", DevExeSpace(), 0, nmb1, 2, n3m1-1, 0, n2m1, 0, n1m1,
+    par_for("wb_feq_x3", DevExeSpace(), 0, nmb1, req, n3m1-req+1, 0, n2m1, 0, n1m1,
     KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
       auto eos = eos_;
       auto indcs = indcs_;

@@ -537,17 +537,23 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
       }
     }
 
-    // select EMF averaging method (default ct_contact).  uct_hll works for Newtonian,
-    // SR and GR; uct_hlld is Newtonian-only because it needs rsolver=hlld.
+    // select EMF averaging method (default ct_contact).  'uct' takes the UCT variant
+    // that matches the Riemann solver: HLLD-type coefficients (from the five-wave fan)
+    // with hlld/lhlld, HLL-type (from the outer speeds) with every other solver.
+    // 'uct_hll' / 'uct_hlld' pin a variant explicitly: uct_hll works for Newtonian, SR
+    // and GR; uct_hlld is Newtonian-only because it needs rsolver=hlld/lhlld.
     std::string emf_str = pin->GetOrAddString("mhd","emf","ct_contact");
+    const bool hlld_fan = (rsolver_method == MHD_RSolver::hlld ||
+                           rsolver_method == MHD_RSolver::lhlld);
     if (emf_str.compare("ct_contact") == 0) {
       emf_method = MHD_EMF::ct_contact;
+    } else if (emf_str.compare("uct") == 0) {
+      emf_method = hlld_fan ? MHD_EMF::uct_hlld : MHD_EMF::uct_hll;
     } else if (emf_str.compare("uct_hll") == 0) {
       emf_method = MHD_EMF::uct_hll;
     } else if (emf_str.compare("uct_hlld") == 0) {
       // the HLLD-type UCT coefficients come from the five-wave fan: hlld or lhlld
-      if (rsolver_method != MHD_RSolver::hlld &&
-          rsolver_method != MHD_RSolver::lhlld) {
+      if (!hlld_fan) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                   << std::endl << "<mhd>/emf = 'uct_hlld' requires rsolver = 'hlld' "
                   << "or 'lhlld'" << std::endl;
