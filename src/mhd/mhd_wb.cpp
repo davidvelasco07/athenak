@@ -83,9 +83,16 @@ void MHD::WBBuildFullState(DvceArray5D<Real> &w, const DvceFaceFld4D<Real> &b,
   DvceArray5D<Real> wtmp("wb_wtmp", w.extent(0), w.extent(1), w.extent(2), w.extent(3),
                          w.extent(4));
   Kokkos::deep_copy(bcc, 0.0);
-  // pass 1: bcc from the face field (fluid part of this pass is discarded)
+  // pass 1: bcc from the face field (fluid part of this pass is discarded).  It converts
+  // with bcc = 0 and inverts with the real field, so wherever B^2/2 > p/(gamma-1) the
+  // discarded fluid state hits the energy floor: keep those floors out of the event
+  // counters, or the admissibility check (WBSetEquilibrium) rejects a perfectly valid
+  // strong-field equilibrium.
+  auto &ec = pmy_pack->pmesh->ecounter;
+  const int nfl_d = ec.neos_dfloor, nfl_e = ec.neos_efloor, nfl_t = ec.neos_tfloor;
   peos->PrimToCons(w, bcc, u, 0, n1m1, 0, n2m1, 0, n3m1);
   peos->ConsToPrim(u, b, wtmp, bcc, false, 0, n1m1, 0, n2m1, 0, n3m1);
+  ec.neos_dfloor = nfl_d; ec.neos_efloor = nfl_e; ec.neos_tfloor = nfl_t;
   // pass 2: conserved state with that bcc, then primitives as the task would find them
   peos->PrimToCons(w, bcc, u, 0, n1m1, 0, n2m1, 0, n3m1);
   peos->ConsToPrim(u, b, w, bcc, false, 0, n1m1, 0, n2m1, 0, n3m1);
