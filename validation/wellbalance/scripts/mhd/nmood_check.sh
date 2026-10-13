@@ -5,7 +5,7 @@ cd ${RUNS:?set RUNS to a run directory holding mkdeck.py and cmp_global.py}; mkd
 while IFS='|' read -r n a; do
   d=p2/nmood/$n; rm -rf $d; mkdir -p $d
   python3 mkdeck.py $d/in.athinput wb=true $a 'tail=<output8>\nfile_type = log\ndcycle = 1\n'
-  (cd $d && $NEW -i in.athinput > log.txt 2>&1); rc=$?
+  (cd $d && ${LAUNCH1:-} $NEW -i in.athinput > log.txt 2>&1 < /dev/null); rc=$?
   printf "%-8s rc=%s cycles=%s mood_demotions=%s floors=%s\n" $n $rc "$(grep -c '^ *[0-9]' $d/hse.log)" "$(awk 'NR>2{s+=$9}END{print s+0}' $d/hse.log)" "$(awk 'NR>2{s+=$2+$3+$4}END{print s+0}' $d/hse.log)"
 done <<'LIST'
 m3ct|fluid=mhd iprob=3 b1=1.0 b2=0.5 b3=0.25 recon=fv4 mood=true integrator=rk3 rsolver=hlld emf=ct_contact ng=5 tlim=0.5

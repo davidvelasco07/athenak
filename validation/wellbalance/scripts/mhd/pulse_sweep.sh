@@ -10,7 +10,7 @@ for prob in "m3|fluid=mhd iprob=3 b1=1.0 b2=0.5 b3=0.25 pulse_x1=0.3 pulse_x2=0.
     for eta in 1e-2 1e-4 1e-8 1e-12; do for wb in true false; do
       d=sweep/${pn}_${sn}_eta${eta}_wb$wb; rm -rf $d; mkdir -p $d
       python3 mkdeck.py $d/in.athinput wb=$wb $pa $sa amp=$eta tlim=0.25 bin_dt=0.25 'tail=<output8>\nfile_type = log\ndcycle = 1\n'
-      (cd $d && $NEW -i in.athinput > log.txt 2>&1); rc=$?
+      (cd $d && ${LAUNCH1:-} $NEW -i in.athinput > log.txt 2>&1 < /dev/null); rc=$?
       last=$(ls $d/bin/*_wpert*.bin 2>/dev/null | tail -1)
       python3 - "$pn" "$sn" "$eta" "$wb" "$rc" "$last" "$d/hse.log" >> sweep/results.txt <<'PY'
 import sys, numpy as np, os

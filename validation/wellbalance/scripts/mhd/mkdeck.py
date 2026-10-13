@@ -13,6 +13,9 @@ if P['mbx1'] in (0, '0'): P['mbx1'] = P['nx1']
 if P['mbx2'] in (0, '0'): P['mbx2'] = P['nx2']
 grav = (f"const_accel_dir = {P['gdir']}\nconst_accel_val = {P['gval']}" if int(P['gdir']) != 0
         else f"const_accel_dir = 0\nconst_accel_x1 = {P['g1']}\nconst_accel_x2 = {P['g2']}")
+# emf / MOOD edge keys (MHD only); kept out of the f-string so Python < 3.12 accepts the deck
+mhdblk = ("emf = " + P['emf'] + "\nmood_edge = " + P['mood_edge'] + "\nmood_nad_b = " + P['nad_b']
+          if P['fluid'] == 'mhd' else "")
 deck = f"""<job>
 basename = {P['basename']}
 
@@ -55,7 +58,7 @@ rsolver = {P['rsolver']}
 well_balanced = {P['wb']}
 mood = {P['mood']}
 fofc = {P['fofc']}
-{"emf = " + P['emf'] + "\nmood_edge = " + P['mood_edge'] + "\nmood_nad_b = " + P['nad_b'] if P['fluid'] == 'mhd' else ""}
+{mhdblk}
 
 <{P['fluid']}_srcterms>
 const_accel = true
