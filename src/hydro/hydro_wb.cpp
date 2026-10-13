@@ -36,6 +36,7 @@
 #include "hydro.hpp"
 #include "hydro/well_balance.hpp"
 #include "reconstruct/recon.hpp"
+#include "reconstruct/ppm_closure.hpp"
 #include "hydro/rsolvers/solve_face_hyd.hpp"
 
 namespace hydro {
@@ -243,11 +244,12 @@ void Hydro::WBSetEquilibrium() {
     case Hydro_RSolver::llf:  WBEquilibriumFluxes<Hydro_RSolver::llf>();  break;
     case Hydro_RSolver::hlle: WBEquilibriumFluxes<Hydro_RSolver::hlle>(); break;
     case Hydro_RSolver::hllc: WBEquilibriumFluxes<Hydro_RSolver::hllc>(); break;
+    case Hydro_RSolver::lhllc: WBEquilibriumFluxes<Hydro_RSolver::lhllc>(); break;
     case Hydro_RSolver::roe:  WBEquilibriumFluxes<Hydro_RSolver::roe>();  break;
     default:
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "<hydro> well_balanced=true supports rsolver = "
-                << "llf|hlle|hllc|roe" << std::endl;
+                << "llf|hlle|hllc|lhllc|roe" << std::endl;
       std::exit(EXIT_FAILURE);
   }
   return;
@@ -403,6 +405,10 @@ void Hydro::WBCalculateFluxes(Driver *pdriver, int stage) {
     auto feq = f_eq.x1f;
     ReconDispatch<IVX>(recon_method_, "hflux_x1_recon_wb", nmb1,
         ktl, ktu, jtl, jtu, il1-1, iu1, eos_, false, nvars, wp_, wl_, wr_);
+    if (recon_method_ == ReconstructionMethod::fv4 && ppm_bc_closure) {
+      PPMBoundaryClosure<IVX>("hflux_x1_ppm_closure_wb", nmb1, ktl, ktu, jtl, jtu, indcs_,
+          pmy_pack->pmb->mb_bcs, eos_, false, nvars, wp_, wl_, wr_);
+    }
     par_for("hflux_x1_rsolve_wb", DevExeSpace(), 0, nmb1, ktl, ktu, jtl, jtu, il1, iu1,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
       // local copies of the solver inputs (required for CUDA 11.6+, as in hydro_fluxes)
@@ -437,6 +443,10 @@ void Hydro::WBCalculateFluxes(Driver *pdriver, int stage) {
     auto feq = f_eq.x2f;
     ReconDispatch<IVY>(recon_method_, "hflux_x2_recon_wb", nmb1,
         ktl, ktu, jl2-1, ju2, itl, itu, eos_, false, nvars, wp_, wl_, wr_);
+    if (recon_method_ == ReconstructionMethod::fv4 && ppm_bc_closure) {
+      PPMBoundaryClosure<IVY>("hflux_x2_ppm_closure_wb", nmb1, ktl, ktu, itl, itu, indcs_,
+          pmy_pack->pmb->mb_bcs, eos_, false, nvars, wp_, wl_, wr_);
+    }
     par_for("hflux_x2_rsolve_wb", DevExeSpace(), 0, nmb1, ktl, ktu, jl2, ju2, itl, itu,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
       // local copies of the solver inputs (required for CUDA 11.6+, as in hydro_fluxes)
@@ -471,6 +481,10 @@ void Hydro::WBCalculateFluxes(Driver *pdriver, int stage) {
     auto feq = f_eq.x3f;
     ReconDispatch<IVZ>(recon_method_, "hflux_x3_recon_wb", nmb1,
         kl3-1, ku3, jtl, jtu, itl, itu, eos_, false, nvars, wp_, wl_, wr_);
+    if (recon_method_ == ReconstructionMethod::fv4 && ppm_bc_closure) {
+      PPMBoundaryClosure<IVZ>("hflux_x3_ppm_closure_wb", nmb1, jtl, jtu, itl, itu, indcs_,
+          pmy_pack->pmb->mb_bcs, eos_, false, nvars, wp_, wl_, wr_);
+    }
     par_for("hflux_x3_rsolve_wb", DevExeSpace(), 0, nmb1, kl3, ku3, jtl, jtu, itl, itu,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
       // local copies of the solver inputs (required for CUDA 11.6+, as in hydro_fluxes)
@@ -504,10 +518,12 @@ void Hydro::WBCalculateFluxes(Driver *pdriver, int stage) {
 template void Hydro::WBEquilibriumFluxes<Hydro_RSolver::llf>();
 template void Hydro::WBEquilibriumFluxes<Hydro_RSolver::hlle>();
 template void Hydro::WBEquilibriumFluxes<Hydro_RSolver::hllc>();
+template void Hydro::WBEquilibriumFluxes<Hydro_RSolver::lhllc>();
 template void Hydro::WBEquilibriumFluxes<Hydro_RSolver::roe>();
 template void Hydro::WBCalculateFluxes<Hydro_RSolver::llf>(Driver *d, int stage);
 template void Hydro::WBCalculateFluxes<Hydro_RSolver::hlle>(Driver *d, int stage);
 template void Hydro::WBCalculateFluxes<Hydro_RSolver::hllc>(Driver *d, int stage);
+template void Hydro::WBCalculateFluxes<Hydro_RSolver::lhllc>(Driver *d, int stage);
 template void Hydro::WBCalculateFluxes<Hydro_RSolver::roe>(Driver *d, int stage);
 
 }  // namespace hydro

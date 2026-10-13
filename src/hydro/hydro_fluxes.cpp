@@ -37,6 +37,7 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
   if constexpr (rsolver_method_ == Hydro_RSolver::llf ||
                 rsolver_method_ == Hydro_RSolver::hlle ||
                 rsolver_method_ == Hydro_RSolver::hllc ||
+                rsolver_method_ == Hydro_RSolver::lhllc ||
                 rsolver_method_ == Hydro_RSolver::roe) {
     if (well_balanced) {
       WBCalculateFluxes<rsolver_method_>(pdriver, stage);

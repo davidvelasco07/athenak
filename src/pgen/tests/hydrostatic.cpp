@@ -25,6 +25,18 @@
 //!           B_x = sqrt(2 p/beta), rho, p ~ exp(-x2/H), H = (p0/rho0)(1+1/beta)/g.
 //!           A true magnetostatic equilibrium with J x B != 0 (magnetic pressure
 //!           gradient).
+//!  iprob=6  Two-layer Rayleigh-Taylor setup of sec. 3.2 (a modified Liska & Wendroff
+//!           2003): rho1 below the sharp interface x2 = yc, rho2 above, p = P0 + g int rho
+//!           with g along +x2 (the paper's frame: gravity points up, so the heavy lower
+//!           layer is on top in the gravitational sense).  Seeded by
+//!           v2 = -rti_amp*dv*cos(k x1), dv = sqrt(gamma (rho1 yc |g| + 1)/rho1), which
+//!           does not depend on P0, so P0 sets the Mach number alone.  rti_sigma > 0
+//!           replaces the sharp interface by a tanh profile of that width (the
+//!           well-balanced scheme needs a smooth equilibrium: at a jump the full face
+//!           state W_eq,face + W' can leave the range of the two layers).
+//!
+//! <problem>/user_hist=true (hydro) adds a history block: the global maximum Mach number
+//! (all iprob) and, for iprob=2, the kinetic energy of each of the three zones.
 //!
 //! The gravity vector is read from <hydro_srcterms> const_accel (dir/val or the dir=0
 //! vector form), so the equilibrium and the source term cannot disagree.  Boundaries
@@ -37,13 +49,17 @@
 #include <string>
 
 #include "athena.hpp"
+#include "globals.hpp"
 #include "parameter_input.hpp"
+#include "coordinates/cell_locations.hpp"
 #include "mesh/mesh.hpp"
+#include "mesh/mesh_refinement.hpp"
 #include "eos/eos.hpp"
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
 #include "hydro/well_balance.hpp"
 #include "srcterms/srcterms.hpp"
+#include "outputs/outputs.hpp"
 #include "pgen/pgen.hpp"
 
 namespace {
@@ -117,6 +133,42 @@ struct BubbleDensity {       // only the density perturbation, pressure unpertur
   }
 };
 
+struct TwoLayer {            // two-layer RTI background (iprob=6), vertical x2
+  Real rho1, rho2, yc, p0, g, gm1;
+  Real sigma;                // 0: sharp interface; > 0: tanh profile of this width
+  KOKKOS_INLINE_FUNCTION
+  static Real LnCosh(const Real a) {return fabs(a) + log1p(exp(-2.0*fabs(a))) - log(2.0);}
+  KOKKOS_INLINE_FUNCTION
+  void operator()(const Real x1, const Real x2, const Real x3, Real w[]) const {
+    Real rho, p;
+    if (sigma > 0.0) {     // p = p0 + g int_0^y rho, analytic for the tanh profile
+      const Real h = 0.5*(rho1 - rho2);
+      rho = rho2 + h*(1.0 - tanh((x2 - yc)/sigma));
+      p = p0 + g*(rho2*x2 + h*(x2 - sigma*(LnCosh((x2 - yc)/sigma) - LnCosh(yc/sigma))));
+    } else {
+      const bool below = (x2 <= yc);
+      rho = below ? rho1 : rho2;
+      p = below ? (p0 + g*rho1*x2) : (p0 + g*(rho1*yc + rho2*(x2 - yc)));
+    }
+    w[IDN] = rho;
+    w[IVX] = 0.0; w[IVY] = 0.0; w[IVZ] = 0.0;
+    w[IEN] = p/gm1;
+  }
+};
+
+struct RTIVelocity {         // conserved increments of the v2 seed (iprob=6)
+  TwoLayer eq;
+  Real vamp, kx;
+  KOKKOS_INLINE_FUNCTION
+  void operator()(const Real x1, const Real x2, const Real x3, Real w[]) const {
+    Real weq[5];
+    eq(x1, x2, x3, weq);
+    const Real v2 = -vamp*cos(kx*x1);
+    w[IM2] = weq[IDN]*v2;
+    w[IEN] = 0.5*weq[IDN]*v2*v2;
+  }
+};
+
 struct EqField {             // equilibrium magnetic field at a point
   bool parker;
   Real b1, b2, b3;           // uniform field (iprob=3)
@@ -135,6 +187,7 @@ struct EqField {             // equilibrium magnetic field at a point
 int iprob = 1;
 ExpAtmosphere exp_atm;
 PolytropeZones poly;
+TwoLayer two_layer;
 EqField eq_field;
 DvceArray5D<Real> ubc_full;   // equilibrium conserved state for non-WB user BCs
 // equilibrium face field for user BCs.  A pointer: a file-scope View would be
@@ -178,6 +231,8 @@ void FillArcadeField(MeshBlockPack *pmbp, DvceFaceFld4D<Real> &b) {
 void FillEquilibrium(MeshBlockPack *pmbp, DvceArray5D<Real> &w, int nvar) {
   if (iprob == 2) {
     wellbalance::FillEquilibriumCellAverages(pmbp, w, nvar, poly);
+  } else if (iprob == 6) {
+    wellbalance::FillEquilibriumCellAverages(pmbp, w, nvar, two_layer);
   } else {
     wellbalance::FillEquilibriumCellAverages(pmbp, w, nvar, exp_atm);
   }
@@ -223,7 +278,7 @@ void HSEBoundary(Mesh *pm) {
                                        : pmhd->nmhd + pmhd->nscalars;
   auto &mb_bcs = pmbp->pmb->mb_bcs;
   auto u0 = (phydro != nullptr) ? phydro->u0 : pmhd->u0;
-  auto &ubc = ubc_full;
+  auto ubc = ubc_full;   // copy the View handle: a reference to a file-scope View is not captured by device lambdas
   par_for("hse_bc", DevExeSpace(), 0, (pmbp->nmb_thispack-1), 0, n3-1, 0, n2-1, 0, n1-1,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
     auto user = [&](const int f) {return mb_bcs.d_view(m,f) == BoundaryFlag::user;};
@@ -270,6 +325,176 @@ void HSEBoundary(Mesh *pm) {
   }
 }
 
+//----------------------------------------------------------------------------------------
+// Test-only AMR criteria (<amr_criterion0> method = user), chosen by <problem>/amr_test:
+//   band  refine every MeshBlock overlapping |x1 - xc(t)| < amr_band_w/2 (periodic in x1),
+//         xc = amr_band_x0 + amr_band_v*t, derefine all others.  It ignores the solution, so a
+//         static equilibrium is refined and derefined every few steps: the WB exact gate
+//         through regrids, load balancing and new-block equilibria.
+//   pert  refine where max(|U'_d|/U_eq,d, |U'_E|/U_eq,E) over the block exceeds amr_pert_ref,
+//         derefine below amr_pert_ref/4.  U' = u0 with WB, u0 - u_eq without (needs
+//         wb_diagnostics).  A WB-aware criterion that follows a perturbation.  Optional window
+//         amr_x2min < x2 < amr_x2max: blocks lying entirely outside it are always derefined (e.g.
+//         keep the stable zones of the bubble at root resolution; default: no window).
+struct AMRTest {
+  int mode = 0;                         // 0 none, 1 band, 2 pert
+  Real x0 = 0.0, v = 0.0, w = 0.0, ref = 0.0;
+  Real x2lo = -1.0e300, x2hi = 1.0e300;  // pert: refinement window along x2
+};
+AMRTest amr_test;
+
+void HSERefinement(MeshBlockPack *pmbp) {
+  Mesh *pm = pmbp->pmesh;
+  auto &refine_flag = pm->pmr->refine_flag;
+  const int mbs = pm->gids_eachrank[global_variable::my_rank];
+  const int nmb = pmbp->nmb_thispack;
+  if (amr_test.mode == 1) {
+    auto &size = pmbp->pmb->mb_size;
+    const Real xmin = pm->mesh_size.x1min, len = pm->mesh_size.x1max - xmin;
+    Real xc = std::fmod(amr_test.x0 + amr_test.v*pm->time - xmin, len);
+    xc = xmin + ((xc < 0.0) ? xc + len : xc);
+    for (int m = 0; m < nmb; ++m) {
+      const Real a = size.h_view(m).x1min, b = size.h_view(m).x1max;
+      bool in = false;
+      for (int s = -1; s <= 1; ++s) {                 // periodic images of the band
+        const Real lo = xc - 0.5*amr_test.w + s*len, hi = xc + 0.5*amr_test.w + s*len;
+        if (b > lo && a < hi) in = true;
+      }
+      refine_flag.h_view(m + mbs) = in ? 1 : -1;
+    }
+    refine_flag.template modify<HostMemSpace>();
+    refine_flag.template sync<DevExeSpace>();
+    return;
+  }
+  // pert: device reduction per block
+  auto *ph = pmbp->phydro;
+  auto &u0 = ph->u0;
+  auto &ueq = ph->u_eq;
+  const bool wb = ph->well_balanced;
+  const Real ref = amr_test.ref;
+  const Real x2lo = amr_test.x2lo, x2hi = amr_test.x2hi;
+  auto &msize = pmbp->pmb->mb_size;
+  auto &indcs = pm->mb_indcs;
+  const int is = indcs.is, js = indcs.js, ks = indcs.ks;
+  const int nx1 = indcs.nx1, nx2 = indcs.nx2, nx3 = indcs.nx3;
+  const int nkji = nx3*nx2*nx1, nji = nx2*nx1;
+  par_for_outer("hse_ref_pert", DevExeSpace(), 0, 0, 0, nmb - 1,
+  KOKKOS_LAMBDA(TeamMember_t tmember, const int m) {
+    Real qmax = 0.0;
+    Kokkos::parallel_reduce(Kokkos::TeamThreadRange(tmember, nkji),
+    [=](const int idx, Real &q) {
+      const int k = idx/nji + ks;
+      const int j = (idx - (k - ks)*nji)/nx1 + js;
+      const int i = (idx - (k - ks)*nji - (j - js)*nx1) + is;
+      const Real dd = wb ? u0(m,IDN,k,j,i) : u0(m,IDN,k,j,i) - ueq(m,IDN,k,j,i);
+      const Real de = wb ? u0(m,IEN,k,j,i) : u0(m,IEN,k,j,i) - ueq(m,IEN,k,j,i);
+      q = fmax(q, fmax(fabs(dd)/ueq(m,IDN,k,j,i), fabs(de)/ueq(m,IEN,k,j,i)));
+    }, Kokkos::Max<Real>(qmax));
+    Kokkos::single(Kokkos::PerTeam(tmember), [&]() {
+      const bool outside = (msize.d_view(m).x2max <= x2lo) || (msize.d_view(m).x2min >= x2hi);
+      refine_flag.d_view(m + mbs) = outside ? -1 :
+                                    ((qmax > ref) ? 1 : ((qmax < 0.25*ref) ? -1 : 0));
+    });
+  });
+  refine_flag.template modify<DevExeSpace>();
+  refine_flag.template sync<HostMemSpace>();
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void HSEHistory()
+//! \brief user history (hydro): global max Mach number and, for iprob=2, the kinetic
+//! energy of each zone.  The history writer SUMS every entry over ranks, so the max is
+//! reduced here and stored on rank 0 only.  w0 holds the FULL primitives (also with WB).
+
+void HSEHistory(HistoryData *pdata, Mesh *pm) {
+  auto *pmbp = pm->pmb_pack;
+  auto *ph = pmbp->phydro;
+  const bool zones = (iprob == 2);
+  const bool amrh = (amr_test.mode != 0);
+  const int namr = zones ? 4 : 1;                 // first column of the AMR-test block
+  pdata->nhist = namr + (amrh ? 2 : 0);
+  pdata->label[0] = "Mach-max";
+  if (zones) {
+    pdata->label[1] = "KE-zone1";
+    pdata->label[2] = "KE-zone2";
+    pdata->label[3] = "KE-zone3";
+  }
+  if (amrh) {
+    pdata->label[namr] = "nmb-total";
+    pdata->label[namr + 1] = "pert-max";
+  }
+  auto &w0 = ph->w0;
+  const Real gamma = ph->peos->eos_data.gamma;
+  const Real gm1 = gamma - 1.0;
+  auto &size = pmbp->pmb->mb_size;
+  auto &indcs = pm->mb_indcs;
+  const int is = indcs.is, js = indcs.js, ks = indcs.ks;
+  const int nx1 = indcs.nx1, nx2 = indcs.nx2, nx3 = indcs.nx3;
+  const int nkji = nx3*nx2*nx1, nji = nx2*nx1;
+  const int nmkji = pmbp->nmb_thispack*nkji;
+  const Real z1 = poly.zb[1], z2 = poly.zb[2];
+
+  Real mmax = 0.0;
+  Kokkos::parallel_reduce("hse_hist_mach", Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+  KOKKOS_LAMBDA(const int &idx, Real &lmax) {
+    const int m = idx/nkji;
+    const int k = (idx - m*nkji)/nji + ks;
+    const int j = (idx - m*nkji - (k - ks)*nji)/nx1 + js;
+    const int i = (idx - m*nkji - (k - ks)*nji - (j - js)*nx1) + is;
+    const Real v2 = SQR(w0(m,IVX,k,j,i)) + SQR(w0(m,IVY,k,j,i)) + SQR(w0(m,IVZ,k,j,i));
+    const Real cs2 = gamma*gm1*w0(m,IEN,k,j,i)/w0(m,IDN,k,j,i);
+    lmax = fmax(lmax, sqrt(v2/cs2));
+  }, Kokkos::Max<Real>(mmax));
+#if MPI_PARALLEL_ENABLED
+  MPI_Allreduce(MPI_IN_PLACE, &mmax, 1, MPI_ATHENA_REAL, MPI_MAX, MPI_COMM_WORLD);
+#endif
+  pdata->hdata[0] = (global_variable::my_rank == 0) ? mmax : 0.0;
+
+  if (zones) {
+    array_sum::GlobalSum ke;
+    Kokkos::parallel_reduce("hse_hist_ke", Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+    KOKKOS_LAMBDA(const int &idx, array_sum::GlobalSum &lsum) {
+      const int m = idx/nkji;
+      const int k = (idx - m*nkji)/nji + ks;
+      const int j = (idx - m*nkji - (k - ks)*nji)/nx1 + js;
+      const int i = (idx - m*nkji - (k - ks)*nji - (j - js)*nx1) + is;
+      const Real vol = size.d_view(m).dx1*size.d_view(m).dx2*size.d_view(m).dx3;
+      const Real x2v = CellCenterX(j - js, nx2, size.d_view(m).x2min,
+                                   size.d_view(m).x2max);
+      const int iz = (x2v < z1) ? 0 : ((x2v < z2) ? 1 : 2);
+      array_sum::GlobalSum h;
+      for (int n=0; n<NHISTORY_VARIABLES; ++n) {h.the_array[n] = 0.0;}
+      h.the_array[iz] = vol*0.5*w0(m,IDN,k,j,i)*(SQR(w0(m,IVX,k,j,i)) +
+                        SQR(w0(m,IVY,k,j,i)) + SQR(w0(m,IVZ,k,j,i)));
+      lsum += h;
+    }, Kokkos::Sum<array_sum::GlobalSum>(ke));
+    for (int n=0; n<3; ++n) {pdata->hdata[1+n] = ke.the_array[n];}
+  }
+
+  if (amrh) {   // block count, and max(|U'_d|/U_eq,d, |U'_E|/U_eq,E) over the whole mesh
+    auto &u0 = ph->u0;
+    auto &ueq = ph->u_eq;
+    const bool wb = ph->well_balanced;
+    Real pmax = 0.0;
+    Kokkos::parallel_reduce("hse_hist_pert", Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+    KOKKOS_LAMBDA(const int &idx, Real &lmax) {
+      const int m = idx/nkji;
+      const int k = (idx - m*nkji)/nji + ks;
+      const int j = (idx - m*nkji - (k - ks)*nji)/nx1 + js;
+      const int i = (idx - m*nkji - (k - ks)*nji - (j - js)*nx1) + is;
+      const Real dd = wb ? u0(m,IDN,k,j,i) : u0(m,IDN,k,j,i) - ueq(m,IDN,k,j,i);
+      const Real de = wb ? u0(m,IEN,k,j,i) : u0(m,IEN,k,j,i) - ueq(m,IEN,k,j,i);
+      lmax = fmax(lmax, fmax(fabs(dd)/ueq(m,IDN,k,j,i), fabs(de)/ueq(m,IEN,k,j,i)));
+    }, Kokkos::Max<Real>(pmax));
+#if MPI_PARALLEL_ENABLED
+    MPI_Allreduce(MPI_IN_PLACE, &pmax, 1, MPI_ATHENA_REAL, MPI_MAX, MPI_COMM_WORLD);
+#endif
+    const bool r0 = (global_variable::my_rank == 0);
+    pdata->hdata[namr] = r0 ? static_cast<Real>(pm->nmb_total) : 0.0;
+    pdata->hdata[namr + 1] = r0 ? pmax : 0.0;
+  }
+}
+
 // release the file-scope view before Kokkos::finalize
 void HSEFinalize(ParameterInput *pin, Mesh *pm) {
   ubc_full = DvceArray5D<Real>();
@@ -304,9 +529,10 @@ void ProblemGenerator::Hydrostatic(ParameterInput *pin, const bool restart) {
   const Real gm1 = peos_->eos_data.gamma - 1.0;
   const Real *gv = psrc_->const_accel_vec;
   iprob = pin->GetOrAddInteger("problem", "iprob", 1);
-  if ((iprob >= 3) != (pmhd != nullptr)) {
+  if ((iprob >= 3 && iprob <= 5) != (pmhd != nullptr)) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
-              << "hydrostatic: iprob=1,2 are hydro problems, iprob=3,4 MHD" << std::endl;
+              << "hydrostatic: iprob=1,2,6 are hydro problems, iprob=3,4,5 MHD"
+              << std::endl;
     std::exit(EXIT_FAILURE);
   }
   eq_field.parker = false;
@@ -374,15 +600,59 @@ void ProblemGenerator::Hydrostatic(ParameterInput *pin, const bool restart) {
       poly.rho0[iz] = poly.rho0[iz-1]*std::pow(t, 1.0/(gz - 1.0));
       poly.p0[iz] = poly.p0[iz-1]*std::pow(t, gz/(gz - 1.0));
     }
+  } else if (iprob == 6) {
+    if (gv[0] != 0.0 || gv[2] != 0.0 || gv[1] == 0.0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "hydrostatic iprob=6 needs gravity along x2"
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    two_layer.rho1 = pin->GetOrAddReal("problem", "rti_rho1", 2.0);
+    two_layer.rho2 = pin->GetOrAddReal("problem", "rti_rho2", 1.0);
+    two_layer.yc = pin->GetOrAddReal("problem", "rti_yc", 0.5);
+    two_layer.p0 = pin->GetOrAddReal("problem", "rti_p0", 1.0);
+    two_layer.sigma = pin->GetOrAddReal("problem", "rti_sigma", 0.0);
+    two_layer.g = gv[1];
+    two_layer.gm1 = gm1;
   } else {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
-              << "hydrostatic: iprob must be 1..5" << std::endl;
+              << "hydrostatic: iprob must be 1..6" << std::endl;
     std::exit(EXIT_FAILURE);
+  }
+
+  // test-only AMR criteria (see HSERefinement); the deck must use <amr_criterion0> method=user
+  {
+    const std::string at = pin->GetOrAddString("problem", "amr_test", "none");
+    amr_test.mode = (at == "band") ? 1 : ((at == "pert") ? 2 : 0);
+    if (at != "none" && amr_test.mode == 0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+                << "hydrostatic: amr_test must be none, band or pert" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (amr_test.mode != 0 && (phydro == nullptr || !phydro->peos->eos_data.is_ideal ||
+        (!phydro->well_balanced && !phydro->wb_diagnostics))) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+                << "hydrostatic amr_test needs ideal hydro with well_balanced or "
+                << "wb_diagnostics (it measures U' against u_eq)" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    amr_test.x0 = pin->GetOrAddReal("problem", "amr_band_x0", 0.0);
+    amr_test.v = pin->GetOrAddReal("problem", "amr_band_v", 1.0);
+    amr_test.w = pin->GetOrAddReal("problem", "amr_band_w", 0.25);
+    amr_test.ref = pin->GetOrAddReal("problem", "amr_pert_ref", 1.0e-6);
+    if (pin->DoesParameterExist("problem", "amr_x2min")) {
+      amr_test.x2lo = pin->GetReal("problem", "amr_x2min");
+    }
+    if (pin->DoesParameterExist("problem", "amr_x2max")) {
+      amr_test.x2hi = pin->GetReal("problem", "amr_x2max");
+    }
+    if (amr_test.mode != 0) user_ref_func = HSERefinement;
   }
 
   // hooks (also needed on restart)
   user_eq_func = HSEEquilibrium;
   if (user_bcs) user_bcs_func = HSEBoundary;
+  if (phydro != nullptr) user_hist_func = HSEHistory;
   pgen_final_func = HSEFinalize;
 
   auto &indcs = pmy_mesh_->mb_indcs;
@@ -459,6 +729,19 @@ void ProblemGenerator::Hydrostatic(ParameterInput *pin, const bool restart) {
       wellbalance::FillEquilibriumCellAverages(pmbp, dw, nhyd, pp);
       perturb = true;
     }
+  } else if (iprob == 6) {
+    RTIVelocity rv;
+    rv.eq = two_layer;
+    const Real amp = pin->GetOrAddReal("problem", "rti_amp", 0.025);
+    const Real dv = std::sqrt((gm1 + 1.0)*(two_layer.rho1*two_layer.yc*std::abs(gv[1])
+                                           + 1.0)/two_layer.rho1);
+    rv.vamp = amp*dv;
+    rv.kx = 2.0*M_PI*pin->GetOrAddReal("problem", "rti_mode", 1.0)
+            /(pmy_mesh_->mesh_size.x1max - pmy_mesh_->mesh_size.x1min);
+    if (amp != 0.0) {
+      wellbalance::FillEquilibriumCellAverages(pmbp, dw, nhyd, rv);
+      perturb = true;
+    }
   } else {
     BubbleDensity bd;
     bd.z = poly;
@@ -474,12 +757,11 @@ void ProblemGenerator::Hydrostatic(ParameterInput *pin, const bool restart) {
     }
   }
   if (perturb) {
-    // dw holds the density (IDN) and internal-energy (IEN) perturbations; v' = 0
+    // dw holds conserved increments (the pulse and bubble set only IDN/IEN)
     par_for("hse_perturb", DevExeSpace(), 0, (pmbp->nmb_thispack-1), 0, n3m1, 0, n2m1,
             0, n1m1,
     KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-      u0(m,IDN,k,j,i) += dw(m,IDN,k,j,i);
-      u0(m,IEN,k,j,i) += dw(m,IEN,k,j,i);
+      for (int n=0; n<nhyd; ++n) {u0(m,n,k,j,i) += dw(m,n,k,j,i);}
     });
   }
   return;

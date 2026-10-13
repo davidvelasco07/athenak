@@ -138,7 +138,9 @@ void IdealMHD::ConsToPrimImpl(DvceArray5D<Real> &cons, const DvceArray5D<Real> &
     // load single state conserved variables (full state = perturbation + equilibrium
     // with the well-balanced scheme)
     MHDCons1D u;
-    if constexpr (WB) {
+    // plain `if` on the template constant: CUDA extended lambdas may not first-capture a
+    // variable (cons, ueq) inside an `if constexpr` branch; the dead branch is still removed
+    if (WB) {
       u.d  = cons(m,IDN,k,j,i) + ueq(m,IDN,k,j,i);
       u.mx = cons(m,IM1,k,j,i) + ueq(m,IM1,k,j,i);
       u.my = cons(m,IM2,k,j,i) + ueq(m,IM2,k,j,i);
@@ -232,7 +234,7 @@ void IdealMHD::ConsToPrimImpl(DvceArray5D<Real> &cons, const DvceArray5D<Real> &
       }
     } else {
       // update counter, reset conserved if floor was hit
-      if constexpr (WB) {
+      if (WB) {
         if (dfloor_used) {
           cons(m,IDN,k,j,i) = u.d - ueq(m,IDN,k,j,i);
           sumd++;
