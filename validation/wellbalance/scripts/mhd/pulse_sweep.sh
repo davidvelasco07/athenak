@@ -5,7 +5,7 @@ NEW=${ATH:?set ATH to the athena binary}
 cd ${RUNS:?set RUNS to a run directory holding mkdeck.py and cmp_global.py}; mkdir -p sweep; : > sweep/results.txt
 for prob in "m3|fluid=mhd iprob=3 b1=1.0 b2=0.5 b3=0.25 pulse_x1=0.3 pulse_x2=0.3" "m4|fluid=mhd iprob=4 gdir=2 beta=1.0"; do
   pn=${prob%%|*}; pa=${prob#*|}
-  for sch in "fv4mood|recon=fv4 mood=true integrator=rk3 rsolver=hlld emf=uct_hlld ng=6" "plmfofc|recon=plm fofc=true rsolver=hlld emf=ct_contact ng=3"; do
+  for sch in "fv4mood|recon=fv4 mood=true integrator=rk3 rsolver=hlld emf=uct_hlld ng=7" "plmfofc|recon=plm fofc=true rsolver=hlld emf=ct_contact ng=3"; do
     sn=${sch%%|*}; sa=${sch#*|}
     for eta in 1e-2 1e-4 1e-8 1e-12; do for wb in true false; do
       d=sweep/${pn}_${sn}_eta${eta}_wb$wb; rm -rf $d; mkdir -p $d

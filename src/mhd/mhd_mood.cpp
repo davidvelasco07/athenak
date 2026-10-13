@@ -466,7 +466,7 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
 
   // Light-cone halo: the final iteration retains h_f = mood_halo0 - nrevs + 1 cells,
   // the transverse reach of the corner-EMF composition (see mhd.cpp).
-  const int h_f = mood_halo0 - nrevs + 1;
+  const int h_f = mood_halo0/nrevs;   // composition reach per revision (mhd.cpp)
 
   const int ndi = 1;
   const int ndj = (multi_d) ? 1 : 0;
@@ -518,7 +518,7 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
   int ndemoted_total = 0;
   for (int rev=1; rev<=nrevs; ++rev) {
     const bool masked = touched_only && (rev > 1);
-    const int dh = h_f + (nrevs - rev);
+    const int dh = h_f*(nrevs - rev + 1);   // light-cone halo of this revision
     int il = is-dh, iu = ie+dh, jl = js, ju = je, kl = ks, ku = ke;
     if (multi_d) { jl = js-dh; ju = je+dh; }
     if (three_d) { kl = ks-dh; ku = ke+dh; }
@@ -627,16 +627,21 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
     // the current fb_level demotion), CT-update the candidate face-B (mhd_ct.cpp), and
     // average to cell centers.  The detector then sees the real evolved field -- including
     // the corner-EMF composition where the UCT dissipation coefficient can run away -- not
-    // the FOFC face-E proxy above.  First cut: interior only (single-block-exact); the halo
-    // keeps the proxy, so multi-block demotion in the outer halo is approximate until the
-    // composition is extended over the light-cone halo (needs +3 flux/ghost coverage).
+    // the FOFC face-E proxy above.  Composed over the full light-cone halo (the flux
+    // kernels extend the UCT face data by mood_halo0 for this), so it is identical on
+    // every block that sees a cell: decomposition-invariant demotions.
     if (uct_fl > 0 && multi_d) {
-      ComposeCornerEMF(is, ie+1, js, je+1, ks, (three_d ? ke+1 : ks), masked);
+      // Compose over the WHOLE detection halo [il,iu] x [jl,ju] x [kl,ku] (edges one past
+      // the upper cell), not only the interior: the flux kernels fill the UCT face data
+      // out to this reach (mhd_fluxes.cpp), so every halo cell sees the same composed
+      // candidate as the neighbouring block's interior and the demotion pattern is
+      // block-decomposition invariant.
+      ComposeCornerEMF(il, iu+1, jl, ju+1, kl, (three_d ? ku+1 : ks), masked);
       auto bt1 = b0_test.x1f;  auto bt2 = b0_test.x2f;  auto bt3 = b0_test.x3f;
       auto e1c = efld.x1e;  auto e2c = efld.x2e;  auto e3c = efld.x3e;
       const bool td = three_d;
       // CT update of candidate face-B (mirrors mhd_ct.cpp)
-      par_for("mmood_ctB1", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie+1,
+      par_for("mmood_ctB1", DevExeSpace(), 0, nmb1, kl, ku, jl, ju, il, iu+1,
       KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
         if (masked && !touched_(m,k,j,i)) return;
         Real b = gam0*b0x1(m,k,j,i) + gam1*b1_.x1f(m,k,j,i);
@@ -648,7 +653,7 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
         if (td) b += beta_dt*(e2c(m,k+1,j,i) - e2c(m,k,j,i))/size_.d_view(m).dx3;
         bt1(m,k,j,i) = b;
       });
-      par_for("mmood_ctB2", DevExeSpace(), 0, nmb1, ks, ke, js, je+1, is, ie,
+      par_for("mmood_ctB2", DevExeSpace(), 0, nmb1, kl, ku, jl, ju+1, il, iu,
       KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
         if (masked && !touched_(m,k,j,i)) return;
         Real b = gam0*b0x2(m,k,j,i) + gam1*b1_.x2f(m,k,j,i);
@@ -660,7 +665,7 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
         if (td) b -= beta_dt*(e1c(m,k+1,j,i) - e1c(m,k,j,i))/size_.d_view(m).dx3;
         bt2(m,k,j,i) = b;
       });
-      par_for("mmood_ctB3", DevExeSpace(), 0, nmb1, ks, ke+td, js, je, is, ie,
+      par_for("mmood_ctB3", DevExeSpace(), 0, nmb1, kl, ku+td, jl, ju, il, iu,
       KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
         if (masked && !touched_(m,k,j,i)) return;
         Real b = gam0*b0x3(m,k,j,i) + gam1*b1_.x3f(m,k,j,i);
@@ -672,8 +677,8 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
         b += beta_dt*(e1c(m,k,j+1,i) - e1c(m,k,j,i))/size_.d_view(m).dx2;
         bt3(m,k,j,i) = b;
       });
-      // average candidate face-B to cell centers -> bcctest (interior)
-      par_for("mmood_avgB", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
+      // average candidate face-B to cell centers -> bcctest over the halo
+      par_for("mmood_avgB", DevExeSpace(), 0, nmb1, kl, ku, jl, ju, il, iu,
       KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
         if (masked && !touched_(m,k,j,i)) return;
         if (wb) {

@@ -27,11 +27,12 @@ extension to static magnetohydrostatic equilibria, `grad p = rho g + J x B`, `v 
 | physical boundaries (reflect / outflow / diode), user boundaries | exact; during the boundary phase `b0` holds `B' = b0 - b_eq` (see `mhd.hpp`, `wb_b0_is_pert`), so user boundary functions must write `B'` (0 for an equilibrium ghost) in that state | "physical walls" |
 | ideal gas only, Newtonian only, `const_accel` sources only, no conduction / resistivity / shearing box / prolong_prims | refused at startup | |
 
-Decomposition invariance of a perturbed run (64 vs 16 blocks, reassembled on the global grid,
-`cmp_global.py`): bitwise for plm, plm+FOFC (both EMF methods) and fv4+MOOD with `ct_contact`,
-WB on and off. fv4+MOOD under UCT is not block-invariant, with or without WB: the staggered
-candidate field of the detector is built over the block interior only (documented in
-`mhd_mood.cpp`), a pre-existing property of the fallback, not of the WB scheme.
+Decomposition invariance of a perturbed run (1 vs 4x1 / 1x4 / 2x2 / 4x4 blocks, reassembled on
+the global grid with `cmp_global.py`): bitwise for plm, plm+FOFC and fv4+MOOD with both EMF
+methods, WB on and off, hlld and lhlld. For fv4+MOOD under UCT this required composing the
+staggered candidate field over the whole light-cone halo and growing that halo by the edge
+reach per revision (`mood_halo0 = reach * mood_max_revs`), so fv4+MOOD with `uct_*` now needs
+`nghost >= 7` (8 with SMR/AMR, which need an even count); ct_contact is unchanged.
 
 ## Pulse sweep (`scripts/mhd/pulse_sweep.sh`, `results/mhd_pulse_sweep.{txt,png}`)
 

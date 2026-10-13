@@ -486,12 +486,12 @@ void MHD::WBCalculateFluxes(Driver *pdriver, int stage) {
   const bool use_uct = (emf_method_ != MHD_EMF::ct_contact);
   int uct_ext = 1;
   if (use_uct) {
-    if (recon_method == ReconstructionMethod::dc) {
-      uct_ext = 1;
-    } else if (recon_method == ReconstructionMethod::plm) {
-      uct_ext = 2;
-    } else {
-      uct_ext = 3;
+    // same transverse reach of the UCT face data as CalculateFluxes (mhd_fluxes.cpp):
+    // the edge stencil, plus the MOOD light-cone halo over which the detector composes
+    // the staggered candidate
+    uct_ext = ReconEdgeReach(recon_method_);
+    if (use_mood) {
+      uct_ext += mood_halo0;
     }
   }
   const int ext = std::max(uct_ext, mext);

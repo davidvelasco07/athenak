@@ -122,6 +122,15 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
   int uct_ext = 1;
   if (use_uct) {
     uct_ext = ReconEdgeReach(recon_method);
+    // With MOOD the detector composes the staggered candidate field over its whole
+    // light-cone halo (mood_halo0 cells, mhd_mood.cpp), so the edges out to
+    // ie+1+mood_halo0 need the UCT face data a further reach beyond that; the ghost
+    // zones already cover it (ng >= mood_halo0 + 1 + stencil, stencil >= reach - 1).
+    // Without this the halo candidate differed between MeshBlocks and the demotion
+    // pattern of fv4+MOOD under UCT depended on the block decomposition.
+    if (use_mood) {
+      uct_ext += mood_halo0;
+    }
   }
   const int ext = std::max(uct_ext, mext);
   const int uct_fl = (emf_method_ == MHD_EMF::uct_hlld) ? 2 : (use_uct ? 1 : 0);

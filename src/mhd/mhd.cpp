@@ -623,12 +623,22 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
       if (emf_method != MHD_EMF::ct_contact) {
         h_f = ReconEdgeReach(recon_method);
       }
-      mood_halo0 = h_f + mood_max_revs - 1;
+      // Light cone of the revisions.  Each revision's candidate over its halo needs
+      // the faces revised by the previous one out to the composition reach h_f beyond
+      // that halo (the staggered candidate composes corner EMFs over the halo), so the
+      // halo grows by h_f per revision and the final one keeps h_f for the production
+      // CornerE: halo0 = h_f*nrevs.  With ct_contact (h_f = 1) this is the former
+      // h_f + nrevs - 1; with UCT it is wider (fv4: 2 per revision).
+      mood_halo0 = h_f*mood_max_revs;
       // SED reads a +/-2 neighborhood even for PLM; otherwise the stencil is the
       // reconstruction half-width.
       int stencil = ReconStencilRadius(recon_method);
       if (mood_sed && stencil < 2) { stencil = 2; }
       int ng_need = mood_halo0 + 1 + stencil;
+      // the detector composes the UCT candidate over the halo: edge stencil reach past it
+      if (mood_halo0 + h_f > ng_need) {
+        ng_need = mood_halo0 + h_f;
+      }
       auto &indcs = pmy_pack->pmesh->mb_indcs;
       if (indcs.ng < ng_need) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
