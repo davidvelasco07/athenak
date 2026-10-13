@@ -181,6 +181,7 @@ class MHD {
   int mood_edge_flag;       // 1: demote UCT edge recon at demoted cells; 0: blend only
   Real mood_rtol;
   Real mood_eps0;
+  Real mood_eps0_eq;        // WB: round-off floor relative to the equilibrium (hydro.hpp)
   Real mood_atol;
   bool mood_sed;
   int n_fb_tiers;

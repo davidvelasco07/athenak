@@ -39,6 +39,7 @@
 #include "eos/eos.hpp"
 #include "reconstruct/recon.hpp"
 #include "mhd/rsolvers/solve_face_mhd.hpp"
+#include "mhd/mhd_wb.hpp"
 #include "mhd.hpp"
 
 #if MPI_PARALLEL_ENABLED
@@ -178,6 +179,26 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
   auto bl_ = bl3d;
   auto br_ = br3d;
   auto sdet_ = sdet;   // L-HLLD carbuncle sensor (filled by CalculateFluxes)
+  // Well-balanced scheme (mhd_wb.cpp): u0/u1/utest and the fluxes/face EMFs are
+  // PERTURBATION quantities about a static magnetohydrostatic equilibrium, b0/bcc0 the
+  // full field.  As in hydro (hydro_mood.cpp): NAD/SED and their global scales act on
+  // the perturbation (rho', e', B - B_eq or |B| - |B_eq|), PAD on the full state, the
+  // candidate B is formed in perturbation form (exact at rest), and revised faces go
+  // through the face equilibrium exactly like the base fluxes.
+  const bool wb = well_balanced;
+  auto &ueq_ = u_eq;
+  auto &weq_ = w_eq;
+  auto &bcceq_ = bcc_eq;
+  const DvceArray5D<Real> wnad_ = wb ? w_pert : w0;   // NAD reference primitives
+  const DvceArray5D<Real> bnad_ = wb ? bcc_pert : bcc0;
+  auto beq1 = b_eq.x1f;  auto beq2 = b_eq.x2f;  auto beq3 = b_eq.x3f;
+  auto weqf1 = w_eq_face.x1f;  auto weqf2 = w_eq_face.x2f;  auto weqf3 = w_eq_face.x3f;
+  auto beqf1 = bcc_eq_face.x1f;  auto beqf2 = bcc_eq_face.x2f;
+  auto beqf3 = bcc_eq_face.x3f;
+  auto feq1 = f_eq.x1f;  auto feq2 = f_eq.x2f;  auto feq3 = f_eq.x3f;
+  auto e31q = e3x1_eq;  auto e21q = e2x1_eq;  auto e12q = e1x2_eq;
+  auto e32q = e3x2_eq;  auto e23q = e2x3_eq;  auto e13q = e1x3_eq;
+  const Real eps0_eq = mood_eps0_eq;
   auto b0x1 = b0.x1f;
   auto b0x2 = b0.x2f;
   auto b0x3 = b0.x3f;
@@ -230,6 +251,10 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
     KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
       bmag_(m,k,j,i) = sqrt(SQR(bcc0_(m,IBX,k,j,i)) + SQR(bcc0_(m,IBY,k,j,i))
                           + SQR(bcc0_(m,IBZ,k,j,i)));
+      if (wb) {   // signed delta|B| = |B| - |B_eq|: smooth, rotation-invariant
+        bmag_(m,k,j,i) -= sqrt(SQR(bcceq_(m,IBX,k,j,i)) + SQR(bcceq_(m,IBY,k,j,i))
+                             + SQR(bcceq_(m,IBZ,k,j,i)));
+      }
     });
   }
 
@@ -292,9 +317,11 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
       int j = (idx - m*nkji - k*nji)/ni;
       int i = (idx - m*nkji - k*nji - j*ni) + is;
       j += js; k += ks;
-      Real d = w0_(m,IDN,k,j,i);
+      Real d = wnad_(m,IDN,k,j,i);
       dmn = fmin(dmn, d); dmx = fmax(dmx, d);
-      if (ideal) { Real e = w0_(m,IEN,k,j,i); emn = fmin(emn,e); emx = fmax(emx,e); }
+      if (ideal) {
+        Real e = wnad_(m,IEN,k,j,i); emn = fmin(emn,e); emx = fmax(emx,e);
+      }
       if (want_v) {
         Real v = fmax(fabs(w0_(m,IVX,k,j,i)),
                  fmax(fabs(w0_(m,IVY,k,j,i)), fabs(w0_(m,IVZ,k,j,i))));
@@ -321,9 +348,9 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
         Real b = bmag_(m,k,j,i);
         b0mn = fmin(b0mn, b); b0mx = fmax(b0mx, b);
       } else {
-        Real bx = bcc0_(m,IBX,k,j,i);
-        Real by = bcc0_(m,IBY,k,j,i);
-        Real bz = bcc0_(m,IBZ,k,j,i);
+        Real bx = bnad_(m,IBX,k,j,i);
+        Real by = bnad_(m,IBY,k,j,i);
+        Real bz = bnad_(m,IBZ,k,j,i);
         b0mn = fmin(b0mn, bx); b0mx = fmax(b0mx, bx);
         b1mn = fmin(b1mn, by); b1mx = fmax(b1mx, by);
         b2mn = fmin(b2mn, bz); b2mx = fmax(b2mx, bz);
@@ -564,9 +591,23 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
       Real b2old = 0.5*(b1_.x2f(m,k,j,i) + b1_.x2f(m,k,j+1,i));
       Real b3old = 0.5*(b1_.x3f(m,k,j,i) + b1_.x3f(m,k+1,j,i));
 
-      bcctest_(m,IBX,k,j,i) = gam0*bcc0_(m,IBX,k,j,i) + gam1*b1old;
-      bcctest_(m,IBY,k,j,i) = gam0*bcc0_(m,IBY,k,j,i) + gam1*b2old;
-      bcctest_(m,IBZ,k,j,i) = gam0*bcc0_(m,IBZ,k,j,i) + gam1*b3old;
+      if (wb) {
+        // perturbation form about the equilibrium (mhd_ct.cpp): b_eq + gam0*(b - b_eq)
+        // + gam1*(b1 - b_eq) is b_eq bit for bit at rest, (2/3)X + (1/3)X is not X
+        b1old -= 0.5*(beq1(m,k,j,i) + beq1(m,k,j,i+1));
+        b2old -= 0.5*(beq2(m,k,j,i) + beq2(m,k,j+1,i));
+        b3old -= 0.5*(beq3(m,k,j,i) + beq3(m,k+1,j,i));
+        bcctest_(m,IBX,k,j,i) = bcceq_(m,IBX,k,j,i)
+            + gam0*(bcc0_(m,IBX,k,j,i) - bcceq_(m,IBX,k,j,i)) + gam1*b1old;
+        bcctest_(m,IBY,k,j,i) = bcceq_(m,IBY,k,j,i)
+            + gam0*(bcc0_(m,IBY,k,j,i) - bcceq_(m,IBY,k,j,i)) + gam1*b2old;
+        bcctest_(m,IBZ,k,j,i) = bcceq_(m,IBZ,k,j,i)
+            + gam0*(bcc0_(m,IBZ,k,j,i) - bcceq_(m,IBZ,k,j,i)) + gam1*b3old;
+      } else {
+        bcctest_(m,IBX,k,j,i) = gam0*bcc0_(m,IBX,k,j,i) + gam1*b1old;
+        bcctest_(m,IBY,k,j,i) = gam0*bcc0_(m,IBY,k,j,i) + gam1*b2old;
+        bcctest_(m,IBZ,k,j,i) = gam0*bcc0_(m,IBZ,k,j,i) + gam1*b3old;
+      }
 
       bcctest_(m,IBY,k,j,i) += dtodx1*(e3x1_(m,k,j,i+1) - e3x1_(m,k,j,i));
       bcctest_(m,IBZ,k,j,i) -= dtodx1*(e2x1_(m,k,j,i+1) - e2x1_(m,k,j,i));
@@ -599,6 +640,10 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
       KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
         if (masked && !touched_(m,k,j,i)) return;
         Real b = gam0*b0x1(m,k,j,i) + gam1*b1_.x1f(m,k,j,i);
+        if (wb) {   // perturbation form (mhd_ct.cpp)
+          b = beq1(m,k,j,i) + gam0*(b0x1(m,k,j,i) - beq1(m,k,j,i))
+            + gam1*(b1_.x1f(m,k,j,i) - beq1(m,k,j,i));
+        }
         b -= beta_dt*(e3c(m,k,j+1,i) - e3c(m,k,j,i))/size_.d_view(m).dx2;
         if (td) b += beta_dt*(e2c(m,k+1,j,i) - e2c(m,k,j,i))/size_.d_view(m).dx3;
         bt1(m,k,j,i) = b;
@@ -607,6 +652,10 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
       KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
         if (masked && !touched_(m,k,j,i)) return;
         Real b = gam0*b0x2(m,k,j,i) + gam1*b1_.x2f(m,k,j,i);
+        if (wb) {   // perturbation form (mhd_ct.cpp)
+          b = beq2(m,k,j,i) + gam0*(b0x2(m,k,j,i) - beq2(m,k,j,i))
+            + gam1*(b1_.x2f(m,k,j,i) - beq2(m,k,j,i));
+        }
         b += beta_dt*(e3c(m,k,j,i+1) - e3c(m,k,j,i))/size_.d_view(m).dx1;
         if (td) b -= beta_dt*(e1c(m,k+1,j,i) - e1c(m,k,j,i))/size_.d_view(m).dx3;
         bt2(m,k,j,i) = b;
@@ -615,6 +664,10 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
       KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
         if (masked && !touched_(m,k,j,i)) return;
         Real b = gam0*b0x3(m,k,j,i) + gam1*b1_.x3f(m,k,j,i);
+        if (wb) {   // perturbation form (mhd_ct.cpp)
+          b = beq3(m,k,j,i) + gam0*(b0x3(m,k,j,i) - beq3(m,k,j,i))
+            + gam1*(b1_.x3f(m,k,j,i) - beq3(m,k,j,i));
+        }
         b -= beta_dt*(e2c(m,k,j,i+1) - e2c(m,k,j,i))/size_.d_view(m).dx1;
         b += beta_dt*(e1c(m,k,j+1,i) - e1c(m,k,j,i))/size_.d_view(m).dx2;
         bt3(m,k,j,i) = b;
@@ -623,10 +676,25 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
       par_for("mmood_avgB", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
       KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
         if (masked && !touched_(m,k,j,i)) return;
-        bcctest_(m,IBX,k,j,i) = 0.5*(bt1(m,k,j,i) + bt1(m,k,j,i+1));
-        bcctest_(m,IBY,k,j,i) = 0.5*(bt2(m,k,j,i) + bt2(m,k,j+1,i));
-        bcctest_(m,IBZ,k,j,i) = (td) ? 0.5*(bt3(m,k,j,i) + bt3(m,k+1,j,i))
-                                     : bt3(m,k,j,i);
+        if (wb) {
+          // average the PERTURBATION faces about bcc_eq (built with the ConsToPrim
+          // face-to-centre arithmetic, which is not this average): exact at rest
+          bcctest_(m,IBX,k,j,i) = bcceq_(m,IBX,k,j,i)
+              + 0.5*((bt1(m,k,j,i) - beq1(m,k,j,i))
+                   + (bt1(m,k,j,i+1) - beq1(m,k,j,i+1)));
+          bcctest_(m,IBY,k,j,i) = bcceq_(m,IBY,k,j,i)
+              + 0.5*((bt2(m,k,j,i) - beq2(m,k,j,i))
+                   + (bt2(m,k,j+1,i) - beq2(m,k,j+1,i)));
+          bcctest_(m,IBZ,k,j,i) = bcceq_(m,IBZ,k,j,i) + ((td) ?
+              0.5*((bt3(m,k,j,i) - beq3(m,k,j,i))
+                 + (bt3(m,k+1,j,i) - beq3(m,k+1,j,i)))
+              : (bt3(m,k,j,i) - beq3(m,k,j,i)));
+        } else {
+          bcctest_(m,IBX,k,j,i) = 0.5*(bt1(m,k,j,i) + bt1(m,k,j,i+1));
+          bcctest_(m,IBY,k,j,i) = 0.5*(bt2(m,k,j,i) + bt2(m,k,j+1,i));
+          bcctest_(m,IBZ,k,j,i) = (td) ? 0.5*(bt3(m,k,j,i) + bt3(m,k+1,j,i))
+                                       : bt3(m,k,j,i);
+        }
       });
     }
 
@@ -653,13 +721,15 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
         if (ideal) {
           Real enew, eold;
           if (newt) {
-            Real dtst = utest_(m,IDN,k,j,i);
+            Real dtst = utest_(m,IDN,k,j,i) + (wb ? ueq_(m,IDN,k,j,i) : 0.0);
             enew = (dtst > 0.0) ?
-                   utest_(m,IEN,k,j,i) - 0.5*(SQR(utest_(m,IM1,k,j,i))
+                   (utest_(m,IEN,k,j,i) + (wb ? ueq_(m,IEN,k,j,i) : 0.0))
+                   - 0.5*(SQR(utest_(m,IM1,k,j,i))
                    + SQR(utest_(m,IM2,k,j,i)) + SQR(utest_(m,IM3,k,j,i)))/dtst
                    - 0.5*(SQR(bcctest_(m,IBX,k,j,i)) + SQR(bcctest_(m,IBY,k,j,i))
-                        + SQR(bcctest_(m,IBZ,k,j,i))) : 0.0;
-            eold = (dtst > 0.0) ? w0_(m,IEN,k,j,i) : 0.0;
+                        + SQR(bcctest_(m,IBZ,k,j,i)))
+                   - (wb ? weq_(m,IEN,k,j,i) : 0.0) : 0.0;
+            eold = (dtst > 0.0) ? wnad_(m,IEN,k,j,i) : 0.0;
           } else {
             enew = utest_(m,IEN,k,j,i);
             eold = u0_(m,IEN,k,j,i);
@@ -670,6 +740,10 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
         if (bmag_mode) {
           Real bnew = sqrt(SQR(bcctest_(m,IBX,k,j,i)) + SQR(bcctest_(m,IBY,k,j,i))
                          + SQR(bcctest_(m,IBZ,k,j,i)));
+          if (wb) {
+            bnew -= sqrt(SQR(bcceq_(m,IBX,k,j,i)) + SQR(bcceq_(m,IBY,k,j,i))
+                       + SQR(bcceq_(m,IBZ,k,j,i)));
+          }
           Real b = fabs(bnew - bmag_(m,k,j,i));
           if (isfinite(b)) db0 = fmax(db0, b);
         } else {
@@ -761,7 +835,11 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
     // (2) PAD: flag cells where conversion to primitives would require floors
     // (sets fofc; b0/w0 passed but not used/changed)
     peos->use_c2p_mask = masked;
-    peos->ConsToPrim(utest_, b0, w0_, bcctest_, true, il, iu, jl, ju, kl, ku);
+    if (wb) {
+      peos->ConsToPrimWB(utest_, u_eq, b0, w0_, bcctest_, true, il, iu, jl, ju, kl, ku);
+    } else {
+      peos->ConsToPrim(utest_, b0, w0_, bcctest_, true, il, iu, jl, ju, kl, ku);
+    }
     peos->use_c2p_mask = false;
 
     //------------------------------------------------------------------------------------
@@ -803,7 +881,8 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
       // NAD passes: 0 = density, 1 = internal energy (ideal gas), then B (|B| in mag
       // mode, three components in comps mode).  Bounds from the stage-input state.
       if (!trouble && lv < 1) {
-        const Real dtst = utest_(m,IDN,k,j,i);
+        // full candidate density (WB: U' + U_eq) for the velocity/energy divisions
+        const Real dtst = utest_(m,IDN,k,j,i) + (wb ? ueq_(m,IDN,k,j,i) : 0.0);
         const int npass_he = (is_ideal_ && nad_energy) ? 2 : 1;
         const int npass_hb = npass_he + (nad_bmag ? 1 : 3);
         const int npass = npass_hb + (nad_von ? (nad_vmag ? 1 : 3) : 0);
@@ -827,18 +906,25 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
             if (!newtonian) {
               q_new = utest_(m,n,k,j,i);
             } else if (n == IDN) {
-              q_new = dtst;
-            } else {  // internal energy density (subtract kinetic AND magnetic)
-              q_new = utest_(m,IEN,k,j,i) - 0.5*(SQR(utest_(m,IM1,k,j,i))
+              q_new = wb ? utest_(m,IDN,k,j,i) : dtst;   // WB: rho' = U'_rho
+            } else {  // internal energy density (subtract kinetic AND magnetic);
+                      // WB: e' = e(U'+U_eq, B*) - e_eq
+              q_new = (utest_(m,IEN,k,j,i) + (wb ? ueq_(m,IEN,k,j,i) : 0.0))
+                    - 0.5*(SQR(utest_(m,IM1,k,j,i))
                     + SQR(utest_(m,IM2,k,j,i)) + SQR(utest_(m,IM3,k,j,i)))/dtst
                     - 0.5*(SQR(bcctest_(m,IBX,k,j,i)) + SQR(bcctest_(m,IBY,k,j,i))
-                         + SQR(bcctest_(m,IBZ,k,j,i)));
+                         + SQR(bcctest_(m,IBZ,k,j,i)))
+                    - (wb ? weq_(m,IEN,k,j,i) : 0.0);
             }
           } else if (nad_bmag) {
             q_new = sqrt(SQR(bcctest_(m,IBX,k,j,i)) + SQR(bcctest_(m,IBY,k,j,i))
                        + SQR(bcctest_(m,IBZ,k,j,i)));
+            if (wb) {   // signed delta|B|
+              q_new -= sqrt(SQR(bcceq_(m,IBX,k,j,i)) + SQR(bcceq_(m,IBY,k,j,i))
+                          + SQR(bcceq_(m,IBZ,k,j,i)));
+            }
           } else {
-            q_new = bcctest_(m,IBX+bidx,k,j,i);
+            q_new = bcctest_(m,IBX+bidx,k,j,i) - (wb ? bcceq_(m,IBX+bidx,k,j,i) : 0.0);
           }
           // DMP bounds from the stage-input state over the neighborhood
           Real qmn, qmx;
@@ -869,7 +955,7 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
             }
           } else if (!bpass) {
             const int n = (pass == 0) ? IDN : IEN;
-            const DvceArray5D<Real> &qref = (newtonian) ? w0_ : u0_;
+            const DvceArray5D<Real> &qref = (newtonian) ? wnad_ : u0_;
             qmn = qref(m,n,k,j,i); qmx = qmn;
             for (int dk=-ndk; dk<=ndk; ++dk) {
             for (int dj=-ndj; dj<=ndj; ++dj) {
@@ -889,11 +975,11 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
             }}}
           } else {
             const int n = IBX + bidx;
-            qmn = bcc0_(m,n,k,j,i); qmx = qmn;
+            qmn = bnad_(m,n,k,j,i); qmx = qmn;
             for (int dk=-ndk; dk<=ndk; ++dk) {
             for (int dj=-ndj; dj<=ndj; ++dj) {
             for (int di=-ndi; di<=ndi; ++di) {
-              Real q = bcc0_(m,n,k+dk,j+dj,i+di);
+              Real q = bnad_(m,n,k+dk,j+dj,i+di);
               qmn = fmin(qmn, q);
               qmx = fmax(qmx, q);
             }}}
@@ -931,6 +1017,23 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
           }
           eps_m = fmax(eps_m, eps0*fabs(qmn));
           eps_p = fmax(eps_p, eps0*fabs(qmx));
+          if (wb && !vpass) {
+            // Round-off floor tied to the EQUILIBRIUM (hydro_mood.cpp): the perturbation
+            // carries the cancellation error of F - F_eq (~eps*|F_eq|), so its bounds and
+            // candidate are only defined to eps*|q_eq|.  v_eq = 0, so no floor for v.
+            Real qeq;
+            if (!bpass) {
+              qeq = weq_(m,(pass == 0) ? IDN : IEN,k,j,i);
+            } else if (nad_bmag) {
+              qeq = sqrt(SQR(bcceq_(m,IBX,k,j,i)) + SQR(bcceq_(m,IBY,k,j,i))
+                       + SQR(bcceq_(m,IBZ,k,j,i)));
+            } else {
+              qeq = bcceq_(m,IBX+bidx,k,j,i);
+            }
+            const Real eq_floor = eps0_eq*fabs(qeq);
+            eps_m = fmax(eps_m, eq_floor);
+            eps_p = fmax(eps_p, eq_floor);
+          }
           bool nad = (q_new < qmn - eps_m) || (q_new > qmx + eps_p);
           // exempt smooth extrema of this variable from NAD (never from PAD/NaN)
           if (nad && use_sed) {
@@ -941,12 +1044,12 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
                     : SEDAlpha(w0_, m, IVX+vidx, k, j, i, multi_d, three_d);
             } else if (!bpass) {
               const int n = (pass == 0) ? IDN : IEN;
-              const DvceArray5D<Real> &qref = (newtonian) ? w0_ : u0_;
+              const DvceArray5D<Real> &qref = (newtonian) ? wnad_ : u0_;
               alpha = SEDAlpha(qref, m, n, k, j, i, multi_d, three_d);
             } else if (nad_bmag) {
               alpha = SEDAlpha4(bmag_, m, k, j, i, multi_d, three_d);
             } else {
-              alpha = SEDAlpha(bcc0_, m, IBX+bidx, k, j, i, multi_d, three_d);
+              alpha = SEDAlpha(bnad_, m, IBX+bidx, k, j, i, multi_d, three_d);
             }
             nad = (alpha < 1.0);
           }
@@ -960,7 +1063,7 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
       // conserved scalar density (whose bounds would move with the density even where
       // the tracer itself is perfectly smooth).
       if (!trouble && lv < 1 && nad_scalars) {
-        const Real dtst = utest_(m,IDN,k,j,i);
+        const Real dtst = utest_(m,IDN,k,j,i) + (wb ? ueq_(m,IDN,k,j,i) : 0.0);
         for (int n=nmhd_; n<nvars && !trouble; ++n) {
           // a non-positive candidate density is already PAD's business; skip the ratio
           if (!(dtst > 0.0)) break;
@@ -1019,8 +1122,12 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
         int tier = (lv_l > lv_r) ? lv_l : lv_r;
         ReconstructionMethod frecon = (tier >= n_fb) ?
             ReconstructionMethod::dc : ReconstructionMethod::plm;
-        ReconFace<IVX>(frecon, m, k, j, i, nvars, w0_, wl_, wr_);
-        ReconFace<IVX>(frecon, m, k, j, i, 3, bcc0_, bl_, br_);
+        ReconFace<IVX>(frecon, m, k, j, i, nvars, wnad_, wl_, wr_);
+        ReconFace<IVX>(frecon, m, k, j, i, 3, bnad_, bl_, br_);
+        if (wb) {
+          AddFaceEquilibriumMHD(eos_, true, nmhd_, m, k, j, i, weqf1, beqf1,
+                                wl_, wr_, bl_, br_);
+        }
         auto eos = eos_;
         auto indcs = indcs_;
         auto size = size_;
@@ -1032,11 +1139,24 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
                                            m, k, j, i, is_, js_, ks_,
                                            wl, wr, bl, br, bx, flx, eyl, ezl,
                                            uct_fl, aL1, dl1, dr1, vt1_1, vt2_1, sdet_);
-        for (int n=nmhd_; n<nvars; ++n) {
-          if (flx1(m,IDN,k,j,i) >= 0.0) {
-            flx1(m,n,k,j,i) = flx1(m,IDN,k,j,i)*wl_(m,n,k,j,i);
-          } else {
-            flx1(m,n,k,j,i) = flx1(m,IDN,k,j,i)*wr_(m,n,k,j,i);
+        if (wb) {
+          // perturbation flux and face EMFs; scalars upwinded on the FULL mass flux
+          for (int n=0; n<nmhd_; ++n) {
+            flx1(m,n,k,j,i) -= feq1(m,n,k,j,i);
+          }
+          eyl(m,k,j,i) -= e31q(m,k,j,i);
+          ezl(m,k,j,i) -= e21q(m,k,j,i);
+          const Real fd = flx1(m,IDN,k,j,i) + feq1(m,IDN,k,j,i);
+          for (int n=nmhd_; n<nvars; ++n) {
+            flx1(m,n,k,j,i) = (fd >= 0.0) ? fd*wl_(m,n,k,j,i) : fd*wr_(m,n,k,j,i);
+          }
+        } else {
+          for (int n=nmhd_; n<nvars; ++n) {
+            if (flx1(m,IDN,k,j,i) >= 0.0) {
+              flx1(m,n,k,j,i) = flx1(m,IDN,k,j,i)*wl_(m,n,k,j,i);
+            } else {
+              flx1(m,n,k,j,i) = flx1(m,IDN,k,j,i)*wr_(m,n,k,j,i);
+            }
           }
         }
       }
@@ -1051,8 +1171,12 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
           int tier = (lv_l > lv_r) ? lv_l : lv_r;
           ReconstructionMethod frecon = (tier >= n_fb) ?
               ReconstructionMethod::dc : ReconstructionMethod::plm;
-          ReconFace<IVY>(frecon, m, k, j, i, nvars, w0_, wl_, wr_);
-          ReconFace<IVY>(frecon, m, k, j, i, 3, bcc0_, bl_, br_);
+          ReconFace<IVY>(frecon, m, k, j, i, nvars, wnad_, wl_, wr_);
+          ReconFace<IVY>(frecon, m, k, j, i, 3, bnad_, bl_, br_);
+          if (wb) {
+            AddFaceEquilibriumMHD(eos_, true, nmhd_, m, k, j, i, weqf2, beqf2,
+                                  wl_, wr_, bl_, br_);
+          }
           auto eos = eos_;
           auto indcs = indcs_;
           auto size = size_;
@@ -1064,11 +1188,24 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
                                              m, k, j, i, is_, js_, ks_,
                                              wl, wr, bl, br, bx, flx, eyl, ezl,
                                              uct_fl, aL2, dl2, dr2, vt1_2, vt2_2, sdet_);
-          for (int n=nmhd_; n<nvars; ++n) {
-            if (flx2(m,IDN,k,j,i) >= 0.0) {
-              flx2(m,n,k,j,i) = flx2(m,IDN,k,j,i)*wl_(m,n,k,j,i);
-            } else {
-              flx2(m,n,k,j,i) = flx2(m,IDN,k,j,i)*wr_(m,n,k,j,i);
+          if (wb) {
+            // perturbation flux and face EMFs; scalars upwinded on the FULL mass flux
+            for (int n=0; n<nmhd_; ++n) {
+              flx2(m,n,k,j,i) -= feq2(m,n,k,j,i);
+            }
+            eyl(m,k,j,i) -= e12q(m,k,j,i);
+            ezl(m,k,j,i) -= e32q(m,k,j,i);
+            const Real fd = flx2(m,IDN,k,j,i) + feq2(m,IDN,k,j,i);
+            for (int n=nmhd_; n<nvars; ++n) {
+              flx2(m,n,k,j,i) = (fd >= 0.0) ? fd*wl_(m,n,k,j,i) : fd*wr_(m,n,k,j,i);
+            }
+          } else {
+            for (int n=nmhd_; n<nvars; ++n) {
+              if (flx2(m,IDN,k,j,i) >= 0.0) {
+                flx2(m,n,k,j,i) = flx2(m,IDN,k,j,i)*wl_(m,n,k,j,i);
+              } else {
+                flx2(m,n,k,j,i) = flx2(m,IDN,k,j,i)*wr_(m,n,k,j,i);
+              }
             }
           }
         }
@@ -1084,8 +1221,12 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
           int tier = (lv_l > lv_r) ? lv_l : lv_r;
           ReconstructionMethod frecon = (tier >= n_fb) ?
               ReconstructionMethod::dc : ReconstructionMethod::plm;
-          ReconFace<IVZ>(frecon, m, k, j, i, nvars, w0_, wl_, wr_);
-          ReconFace<IVZ>(frecon, m, k, j, i, 3, bcc0_, bl_, br_);
+          ReconFace<IVZ>(frecon, m, k, j, i, nvars, wnad_, wl_, wr_);
+          ReconFace<IVZ>(frecon, m, k, j, i, 3, bnad_, bl_, br_);
+          if (wb) {
+            AddFaceEquilibriumMHD(eos_, true, nmhd_, m, k, j, i, weqf3, beqf3,
+                                  wl_, wr_, bl_, br_);
+          }
           auto eos = eos_;
           auto indcs = indcs_;
           auto size = size_;
@@ -1097,11 +1238,24 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
                                              m, k, j, i, is_, js_, ks_,
                                              wl, wr, bl, br, bx, flx, eyl, ezl,
                                              uct_fl, aL3, dl3, dr3, vt1_3, vt2_3, sdet_);
-          for (int n=nmhd_; n<nvars; ++n) {
-            if (flx3(m,IDN,k,j,i) >= 0.0) {
-              flx3(m,n,k,j,i) = flx3(m,IDN,k,j,i)*wl_(m,n,k,j,i);
-            } else {
-              flx3(m,n,k,j,i) = flx3(m,IDN,k,j,i)*wr_(m,n,k,j,i);
+          if (wb) {
+            // perturbation flux and face EMFs; scalars upwinded on the FULL mass flux
+            for (int n=0; n<nmhd_; ++n) {
+              flx3(m,n,k,j,i) -= feq3(m,n,k,j,i);
+            }
+            eyl(m,k,j,i) -= e23q(m,k,j,i);
+            ezl(m,k,j,i) -= e13q(m,k,j,i);
+            const Real fd = flx3(m,IDN,k,j,i) + feq3(m,IDN,k,j,i);
+            for (int n=nmhd_; n<nvars; ++n) {
+              flx3(m,n,k,j,i) = (fd >= 0.0) ? fd*wl_(m,n,k,j,i) : fd*wr_(m,n,k,j,i);
+            }
+          } else {
+            for (int n=nmhd_; n<nvars; ++n) {
+              if (flx3(m,IDN,k,j,i) >= 0.0) {
+                flx3(m,n,k,j,i) = flx3(m,IDN,k,j,i)*wl_(m,n,k,j,i);
+              } else {
+                flx3(m,n,k,j,i) = flx3(m,IDN,k,j,i)*wr_(m,n,k,j,i);
+              }
             }
           }
         }

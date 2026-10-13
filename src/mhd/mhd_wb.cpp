@@ -35,35 +35,10 @@
 #include "hydro/well_balance.hpp"
 #include "reconstruct/recon.hpp"
 #include "mhd/rsolvers/solve_face_mhd.hpp"
+#include "mhd/mhd_wb.hpp"
 
 namespace mhd {
 
-namespace {
-// Add the face equilibrium (primitives and cell-centred B) to both reconstructed
-// perturbation states of face (m,k,j,i), then floor the full fluid states.
-KOKKOS_INLINE_FUNCTION
-void AddFaceEquilibriumMHD(const EOS_Data &eos, const bool floors, const int nmhd,
-                           const int m, const int k, const int j, const int i,
-                           const DvceArray5D<Real> &weqf, const DvceArray5D<Real> &beqf,
-                           const DvceArray5D<Real> &wl, const DvceArray5D<Real> &wr,
-                           const DvceArray5D<Real> &bl, const DvceArray5D<Real> &br) {
-  for (int n=0; n<nmhd; ++n) {
-    wl(m,n,k,j,i) += weqf(m,n,k,j,i);
-    wr(m,n,k,j,i) += weqf(m,n,k,j,i);
-  }
-  for (int n=0; n<3; ++n) {
-    bl(m,n,k,j,i) += beqf(m,n,k,j,i);
-    br(m,n,k,j,i) += beqf(m,n,k,j,i);
-  }
-  if (floors) {
-    wl(m,IDN,k,j,i) = fmax(wl(m,IDN,k,j,i), eos.dfloor);
-    wr(m,IDN,k,j,i) = fmax(wr(m,IDN,k,j,i), eos.dfloor);
-    const Real efloor = eos.pfloor/(eos.gamma - 1.0);
-    wl(m,IEN,k,j,i) = fmax(wl(m,IEN,k,j,i), efloor);
-    wr(m,IEN,k,j,i) = fmax(wr(m,IEN,k,j,i), efloor);
-  }
-}
-}  // namespace
 
 //----------------------------------------------------------------------------------------
 //! \fn void MHD::WBBuildFullState()
@@ -130,8 +105,8 @@ void MHD::WBInitialize(ProblemGenerator *ppgen, bool restart) {
     err = "cannot be used with the turbulence driver";
   } else if (pmy_pack->pgrav != nullptr) {
     err = "cannot be used with self-gravity";
-  } else if (use_mood || use_fofc) {
-    err = "does not support mood/fofc yet";
+  } else if (use_fofc) {
+    err = "does not support fofc yet";
   }
   for (int f=0; f<6; ++f) {
     // physical BCs act on the FULL face field b0; only periodic and user (equilibrium

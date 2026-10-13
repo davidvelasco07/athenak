@@ -307,6 +307,8 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
       std::exit(EXIT_FAILURE);
     }
     mood_eps0  = pin->GetOrAddReal("mhd","mood_eps0",1.0e-12);
+    // well-balanced round-off floor relative to the equilibrium (see hydro.cpp)
+    mood_eps0_eq = pin->GetOrAddReal("mhd","mood_eps0_eq",0.0);
     // the default rtol follows the scale: rcfl is calibrated at 1e-4, the range-based
     // scales (gcfl etc.) at 1e-5, so an explicit gcfl without mood_rtol is unchanged
     mood_rtol = pin->GetOrAddReal("mhd","mood_rtol",
@@ -544,7 +546,8 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
       emf_method = MHD_EMF::uct_hll;
     } else if (emf_str.compare("uct_hlld") == 0) {
       // the HLLD-type UCT coefficients come from the five-wave fan: hlld or lhlld
-      if (rsolver_method != MHD_RSolver::hlld && rsolver_method != MHD_RSolver::lhlld) {
+      if (rsolver_method != MHD_RSolver::hlld &&
+          rsolver_method != MHD_RSolver::lhlld) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                   << std::endl << "<mhd>/emf = 'uct_hlld' requires rsolver = 'hlld' "
                   << "or 'lhlld'" << std::endl;
