@@ -105,8 +105,6 @@ void MHD::WBInitialize(ProblemGenerator *ppgen, bool restart) {
     err = "cannot be used with the turbulence driver";
   } else if (pmy_pack->pgrav != nullptr) {
     err = "cannot be used with self-gravity";
-  } else if (use_fofc) {
-    err = "does not support fofc yet";
   }
   for (int f=0; f<6; ++f) {
     // physical BCs act on the FULL face field b0; only periodic and user (equilibrium

@@ -17,6 +17,68 @@
 #include "mhd.hpp"
 
 namespace mhd {
+namespace {
+//----------------------------------------------------------------------------------------
+//! \fn WBFaceLLF_MHD<ivx>()
+//! \brief Well-balanced first-order LLF flux at face (m,k,j,i) in direction ivx (the face
+//! between cells (k,j,i)-1 and (k,j,i) along ivx): donor-cell perturbation states on both
+//! sides plus the face equilibrium, minus the LLF flux of the face equilibrium itself,
+//! evaluated in registers in the same kernel so it cancels exactly at U' = 0.  Vector
+//! components are permuted so vx/by/bz are the face-normal/transverse ones; the normal
+//! field is the full face field bxi.  Returns the conserved fluxes and, in by/bz, the
+//! face EMFs (same convention as SingleStateLLF_MHD).
+template <int ivx>
+KOKKOS_INLINE_FUNCTION
+void WBFaceLLF_MHD(const EOS_Data &eos, const int m, const int k, const int j, const int i,
+                   const DvceArray5D<Real> &wp, const DvceArray5D<Real> &bp,
+                   const DvceArray5D<Real> &weqf, const DvceArray5D<Real> &beqf,
+                   const Real bxi, MHDCons1D &flux) {
+  constexpr int di = (ivx == IVX) ? 1 : 0;
+  constexpr int dj = (ivx == IVY) ? 1 : 0;
+  constexpr int dk = (ivx == IVZ) ? 1 : 0;
+  constexpr int ivy = IVX + ((ivx - IVX) + 1) % 3;
+  constexpr int ivz = IVX + ((ivx - IVX) + 2) % 3;
+  constexpr int iby = ((ivx - IVX) + 1) % 3;
+  constexpr int ibz = ((ivx - IVX) + 2) % 3;
+  MHDPrim1D we, wl, wr;
+  we.d  = weqf(m,IDN,k,j,i);
+  we.vx = weqf(m,ivx,k,j,i);
+  we.vy = weqf(m,ivy,k,j,i);
+  we.vz = weqf(m,ivz,k,j,i);
+  we.by = beqf(m,iby,k,j,i);
+  we.bz = beqf(m,ibz,k,j,i);
+  wl.d  = wp(m,IDN,k-dk,j-dj,i-di) + we.d;
+  wl.vx = wp(m,ivx,k-dk,j-dj,i-di) + we.vx;
+  wl.vy = wp(m,ivy,k-dk,j-dj,i-di) + we.vy;
+  wl.vz = wp(m,ivz,k-dk,j-dj,i-di) + we.vz;
+  wl.by = bp(m,iby,k-dk,j-dj,i-di) + we.by;
+  wl.bz = bp(m,ibz,k-dk,j-dj,i-di) + we.bz;
+  wr.d  = wp(m,IDN,k,j,i) + we.d;
+  wr.vx = wp(m,ivx,k,j,i) + we.vx;
+  wr.vy = wp(m,ivy,k,j,i) + we.vy;
+  wr.vz = wp(m,ivz,k,j,i) + we.vz;
+  wr.by = bp(m,iby,k,j,i) + we.by;
+  wr.bz = bp(m,ibz,k,j,i) + we.bz;
+  if (eos.is_ideal) {
+    we.e = weqf(m,IEN,k,j,i);
+    wl.e = wp(m,IEN,k-dk,j-dj,i-di) + we.e;
+    wr.e = wp(m,IEN,k,j,i) + we.e;
+  }
+  MHDCons1D f, feq;
+  SingleStateLLF_MHD(wl, wr, bxi, eos, f);
+  SingleStateLLF_MHD(we, we, bxi, eos, feq);
+  flux.d  = f.d  - feq.d;
+  flux.mx = f.mx - feq.mx;
+  flux.my = f.my - feq.my;
+  flux.mz = f.mz - feq.mz;
+  if (eos.is_ideal) {flux.e = f.e - feq.e;}
+  flux.by = f.by - feq.by;
+  flux.bz = f.bz - feq.bz;
+}
+}  // namespace
+}  // namespace mhd
+
+namespace mhd {
 //----------------------------------------------------------------------------------------
 //! \fn void MHD::FOFC
 //! \brief Implements first-order flux-correction (FOFC) algorithm for MHD.  First an
@@ -61,6 +123,10 @@ void MHD::FOFC(Driver *pdriver, int stage) {
     auto &utest_ = utest;
     auto &bcctest_ = bcctest;
     auto &b1_ = b1;
+    // well-balanced scheme: the candidate B in perturbation form (mhd_mood.cpp)
+    const bool wb = well_balanced;
+    auto &bcceq_ = bcc_eq;
+    auto beq1 = b_eq.x1f;  auto beq2 = b_eq.x2f;  auto beq3 = b_eq.x3f;
 
     // Index bounds
     int il = is-1, iu = ie+1, jl = js, ju = je, kl = ks, ku = ke;
@@ -91,9 +157,21 @@ void MHD::FOFC(Driver *pdriver, int stage) {
       Real b2old = 0.5*(b1_.x2f(m,k,j,i) + b1_.x2f(m,k,j+1,i));
       Real b3old = 0.5*(b1_.x3f(m,k,j,i) + b1_.x3f(m,k+1,j,i));
 
-      bcctest_(m,IBX,k,j,i) = gam0*bcc0_(m,IBX,k,j,i) + gam1*b1old;
-      bcctest_(m,IBY,k,j,i) = gam0*bcc0_(m,IBY,k,j,i) + gam1*b2old;
-      bcctest_(m,IBZ,k,j,i) = gam0*bcc0_(m,IBZ,k,j,i) + gam1*b3old;
+      if (wb) {
+        b1old -= 0.5*(beq1(m,k,j,i) + beq1(m,k,j,i+1));
+        b2old -= 0.5*(beq2(m,k,j,i) + beq2(m,k,j+1,i));
+        b3old -= 0.5*(beq3(m,k,j,i) + beq3(m,k+1,j,i));
+        bcctest_(m,IBX,k,j,i) = bcceq_(m,IBX,k,j,i)
+            + gam0*(bcc0_(m,IBX,k,j,i) - bcceq_(m,IBX,k,j,i)) + gam1*b1old;
+        bcctest_(m,IBY,k,j,i) = bcceq_(m,IBY,k,j,i)
+            + gam0*(bcc0_(m,IBY,k,j,i) - bcceq_(m,IBY,k,j,i)) + gam1*b2old;
+        bcctest_(m,IBZ,k,j,i) = bcceq_(m,IBZ,k,j,i)
+            + gam0*(bcc0_(m,IBZ,k,j,i) - bcceq_(m,IBZ,k,j,i)) + gam1*b3old;
+      } else {
+        bcctest_(m,IBX,k,j,i) = gam0*bcc0_(m,IBX,k,j,i) + gam1*b1old;
+        bcctest_(m,IBY,k,j,i) = gam0*bcc0_(m,IBY,k,j,i) + gam1*b2old;
+        bcctest_(m,IBZ,k,j,i) = gam0*bcc0_(m,IBZ,k,j,i) + gam1*b3old;
+      }
 
       bcctest_(m,IBY,k,j,i) += dtodx1*(e3x1_(m,k,j,i+1) - e3x1_(m,k,j,i));
       bcctest_(m,IBZ,k,j,i) -= dtodx1*(e2x1_(m,k,j,i+1) - e2x1_(m,k,j,i));
@@ -109,7 +187,11 @@ void MHD::FOFC(Driver *pdriver, int stage) {
 
     // Test whether conversion to primitives requires floors
     // Note b0 and w0 passed to function, but not used/changed.
-    peos->ConsToPrim(utest_, b0, w0, bcctest_, true, il, iu, jl, ju, kl, ku);
+    if (wb) {
+      peos->ConsToPrimWB(utest_, u_eq, b0, w0, bcctest_, true, il, iu, jl, ju, kl, ku);
+    } else {
+      peos->ConsToPrim(utest_, b0, w0, bcctest_, true, il, iu, jl, ju, kl, ku);
+    }
   }
 
   auto &coord = pmy_pack->pcoord->coord_data;
@@ -122,6 +204,12 @@ void MHD::FOFC(Driver *pdriver, int stage) {
   auto &excision_flux_ = pmy_pack->pcoord->excision_flux;
   auto &w0_ = w0;
   auto &b0_ = b0;
+  // well-balanced scheme: replacement fluxes through the face equilibrium (WBFaceLLF_MHD)
+  const bool wb_ = well_balanced;
+  auto wp_ = w_pert;  auto bp_ = bcc_pert;
+  auto weqf1 = w_eq_face.x1f;  auto weqf2 = w_eq_face.x2f;  auto weqf3 = w_eq_face.x3f;
+  auto beqf1 = bcc_eq_face.x1f;  auto beqf2 = bcc_eq_face.x2f;
+  auto beqf3 = bcc_eq_face.x3f;
 
   // Index bounds
   int il = is-1, iu = ie+1, jl = js, ju = je, kl = ks, ku = ke;
@@ -183,6 +271,8 @@ void MHD::FOFC(Driver *pdriver, int stage) {
           SingleStateLLF_GRMHD(wim1, wi, bxi, x1v, x2v, x3v, IVX, coord, eos, flux);
         } else if (is_sr) {
           SingleStateLLF_SRMHD(wim1, wi, bxi, eos, flux);
+        } else if (wb_) {
+          WBFaceLLF_MHD<IVX>(eos, m, k, j, i, wp_, bp_, weqf1, beqf1, bxi, flux);
         } else {
           SingleStateLLF_MHD(wim1, wi, bxi, eos, flux);
         }
@@ -236,6 +326,8 @@ void MHD::FOFC(Driver *pdriver, int stage) {
           SingleStateLLF_GRMHD(wjm1, wj, bxi, x1v, x2v, x3v, IVY, coord, eos, flux);
         } else if (is_sr) {
           SingleStateLLF_SRMHD(wjm1, wj, bxi, eos, flux);
+        } else if (wb_) {
+          WBFaceLLF_MHD<IVY>(eos, m, k, j, i, wp_, bp_, weqf2, beqf2, bxi, flux);
         } else {
           SingleStateLLF_MHD(wjm1, wj, bxi, eos, flux);
         }
@@ -289,6 +381,8 @@ void MHD::FOFC(Driver *pdriver, int stage) {
           SingleStateLLF_GRMHD(wkm1, wk, bxi, x1v, x2v, x3v, IVZ, coord, eos, flux);
         } else if (is_sr) {
           SingleStateLLF_SRMHD(wkm1, wk, bxi, eos, flux);
+        } else if (wb_) {
+          WBFaceLLF_MHD<IVZ>(eos, m, k, j, i, wp_, bp_, weqf3, beqf3, bxi, flux);
         } else {
           SingleStateLLF_MHD(wkm1, wk, bxi, eos, flux);
         }
@@ -360,6 +454,8 @@ void MHD::FOFC(Driver *pdriver, int stage) {
           SingleStateLLF_GRMHD(wi, wip1, bxi, x1v, x2v, x3v, IVX, coord, eos, flux);
         } else if (is_sr) {
           SingleStateLLF_SRMHD(wi, wip1, bxi, eos, flux);
+        } else if (wb_) {
+          WBFaceLLF_MHD<IVX>(eos, m, k, j, i+1, wp_, bp_, weqf1, beqf1, bxi, flux);
         } else {
           SingleStateLLF_MHD(wi, wip1, bxi, eos, flux);
         }
@@ -413,6 +509,8 @@ void MHD::FOFC(Driver *pdriver, int stage) {
           SingleStateLLF_GRMHD(wj, wjp1, bxi, x1v, x2v, x3v, IVY, coord, eos, flux);
         } else if (is_sr) {
           SingleStateLLF_SRMHD(wj, wjp1, bxi, eos, flux);
+        } else if (wb_) {
+          WBFaceLLF_MHD<IVY>(eos, m, k, j+1, i, wp_, bp_, weqf2, beqf2, bxi, flux);
         } else {
           SingleStateLLF_MHD(wj, wjp1, bxi, eos, flux);
         }
@@ -466,6 +564,8 @@ void MHD::FOFC(Driver *pdriver, int stage) {
           SingleStateLLF_GRMHD(wk, wkp1, bxi, x1v, x2v, x3v, IVZ, coord, eos, flux);
         } else if (is_sr) {
           SingleStateLLF_SRMHD(wk, wkp1, bxi, eos, flux);
+        } else if (wb_) {
+          WBFaceLLF_MHD<IVZ>(eos, m, k+1, j, i, wp_, bp_, weqf3, beqf3, bxi, flux);
         } else {
           SingleStateLLF_MHD(wk, wkp1, bxi, eos, flux);
         }
