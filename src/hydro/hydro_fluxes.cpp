@@ -193,6 +193,7 @@ template void Hydro::CalculateFluxes<Hydro_RSolver::advect>(Driver *pdriver, int
 template void Hydro::CalculateFluxes<Hydro_RSolver::llf>(Driver *pdriver, int stage);
 template void Hydro::CalculateFluxes<Hydro_RSolver::hlle>(Driver *pdriver, int stage);
 template void Hydro::CalculateFluxes<Hydro_RSolver::hllc>(Driver *pdriver, int stage);
+template void Hydro::CalculateFluxes<Hydro_RSolver::lhllc>(Driver *pdriver, int stage);
 template void Hydro::CalculateFluxes<Hydro_RSolver::roe>(Driver *pdriver, int stage);
 template void Hydro::CalculateFluxes<Hydro_RSolver::llf_sr>(Driver *pdriver, int stage);
 template void Hydro::CalculateFluxes<Hydro_RSolver::hlle_sr>(Driver *pdriver, int stage);

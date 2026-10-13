@@ -29,7 +29,7 @@ class ShearingBoxCC;
 class Driver;
 
 // constants that enumerate Hydro Riemann Solver options
-enum class Hydro_RSolver {advect, llf, hlle, hllc, roe,    // non-relativistic
+enum class Hydro_RSolver {advect, llf, hlle, hllc, lhllc, roe,    // non-relativistic
                           llf_sr, hlle_sr, hllc_sr,        // SR
                           llf_gr, hlle_gr};                // GR
 

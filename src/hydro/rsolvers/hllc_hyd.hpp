@@ -8,6 +8,15 @@
 //! \file hllc_hyd.hpp
 //! \brief HLLC Riemann solver for hydrodynamics.  Reads L/R primitives from the global
 //! per-face buffers and writes a single flux entry.  Ideal gas EOS only.
+//!
+//! lowmach = true is L-HLLC (rsolver = lhllc): the low-Mach fix of Minoshima & Miyoshi
+//! (2021, JCP 446, 110639) as used by Velasco-Romero & Teyssier (2025, MNRAS, eqs 17-19)
+//! and spd's lhllc.  The velocity-jump (dissipative) term of the contact pressure,
+//!   p* = [m_R p_L + m_L p_R + phi m_L m_R (v_L - v_R)] / (m_L + m_R),
+//! is scaled by phi = chi (2 - chi), chi = min(1, max(|v_L|,|v_R|)/max(c_L,c_R)) with the
+//! NORMAL velocities, so it vanishes as M -> 0.  Wave and contact speeds are unchanged.
+//! It is written as a subtraction of (1 - phi) times that term, so chi = 1 returns the
+//! HLLC flux bit for bit.
 
 #include <cmath>
 
@@ -17,7 +26,7 @@ namespace hydro {
 //! \fn HLLC<ivx>()
 //! \brief Compute the HLLC flux at face (m,k,j,i) for direction ivx.  Only valid for
 //! ideal gas EOS (caller responsibility).
-template <int ivx>
+template <int ivx, bool lowmach = false>
 KOKKOS_INLINE_FUNCTION
 void HLLC(const EOS_Data &eos,
           const int m, const int k, const int j, const int i,
@@ -56,6 +65,11 @@ void HLLC(const EOS_Data &eos,
   Real qa, qb, qc, qd, qe, qf;
   qa = eos.IdealHydroSoundSpeed(wl_idn, wl_ipr);
   qb = eos.IdealHydroSoundSpeed(wr_idn, wr_ipr);
+  Real phi = 1.0;
+  if constexpr (lowmach) {
+    const Real chi = fmin(1.0, fmax(fabs(wl_ivx), fabs(wr_ivx))/fmax(qa, qb));
+    phi = chi*(2.0 - chi);
+  }
   Real el = wl_ipr * igm1 + 0.5 * wl_idn * (SQR(wl_ivx) + SQR(wl_ivy) + SQR(wl_ivz));
   Real er = wr_ipr * igm1 + 0.5 * wr_idn * (SQR(wr_ivx) + SQR(wr_ivy) + SQR(wr_ivz));
   qc = 0.25 * (wl_idn + wr_idn) * (qa + qb);
@@ -83,6 +97,9 @@ void HLLC(const EOS_Data &eos,
 
   Real am = (qc - qd) / (ml + mr);
   Real cp = (ml * qd + mr * qc) / (ml + mr);
+  if constexpr (lowmach) {
+    cp -= (1.0 - phi) * (ml * mr * (wl_ivx - wr_ivx)) / (ml + mr);
+  }
   cp = cp > 0.0 ? cp : 0.0;
 
   // L/R fluxes along bm (qb) and bp (qa)

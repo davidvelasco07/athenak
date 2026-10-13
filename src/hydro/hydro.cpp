@@ -390,9 +390,11 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
         rsolver_method = Hydro_RSolver::llf;
       } else if (rsolver.compare("hlle") == 0) {
         rsolver_method = Hydro_RSolver::hlle;
-      } else if (rsolver.compare("hllc") == 0) {
+      } else if (rsolver.compare("hllc") == 0 || rsolver.compare("lhllc") == 0) {
+        // lhllc = L-HLLC, the low-Mach HLLC (hllc_hyd.hpp); same checks as hllc
         if (peos->eos_data.is_ideal) {
-          rsolver_method = Hydro_RSolver::hllc;
+          rsolver_method = (rsolver.compare("hllc") == 0) ? Hydro_RSolver::hllc
+                                                          : Hydro_RSolver::lhllc;
         } else {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                     << std::endl << "<hydro>/rsolver = hllc cannot be used with "

@@ -50,6 +50,8 @@ void SolveFace(const EOS_Data &eos, const RegionIndcs &indcs,
     HLLE<ivx>(eos, m, k, j, i, is, js, ks, wl, wr, flx);
   } else if constexpr (rsolver_method_ == Hydro_RSolver::hllc) {
     HLLC<ivx>(eos, m, k, j, i, is, js, ks, wl, wr, flx);
+  } else if constexpr (rsolver_method_ == Hydro_RSolver::lhllc) {
+    HLLC<ivx, true>(eos, m, k, j, i, is, js, ks, wl, wr, flx);
   } else if constexpr (rsolver_method_ == Hydro_RSolver::roe) {
     Roe<ivx>(eos, m, k, j, i, is, js, ks, wl, wr, flx);
   } else if constexpr (rsolver_method_ == Hydro_RSolver::llf_sr) {

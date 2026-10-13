@@ -735,6 +735,7 @@ template void Hydro::MOODLoop<Hydro_RSolver::advect>(Driver *pdriver, int stage)
 template void Hydro::MOODLoop<Hydro_RSolver::llf>(Driver *pdriver, int stage);
 template void Hydro::MOODLoop<Hydro_RSolver::hlle>(Driver *pdriver, int stage);
 template void Hydro::MOODLoop<Hydro_RSolver::hllc>(Driver *pdriver, int stage);
+template void Hydro::MOODLoop<Hydro_RSolver::lhllc>(Driver *pdriver, int stage);
 template void Hydro::MOODLoop<Hydro_RSolver::roe>(Driver *pdriver, int stage);
 template void Hydro::MOODLoop<Hydro_RSolver::llf_sr>(Driver *pdriver, int stage);
 template void Hydro::MOODLoop<Hydro_RSolver::hlle_sr>(Driver *pdriver, int stage);
