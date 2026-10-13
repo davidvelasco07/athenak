@@ -12,6 +12,7 @@
 #include "mhd/rsolvers/llf_mhd.hpp"
 #include "mhd/rsolvers/hlle_mhd.hpp"
 #include "mhd/rsolvers/hlld_mhd.hpp"
+#include "mhd/rsolvers/lhlld_mhd.hpp"
 #include "mhd/rsolvers/llf_srmhd.hpp"
 #include "mhd/rsolvers/hlle_srmhd.hpp"
 #include "mhd/rsolvers/llf_grmhd.hpp"
@@ -35,7 +36,10 @@ void SolveFaceMHD(const EOS_Data &eos, const RegionIndcs &indcs,
                   const DvceArray4D<Real> &uct_dL = {},
                   const DvceArray4D<Real> &uct_dR = {},
                   const DvceArray4D<Real> &uct_vt1 = {},
-                  const DvceArray4D<Real> &uct_vt2 = {}) {
+                  const DvceArray4D<Real> &uct_vt2 = {},
+                  const DvceArray5D<Real> &sdet = {}) {
+  // sdet: per-direction velocity compression for the L-HLLD carbuncle sensor
+  // (MHD::LHLLDShockSensor); ignored by every other solver.
   if constexpr (rsolver_method_ == MHD_RSolver::advect) {
     Advect<ivx>(eos, m, k, j, i, is, js, ks, wl, wr, bl, br, bx, flx, ey, ez);
   } else if constexpr (rsolver_method_ == MHD_RSolver::llf) {
@@ -47,6 +51,9 @@ void SolveFaceMHD(const EOS_Data &eos, const RegionIndcs &indcs,
   } else if constexpr (rsolver_method_ == MHD_RSolver::hlld) {
     HLLD<ivx>(eos, m, k, j, i, is, js, ks, wl, wr, bl, br, bx, flx, ey, ez,
               uct_flag, uct_aL, uct_dL, uct_dR, uct_vt1, uct_vt2);
+  } else if constexpr (rsolver_method_ == MHD_RSolver::lhlld) {
+    LHLLD<ivx>(eos, m, k, j, i, is, js, ks, wl, wr, bl, br, bx, flx, ey, ez, sdet,
+               uct_flag, uct_aL, uct_dL, uct_dR, uct_vt1, uct_vt2);
   } else if constexpr (rsolver_method_ == MHD_RSolver::llf_sr) {
     LLF_SR<ivx>(eos, m, k, j, i, is, js, ks, wl, wr, bl, br, bx, flx, ey, ez,
                 uct_flag, uct_aL, uct_dL, uct_dR, uct_vt1, uct_vt2);

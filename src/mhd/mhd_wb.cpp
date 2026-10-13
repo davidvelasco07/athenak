@@ -307,10 +307,11 @@ void MHD::WBSetEquilibrium() {
     case MHD_RSolver::llf:  WBEquilibriumFluxes<MHD_RSolver::llf>();  break;
     case MHD_RSolver::hlle: WBEquilibriumFluxes<MHD_RSolver::hlle>(); break;
     case MHD_RSolver::hlld: WBEquilibriumFluxes<MHD_RSolver::hlld>(); break;
+    case MHD_RSolver::lhlld: WBEquilibriumFluxes<MHD_RSolver::lhlld>(); break;
     default:
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "<mhd> well_balanced=true supports rsolver = "
-                << "llf|hlle|hlld" << std::endl;
+                << "llf|hlle|hlld|lhlld" << std::endl;
       std::exit(EXIT_FAILURE);
   }
 }
@@ -337,6 +338,10 @@ void MHD::WBEquilibriumFluxes() {
   auto &coord_ = pmy_pack->pcoord->coord_data;
   const bool use_uct = (emf_method != MHD_EMF::ct_contact);
   const int uct_fl = (emf_method == MHD_EMF::uct_hlld) ? 2 : (use_uct ? 1 : 0);
+  // L-HLLD: the equilibrium is at rest, so its carbuncle sensor is zero; the stage flux
+  // of an unperturbed equilibrium then sees the same theta and f - f_eq cancels exactly
+  if constexpr (rsolver_method_ == MHD_RSolver::lhlld) { Kokkos::deep_copy(sdet, 0.0); }
+  auto sdet_ = sdet;
 
   {
     auto wf = w_eq_face.x1f;  auto bf = bcc_eq_face.x1f;  auto bx_ = b_eq.x1f;
@@ -349,7 +354,7 @@ void MHD::WBEquilibriumFluxes() {
       const int is_ = is, js_ = js, ks_ = ks;
       SolveFaceMHD<rsolver_method_, IVX>(eos, indcs, size, coord, m, k, j, i,
                                          is_, js_, ks_, wf, wf, bf, bf, bx_, fe, ey_, ez_,
-                                         uct_fl, aL1, dl1, dr1, vt1, vt2);
+                                         uct_fl, aL1, dl1, dr1, vt1, vt2, sdet_);
     });
   }
   if (pm->multi_d) {
@@ -363,7 +368,7 @@ void MHD::WBEquilibriumFluxes() {
       const int is_ = is, js_ = js, ks_ = ks;
       SolveFaceMHD<rsolver_method_, IVY>(eos, indcs, size, coord, m, k, j, i,
                                          is_, js_, ks_, wf, wf, bf, bf, bx_, fe, ey_, ez_,
-                                         uct_fl, aL2, dl2, dr2, vt1, vt2);
+                                         uct_fl, aL2, dl2, dr2, vt1, vt2, sdet_);
     });
   }
   if (pm->three_d) {
@@ -377,7 +382,7 @@ void MHD::WBEquilibriumFluxes() {
       const int is_ = is, js_ = js, ks_ = ks;
       SolveFaceMHD<rsolver_method_, IVZ>(eos, indcs, size, coord, m, k, j, i,
                                          is_, js_, ks_, wf, wf, bf, bf, bx_, fe, ey_, ez_,
-                                         uct_fl, aL3, dl3, dr3, vt1, vt2);
+                                         uct_fl, aL3, dl3, dr3, vt1, vt2, sdet_);
     });
   }
 }
@@ -456,6 +461,9 @@ void MHD::WBCalculateFluxes(Driver *pdriver, int stage) {
   }
   const int ext = std::max(uct_ext, mext);
   const int uct_fl = (emf_method_ == MHD_EMF::uct_hlld) ? 2 : (use_uct ? 1 : 0);
+  // L-HLLD carbuncle sensor from the stage-input (full) primitives
+  if constexpr (rsolver_method_ == MHD_RSolver::lhlld) { LHLLDShockSensor(); }
+  auto sdet_ = sdet;
 
   auto &eos_ = peos->eos_data;
   auto &size_ = pmy_pack->pmb->mb_size;
@@ -493,7 +501,7 @@ void MHD::WBCalculateFluxes(Driver *pdriver, int stage) {
       AddFaceEquilibriumMHD(eos, floors, nmhd_, m, k, j, i, weqf, beqf, wl, wr, bl, br);
       SolveFaceMHD<rsolver_method_, IVX>(eos, indcs, size, coord, m, k, j, i,
                                          is_, js_, ks_, wl, wr, bl, br, bx, flx, eyl, ezl,
-                                         uct_fl, aL1, dl1, dr1, vt1_1, vt2_1);
+                                         uct_fl, aL1, dl1, dr1, vt1_1, vt2_1, sdet_);
       for (int n=0; n<nmhd_; ++n) {flx(m,n,k,j,i) -= feq(m,n,k,j,i);}
       eyl(m,k,j,i) -= e31q(m,k,j,i);
       ezl(m,k,j,i) -= e21q(m,k,j,i);
@@ -535,7 +543,7 @@ void MHD::WBCalculateFluxes(Driver *pdriver, int stage) {
       AddFaceEquilibriumMHD(eos, floors, nmhd_, m, k, j, i, weqf, beqf, wl, wr, bl, br);
       SolveFaceMHD<rsolver_method_, IVY>(eos, indcs, size, coord, m, k, j, i,
                                          is_, js_, ks_, wl, wr, bl, br, bx, flx, eyl, ezl,
-                                         uct_fl, aL2, dl2, dr2, vt1_2, vt2_2);
+                                         uct_fl, aL2, dl2, dr2, vt1_2, vt2_2, sdet_);
       for (int n=0; n<nmhd_; ++n) {flx(m,n,k,j,i) -= feq(m,n,k,j,i);}
       eyl(m,k,j,i) -= e12q(m,k,j,i);
       ezl(m,k,j,i) -= e32q(m,k,j,i);
@@ -575,7 +583,7 @@ void MHD::WBCalculateFluxes(Driver *pdriver, int stage) {
       AddFaceEquilibriumMHD(eos, floors, nmhd_, m, k, j, i, weqf, beqf, wl, wr, bl, br);
       SolveFaceMHD<rsolver_method_, IVZ>(eos, indcs, size, coord, m, k, j, i,
                                          is_, js_, ks_, wl, wr, bl, br, bx, flx, eyl, ezl,
-                                         uct_fl, aL3, dl3, dr3, vt1_3, vt2_3);
+                                         uct_fl, aL3, dl3, dr3, vt1_3, vt2_3, sdet_);
       for (int n=0; n<nmhd_; ++n) {flx(m,n,k,j,i) -= feq(m,n,k,j,i);}
       eyl(m,k,j,i) -= e23q(m,k,j,i);
       ezl(m,k,j,i) -= e13q(m,k,j,i);
@@ -596,8 +604,10 @@ void MHD::WBCalculateFluxes(Driver *pdriver, int stage) {
 template void MHD::WBEquilibriumFluxes<MHD_RSolver::llf>();
 template void MHD::WBEquilibriumFluxes<MHD_RSolver::hlle>();
 template void MHD::WBEquilibriumFluxes<MHD_RSolver::hlld>();
+template void MHD::WBEquilibriumFluxes<MHD_RSolver::lhlld>();
 template void MHD::WBCalculateFluxes<MHD_RSolver::llf>(Driver *d, int stage);
 template void MHD::WBCalculateFluxes<MHD_RSolver::hlle>(Driver *d, int stage);
 template void MHD::WBCalculateFluxes<MHD_RSolver::hlld>(Driver *d, int stage);
+template void MHD::WBCalculateFluxes<MHD_RSolver::lhlld>(Driver *d, int stage);
 
 }  // namespace mhd

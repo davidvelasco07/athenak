@@ -36,12 +36,54 @@ namespace mhd {
 //! \brief Calls reconstruction and Riemann solver functions to compute MHD fluxes and
 //! face-centered area-averaged EMFs.  Templated over the Riemann solver for GPU perf.
 
+//----------------------------------------------------------------------------------------
+//! \fn void MHD::LHLLDShockSensor()
+//! \brief Per-direction velocity compression of the stage-input primitives for the
+//! L-HLLD carbuncle sensor (rsolvers/lhlld_mhd.hpp): sdet(m,d,k,j,i) = min(v_d(+1)-v_d,
+//! v_d-v_d(-1)).  Unused directions and array-edge cells are set large so the transverse
+//! min in the solver ignores them.  Called once per stage before the face solves; the
+//! MOOD re-solve of the same stage reuses it (same w0).
+
+void MHD::LHLLDShockSensor() {
+  const int nmb1 = pmy_pack->nmb_thispack - 1;
+  const bool md = pmy_pack->pmesh->multi_d;
+  const bool td = pmy_pack->pmesh->three_d;
+  auto w0_ = w0;
+  auto sdet_ = sdet;
+  const int nc1 = w0_.extent_int(4);
+  const int nc2 = w0_.extent_int(3);
+  const int nc3 = w0_.extent_int(2);
+  par_for("lhlld_sdet", DevExeSpace(), 0, nmb1, 0, nc3-1, 0, nc2-1, 0, nc1-1,
+  KOKKOS_LAMBDA(int m, int k, int j, int i) {
+    const Real big = 1.0e30;
+    Real sx = big;
+    if (i >= 1 && i <= nc1-2) {
+      sx = fmin(w0_(m,IVX,k,j,i+1)-w0_(m,IVX,k,j,i),
+                w0_(m,IVX,k,j,i)-w0_(m,IVX,k,j,i-1));
+    }
+    sdet_(m,0,k,j,i) = sx;
+    Real sy = big;
+    if (md && j >= 1 && j <= nc2-2) {
+      sy = fmin(w0_(m,IVY,k,j+1,i)-w0_(m,IVY,k,j,i),
+                w0_(m,IVY,k,j,i)-w0_(m,IVY,k,j-1,i));
+    }
+    sdet_(m,1,k,j,i) = sy;
+    Real sz = big;
+    if (td && k >= 1 && k <= nc3-2) {
+      sz = fmin(w0_(m,IVZ,k+1,j,i)-w0_(m,IVZ,k,j,i),
+                w0_(m,IVZ,k,j,i)-w0_(m,IVZ,k-1,j,i));
+    }
+    sdet_(m,2,k,j,i) = sz;
+  });
+}
+
 template <MHD_RSolver rsolver_method_>
 void MHD::CalculateFluxes(Driver *pdriver, int stage) {
   // well-balanced scheme: separate path (mhd_wb.cpp), default kernels untouched
   if constexpr (rsolver_method_ == MHD_RSolver::llf ||
                 rsolver_method_ == MHD_RSolver::hlle ||
-                rsolver_method_ == MHD_RSolver::hlld) {
+                rsolver_method_ == MHD_RSolver::hlld ||
+                rsolver_method_ == MHD_RSolver::lhlld) {
     if (well_balanced) {
       WBCalculateFluxes<rsolver_method_>(pdriver, stage);
       return;
@@ -93,6 +135,9 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
   auto wr_ = wr3d;
   auto bl_ = bl3d;
   auto br_ = br3d;
+  // L-HLLD carbuncle sensor from the stage-input primitives (empty view otherwise)
+  if constexpr (rsolver_method_ == MHD_RSolver::lhlld) { LHLLDShockSensor(); }
+  auto sdet_ = sdet;
 
   //------------------------------------------------------------------------------------
   // x1 direction
@@ -126,7 +171,7 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
         SolveFaceMHD<rsolver_method_, IVX>(eos, indcs, size, coord,
                                            m, k, j, i, is_, js_, ks_,
                                            wl, wr, bl, br, bx, flx, eyl, ezl,
-                                           uct_fl, aL1, dl1, dr1, vt1_1, vt2_1);
+                                           uct_fl, aL1, dl1, dr1, vt1_1, vt2_1, sdet_);
       });
 
     if (nvars > nmhd_) {
@@ -175,7 +220,7 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
         SolveFaceMHD<rsolver_method_, IVY>(eos, indcs, size, coord,
                                            m, k, j, i, is_, js_, ks_,
                                            wl, wr, bl, br, bx, flx, eyl, ezl,
-                                           uct_fl, aL2, dl2, dr2, vt1_2, vt2_2);
+                                           uct_fl, aL2, dl2, dr2, vt1_2, vt2_2, sdet_);
       });
 
     if (nvars > nmhd_) {
@@ -221,7 +266,7 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
         SolveFaceMHD<rsolver_method_, IVZ>(eos, indcs, size, coord,
                                            m, k, j, i, is_, js_, ks_,
                                            wl, wr, bl, br, bx, flx, eyl, ezl,
-                                           uct_fl, aL3, dl3, dr3, vt1_3, vt2_3);
+                                           uct_fl, aL3, dl3, dr3, vt1_3, vt2_3, sdet_);
       });
 
     if (nvars > nmhd_) {
@@ -247,6 +292,7 @@ template void MHD::CalculateFluxes<MHD_RSolver::advect>(Driver *pdriver, int sta
 template void MHD::CalculateFluxes<MHD_RSolver::llf>(Driver *pdriver, int stage);
 template void MHD::CalculateFluxes<MHD_RSolver::hlle>(Driver *pdriver, int stage);
 template void MHD::CalculateFluxes<MHD_RSolver::hlld>(Driver *pdriver, int stage);
+template void MHD::CalculateFluxes<MHD_RSolver::lhlld>(Driver *pdriver, int stage);
 template void MHD::CalculateFluxes<MHD_RSolver::llf_sr>(Driver *pdriver, int stage);
 template void MHD::CalculateFluxes<MHD_RSolver::hlle_sr>(Driver *pdriver, int stage);
 template void MHD::CalculateFluxes<MHD_RSolver::llf_gr>(Driver *pdriver, int stage);

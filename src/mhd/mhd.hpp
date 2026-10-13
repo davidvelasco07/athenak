@@ -39,7 +39,7 @@ using MHDBoundaryFnPtr = void (*)(int m, Mesh* pm, MHD* pmhd, DvceArray5D<Real> 
 }
 
 // constants that enumerate MHD Riemann Solver options
-enum class MHD_RSolver {advect, llf, hlle, hlld, roe,   // non-relativistic
+enum class MHD_RSolver {advect, llf, hlle, hlld, lhlld, roe,   // non-relativistic
                         llf_sr, hlle_sr,                // SR
                         llf_gr, hlle_gr};                       // GR
 
@@ -300,6 +300,10 @@ class MHD {
   void MOODLoop(Driver *d, int stage);
 
   DvceArray5D<Real> utest, bcctest;  // scratch arrays for FOFC
+  // L-HLLD carbuncle sensor: per-direction velocity compression of the stage-input
+  // primitives, sdet(m,d,k,j,i) = min(v_d(+1)-v_d, v_d-v_d(-1)) (rsolvers/lhlld_mhd.hpp)
+  DvceArray5D<Real> sdet;
+  void LHLLDShockSensor();
 
  private:
   void AddSelectedDiffusionFluxes(parabolic::DiffusionSelection selection);

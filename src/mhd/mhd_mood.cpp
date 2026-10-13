@@ -177,6 +177,7 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
   auto wr_ = wr3d;
   auto bl_ = bl3d;
   auto br_ = br3d;
+  auto sdet_ = sdet;   // L-HLLD carbuncle sensor (filled by CalculateFluxes)
   auto b0x1 = b0.x1f;
   auto b0x2 = b0.x2f;
   auto b0x3 = b0.x3f;
@@ -1030,7 +1031,7 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
         SolveFaceMHD<rsolver_method_, IVX>(eos, indcs, size, coord,
                                            m, k, j, i, is_, js_, ks_,
                                            wl, wr, bl, br, bx, flx, eyl, ezl,
-                                           uct_fl, aL1, dl1, dr1, vt1_1, vt2_1);
+                                           uct_fl, aL1, dl1, dr1, vt1_1, vt2_1, sdet_);
         for (int n=nmhd_; n<nvars; ++n) {
           if (flx1(m,IDN,k,j,i) >= 0.0) {
             flx1(m,n,k,j,i) = flx1(m,IDN,k,j,i)*wl_(m,n,k,j,i);
@@ -1062,7 +1063,7 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
           SolveFaceMHD<rsolver_method_, IVY>(eos, indcs, size, coord,
                                              m, k, j, i, is_, js_, ks_,
                                              wl, wr, bl, br, bx, flx, eyl, ezl,
-                                             uct_fl, aL2, dl2, dr2, vt1_2, vt2_2);
+                                             uct_fl, aL2, dl2, dr2, vt1_2, vt2_2, sdet_);
           for (int n=nmhd_; n<nvars; ++n) {
             if (flx2(m,IDN,k,j,i) >= 0.0) {
               flx2(m,n,k,j,i) = flx2(m,IDN,k,j,i)*wl_(m,n,k,j,i);
@@ -1095,7 +1096,7 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
           SolveFaceMHD<rsolver_method_, IVZ>(eos, indcs, size, coord,
                                              m, k, j, i, is_, js_, ks_,
                                              wl, wr, bl, br, bx, flx, eyl, ezl,
-                                             uct_fl, aL3, dl3, dr3, vt1_3, vt2_3);
+                                             uct_fl, aL3, dl3, dr3, vt1_3, vt2_3, sdet_);
           for (int n=nmhd_; n<nvars; ++n) {
             if (flx3(m,IDN,k,j,i) >= 0.0) {
               flx3(m,n,k,j,i) = flx3(m,IDN,k,j,i)*wl_(m,n,k,j,i);
@@ -1118,6 +1119,7 @@ template void MHD::MOODLoop<MHD_RSolver::advect>(Driver *pdriver, int stage);
 template void MHD::MOODLoop<MHD_RSolver::llf>(Driver *pdriver, int stage);
 template void MHD::MOODLoop<MHD_RSolver::hlle>(Driver *pdriver, int stage);
 template void MHD::MOODLoop<MHD_RSolver::hlld>(Driver *pdriver, int stage);
+template void MHD::MOODLoop<MHD_RSolver::lhlld>(Driver *pdriver, int stage);
 template void MHD::MOODLoop<MHD_RSolver::llf_sr>(Driver *pdriver, int stage);
 template void MHD::MOODLoop<MHD_RSolver::hlle_sr>(Driver *pdriver, int stage);
 template void MHD::MOODLoop<MHD_RSolver::llf_gr>(Driver *pdriver, int stage);

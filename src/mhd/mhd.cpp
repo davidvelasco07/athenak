@@ -509,6 +509,9 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
       // HLLD solver
       } else if (rsolver.compare("hlld") == 0) {
         rsolver_method = MHD_RSolver::hlld;
+      // L-HLLD: low-Mach + carbuncle-controlled HLLD (Minoshima & Miyoshi 2021)
+      } else if (rsolver.compare("lhlld") == 0) {
+        rsolver_method = MHD_RSolver::lhlld;
       // Roe solver
       // } else if (rsolver.compare("roe") == 0) {
       //   rsolver_method = MHD_RSolver::roe;
@@ -540,10 +543,11 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
     } else if (emf_str.compare("uct_hll") == 0) {
       emf_method = MHD_EMF::uct_hll;
     } else if (emf_str.compare("uct_hlld") == 0) {
-      if (rsolver_method != MHD_RSolver::hlld) {
+      // the HLLD-type UCT coefficients come from the five-wave fan: hlld or lhlld
+      if (rsolver_method != MHD_RSolver::hlld && rsolver_method != MHD_RSolver::lhlld) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                  << std::endl << "<mhd>/emf = 'uct_hlld' requires rsolver = 'hlld'"
-                  << std::endl;
+                  << std::endl << "<mhd>/emf = 'uct_hlld' requires rsolver = 'hlld' "
+                  << "or 'lhlld'" << std::endl;
         std::exit(EXIT_FAILURE);
       }
       emf_method = MHD_EMF::uct_hlld;
@@ -745,6 +749,11 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
         Kokkos::realloc(dR_x3f, nmb, ncells3, ncells2, ncells1);
         Kokkos::realloc(vx_x3f, nmb, ncells3, ncells2, ncells1);
         Kokkos::realloc(vy_x3f, nmb, ncells3, ncells2, ncells1);
+      }
+
+      // per-direction velocity-compression field for the L-HLLD carbuncle sensor
+      if (rsolver_method == MHD_RSolver::lhlld) {
+        Kokkos::realloc(sdet, nmb, 3, ncells3, ncells2, ncells1);
       }
 
       // allocate arrays of flags/candidate state used with FOFC and MOOD
