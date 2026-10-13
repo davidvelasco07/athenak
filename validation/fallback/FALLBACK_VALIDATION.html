@@ -9,86 +9,377 @@ img { max-width: 100%; height: auto; }
 figcaption { color: #666; font-size: 0.85rem; }
 </style></head><body>
 <h1>MOOD Fallback Validation Report</h1>
-<p>_Generated 2026-10-06 00:07 UTC_ _Commit <code>2787d427f</code>_</p>
+<p>_Generated 2026-10-07 03:02 UTC_</p>
+<p>_Commit <code>516bb4d9a</code>_</p>
 <h2>Summary</h2>
-<ul><li>Records analyzed: <strong>888</strong></li><li>FV4 linear-wave zero demotions: <strong>True</strong></li><li>FV6 linear-wave zero demotions: <strong>True</strong></li><li>FV8 linear-wave zero demotions: <strong>True</strong></li><li>All runs completed (rc=0): <strong>False</strong></li></ul>
+<ul>
+<li>Records analyzed: <strong>932</strong></li>
+<li>FV4 linear-wave zero demotions: <strong>True</strong></li>
+<li>FV6 linear-wave zero demotions: <strong>True</strong></li>
+<li>FV8 linear-wave zero demotions: <strong>True</strong></li>
+<li>All runs completed (rc=0): <strong>False</strong></li>
+</ul>
 <h2>Method</h2>
-<p>We compare unlimited central finite-volume face interpolation at 4th, 6th and 8th order (<code>reconstruct=fv4|fv6|fv8</code>) with a-posteriori MOOD fallback (RK3) against PLM+RK2, WENOZ+RK3, and TENO-5+RK3. Detection uses NAD (<code>mood_nad_scale=gcfl</code>, <code>mood_rtol=1e-5</code>; <code>mood_nad_v=off</code> for MHD *linear waves* only -- see the note below) plus PAD/NaN. Passive-scalar concentrations are included in the relaxed-DMP test, so scalar discontinuities can trigger fallback even on a uniform-density kinematic background. NAD demotions are floored at PLM.</p>
-<p><strong>Each scheme carries its own a-posteriori protection.</strong> MOOD and FOFC are mutually exclusive in the code, and unlimited FV4/FV6/FV8 *require* <code>mood=true</code>, so the like-for-like comparison gives the unlimited schemes the MOOD cascade and gives PLM / WENO-Z / TENO first-order flux correction (<code>fofc=true</code>). Benchmarking MOOD against unprotected competitors would overstate it: on the current sheet, TENO fails outright without FOFC and survives with it. <code>fofc</code> is a per-scheme property of the manifest so it cannot silently differ per case. MOOD is unsupported with BH excision. Newtonian MHD uses <code>emf=uct_hlld</code> for all schemes. Relativistic MHD defaults to <code>ct_contact</code> and may opt into <code>uct_hll</code> per case (<code>uct_hlld</code> needs <code>rsolver=hlld</code>, which SR/GR reject); the <code>blast_grmhd</code> / <code>blast_grmhd_uct</code> pair runs both.</p>
+<p>We compare unlimited central finite-volume face interpolation at 4th, 6th and 8th order (<code>reconstruct=fv4|fv6|fv8</code>) with a-posteriori MOOD fallback (RK3) against PLM+RK2, WENOZ+RK3, and TENO-5+RK3. Detection uses NAD (<code>mood_nad_scale=gcfl</code>, <code>mood_rtol=1e-5</code>; <code>mood_nad_v=off</code> for MHD <em>linear waves</em> only -- see the note below) plus PAD/NaN. Passive-scalar concentrations are included in the relaxed-DMP test, so scalar discontinuities can trigger fallback even on a uniform-density kinematic background. NAD demotions are floored at PLM.</p>
+<p><strong>Each scheme carries its own a-posteriori protection.</strong> MOOD and FOFC are mutually exclusive in the code, and unlimited FV4/FV6/FV8 <em>require</em> <code>mood=true</code>, so the like-for-like comparison gives the unlimited schemes the MOOD cascade and gives PLM / WENO-Z / TENO first-order flux correction (<code>fofc=true</code>). Benchmarking MOOD against unprotected competitors would overstate it: on the current sheet, TENO fails outright without FOFC and survives with it. <code>fofc</code> is a per-scheme property of the manifest so it cannot silently differ per case. MOOD is unsupported with BH excision. Newtonian MHD uses <code>emf=uct_hlld</code> for all schemes. Relativistic MHD defaults to <code>ct_contact</code> and may opt into <code>uct_hll</code> per case (<code>uct_hlld</code> needs <code>rsolver=hlld</code>, which SR/GR reject); the <code>blast_grmhd</code> / <code>blast_grmhd_uct</code> pair runs both.</p>
 <p><strong><code>returncode == 0</code> is not evidence of success.</strong> A run whose state has been wiped still prints &quot;Terminating on time limit&quot;: on the current sheet, unprotected TENO reported rc=0 with an all-NaN final dump. Every stress run is therefore health-gated on the EOS floor/failure counters and the timestep history (<code>dt_collapse</code> when $\Delta t_{\min} \le 0$ or $&lt; 10^{-6}\Delta t_{\max}$).</p>
 <p>The report is organized by physics. Each section covers <strong>1D / 2D / 3D</strong> linear waves (convergence mosaics with shared axes), plus 1D shocks and available multi-D stress cases.</p>
 <h2>Hydrodynamics</h2>
 <h3>1D linear waves</h3>
-<figure><img src="figures/lwave_hydro_1d_mosaic.png?v=1791244739" alt="Linear-wave mosaic hydro 1d"><figcaption>Linear-wave mosaic hydro 1d</figcaption></figure>
-<figure><img src="figures/lwave_nmood_hydro.png?v=1791244742" alt="FV4 demotions hydro"><figcaption>FV4 demotions hydro</figcaption></figure>
-<div class='tablewrap'><table><thead><tr><th>Scheme</th><th>Wave</th><th>N</th><th>L1</th><th>Order</th><th>nmood</th><th>ok</th></tr></thead><tbody><tr><td>fv4_fb</td><td>left-going acoustic</td><td>256</td><td>5.497982e-12</td><td>0.04</td><td>0</td><td>yes</td></tr><tr><td>fv4_fb</td><td>transverse shear z</td><td>256</td><td>1.81143e-13</td><td>2.11</td><td>0</td><td>yes</td></tr><tr><td>fv4_fb</td><td>right-going acoustic</td><td>256</td><td>5.497744e-12</td><td>0.04</td><td>0</td><td>yes</td></tr><tr><td>fv6_fb</td><td>left-going acoustic</td><td>256</td><td>5.49782e-12</td><td>0.01</td><td>0</td><td>yes</td></tr><tr><td>fv6_fb</td><td>transverse shear z</td><td>256</td><td>1.737696e-13</td><td>-0.66</td><td>0</td><td>yes</td></tr><tr><td>fv6_fb</td><td>right-going acoustic</td><td>256</td><td>5.497812e-12</td><td>0.01</td><td>0</td><td>yes</td></tr><tr><td>fv8_fb</td><td>left-going acoustic</td><td>256</td><td>5.498006e-12</td><td>0.01</td><td>0</td><td>yes</td></tr><tr><td>fv8_fb</td><td>transverse shear z</td><td>256</td><td>1.734038e-13</td><td>-0.68</td><td>0</td><td>yes</td></tr><tr><td>fv8_fb</td><td>right-going acoustic</td><td>256</td><td>5.498035e-12</td><td>0.01</td><td>0</td><td>yes</td></tr><tr><td>plm</td><td>left-going acoustic</td><td>256</td><td>1.228226e-09</td><td>2.02</td><td>0</td><td>yes</td></tr><tr><td>plm</td><td>transverse shear z</td><td>256</td><td>5.517613e-10</td><td>2.03</td><td>0</td><td>yes</td></tr><tr><td>plm</td><td>right-going acoustic</td><td>256</td><td>1.228227e-09</td><td>2.02</td><td>0</td><td>yes</td></tr><tr><td>teno</td><td>left-going acoustic</td><td>256</td><td>5.497806e-12</td><td>0.02</td><td>0</td><td>yes</td></tr><tr><td>teno</td><td>transverse shear z</td><td>256</td><td>1.813326e-13</td><td>-0.56</td><td>0</td><td>yes</td></tr><tr><td>teno</td><td>right-going acoustic</td><td>256</td><td>5.497714e-12</td><td>0.02</td><td>0</td><td>yes</td></tr><tr><td>wenoz</td><td>left-going acoustic</td><td>256</td><td>5.497799e-12</td><td>0.02</td><td>0</td><td>yes</td></tr><tr><td>wenoz</td><td>transverse shear z</td><td>256</td><td>1.861057e-13</td><td>-0.60</td><td>0</td><td>yes</td></tr><tr><td>wenoz</td><td>right-going acoustic</td><td>256</td><td>5.497752e-12</td><td>0.02</td><td>0</td><td>yes</td></tr></tbody></table></div>
+<figure><img src="figures/lwave_hydro_1d_mosaic.png?v=1791342079" alt="Linear-wave mosaic hydro 1d"><figcaption>Linear-wave mosaic hydro 1d</figcaption></figure>
+<figure><img src="figures/lwave_nmood_hydro.png?v=1791342082" alt="FV4 demotions hydro"><figcaption>FV4 demotions hydro</figcaption></figure>
+<div class='tablewrap'><table><thead><tr><th>Scheme</th><th>Wave</th><th>N</th><th>L1</th><th>Order</th><th>nmood</th><th>ok</th></tr></thead><tbody>
+<tr><td>fv4_fb</td><td>left-going acoustic</td><td>256</td><td>5.497982e-12</td><td>0.04</td><td>0</td><td>yes</td></tr>
+<tr><td>fv4_fb</td><td>transverse shear z</td><td>256</td><td>1.81143e-13</td><td>2.11</td><td>0</td><td>yes</td></tr>
+<tr><td>fv4_fb</td><td>right-going acoustic</td><td>256</td><td>5.497744e-12</td><td>0.04</td><td>0</td><td>yes</td></tr>
+<tr><td>fv6_fb</td><td>left-going acoustic</td><td>256</td><td>5.49782e-12</td><td>0.01</td><td>0</td><td>yes</td></tr>
+<tr><td>fv6_fb</td><td>transverse shear z</td><td>256</td><td>1.737696e-13</td><td>-0.66</td><td>0</td><td>yes</td></tr>
+<tr><td>fv6_fb</td><td>right-going acoustic</td><td>256</td><td>5.497812e-12</td><td>0.01</td><td>0</td><td>yes</td></tr>
+<tr><td>fv8_fb</td><td>left-going acoustic</td><td>256</td><td>5.498006e-12</td><td>0.01</td><td>0</td><td>yes</td></tr>
+<tr><td>fv8_fb</td><td>transverse shear z</td><td>256</td><td>1.734038e-13</td><td>-0.68</td><td>0</td><td>yes</td></tr>
+<tr><td>fv8_fb</td><td>right-going acoustic</td><td>256</td><td>5.498035e-12</td><td>0.01</td><td>0</td><td>yes</td></tr>
+<tr><td>plm</td><td>left-going acoustic</td><td>256</td><td>1.228226e-09</td><td>2.02</td><td>0</td><td>yes</td></tr>
+<tr><td>plm</td><td>transverse shear z</td><td>256</td><td>5.517613e-10</td><td>2.03</td><td>0</td><td>yes</td></tr>
+<tr><td>plm</td><td>right-going acoustic</td><td>256</td><td>1.228227e-09</td><td>2.02</td><td>0</td><td>yes</td></tr>
+<tr><td>teno</td><td>left-going acoustic</td><td>256</td><td>5.497806e-12</td><td>0.02</td><td>0</td><td>yes</td></tr>
+<tr><td>teno</td><td>transverse shear z</td><td>256</td><td>1.813326e-13</td><td>-0.56</td><td>0</td><td>yes</td></tr>
+<tr><td>teno</td><td>right-going acoustic</td><td>256</td><td>5.497714e-12</td><td>0.02</td><td>0</td><td>yes</td></tr>
+<tr><td>wenoz</td><td>left-going acoustic</td><td>256</td><td>5.497799e-12</td><td>0.02</td><td>0</td><td>yes</td></tr>
+<tr><td>wenoz</td><td>transverse shear z</td><td>256</td><td>1.861057e-13</td><td>-0.60</td><td>0</td><td>yes</td></tr>
+<tr><td>wenoz</td><td>right-going acoustic</td><td>256</td><td>5.497752e-12</td><td>0.02</td><td>0</td><td>yes</td></tr>
+</tbody></table></div>
 <h3>2D linear waves</h3>
-<figure><img src="figures/lwave_hydro_2d_mosaic.png?v=1791244739" alt="Linear-wave mosaic hydro 2d"><figcaption>Linear-wave mosaic hydro 2d</figcaption></figure>
-<div class='tablewrap'><table><thead><tr><th>Scheme</th><th>Wave</th><th>N</th><th>L1</th><th>Order</th><th>nmood</th><th>ok</th></tr></thead><tbody><tr><td>fv4_fb</td><td>left-going acoustic</td><td>128</td><td>2.838811e-11</td><td>3.60</td><td>0</td><td>yes</td></tr><tr><td>fv4_fb</td><td>right-going acoustic</td><td>128</td><td>2.83881e-11</td><td>3.60</td><td>0</td><td>yes</td></tr><tr><td>fv6_fb</td><td>left-going acoustic</td><td>128</td><td>1.365538e-11</td><td>2.84</td><td>0</td><td>yes</td></tr><tr><td>fv6_fb</td><td>right-going acoustic</td><td>128</td><td>1.365543e-11</td><td>2.84</td><td>0</td><td>yes</td></tr><tr><td>fv8_fb</td><td>left-going acoustic</td><td>128</td><td>1.36365e-11</td><td>2.84</td><td>0</td><td>yes</td></tr><tr><td>fv8_fb</td><td>right-going acoustic</td><td>128</td><td>1.363651e-11</td><td>2.84</td><td>0</td><td>yes</td></tr><tr><td>plm</td><td>left-going acoustic</td><td>128</td><td>1.802754e-08</td><td>1.84</td><td>0</td><td>yes</td></tr><tr><td>plm</td><td>right-going acoustic</td><td>128</td><td>1.802754e-08</td><td>1.84</td><td>0</td><td>yes</td></tr><tr><td>teno</td><td>left-going acoustic</td><td>128</td><td>1.462497e-11</td><td>3.19</td><td>0</td><td>yes</td></tr><tr><td>teno</td><td>right-going acoustic</td><td>128</td><td>1.462486e-11</td><td>3.19</td><td>0</td><td>yes</td></tr><tr><td>wenoz</td><td>left-going acoustic</td><td>128</td><td>1.462485e-11</td><td>3.19</td><td>0</td><td>yes</td></tr><tr><td>wenoz</td><td>right-going acoustic</td><td>128</td><td>1.462489e-11</td><td>3.19</td><td>0</td><td>yes</td></tr></tbody></table></div>
+<figure><img src="figures/lwave_hydro_2d_mosaic.png?v=1791342079" alt="Linear-wave mosaic hydro 2d"><figcaption>Linear-wave mosaic hydro 2d</figcaption></figure>
+<div class='tablewrap'><table><thead><tr><th>Scheme</th><th>Wave</th><th>N</th><th>L1</th><th>Order</th><th>nmood</th><th>ok</th></tr></thead><tbody>
+<tr><td>fv4_fb</td><td>left-going acoustic</td><td>128</td><td>2.838811e-11</td><td>3.60</td><td>0</td><td>yes</td></tr>
+<tr><td>fv4_fb</td><td>right-going acoustic</td><td>128</td><td>2.83881e-11</td><td>3.60</td><td>0</td><td>yes</td></tr>
+<tr><td>fv6_fb</td><td>left-going acoustic</td><td>128</td><td>1.365538e-11</td><td>2.84</td><td>0</td><td>yes</td></tr>
+<tr><td>fv6_fb</td><td>right-going acoustic</td><td>128</td><td>1.365543e-11</td><td>2.84</td><td>0</td><td>yes</td></tr>
+<tr><td>fv8_fb</td><td>left-going acoustic</td><td>128</td><td>1.36365e-11</td><td>2.84</td><td>0</td><td>yes</td></tr>
+<tr><td>fv8_fb</td><td>right-going acoustic</td><td>128</td><td>1.363651e-11</td><td>2.84</td><td>0</td><td>yes</td></tr>
+<tr><td>plm</td><td>left-going acoustic</td><td>128</td><td>1.802754e-08</td><td>1.84</td><td>0</td><td>yes</td></tr>
+<tr><td>plm</td><td>right-going acoustic</td><td>128</td><td>1.802754e-08</td><td>1.84</td><td>0</td><td>yes</td></tr>
+<tr><td>teno</td><td>left-going acoustic</td><td>128</td><td>1.462497e-11</td><td>3.19</td><td>0</td><td>yes</td></tr>
+<tr><td>teno</td><td>right-going acoustic</td><td>128</td><td>1.462486e-11</td><td>3.19</td><td>0</td><td>yes</td></tr>
+<tr><td>wenoz</td><td>left-going acoustic</td><td>128</td><td>1.462485e-11</td><td>3.19</td><td>0</td><td>yes</td></tr>
+<tr><td>wenoz</td><td>right-going acoustic</td><td>128</td><td>1.462489e-11</td><td>3.19</td><td>0</td><td>yes</td></tr>
+</tbody></table></div>
 <h3>3D linear waves</h3>
-<figure><img src="figures/lwave_hydro_3d_mosaic.png?v=1791244739" alt="Linear-wave mosaic hydro 3d"><figcaption>Linear-wave mosaic hydro 3d</figcaption></figure>
-<div class='tablewrap'><table><thead><tr><th>Scheme</th><th>Wave</th><th>N</th><th>L1</th><th>Order</th><th>nmood</th><th>ok</th></tr></thead><tbody><tr><td>fv4_fb</td><td>left-going acoustic</td><td>64</td><td>4.202751e-10</td><td>3.78</td><td>0</td><td>yes</td></tr><tr><td>fv4_fb</td><td>right-going acoustic</td><td>64</td><td>4.202752e-10</td><td>3.78</td><td>0</td><td>yes</td></tr><tr><td>fv6_fb</td><td>left-going acoustic</td><td>64</td><td>2.363084e-10</td><td>2.97</td><td>0</td><td>yes</td></tr><tr><td>fv6_fb</td><td>right-going acoustic</td><td>64</td><td>2.363084e-10</td><td>2.97</td><td>0</td><td>yes</td></tr><tr><td>fv8_fb</td><td>left-going acoustic</td><td>64</td><td>2.365988e-10</td><td>2.98</td><td>0</td><td>yes</td></tr><tr><td>fv8_fb</td><td>right-going acoustic</td><td>64</td><td>2.365988e-10</td><td>2.98</td><td>0</td><td>yes</td></tr><tr><td>plm</td><td>left-going acoustic</td><td>64</td><td>7.883148e-08</td><td>1.49</td><td>0</td><td>yes</td></tr><tr><td>plm</td><td>right-going acoustic</td><td>64</td><td>7.883148e-08</td><td>1.49</td><td>0</td><td>yes</td></tr><tr><td>teno</td><td>left-going acoustic</td><td>64</td><td>2.894962e-10</td><td>3.60</td><td>0</td><td>yes</td></tr><tr><td>teno</td><td>right-going acoustic</td><td>64</td><td>2.894962e-10</td><td>3.60</td><td>0</td><td>yes</td></tr><tr><td>wenoz</td><td>left-going acoustic</td><td>64</td><td>2.894976e-10</td><td>3.62</td><td>0</td><td>yes</td></tr><tr><td>wenoz</td><td>right-going acoustic</td><td>64</td><td>2.894977e-10</td><td>3.62</td><td>0</td><td>yes</td></tr></tbody></table></div>
+<figure><img src="figures/lwave_hydro_3d_mosaic.png?v=1791342080" alt="Linear-wave mosaic hydro 3d"><figcaption>Linear-wave mosaic hydro 3d</figcaption></figure>
+<div class='tablewrap'><table><thead><tr><th>Scheme</th><th>Wave</th><th>N</th><th>L1</th><th>Order</th><th>nmood</th><th>ok</th></tr></thead><tbody>
+<tr><td>fv4_fb</td><td>left-going acoustic</td><td>64</td><td>4.202751e-10</td><td>3.78</td><td>0</td><td>yes</td></tr>
+<tr><td>fv4_fb</td><td>right-going acoustic</td><td>64</td><td>4.202752e-10</td><td>3.78</td><td>0</td><td>yes</td></tr>
+<tr><td>fv6_fb</td><td>left-going acoustic</td><td>64</td><td>2.363084e-10</td><td>2.97</td><td>0</td><td>yes</td></tr>
+<tr><td>fv6_fb</td><td>right-going acoustic</td><td>64</td><td>2.363084e-10</td><td>2.97</td><td>0</td><td>yes</td></tr>
+<tr><td>fv8_fb</td><td>left-going acoustic</td><td>64</td><td>2.365988e-10</td><td>2.98</td><td>0</td><td>yes</td></tr>
+<tr><td>fv8_fb</td><td>right-going acoustic</td><td>64</td><td>2.365988e-10</td><td>2.98</td><td>0</td><td>yes</td></tr>
+<tr><td>plm</td><td>left-going acoustic</td><td>64</td><td>7.883148e-08</td><td>1.49</td><td>0</td><td>yes</td></tr>
+<tr><td>plm</td><td>right-going acoustic</td><td>64</td><td>7.883148e-08</td><td>1.49</td><td>0</td><td>yes</td></tr>
+<tr><td>teno</td><td>left-going acoustic</td><td>64</td><td>2.894962e-10</td><td>3.60</td><td>0</td><td>yes</td></tr>
+<tr><td>teno</td><td>right-going acoustic</td><td>64</td><td>2.894962e-10</td><td>3.60</td><td>0</td><td>yes</td></tr>
+<tr><td>wenoz</td><td>left-going acoustic</td><td>64</td><td>2.894976e-10</td><td>3.62</td><td>0</td><td>yes</td></tr>
+<tr><td>wenoz</td><td>right-going acoustic</td><td>64</td><td>2.894977e-10</td><td>3.62</td><td>0</td><td>yes</td></tr>
+</tbody></table></div>
 <h3>Shocks</h3>
-<figure><img src="figures/shock_shu_osher_dens.png?v=1791245263" alt="shock_shu_osher_dens"><figcaption>shock_shu_osher_dens</figcaption></figure>
-<figure><img src="figures/shock_sod_dens.png?v=1791245263" alt="shock_sod_dens"><figcaption>shock_sod_dens</figcaption></figure>
-<div class='tablewrap'><table><thead><tr><th>Case</th><th>Dim</th><th>Scheme</th><th>N</th><th>rc</th><th>nmood</th><th>wall [s]</th></tr></thead><tbody><tr><td>shu_osher</td><td>1d</td><td>fv4_fb</td><td>256</td><td>0</td><td>27576</td><td>6.583750009536743</td></tr><tr><td>shu_osher</td><td>1d</td><td>fv4_fb</td><td>512</td><td>0</td><td>67195</td><td>8.699394702911377</td></tr><tr><td>shu_osher</td><td>1d</td><td>fv4_fb</td><td>1024</td><td>0</td><td>150202</td><td>12.121439456939697</td></tr><tr><td>shu_osher</td><td>1d</td><td>fv6_fb</td><td>256</td><td>0</td><td>30597</td><td>2.9991588592529297</td></tr><tr><td>shu_osher</td><td>1d</td><td>fv6_fb</td><td>512</td><td>0</td><td>75992</td><td>6.212106943130493</td></tr><tr><td>shu_osher</td><td>1d</td><td>fv6_fb</td><td>1024</td><td>0</td><td>179179</td><td>14.689929246902466</td></tr><tr><td>shu_osher</td><td>1d</td><td>fv8_fb</td><td>256</td><td>0</td><td>34559</td><td>2.95504093170166</td></tr><tr><td>shu_osher</td><td>1d</td><td>fv8_fb</td><td>512</td><td>0</td><td>78911</td><td>7.0734336376190186</td></tr><tr><td>shu_osher</td><td>1d</td><td>fv8_fb</td><td>1024</td><td>0</td><td>174677</td><td>14.276941061019897</td></tr><tr><td>shu_osher</td><td>1d</td><td>plm</td><td>256</td><td>0</td><td>0</td><td>4.85801362991333</td></tr><tr><td>shu_osher</td><td>1d</td><td>plm</td><td>512</td><td>0</td><td>0</td><td>5.158158779144287</td></tr><tr><td>shu_osher</td><td>1d</td><td>plm</td><td>1024</td><td>0</td><td>0</td><td>6.00898551940918</td></tr><tr><td>shu_osher</td><td>1d</td><td>teno</td><td>256</td><td>0</td><td>0</td><td>5.015064477920532</td></tr><tr><td>shu_osher</td><td>1d</td><td>teno</td><td>512</td><td>0</td><td>0</td><td>5.576136589050293</td></tr><tr><td>shu_osher</td><td>1d</td><td>teno</td><td>1024</td><td>0</td><td>0</td><td>6.819214582443237</td></tr><tr><td>shu_osher</td><td>1d</td><td>wenoz</td><td>256</td><td>0</td><td>0</td><td>4.977221250534058</td></tr><tr><td>shu_osher</td><td>1d</td><td>wenoz</td><td>512</td><td>0</td><td>0</td><td>5.588316202163696</td></tr><tr><td>shu_osher</td><td>1d</td><td>wenoz</td><td>1024</td><td>0</td><td>0</td><td>6.855767488479614</td></tr><tr><td>sod</td><td>1d</td><td>fv4_fb</td><td>256</td><td>0</td><td>22045</td><td>6.614264249801636</td></tr><tr><td>sod</td><td>1d</td><td>fv4_fb</td><td>512</td><td>0</td><td>48894</td><td>6.407215118408203</td></tr><tr><td>sod</td><td>1d</td><td>fv4_fb</td><td>1024</td><td>0</td><td>105257</td><td>8.302880048751831</td></tr><tr><td>sod</td><td>1d</td><td>fv6_fb</td><td>256</td><td>0</td><td>24379</td><td>1.628000020980835</td></tr><tr><td>sod</td><td>1d</td><td>fv6_fb</td><td>512</td><td>0</td><td>54241</td><td>3.1809728145599365</td></tr><tr><td>sod</td><td>1d</td><td>fv6_fb</td><td>1024</td><td>0</td><td>122256</td><td>7.341597080230713</td></tr><tr><td>sod</td><td>1d</td><td>fv8_fb</td><td>256</td><td>0</td><td>25960</td><td>1.5586950778961182</td></tr><tr><td>sod</td><td>1d</td><td>fv8_fb</td><td>512</td><td>0</td><td>56740</td><td>3.2086760997772217</td></tr><tr><td>sod</td><td>1d</td><td>fv8_fb</td><td>1024</td><td>0</td><td>126665</td><td>6.708297967910767</td></tr><tr><td>sod</td><td>1d</td><td>plm</td><td>256</td><td>0</td><td>0</td><td>4.611562728881836</td></tr><tr><td>sod</td><td>1d</td><td>plm</td><td>512</td><td>0</td><td>0</td><td>4.9116575717926025</td></tr><tr><td>sod</td><td>1d</td><td>plm</td><td>1024</td><td>0</td><td>0</td><td>5.254113435745239</td></tr><tr><td>sod</td><td>1d</td><td>teno</td><td>256</td><td>0</td><td>0</td><td>4.681830883026123</td></tr><tr><td>sod</td><td>1d</td><td>teno</td><td>512</td><td>0</td><td>0</td><td>4.949263095855713</td></tr><tr><td>sod</td><td>1d</td><td>teno</td><td>1024</td><td>0</td><td>0</td><td>5.4772748947143555</td></tr><tr><td>sod</td><td>1d</td><td>wenoz</td><td>256</td><td>0</td><td>0</td><td>4.689580202102661</td></tr><tr><td>sod</td><td>1d</td><td>wenoz</td><td>512</td><td>0</td><td>0</td><td>4.921968936920166</td></tr><tr><td>sod</td><td>1d</td><td>wenoz</td><td>1024</td><td>0</td><td>0</td><td>5.66727352142334</td></tr></tbody></table></div>
+<figure><img src="figures/shock_shu_osher_dens.png?v=1791342082" alt="shock_shu_osher_dens"><figcaption>shock_shu_osher_dens</figcaption></figure>
+<figure><img src="figures/shock_sod_dens.png?v=1791342083" alt="shock_sod_dens"><figcaption>shock_sod_dens</figcaption></figure>
+<div class='tablewrap'><table><thead><tr><th>Case</th><th>Dim</th><th>Scheme</th><th>N</th><th>rc</th><th>nmood</th><th>wall [s]</th></tr></thead><tbody>
+<tr><td>shu_osher</td><td>1d</td><td>fv4_fb</td><td>256</td><td>0</td><td>27576</td><td>6.583750009536743</td></tr>
+<tr><td>shu_osher</td><td>1d</td><td>fv4_fb</td><td>512</td><td>0</td><td>67195</td><td>8.699394702911377</td></tr>
+<tr><td>shu_osher</td><td>1d</td><td>fv4_fb</td><td>1024</td><td>0</td><td>150202</td><td>12.121439456939697</td></tr>
+<tr><td>shu_osher</td><td>1d</td><td>fv6_fb</td><td>256</td><td>0</td><td>30597</td><td>2.9991588592529297</td></tr>
+<tr><td>shu_osher</td><td>1d</td><td>fv6_fb</td><td>512</td><td>0</td><td>75992</td><td>6.212106943130493</td></tr>
+<tr><td>shu_osher</td><td>1d</td><td>fv6_fb</td><td>1024</td><td>0</td><td>179179</td><td>14.689929246902466</td></tr>
+<tr><td>shu_osher</td><td>1d</td><td>fv8_fb</td><td>256</td><td>0</td><td>34559</td><td>2.95504093170166</td></tr>
+<tr><td>shu_osher</td><td>1d</td><td>fv8_fb</td><td>512</td><td>0</td><td>78911</td><td>7.0734336376190186</td></tr>
+<tr><td>shu_osher</td><td>1d</td><td>fv8_fb</td><td>1024</td><td>0</td><td>174677</td><td>14.276941061019897</td></tr>
+<tr><td>shu_osher</td><td>1d</td><td>plm</td><td>256</td><td>0</td><td>0</td><td>4.85801362991333</td></tr>
+<tr><td>shu_osher</td><td>1d</td><td>plm</td><td>512</td><td>0</td><td>0</td><td>5.158158779144287</td></tr>
+<tr><td>shu_osher</td><td>1d</td><td>plm</td><td>1024</td><td>0</td><td>0</td><td>6.00898551940918</td></tr>
+<tr><td>shu_osher</td><td>1d</td><td>teno</td><td>256</td><td>0</td><td>0</td><td>5.015064477920532</td></tr>
+<tr><td>shu_osher</td><td>1d</td><td>teno</td><td>512</td><td>0</td><td>0</td><td>5.576136589050293</td></tr>
+<tr><td>shu_osher</td><td>1d</td><td>teno</td><td>1024</td><td>0</td><td>0</td><td>6.819214582443237</td></tr>
+<tr><td>shu_osher</td><td>1d</td><td>wenoz</td><td>256</td><td>0</td><td>0</td><td>4.977221250534058</td></tr>
+<tr><td>shu_osher</td><td>1d</td><td>wenoz</td><td>512</td><td>0</td><td>0</td><td>5.588316202163696</td></tr>
+<tr><td>shu_osher</td><td>1d</td><td>wenoz</td><td>1024</td><td>0</td><td>0</td><td>6.855767488479614</td></tr>
+<tr><td>sod</td><td>1d</td><td>fv4_fb</td><td>256</td><td>0</td><td>22045</td><td>6.614264249801636</td></tr>
+<tr><td>sod</td><td>1d</td><td>fv4_fb</td><td>512</td><td>0</td><td>48894</td><td>6.407215118408203</td></tr>
+<tr><td>sod</td><td>1d</td><td>fv4_fb</td><td>1024</td><td>0</td><td>105257</td><td>8.302880048751831</td></tr>
+<tr><td>sod</td><td>1d</td><td>fv6_fb</td><td>256</td><td>0</td><td>24379</td><td>1.628000020980835</td></tr>
+<tr><td>sod</td><td>1d</td><td>fv6_fb</td><td>512</td><td>0</td><td>54241</td><td>3.1809728145599365</td></tr>
+<tr><td>sod</td><td>1d</td><td>fv6_fb</td><td>1024</td><td>0</td><td>122256</td><td>7.341597080230713</td></tr>
+<tr><td>sod</td><td>1d</td><td>fv8_fb</td><td>256</td><td>0</td><td>25960</td><td>1.5586950778961182</td></tr>
+<tr><td>sod</td><td>1d</td><td>fv8_fb</td><td>512</td><td>0</td><td>56740</td><td>3.2086760997772217</td></tr>
+<tr><td>sod</td><td>1d</td><td>fv8_fb</td><td>1024</td><td>0</td><td>126665</td><td>6.708297967910767</td></tr>
+<tr><td>sod</td><td>1d</td><td>plm</td><td>256</td><td>0</td><td>0</td><td>4.611562728881836</td></tr>
+<tr><td>sod</td><td>1d</td><td>plm</td><td>512</td><td>0</td><td>0</td><td>4.9116575717926025</td></tr>
+<tr><td>sod</td><td>1d</td><td>plm</td><td>1024</td><td>0</td><td>0</td><td>5.254113435745239</td></tr>
+<tr><td>sod</td><td>1d</td><td>teno</td><td>256</td><td>0</td><td>0</td><td>4.681830883026123</td></tr>
+<tr><td>sod</td><td>1d</td><td>teno</td><td>512</td><td>0</td><td>0</td><td>4.949263095855713</td></tr>
+<tr><td>sod</td><td>1d</td><td>teno</td><td>1024</td><td>0</td><td>0</td><td>5.4772748947143555</td></tr>
+<tr><td>sod</td><td>1d</td><td>wenoz</td><td>256</td><td>0</td><td>0</td><td>4.689580202102661</td></tr>
+<tr><td>sod</td><td>1d</td><td>wenoz</td><td>512</td><td>0</td><td>0</td><td>4.921968936920166</td></tr>
+<tr><td>sod</td><td>1d</td><td>wenoz</td><td>1024</td><td>0</td><td>0</td><td>5.66727352142334</td></tr>
+</tbody></table></div>
 <h3>Multi-D stress</h3>
-<div class='tablewrap'><table><thead><tr><th>Case</th><th>Dim</th><th>Scheme</th><th>health</th><th>EOS floors</th><th>nmood</th><th>wall [s]</th></tr></thead><tbody><tr><td>implode_hydro</td><td>2d</td><td>fv6_fb</td><td>clean</td><td>0</td><td>182542306</td><td>345.72102880477905</td></tr><tr><td>blast_hydro</td><td>2d</td><td>teno</td><td><strong>rc!=0</strong></td><td>0</td><td>0</td><td>3.127929210662842</td></tr><tr><td>slotted_cyl</td><td>2d</td><td>fv8_fb</td><td>clean</td><td>0</td><td>2377665</td><td>43.80655097961426</td></tr><tr><td>blast_hydro</td><td>2d</td><td>wenoz</td><td><strong>rc!=0</strong></td><td>0</td><td>0</td><td>3.156033754348755</td></tr><tr><td>blast_hydro</td><td>2d</td><td>plm</td><td><strong>rc!=0</strong></td><td>0</td><td>0</td><td>3.1566178798675537</td></tr><tr><td>slotted_cyl</td><td>2d</td><td>fv6_fb</td><td>clean</td><td>0</td><td>2590992</td><td>43.63608407974243</td></tr><tr><td>implode_hydro</td><td>2d</td><td>fv8_fb</td><td>clean</td><td>0</td><td>189683550</td><td>352.6362769603729</td></tr><tr><td>blast_hydro</td><td>2d</td><td>fv4_fb</td><td>clean</td><td>0</td><td>4646336</td><td>5.930562496185303</td></tr></tbody></table></div>
-<figure><img src="figures/stress_blast_hydro_mosaic.png?v=1791244767" alt="blast_hydro stress mosaic"><figcaption>blast_hydro stress mosaic</figcaption></figure>
-<figure><img src="figures/stress_implode_hydro_mosaic.png?v=1791244769" alt="implode_hydro stress mosaic"><figcaption>implode_hydro stress mosaic</figcaption></figure>
+<div class='tablewrap'><table><thead><tr><th>Case</th><th>Dim</th><th>Scheme</th><th>health</th><th>EOS floors</th><th>nmood</th><th>wall [s]</th></tr></thead><tbody>
+<tr><td>implode_hydro</td><td>2d</td><td>fv6_fb</td><td>clean</td><td>0</td><td>182542306</td><td>345.72102880477905</td></tr>
+<tr><td>fu_jet_m80</td><td>2d</td><td>fv6_fb</td><td><strong>non-finite</strong></td><td>44</td><td>218845191</td><td>58.73589515686035</td></tr>
+<tr><td>blast_hydro</td><td>2d</td><td>fv6_fb</td><td>clean</td><td>0</td><td>22852700</td><td>144.23295998573303</td></tr>
+<tr><td>blast_hydro</td><td>2d</td><td>teno</td><td><strong>rc!=0</strong></td><td>0</td><td>0</td><td>3.127929210662842</td></tr>
+<tr><td>ha_jet</td><td>2d</td><td>fv6_fb</td><td><strong>floored</strong></td><td>12</td><td>10222131</td><td>205.2997190952301</td></tr>
+<tr><td>slotted_cyl</td><td>2d</td><td>fv8_fb</td><td>clean</td><td>0</td><td>2377665</td><td>43.80655097961426</td></tr>
+<tr><td>blast_hydro</td><td>2d</td><td>wenoz</td><td><strong>rc!=0</strong></td><td>0</td><td>0</td><td>3.156033754348755</td></tr>
+<tr><td>blast_hydro</td><td>2d</td><td>fv8_fb</td><td>clean</td><td>0</td><td>23668572</td><td>131.51153302192688</td></tr>
+<tr><td>blast_hydro</td><td>2d</td><td>plm</td><td><strong>rc!=0</strong></td><td>0</td><td>0</td><td>3.1566178798675537</td></tr>
+<tr><td>ha_jet</td><td>2d</td><td>fv8_fb</td><td><strong>floored</strong></td><td>6</td><td>10656490</td><td>208.3671441078186</td></tr>
+<tr><td>slotted_cyl</td><td>2d</td><td>fv6_fb</td><td>clean</td><td>0</td><td>2590992</td><td>43.63608407974243</td></tr>
+<tr><td>implode_hydro</td><td>2d</td><td>fv8_fb</td><td>clean</td><td>0</td><td>189683550</td><td>352.6362769603729</td></tr>
+<tr><td>fu_jet_m80</td><td>2d</td><td>fv8_fb</td><td><strong>floored</strong></td><td>410</td><td>11131376</td><td>106.75207614898682</td></tr>
+<tr><td>blast_hydro</td><td>2d</td><td>fv4_fb</td><td>clean</td><td>0</td><td>4646336</td><td>5.930562496185303</td></tr>
+</tbody></table></div>
+<figure><img src="figures/stress_blast_hydro_mosaic.png?v=1791342122" alt="blast_hydro stress mosaic"><figcaption>blast_hydro stress mosaic</figcaption></figure>
+<figure><img src="figures/stress_fu_jet_m80_mosaic.png?v=1791342124" alt="fu_jet_m80 stress mosaic"><figcaption>fu_jet_m80 stress mosaic</figcaption></figure>
+<figure><img src="figures/stress_ha_jet_mosaic.png?v=1791342125" alt="ha_jet stress mosaic"><figcaption>ha_jet stress mosaic</figcaption></figure>
+<figure><img src="figures/stress_implode_hydro_mosaic.png?v=1791342125" alt="implode_hydro stress mosaic"><figcaption>implode_hydro stress mosaic</figcaption></figure>
 <p>The slotted-cylinder test advects a bounded passive scalar through one full rotation on a $200^2$ mesh. Scalar-aware NAD confines fallback to the discontinuity and suppresses unlimited-FV ringing.</p>
-<figure><img src="figures/stress_slotted_cyl_mosaic.png?v=1791244771" alt="slotted_cyl stress mosaic"><figcaption>slotted_cyl stress mosaic</figcaption></figure>
+<figure><img src="figures/stress_slotted_cyl_mosaic.png?v=1791342127" alt="slotted_cyl stress mosaic"><figcaption>slotted_cyl stress mosaic</figcaption></figure>
 <h3>NAD tolerance study</h3>
 <p>Relaxed-DMP tolerance sweeps keep the base scheme, grid, Riemann solver, and integrator fixed. The Liska--Wendroff implosion probes interacting shocks and contacts; the slotted disk isolates the passive-scalar detector.</p>
 <p>#### Liska--Wendroff implosion</p>
-<figure><img src="figures/tolerance_implode_hydro_mosaic.png?v=1791244742" alt="Liska--Wendroff implosion snapshot mosaic"><figcaption>Liska--Wendroff implosion snapshot mosaic</figcaption></figure>
-<figure><img src="figures/tolerance_implode_hydro_demotions.png?v=1791244743" alt="Liska--Wendroff implosion demotion curve"><figcaption>Liska--Wendroff implosion demotion curve</figcaption></figure>
-<div class='tablewrap'><table><thead><tr><th>rtol</th><th>N</th><th>rc</th><th>nmood</th><th>wall [s]</th></tr></thead><tbody><tr><td>1e-02</td><td>200</td><td>0</td><td>62205225</td><td>23.972003698349</td></tr><tr><td>1e-03</td><td>200</td><td>0</td><td>159450725</td><td>24.19423484802246</td></tr><tr><td>1e-04</td><td>200</td><td>0</td><td>174105603</td><td>23.430827140808105</td></tr><tr><td>1e-05</td><td>200</td><td>0</td><td>175861689</td><td>23.174686908721924</td></tr><tr><td>1e-06</td><td>200</td><td>0</td><td>176301945</td><td>24.914732456207275</td></tr></tbody></table></div>
+<figure><img src="figures/tolerance_implode_hydro_mosaic.png?v=1791342083" alt="Liska--Wendroff implosion snapshot mosaic"><figcaption>Liska--Wendroff implosion snapshot mosaic</figcaption></figure>
+<figure><img src="figures/tolerance_implode_hydro_demotions.png?v=1791342083" alt="Liska--Wendroff implosion demotion curve"><figcaption>Liska--Wendroff implosion demotion curve</figcaption></figure>
+<div class='tablewrap'><table><thead><tr><th>rtol</th><th>N</th><th>rc</th><th>nmood</th><th>wall [s]</th></tr></thead><tbody>
+<tr><td>1e-02</td><td>200</td><td>0</td><td>62205225</td><td>23.972003698349</td></tr>
+<tr><td>1e-03</td><td>200</td><td>0</td><td>159450725</td><td>24.19423484802246</td></tr>
+<tr><td>1e-04</td><td>200</td><td>0</td><td>174105603</td><td>23.430827140808105</td></tr>
+<tr><td>1e-05</td><td>200</td><td>0</td><td>175861689</td><td>23.174686908721924</td></tr>
+<tr><td>1e-06</td><td>200</td><td>0</td><td>176301945</td><td>24.914732456207275</td></tr>
+</tbody></table></div>
 <p>#### Slotted disk</p>
-<figure><img src="figures/tolerance_slotted_cyl_mosaic.png?v=1791244743" alt="Slotted disk snapshot mosaic"><figcaption>Slotted disk snapshot mosaic</figcaption></figure>
-<figure><img src="figures/tolerance_slotted_cyl_demotions.png?v=1791244743" alt="Slotted disk demotion curve"><figcaption>Slotted disk demotion curve</figcaption></figure>
-<div class='tablewrap'><table><thead><tr><th>rtol</th><th>N</th><th>rc</th><th>nmood</th><th>wall [s]</th></tr></thead><tbody><tr><td>1e-02</td><td>200</td><td>0</td><td>61122</td><td>5.782958030700684</td></tr><tr><td>1e-03</td><td>200</td><td>0</td><td>650314</td><td>4.287592649459839</td></tr><tr><td>1e-04</td><td>200</td><td>0</td><td>1410463</td><td>4.295799970626831</td></tr><tr><td>1e-05</td><td>200</td><td>0</td><td>2440854</td><td>4.31870698928833</td></tr><tr><td>1e-06</td><td>200</td><td>0</td><td>3129071</td><td>4.2786924839019775</td></tr></tbody></table></div>
+<figure><img src="figures/tolerance_slotted_cyl_mosaic.png?v=1791342083" alt="Slotted disk snapshot mosaic"><figcaption>Slotted disk snapshot mosaic</figcaption></figure>
+<figure><img src="figures/tolerance_slotted_cyl_demotions.png?v=1791342083" alt="Slotted disk demotion curve"><figcaption>Slotted disk demotion curve</figcaption></figure>
+<div class='tablewrap'><table><thead><tr><th>rtol</th><th>N</th><th>rc</th><th>nmood</th><th>wall [s]</th></tr></thead><tbody>
+<tr><td>1e-02</td><td>200</td><td>0</td><td>61122</td><td>5.782958030700684</td></tr>
+<tr><td>1e-03</td><td>200</td><td>0</td><td>650314</td><td>4.287592649459839</td></tr>
+<tr><td>1e-04</td><td>200</td><td>0</td><td>1410463</td><td>4.295799970626831</td></tr>
+<tr><td>1e-05</td><td>200</td><td>0</td><td>2440854</td><td>4.31870698928833</td></tr>
+<tr><td>1e-06</td><td>200</td><td>0</td><td>3129071</td><td>4.2786924839019775</td></tr>
+</tbody></table></div>
 <h2>Magnetohydrodynamics</h2>
 <h3>1D linear waves</h3>
-<figure><img src="figures/lwave_mhd_1d_mosaic.png?v=1791244740" alt="Linear-wave mosaic mhd 1d"><figcaption>Linear-wave mosaic mhd 1d</figcaption></figure>
-<figure><img src="figures/lwave_nmood_mhd.png?v=1791244742" alt="FV4 demotions mhd"><figcaption>FV4 demotions mhd</figcaption></figure>
-<div class='tablewrap'><table><thead><tr><th>Scheme</th><th>Wave</th><th>N</th><th>L1</th><th>Order</th><th>nmood</th><th>ok</th></tr></thead><tbody><tr><td>fv4_fb</td><td>left-going fast magnetosonic</td><td>256</td><td>1.009816e-11</td><td>2.01</td><td>0</td><td>yes</td></tr><tr><td>fv4_fb</td><td>left-going Alfvén</td><td>256</td><td>3.103081e-13</td><td>1.84</td><td>0</td><td>yes</td></tr><tr><td>fv4_fb</td><td>left-going slow magnetosonic</td><td>256</td><td>3.846367e-12</td><td>0.04</td><td>0</td><td>yes</td></tr><tr><td>fv4_fb</td><td>entropy/contact</td><td>256</td><td>5.838054e-13</td><td>1.02</td><td>0</td><td>yes</td></tr><tr><td>fv4_fb</td><td>right-going slow magnetosonic</td><td>256</td><td>3.847842e-12</td><td>0.03</td><td>0</td><td>yes</td></tr><tr><td>fv4_fb</td><td>right-going Alfvén</td><td>256</td><td>3.113863e-13</td><td>1.83</td><td>0</td><td>yes</td></tr><tr><td>fv4_fb</td><td>right-going fast magnetosonic</td><td>256</td><td>1.009795e-11</td><td>2.01</td><td>0</td><td>yes</td></tr><tr><td>fv6_fb</td><td>left-going fast magnetosonic</td><td>256</td><td>1.009669e-11</td><td>2.00</td><td>0</td><td>yes</td></tr><tr><td>fv6_fb</td><td>left-going Alfvén</td><td>256</td><td>3.063597e-13</td><td>-0.76</td><td>0</td><td>yes</td></tr><tr><td>fv6_fb</td><td>left-going slow magnetosonic</td><td>256</td><td>3.845113e-12</td><td>-0.01</td><td>0</td><td>yes</td></tr><tr><td>fv6_fb</td><td>entropy/contact</td><td>256</td><td>5.826382e-13</td><td>-1.01</td><td>0</td><td>yes</td></tr><tr><td>fv6_fb</td><td>right-going slow magnetosonic</td><td>256</td><td>3.844561e-12</td><td>-0.01</td><td>0</td><td>yes</td></tr><tr><td>fv6_fb</td><td>right-going Alfvén</td><td>256</td><td>3.056019e-13</td><td>-0.77</td><td>0</td><td>yes</td></tr><tr><td>fv6_fb</td><td>right-going fast magnetosonic</td><td>256</td><td>1.009744e-11</td><td>2.00</td><td>0</td><td>yes</td></tr><tr><td>fv8_fb</td><td>left-going fast magnetosonic</td><td>256</td><td>1.009731e-11</td><td>2.00</td><td>0</td><td>yes</td></tr><tr><td>fv8_fb</td><td>left-going Alfvén</td><td>256</td><td>3.076449e-13</td><td>-0.77</td><td>0</td><td>yes</td></tr><tr><td>fv8_fb</td><td>left-going slow magnetosonic</td><td>256</td><td>3.845886e-12</td><td>-0.01</td><td>0</td><td>yes</td></tr><tr><td>fv8_fb</td><td>entropy/contact</td><td>256</td><td>5.821558e-13</td><td>-1.00</td><td>0</td><td>yes</td></tr><tr><td>fv8_fb</td><td>right-going slow magnetosonic</td><td>256</td><td>3.843513e-12</td><td>-0.01</td><td>0</td><td>yes</td></tr><tr><td>fv8_fb</td><td>right-going Alfvén</td><td>256</td><td>3.0761e-13</td><td>-0.78</td><td>0</td><td>yes</td></tr><tr><td>fv8_fb</td><td>right-going fast magnetosonic</td><td>256</td><td>1.009686e-11</td><td>2.00</td><td>0</td><td>yes</td></tr><tr><td>plm</td><td>left-going fast magnetosonic</td><td>256</td><td>1.465083e-09</td><td>2.02</td><td>0</td><td>yes</td></tr><tr><td>plm</td><td>left-going Alfvén</td><td>256</td><td>7.800711e-10</td><td>2.03</td><td>0</td><td>yes</td></tr><tr><td>plm</td><td>left-going slow magnetosonic</td><td>256</td><td>9.08071e-10</td><td>2.05</td><td>0</td><td>yes</td></tr><tr><td>plm</td><td>entropy/contact</td><td>256</td><td>8.156857e-10</td><td>2.04</td><td>0</td><td>yes</td></tr><tr><td>plm</td><td>right-going slow magnetosonic</td><td>256</td><td>9.080752e-10</td><td>2.05</td><td>0</td><td>yes</td></tr><tr><td>plm</td><td>right-going Alfvén</td><td>256</td><td>7.800713e-10</td><td>2.03</td><td>0</td><td>yes</td></tr><tr><td>plm</td><td>right-going fast magnetosonic</td><td>256</td><td>1.465099e-09</td><td>2.02</td><td>0</td><td>yes</td></tr><tr><td>teno</td><td>left-going fast magnetosonic</td><td>256</td><td>1.009767e-11</td><td>2.00</td><td>0</td><td>yes</td></tr><tr><td>teno</td><td>left-going Alfvén</td><td>256</td><td>3.091141e-13</td><td>-0.67</td><td>0</td><td>yes</td></tr><tr><td>teno</td><td>left-going slow magnetosonic</td><td>256</td><td>3.846018e-12</td><td>-0.01</td><td>0</td><td>yes</td></tr><tr><td>teno</td><td>entropy/contact</td><td>256</td><td>5.550204e-13</td><td>-0.99</td><td>0</td><td>yes</td></tr><tr><td>teno</td><td>right-going slow magnetosonic</td><td>256</td><td>3.846053e-12</td><td>-0.01</td><td>0</td><td>yes</td></tr><tr><td>teno</td><td>right-going Alfvén</td><td>256</td><td>3.092114e-13</td><td>-0.66</td><td>0</td><td>yes</td></tr><tr><td>teno</td><td>right-going fast magnetosonic</td><td>256</td><td>1.009824e-11</td><td>2.00</td><td>0</td><td>yes</td></tr><tr><td>wenoz</td><td>left-going fast magnetosonic</td><td>256</td><td>1.009766e-11</td><td>2.00</td><td>0</td><td>yes</td></tr><tr><td>wenoz</td><td>left-going Alfvén</td><td>256</td><td>3.076772e-13</td><td>-0.66</td><td>0</td><td>yes</td></tr><tr><td>wenoz</td><td>left-going slow magnetosonic</td><td>256</td><td>3.846868e-12</td><td>-0.01</td><td>0</td><td>yes</td></tr><tr><td>wenoz</td><td>entropy/contact</td><td>256</td><td>5.518025e-13</td><td>-0.99</td><td>0</td><td>yes</td></tr><tr><td>wenoz</td><td>right-going slow magnetosonic</td><td>256</td><td>3.84438e-12</td><td>-0.01</td><td>0</td><td>yes</td></tr><tr><td>wenoz</td><td>right-going Alfvén</td><td>256</td><td>3.081676e-13</td><td>-0.65</td><td>0</td><td>yes</td></tr><tr><td>wenoz</td><td>right-going fast magnetosonic</td><td>256</td><td>1.009757e-11</td><td>2.00</td><td>0</td><td>yes</td></tr></tbody></table></div>
+<figure><img src="figures/lwave_mhd_1d_mosaic.png?v=1791342080" alt="Linear-wave mosaic mhd 1d"><figcaption>Linear-wave mosaic mhd 1d</figcaption></figure>
+<figure><img src="figures/lwave_nmood_mhd.png?v=1791342082" alt="FV4 demotions mhd"><figcaption>FV4 demotions mhd</figcaption></figure>
+<div class='tablewrap'><table><thead><tr><th>Scheme</th><th>Wave</th><th>N</th><th>L1</th><th>Order</th><th>nmood</th><th>ok</th></tr></thead><tbody>
+<tr><td>fv4_fb</td><td>left-going fast magnetosonic</td><td>256</td><td>1.009816e-11</td><td>2.01</td><td>0</td><td>yes</td></tr>
+<tr><td>fv4_fb</td><td>left-going Alfvén</td><td>256</td><td>3.103081e-13</td><td>1.84</td><td>0</td><td>yes</td></tr>
+<tr><td>fv4_fb</td><td>left-going slow magnetosonic</td><td>256</td><td>3.846367e-12</td><td>0.04</td><td>0</td><td>yes</td></tr>
+<tr><td>fv4_fb</td><td>entropy/contact</td><td>256</td><td>5.838054e-13</td><td>1.02</td><td>0</td><td>yes</td></tr>
+<tr><td>fv4_fb</td><td>right-going slow magnetosonic</td><td>256</td><td>3.847842e-12</td><td>0.03</td><td>0</td><td>yes</td></tr>
+<tr><td>fv4_fb</td><td>right-going Alfvén</td><td>256</td><td>3.113863e-13</td><td>1.83</td><td>0</td><td>yes</td></tr>
+<tr><td>fv4_fb</td><td>right-going fast magnetosonic</td><td>256</td><td>1.009795e-11</td><td>2.01</td><td>0</td><td>yes</td></tr>
+<tr><td>fv6_fb</td><td>left-going fast magnetosonic</td><td>256</td><td>1.009669e-11</td><td>2.00</td><td>0</td><td>yes</td></tr>
+<tr><td>fv6_fb</td><td>left-going Alfvén</td><td>256</td><td>3.063597e-13</td><td>-0.76</td><td>0</td><td>yes</td></tr>
+<tr><td>fv6_fb</td><td>left-going slow magnetosonic</td><td>256</td><td>3.845113e-12</td><td>-0.01</td><td>0</td><td>yes</td></tr>
+<tr><td>fv6_fb</td><td>entropy/contact</td><td>256</td><td>5.826382e-13</td><td>-1.01</td><td>0</td><td>yes</td></tr>
+<tr><td>fv6_fb</td><td>right-going slow magnetosonic</td><td>256</td><td>3.844561e-12</td><td>-0.01</td><td>0</td><td>yes</td></tr>
+<tr><td>fv6_fb</td><td>right-going Alfvén</td><td>256</td><td>3.056019e-13</td><td>-0.77</td><td>0</td><td>yes</td></tr>
+<tr><td>fv6_fb</td><td>right-going fast magnetosonic</td><td>256</td><td>1.009744e-11</td><td>2.00</td><td>0</td><td>yes</td></tr>
+<tr><td>fv8_fb</td><td>left-going fast magnetosonic</td><td>256</td><td>1.009731e-11</td><td>2.00</td><td>0</td><td>yes</td></tr>
+<tr><td>fv8_fb</td><td>left-going Alfvén</td><td>256</td><td>3.076449e-13</td><td>-0.77</td><td>0</td><td>yes</td></tr>
+<tr><td>fv8_fb</td><td>left-going slow magnetosonic</td><td>256</td><td>3.845886e-12</td><td>-0.01</td><td>0</td><td>yes</td></tr>
+<tr><td>fv8_fb</td><td>entropy/contact</td><td>256</td><td>5.821558e-13</td><td>-1.00</td><td>0</td><td>yes</td></tr>
+<tr><td>fv8_fb</td><td>right-going slow magnetosonic</td><td>256</td><td>3.843513e-12</td><td>-0.01</td><td>0</td><td>yes</td></tr>
+<tr><td>fv8_fb</td><td>right-going Alfvén</td><td>256</td><td>3.0761e-13</td><td>-0.78</td><td>0</td><td>yes</td></tr>
+<tr><td>fv8_fb</td><td>right-going fast magnetosonic</td><td>256</td><td>1.009686e-11</td><td>2.00</td><td>0</td><td>yes</td></tr>
+<tr><td>plm</td><td>left-going fast magnetosonic</td><td>256</td><td>1.465083e-09</td><td>2.02</td><td>0</td><td>yes</td></tr>
+<tr><td>plm</td><td>left-going Alfvén</td><td>256</td><td>7.800711e-10</td><td>2.03</td><td>0</td><td>yes</td></tr>
+<tr><td>plm</td><td>left-going slow magnetosonic</td><td>256</td><td>9.08071e-10</td><td>2.05</td><td>0</td><td>yes</td></tr>
+<tr><td>plm</td><td>entropy/contact</td><td>256</td><td>8.156857e-10</td><td>2.04</td><td>0</td><td>yes</td></tr>
+<tr><td>plm</td><td>right-going slow magnetosonic</td><td>256</td><td>9.080752e-10</td><td>2.05</td><td>0</td><td>yes</td></tr>
+<tr><td>plm</td><td>right-going Alfvén</td><td>256</td><td>7.800713e-10</td><td>2.03</td><td>0</td><td>yes</td></tr>
+<tr><td>plm</td><td>right-going fast magnetosonic</td><td>256</td><td>1.465099e-09</td><td>2.02</td><td>0</td><td>yes</td></tr>
+<tr><td>teno</td><td>left-going fast magnetosonic</td><td>256</td><td>1.009767e-11</td><td>2.00</td><td>0</td><td>yes</td></tr>
+<tr><td>teno</td><td>left-going Alfvén</td><td>256</td><td>3.091141e-13</td><td>-0.67</td><td>0</td><td>yes</td></tr>
+<tr><td>teno</td><td>left-going slow magnetosonic</td><td>256</td><td>3.846018e-12</td><td>-0.01</td><td>0</td><td>yes</td></tr>
+<tr><td>teno</td><td>entropy/contact</td><td>256</td><td>5.550204e-13</td><td>-0.99</td><td>0</td><td>yes</td></tr>
+<tr><td>teno</td><td>right-going slow magnetosonic</td><td>256</td><td>3.846053e-12</td><td>-0.01</td><td>0</td><td>yes</td></tr>
+<tr><td>teno</td><td>right-going Alfvén</td><td>256</td><td>3.092114e-13</td><td>-0.66</td><td>0</td><td>yes</td></tr>
+<tr><td>teno</td><td>right-going fast magnetosonic</td><td>256</td><td>1.009824e-11</td><td>2.00</td><td>0</td><td>yes</td></tr>
+<tr><td>wenoz</td><td>left-going fast magnetosonic</td><td>256</td><td>1.009766e-11</td><td>2.00</td><td>0</td><td>yes</td></tr>
+<tr><td>wenoz</td><td>left-going Alfvén</td><td>256</td><td>3.076772e-13</td><td>-0.66</td><td>0</td><td>yes</td></tr>
+<tr><td>wenoz</td><td>left-going slow magnetosonic</td><td>256</td><td>3.846868e-12</td><td>-0.01</td><td>0</td><td>yes</td></tr>
+<tr><td>wenoz</td><td>entropy/contact</td><td>256</td><td>5.518025e-13</td><td>-0.99</td><td>0</td><td>yes</td></tr>
+<tr><td>wenoz</td><td>right-going slow magnetosonic</td><td>256</td><td>3.84438e-12</td><td>-0.01</td><td>0</td><td>yes</td></tr>
+<tr><td>wenoz</td><td>right-going Alfvén</td><td>256</td><td>3.081676e-13</td><td>-0.65</td><td>0</td><td>yes</td></tr>
+<tr><td>wenoz</td><td>right-going fast magnetosonic</td><td>256</td><td>1.009757e-11</td><td>2.00</td><td>0</td><td>yes</td></tr>
+</tbody></table></div>
 <h3>2D linear waves</h3>
-<figure><img src="figures/lwave_mhd_2d_mosaic.png?v=1791244740" alt="Linear-wave mosaic mhd 2d"><figcaption>Linear-wave mosaic mhd 2d</figcaption></figure>
-<div class='tablewrap'><table><thead><tr><th>Scheme</th><th>Wave</th><th>N</th><th>L1</th><th>Order</th><th>nmood</th><th>ok</th></tr></thead><tbody><tr><td>fv4_fb</td><td>left-going fast magnetosonic</td><td>128</td><td>4.075089e-10</td><td>2.18</td><td>0</td><td>yes</td></tr><tr><td>fv4_fb</td><td>right-going fast magnetosonic</td><td>128</td><td>4.075085e-10</td><td>2.18</td><td>0</td><td>yes</td></tr><tr><td>fv6_fb</td><td>left-going fast magnetosonic</td><td>128</td><td>3.660084e-10</td><td>2.01</td><td>0</td><td>yes</td></tr><tr><td>fv6_fb</td><td>right-going fast magnetosonic</td><td>128</td><td>3.660084e-10</td><td>2.01</td><td>0</td><td>yes</td></tr><tr><td>fv8_fb</td><td>left-going fast magnetosonic</td><td>128</td><td>3.660463e-10</td><td>2.01</td><td>0</td><td>yes</td></tr><tr><td>fv8_fb</td><td>right-going fast magnetosonic</td><td>128</td><td>3.660463e-10</td><td>2.01</td><td>0</td><td>yes</td></tr><tr><td>plm</td><td>left-going fast magnetosonic</td><td>128</td><td>2.15449e-08</td><td>1.81</td><td>0</td><td>yes</td></tr><tr><td>plm</td><td>right-going fast magnetosonic</td><td>128</td><td>2.154531e-08</td><td>1.81</td><td>0</td><td>yes</td></tr><tr><td>teno</td><td>left-going fast magnetosonic</td><td>128</td><td>3.659035e-10</td><td>2.01</td><td>0</td><td>yes</td></tr><tr><td>teno</td><td>right-going fast magnetosonic</td><td>128</td><td>3.659035e-10</td><td>2.01</td><td>0</td><td>yes</td></tr><tr><td>wenoz</td><td>left-going fast magnetosonic</td><td>128</td><td>3.659035e-10</td><td>2.01</td><td>0</td><td>yes</td></tr><tr><td>wenoz</td><td>right-going fast magnetosonic</td><td>128</td><td>3.659036e-10</td><td>2.01</td><td>0</td><td>yes</td></tr></tbody></table></div>
+<figure><img src="figures/lwave_mhd_2d_mosaic.png?v=1791342080" alt="Linear-wave mosaic mhd 2d"><figcaption>Linear-wave mosaic mhd 2d</figcaption></figure>
+<div class='tablewrap'><table><thead><tr><th>Scheme</th><th>Wave</th><th>N</th><th>L1</th><th>Order</th><th>nmood</th><th>ok</th></tr></thead><tbody>
+<tr><td>fv4_fb</td><td>left-going fast magnetosonic</td><td>128</td><td>4.075089e-10</td><td>2.18</td><td>0</td><td>yes</td></tr>
+<tr><td>fv4_fb</td><td>right-going fast magnetosonic</td><td>128</td><td>4.075085e-10</td><td>2.18</td><td>0</td><td>yes</td></tr>
+<tr><td>fv6_fb</td><td>left-going fast magnetosonic</td><td>128</td><td>3.660084e-10</td><td>2.01</td><td>0</td><td>yes</td></tr>
+<tr><td>fv6_fb</td><td>right-going fast magnetosonic</td><td>128</td><td>3.660084e-10</td><td>2.01</td><td>0</td><td>yes</td></tr>
+<tr><td>fv8_fb</td><td>left-going fast magnetosonic</td><td>128</td><td>3.660463e-10</td><td>2.01</td><td>0</td><td>yes</td></tr>
+<tr><td>fv8_fb</td><td>right-going fast magnetosonic</td><td>128</td><td>3.660463e-10</td><td>2.01</td><td>0</td><td>yes</td></tr>
+<tr><td>plm</td><td>left-going fast magnetosonic</td><td>128</td><td>2.15449e-08</td><td>1.81</td><td>0</td><td>yes</td></tr>
+<tr><td>plm</td><td>right-going fast magnetosonic</td><td>128</td><td>2.154531e-08</td><td>1.81</td><td>0</td><td>yes</td></tr>
+<tr><td>teno</td><td>left-going fast magnetosonic</td><td>128</td><td>3.659035e-10</td><td>2.01</td><td>0</td><td>yes</td></tr>
+<tr><td>teno</td><td>right-going fast magnetosonic</td><td>128</td><td>3.659035e-10</td><td>2.01</td><td>0</td><td>yes</td></tr>
+<tr><td>wenoz</td><td>left-going fast magnetosonic</td><td>128</td><td>3.659035e-10</td><td>2.01</td><td>0</td><td>yes</td></tr>
+<tr><td>wenoz</td><td>right-going fast magnetosonic</td><td>128</td><td>3.659036e-10</td><td>2.01</td><td>0</td><td>yes</td></tr>
+</tbody></table></div>
 <h3>3D linear waves</h3>
-<figure><img src="figures/lwave_mhd_3d_mosaic.png?v=1791244740" alt="Linear-wave mosaic mhd 3d"><figcaption>Linear-wave mosaic mhd 3d</figcaption></figure>
-<div class='tablewrap'><table><thead><tr><th>Scheme</th><th>Wave</th><th>N</th><th>L1</th><th>Order</th><th>nmood</th><th>ok</th></tr></thead><tbody><tr><td>fv4_fb</td><td>left-going fast magnetosonic</td><td>64</td><td>1.811123e-09</td><td>2.70</td><td>0</td><td>yes</td></tr><tr><td>fv4_fb</td><td>right-going fast magnetosonic</td><td>64</td><td>1.811123e-09</td><td>2.70</td><td>0</td><td>yes</td></tr><tr><td>fv6_fb</td><td>left-going fast magnetosonic</td><td>64</td><td>1.403449e-09</td><td>2.06</td><td>0</td><td>yes</td></tr><tr><td>fv6_fb</td><td>right-going fast magnetosonic</td><td>64</td><td>1.403449e-09</td><td>2.06</td><td>0</td><td>yes</td></tr><tr><td>fv8_fb</td><td>left-going fast magnetosonic</td><td>64</td><td>1.40647e-09</td><td>2.10</td><td>0</td><td>yes</td></tr><tr><td>fv8_fb</td><td>right-going fast magnetosonic</td><td>64</td><td>1.40647e-09</td><td>2.10</td><td>0</td><td>yes</td></tr><tr><td>plm</td><td>left-going fast magnetosonic</td><td>64</td><td>8.882641e-08</td><td>1.43</td><td>0</td><td>yes</td></tr><tr><td>plm</td><td>right-going fast magnetosonic</td><td>64</td><td>8.882653e-08</td><td>1.43</td><td>0</td><td>yes</td></tr><tr><td>teno</td><td>left-going fast magnetosonic</td><td>64</td><td>1.410097e-09</td><td>2.19</td><td>0</td><td>yes</td></tr><tr><td>teno</td><td>right-going fast magnetosonic</td><td>64</td><td>1.410097e-09</td><td>2.19</td><td>0</td><td>yes</td></tr><tr><td>wenoz</td><td>left-going fast magnetosonic</td><td>64</td><td>1.410101e-09</td><td>2.19</td><td>0</td><td>yes</td></tr><tr><td>wenoz</td><td>right-going fast magnetosonic</td><td>64</td><td>1.410101e-09</td><td>2.19</td><td>0</td><td>yes</td></tr></tbody></table></div>
+<figure><img src="figures/lwave_mhd_3d_mosaic.png?v=1791342080" alt="Linear-wave mosaic mhd 3d"><figcaption>Linear-wave mosaic mhd 3d</figcaption></figure>
+<div class='tablewrap'><table><thead><tr><th>Scheme</th><th>Wave</th><th>N</th><th>L1</th><th>Order</th><th>nmood</th><th>ok</th></tr></thead><tbody>
+<tr><td>fv4_fb</td><td>left-going fast magnetosonic</td><td>64</td><td>1.811123e-09</td><td>2.70</td><td>0</td><td>yes</td></tr>
+<tr><td>fv4_fb</td><td>right-going fast magnetosonic</td><td>64</td><td>1.811123e-09</td><td>2.70</td><td>0</td><td>yes</td></tr>
+<tr><td>fv6_fb</td><td>left-going fast magnetosonic</td><td>64</td><td>1.403449e-09</td><td>2.06</td><td>0</td><td>yes</td></tr>
+<tr><td>fv6_fb</td><td>right-going fast magnetosonic</td><td>64</td><td>1.403449e-09</td><td>2.06</td><td>0</td><td>yes</td></tr>
+<tr><td>fv8_fb</td><td>left-going fast magnetosonic</td><td>64</td><td>1.40647e-09</td><td>2.10</td><td>0</td><td>yes</td></tr>
+<tr><td>fv8_fb</td><td>right-going fast magnetosonic</td><td>64</td><td>1.40647e-09</td><td>2.10</td><td>0</td><td>yes</td></tr>
+<tr><td>plm</td><td>left-going fast magnetosonic</td><td>64</td><td>8.882641e-08</td><td>1.43</td><td>0</td><td>yes</td></tr>
+<tr><td>plm</td><td>right-going fast magnetosonic</td><td>64</td><td>8.882653e-08</td><td>1.43</td><td>0</td><td>yes</td></tr>
+<tr><td>teno</td><td>left-going fast magnetosonic</td><td>64</td><td>1.410097e-09</td><td>2.19</td><td>0</td><td>yes</td></tr>
+<tr><td>teno</td><td>right-going fast magnetosonic</td><td>64</td><td>1.410097e-09</td><td>2.19</td><td>0</td><td>yes</td></tr>
+<tr><td>wenoz</td><td>left-going fast magnetosonic</td><td>64</td><td>1.410101e-09</td><td>2.19</td><td>0</td><td>yes</td></tr>
+<tr><td>wenoz</td><td>right-going fast magnetosonic</td><td>64</td><td>1.410101e-09</td><td>2.19</td><td>0</td><td>yes</td></tr>
+</tbody></table></div>
 <h3>Shocks</h3>
-<figure><img src="figures/shock_bw_dens.png?v=1791245263" alt="shock_bw_dens"><figcaption>shock_bw_dens</figcaption></figure>
-<figure><img src="figures/shock_rj2a_dens.png?v=1791245263" alt="shock_rj2a_dens"><figcaption>shock_rj2a_dens</figcaption></figure>
-<div class='tablewrap'><table><thead><tr><th>Case</th><th>Dim</th><th>Scheme</th><th>N</th><th>rc</th><th>nmood</th><th>wall [s]</th></tr></thead><tbody><tr><td>bw</td><td>1d</td><td>fv4_fb</td><td>256</td><td>0</td><td>15620</td><td>5.455307722091675</td></tr><tr><td>bw</td><td>1d</td><td>fv4_fb</td><td>512</td><td>0</td><td>46976</td><td>6.407660722732544</td></tr><tr><td>bw</td><td>1d</td><td>fv4_fb</td><td>1024</td><td>0</td><td>139286</td><td>8.186083555221558</td></tr><tr><td>bw</td><td>1d</td><td>fv6_fb</td><td>256</td><td>0</td><td>20716</td><td>1.0440690517425537</td></tr><tr><td>bw</td><td>1d</td><td>fv6_fb</td><td>512</td><td>0</td><td>64711</td><td>2.2514889240264893</td></tr><tr><td>bw</td><td>1d</td><td>fv6_fb</td><td>1024</td><td>0</td><td>202510</td><td>5.148961067199707</td></tr><tr><td>bw</td><td>1d</td><td>fv8_fb</td><td>256</td><td>0</td><td>21156</td><td>1.0830469131469727</td></tr><tr><td>bw</td><td>1d</td><td>fv8_fb</td><td>512</td><td>0</td><td>67262</td><td>2.3356029987335205</td></tr><tr><td>bw</td><td>1d</td><td>fv8_fb</td><td>1024</td><td>0</td><td>213808</td><td>5.349076986312866</td></tr><tr><td>bw</td><td>1d</td><td>plm</td><td>256</td><td>0</td><td>0</td><td>4.831498384475708</td></tr><tr><td>bw</td><td>1d</td><td>plm</td><td>512</td><td>0</td><td>0</td><td>5.09998893737793</td></tr><tr><td>bw</td><td>1d</td><td>plm</td><td>1024</td><td>0</td><td>0</td><td>5.740323543548584</td></tr><tr><td>bw</td><td>1d</td><td>teno</td><td>256</td><td>0</td><td>0</td><td>4.895114898681641</td></tr><tr><td>bw</td><td>1d</td><td>teno</td><td>512</td><td>0</td><td>0</td><td>5.3945393562316895</td></tr><tr><td>bw</td><td>1d</td><td>teno</td><td>1024</td><td>0</td><td>0</td><td>6.336426734924316</td></tr><tr><td>bw</td><td>1d</td><td>wenoz</td><td>256</td><td>0</td><td>0</td><td>5.056381940841675</td></tr><tr><td>bw</td><td>1d</td><td>wenoz</td><td>512</td><td>0</td><td>0</td><td>5.467697620391846</td></tr><tr><td>bw</td><td>1d</td><td>wenoz</td><td>1024</td><td>0</td><td>0</td><td>6.279923915863037</td></tr><tr><td>rj2a</td><td>1d</td><td>fv4_fb</td><td>256</td><td>0</td><td>44934</td><td>6.194762706756592</td></tr><tr><td>rj2a</td><td>1d</td><td>fv4_fb</td><td>512</td><td>0</td><td>160045</td><td>7.311729192733765</td></tr><tr><td>rj2a</td><td>1d</td><td>fv4_fb</td><td>1024</td><td>0</td><td>530082</td><td>10.259937524795532</td></tr><tr><td>rj2a</td><td>1d</td><td>fv6_fb</td><td>256</td><td>0</td><td>68344</td><td>1.6532340049743652</td></tr><tr><td>rj2a</td><td>1d</td><td>fv6_fb</td><td>512</td><td>0</td><td>213337</td><td>3.3467071056365967</td></tr><tr><td>rj2a</td><td>1d</td><td>fv6_fb</td><td>1024</td><td>0</td><td>649935</td><td>8.165112018585205</td></tr><tr><td>rj2a</td><td>1d</td><td>fv8_fb</td><td>256</td><td>0</td><td>71530</td><td>1.574977159500122</td></tr><tr><td>rj2a</td><td>1d</td><td>fv8_fb</td><td>512</td><td>0</td><td>232156</td><td>3.6153247356414795</td></tr><tr><td>rj2a</td><td>1d</td><td>fv8_fb</td><td>1024</td><td>0</td><td>699868</td><td>7.934898853302002</td></tr><tr><td>rj2a</td><td>1d</td><td>plm</td><td>256</td><td>0</td><td>0</td><td>4.898343086242676</td></tr><tr><td>rj2a</td><td>1d</td><td>plm</td><td>512</td><td>0</td><td>0</td><td>5.323077917098999</td></tr><tr><td>rj2a</td><td>1d</td><td>plm</td><td>1024</td><td>0</td><td>0</td><td>6.295633792877197</td></tr><tr><td>rj2a</td><td>1d</td><td>teno</td><td>256</td><td>0</td><td>0</td><td>5.098629713058472</td></tr><tr><td>rj2a</td><td>1d</td><td>teno</td><td>512</td><td>0</td><td>0</td><td>5.725203275680542</td></tr><tr><td>rj2a</td><td>1d</td><td>teno</td><td>1024</td><td>0</td><td>0</td><td>7.114076614379883</td></tr><tr><td>rj2a</td><td>1d</td><td>wenoz</td><td>256</td><td>0</td><td>0</td><td>5.156071424484253</td></tr><tr><td>rj2a</td><td>1d</td><td>wenoz</td><td>512</td><td>0</td><td>0</td><td>5.787648439407349</td></tr><tr><td>rj2a</td><td>1d</td><td>wenoz</td><td>1024</td><td>0</td><td>0</td><td>7.087417125701904</td></tr></tbody></table></div>
+<figure><img src="figures/shock_bw_dens.png?v=1791342082" alt="shock_bw_dens"><figcaption>shock_bw_dens</figcaption></figure>
+<figure><img src="figures/shock_rj2a_dens.png?v=1791342082" alt="shock_rj2a_dens"><figcaption>shock_rj2a_dens</figcaption></figure>
+<div class='tablewrap'><table><thead><tr><th>Case</th><th>Dim</th><th>Scheme</th><th>N</th><th>rc</th><th>nmood</th><th>wall [s]</th></tr></thead><tbody>
+<tr><td>bw</td><td>1d</td><td>fv4_fb</td><td>256</td><td>0</td><td>15620</td><td>5.455307722091675</td></tr>
+<tr><td>bw</td><td>1d</td><td>fv4_fb</td><td>512</td><td>0</td><td>46976</td><td>6.407660722732544</td></tr>
+<tr><td>bw</td><td>1d</td><td>fv4_fb</td><td>1024</td><td>0</td><td>139286</td><td>8.186083555221558</td></tr>
+<tr><td>bw</td><td>1d</td><td>fv6_fb</td><td>256</td><td>0</td><td>20716</td><td>1.0440690517425537</td></tr>
+<tr><td>bw</td><td>1d</td><td>fv6_fb</td><td>512</td><td>0</td><td>64711</td><td>2.2514889240264893</td></tr>
+<tr><td>bw</td><td>1d</td><td>fv6_fb</td><td>1024</td><td>0</td><td>202510</td><td>5.148961067199707</td></tr>
+<tr><td>bw</td><td>1d</td><td>fv8_fb</td><td>256</td><td>0</td><td>21156</td><td>1.0830469131469727</td></tr>
+<tr><td>bw</td><td>1d</td><td>fv8_fb</td><td>512</td><td>0</td><td>67262</td><td>2.3356029987335205</td></tr>
+<tr><td>bw</td><td>1d</td><td>fv8_fb</td><td>1024</td><td>0</td><td>213808</td><td>5.349076986312866</td></tr>
+<tr><td>bw</td><td>1d</td><td>plm</td><td>256</td><td>0</td><td>0</td><td>4.831498384475708</td></tr>
+<tr><td>bw</td><td>1d</td><td>plm</td><td>512</td><td>0</td><td>0</td><td>5.09998893737793</td></tr>
+<tr><td>bw</td><td>1d</td><td>plm</td><td>1024</td><td>0</td><td>0</td><td>5.740323543548584</td></tr>
+<tr><td>bw</td><td>1d</td><td>teno</td><td>256</td><td>0</td><td>0</td><td>4.895114898681641</td></tr>
+<tr><td>bw</td><td>1d</td><td>teno</td><td>512</td><td>0</td><td>0</td><td>5.3945393562316895</td></tr>
+<tr><td>bw</td><td>1d</td><td>teno</td><td>1024</td><td>0</td><td>0</td><td>6.336426734924316</td></tr>
+<tr><td>bw</td><td>1d</td><td>wenoz</td><td>256</td><td>0</td><td>0</td><td>5.056381940841675</td></tr>
+<tr><td>bw</td><td>1d</td><td>wenoz</td><td>512</td><td>0</td><td>0</td><td>5.467697620391846</td></tr>
+<tr><td>bw</td><td>1d</td><td>wenoz</td><td>1024</td><td>0</td><td>0</td><td>6.279923915863037</td></tr>
+<tr><td>rj2a</td><td>1d</td><td>fv4_fb</td><td>256</td><td>0</td><td>44934</td><td>6.194762706756592</td></tr>
+<tr><td>rj2a</td><td>1d</td><td>fv4_fb</td><td>512</td><td>0</td><td>160045</td><td>7.311729192733765</td></tr>
+<tr><td>rj2a</td><td>1d</td><td>fv4_fb</td><td>1024</td><td>0</td><td>530082</td><td>10.259937524795532</td></tr>
+<tr><td>rj2a</td><td>1d</td><td>fv6_fb</td><td>256</td><td>0</td><td>68344</td><td>1.6532340049743652</td></tr>
+<tr><td>rj2a</td><td>1d</td><td>fv6_fb</td><td>512</td><td>0</td><td>213337</td><td>3.3467071056365967</td></tr>
+<tr><td>rj2a</td><td>1d</td><td>fv6_fb</td><td>1024</td><td>0</td><td>649935</td><td>8.165112018585205</td></tr>
+<tr><td>rj2a</td><td>1d</td><td>fv8_fb</td><td>256</td><td>0</td><td>71530</td><td>1.574977159500122</td></tr>
+<tr><td>rj2a</td><td>1d</td><td>fv8_fb</td><td>512</td><td>0</td><td>232156</td><td>3.6153247356414795</td></tr>
+<tr><td>rj2a</td><td>1d</td><td>fv8_fb</td><td>1024</td><td>0</td><td>699868</td><td>7.934898853302002</td></tr>
+<tr><td>rj2a</td><td>1d</td><td>plm</td><td>256</td><td>0</td><td>0</td><td>4.898343086242676</td></tr>
+<tr><td>rj2a</td><td>1d</td><td>plm</td><td>512</td><td>0</td><td>0</td><td>5.323077917098999</td></tr>
+<tr><td>rj2a</td><td>1d</td><td>plm</td><td>1024</td><td>0</td><td>0</td><td>6.295633792877197</td></tr>
+<tr><td>rj2a</td><td>1d</td><td>teno</td><td>256</td><td>0</td><td>0</td><td>5.098629713058472</td></tr>
+<tr><td>rj2a</td><td>1d</td><td>teno</td><td>512</td><td>0</td><td>0</td><td>5.725203275680542</td></tr>
+<tr><td>rj2a</td><td>1d</td><td>teno</td><td>1024</td><td>0</td><td>0</td><td>7.114076614379883</td></tr>
+<tr><td>rj2a</td><td>1d</td><td>wenoz</td><td>256</td><td>0</td><td>0</td><td>5.156071424484253</td></tr>
+<tr><td>rj2a</td><td>1d</td><td>wenoz</td><td>512</td><td>0</td><td>0</td><td>5.787648439407349</td></tr>
+<tr><td>rj2a</td><td>1d</td><td>wenoz</td><td>1024</td><td>0</td><td>0</td><td>7.087417125701904</td></tr>
+</tbody></table></div>
 <h3>Multi-D stress</h3>
-<div class='tablewrap'><table><thead><tr><th>Case</th><th>Dim</th><th>Scheme</th><th>health</th><th>EOS floors</th><th>nmood</th><th>wall [s]</th></tr></thead><tbody><tr><td>jet_n600</td><td>2d</td><td>fv4_fb</td><td><strong>floored</strong></td><td>550</td><td>425945941</td><td>96.45877623558044</td></tr><tr><td>blast_mhd</td><td>2d</td><td>wenoz</td><td>clean</td><td>0</td><td>0</td><td>4.424925327301025</td></tr><tr><td>jet</td><td>2d</td><td>teno</td><td><strong>floored</strong></td><td>2002</td><td>0</td><td>17.087567806243896</td></tr><tr><td>orszag_tang</td><td>2d</td><td>fv6_fb</td><td><strong>floored</strong></td><td>69</td><td>91084393</td><td>1487.0636160373688</td></tr><tr><td>blast_mhd</td><td>2d</td><td>plm</td><td>clean</td><td>0</td><td>0</td><td>4.108715295791626</td></tr><tr><td>rotor</td><td>2d</td><td>teno</td><td>clean</td><td>0</td><td>0</td><td>4.676168203353882</td></tr><tr><td>jet</td><td>2d</td><td>fv6_fb</td><td><strong>non-finite</strong></td><td>3009</td><td>75406908</td><td>641.204922914505</td></tr><tr><td>rotor</td><td>2d</td><td>plm</td><td>clean</td><td>0</td><td>0</td><td>4.2501161098480225</td></tr><tr><td>current_sheet</td><td>2d</td><td>fv6_fb</td><td><strong>floored</strong></td><td>1190</td><td>112173446</td><td>566.8557329177856</td></tr><tr><td>blast_mhd</td><td>2d</td><td>teno</td><td>clean</td><td>0</td><td>0</td><td>4.338674068450928</td></tr><tr><td>jet</td><td>2d</td><td>plm</td><td><strong>floored</strong></td><td>28186</td><td>0</td><td>15.856359481811523</td></tr><tr><td>kh_rr22</td><td>2d</td><td>teno</td><td>clean</td><td>0</td><td>0</td><td>27.219162940979004</td></tr><tr><td>kh_rr22</td><td>2d</td><td>wenoz</td><td>clean</td><td>0</td><td>0</td><td>27.560834646224976</td></tr><tr><td>blast_mhd</td><td>2d</td><td>fv4_fb</td><td>clean</td><td>0</td><td>2865612</td><td>5.676389217376709</td></tr><tr><td>current_sheet</td><td>2d</td><td>plm</td><td>clean</td><td>0</td><td>0</td><td>7.914682388305664</td></tr><tr><td>rotor</td><td>2d</td><td>wenoz</td><td>clean</td><td>0</td><td>0</td><td>4.7452497482299805</td></tr><tr><td>current_sheet</td><td>2d</td><td>teno</td><td><strong>dt collapse</strong></td><td>57853</td><td>0</td><td>434.2576529979706</td></tr><tr><td>current_sheet_n1024</td><td>2d</td><td>wenoz</td><td>clean</td><td>0</td><td>0</td><td>80.21520495414734</td></tr><tr><td>rotor</td><td>2d</td><td>fv4_fb</td><td>clean</td><td>0</td><td>18877768</td><td>6.933132171630859</td></tr><tr><td>current_sheet_n512</td><td>2d</td><td>fv4_fb</td><td>clean</td><td>0</td><td>445302218</td><td>45.406437397003174</td></tr><tr><td>current_sheet</td><td>2d</td><td>fv4_fb</td><td><strong>floored</strong></td><td>10</td><td>93507990</td><td>22.261358976364136</td></tr><tr><td>current_sheet_n1024</td><td>2d</td><td>teno</td><td><strong>dt collapse</strong></td><td>1111726</td><td>0</td><td>63.33787560462952</td></tr><tr><td>jet</td><td>2d</td><td>fv4_fb</td><td>clean</td><td>0</td><td>59372029</td><td>31.7730495929718</td></tr><tr><td>current_sheet</td><td>2d</td><td>wenoz</td><td><strong>floored</strong></td><td>642</td><td>0</td><td>10.626406908035278</td></tr><tr><td>jet_n600</td><td>2d</td><td>plm</td><td>clean</td><td>0</td><td>0</td><td>26.293771743774414</td></tr><tr><td>jet_n600</td><td>2d</td><td>wenoz</td><td><strong>dt collapse</strong></td><td>98098</td><td>0</td><td>46.97315859794617</td></tr><tr><td>jet_n600</td><td>2d</td><td>teno</td><td><strong>floored</strong></td><td>1560</td><td>0</td><td>42.42583513259888</td></tr><tr><td>current_sheet_n512</td><td>2d</td><td>plm</td><td>clean</td><td>0</td><td>0</td><td>14.827360153198242</td></tr><tr><td>current_sheet_n1024</td><td>2d</td><td>fv4_fb</td><td>clean</td><td>0</td><td>2153430653</td><td>172.02649068832397</td></tr><tr><td>current_sheet_n1024</td><td>2d</td><td>plm</td><td>clean</td><td>0</td><td>0</td><td>46.333914279937744</td></tr><tr><td>jet</td><td>2d</td><td>wenoz</td><td><strong>floored</strong></td><td>5466</td><td>0</td><td>17.281517028808594</td></tr><tr><td>orszag_tang</td><td>2d</td><td>fv8_fb</td><td><strong>floored</strong></td><td>54</td><td>93285611</td><td>1425.3590211868286</td></tr><tr><td>kh_rr22</td><td>2d</td><td>plm</td><td>clean</td><td>0</td><td>0</td><td>19.056479692459106</td></tr><tr><td>kh_rr22</td><td>2d</td><td>fv4_fb</td><td>clean</td><td>0</td><td>73353124</td><td>57.68581295013428</td></tr><tr><td>current_sheet_n512</td><td>2d</td><td>wenoz</td><td>clean</td><td>0</td><td>0</td><td>22.701947450637817</td></tr><tr><td>jet</td><td>2d</td><td>fv8_fb</td><td><strong>non-finite</strong></td><td>33600</td><td>62831203</td><td>607.3037672042847</td></tr><tr><td>current_sheet_n512</td><td>2d</td><td>teno</td><td><strong>dt collapse</strong></td><td>79200</td><td>0</td><td>21.408766984939575</td></tr><tr><td>current_sheet</td><td>2d</td><td>fv8_fb</td><td><strong>floored</strong></td><td>254</td><td>117941562</td><td>591.8266229629517</td></tr></tbody></table></div>
-<figure><img src="figures/stress_blast_mhd_mosaic.png?v=1791244767" alt="blast_mhd stress mosaic"><figcaption>blast_mhd stress mosaic</figcaption></figure>
-<figure><img src="figures/stress_blast_mhd_bmag_mosaic.png?v=1791244767" alt="blast_mhd |B| mosaic"><figcaption>blast_mhd |B| mosaic</figcaption></figure>
+<div class='tablewrap'><table><thead><tr><th>Case</th><th>Dim</th><th>Scheme</th><th>health</th><th>EOS floors</th><th>nmood</th><th>wall [s]</th></tr></thead><tbody>
+<tr><td>jet_n600</td><td>2d</td><td>fv4_fb</td><td><strong>floored</strong></td><td>550</td><td>425945941</td><td>96.45877623558044</td></tr>
+<tr><td>blast_mhd</td><td>2d</td><td>wenoz</td><td>clean</td><td>0</td><td>0</td><td>4.424925327301025</td></tr>
+<tr><td>jet</td><td>2d</td><td>teno</td><td><strong>floored</strong></td><td>2002</td><td>0</td><td>17.087567806243896</td></tr>
+<tr><td>current_sheet_n1024</td><td>2d</td><td>fv6_fb</td><td>clean</td><td>0</td><td>2980295958</td><td>26354.41700410843</td></tr>
+<tr><td>rotor</td><td>2d</td><td>fv8_fb</td><td><strong>floored</strong></td><td>32</td><td>19992510</td><td>259.824697971344</td></tr>
+<tr><td>current_sheet_n512</td><td>2d</td><td>fv8_fb</td><td><strong>floored</strong></td><td>316</td><td>552930752</td><td>3765.5608942508698</td></tr>
+<tr><td>orszag_tang</td><td>2d</td><td>fv6_fb</td><td><strong>floored</strong></td><td>69</td><td>91084393</td><td>1487.0636160373688</td></tr>
+<tr><td>blast_mhd</td><td>2d</td><td>plm</td><td>clean</td><td>0</td><td>0</td><td>4.108715295791626</td></tr>
+<tr><td>rotor</td><td>2d</td><td>teno</td><td>clean</td><td>0</td><td>0</td><td>4.676168203353882</td></tr>
+<tr><td>jet</td><td>2d</td><td>fv6_fb</td><td><strong>non-finite</strong></td><td>3009</td><td>75406908</td><td>641.204922914505</td></tr>
+<tr><td>kh_rr22_n256</td><td>2d</td><td>fv8_fb</td><td>clean</td><td>0</td><td>558562997</td><td>7630.115083932877</td></tr>
+<tr><td>rotor</td><td>2d</td><td>plm</td><td>clean</td><td>0</td><td>0</td><td>4.2501161098480225</td></tr>
+<tr><td>current_sheet</td><td>2d</td><td>fv6_fb</td><td><strong>floored</strong></td><td>1190</td><td>112173446</td><td>566.8557329177856</td></tr>
+<tr><td>blast_mhd</td><td>2d</td><td>teno</td><td>clean</td><td>0</td><td>0</td><td>4.338674068450928</td></tr>
+<tr><td>blast_mhd</td><td>2d</td><td>fv8_fb</td><td>clean</td><td>0</td><td>102503498</td><td>979.7400200366974</td></tr>
+<tr><td>jet</td><td>2d</td><td>plm</td><td><strong>floored</strong></td><td>28186</td><td>0</td><td>15.856359481811523</td></tr>
+<tr><td>kh_rr22</td><td>2d</td><td>teno</td><td>clean</td><td>0</td><td>0</td><td>27.219162940979004</td></tr>
+<tr><td>kh_rr22</td><td>2d</td><td>wenoz</td><td>clean</td><td>0</td><td>0</td><td>27.560834646224976</td></tr>
+<tr><td>blast_mhd</td><td>2d</td><td>fv4_fb</td><td>clean</td><td>0</td><td>2865612</td><td>5.676389217376709</td></tr>
+<tr><td>kh_rr22</td><td>2d</td><td>fv6_fb</td><td>clean</td><td>0</td><td>89137357</td><td>1126.128788948059</td></tr>
+<tr><td>current_sheet</td><td>2d</td><td>plm</td><td>clean</td><td>0</td><td>0</td><td>7.914682388305664</td></tr>
+<tr><td>blast_mhd_lowbeta</td><td>2d</td><td>fv6_fb</td><td><strong>floored</strong></td><td>112117</td><td>90283532</td><td>377.54402208328247</td></tr>
+<tr><td>rotor</td><td>2d</td><td>wenoz</td><td>clean</td><td>0</td><td>0</td><td>4.7452497482299805</td></tr>
+<tr><td>mhd_jet</td><td>2d</td><td>fv8_fb</td><td><strong>non-finite</strong></td><td>5279</td><td>34489270</td><td>24.737060070037842</td></tr>
+<tr><td>jet_n600</td><td>2d</td><td>fv8_fb</td><td><strong>floored</strong></td><td>403</td><td>192374395</td><td>6125.73609995842</td></tr>
+<tr><td>current_sheet</td><td>2d</td><td>teno</td><td><strong>dt collapse</strong></td><td>57853</td><td>0</td><td>434.2576529979706</td></tr>
+<tr><td>current_sheet_n1024</td><td>2d</td><td>wenoz</td><td>clean</td><td>0</td><td>0</td><td>80.21520495414734</td></tr>
+<tr><td>mhd_jet_revs4</td><td>2d</td><td>fv6_fb</td><td><strong>non-finite</strong></td><td>97393</td><td>40646287</td><td>41.8792622089386</td></tr>
+<tr><td>rotor</td><td>2d</td><td>fv4_fb</td><td>clean</td><td>0</td><td>18877768</td><td>6.933132171630859</td></tr>
+<tr><td>current_sheet_n512</td><td>2d</td><td>fv4_fb</td><td>clean</td><td>0</td><td>445302218</td><td>45.406437397003174</td></tr>
+<tr><td>current_sheet</td><td>2d</td><td>fv4_fb</td><td><strong>floored</strong></td><td>10</td><td>93507990</td><td>22.261358976364136</td></tr>
+<tr><td>current_sheet_n1024</td><td>2d</td><td>teno</td><td><strong>dt collapse</strong></td><td>1111726</td><td>0</td><td>63.33787560462952</td></tr>
+<tr><td>jet</td><td>2d</td><td>fv4_fb</td><td>clean</td><td>0</td><td>59372029</td><td>31.7730495929718</td></tr>
+<tr><td>kh_rr22</td><td>2d</td><td>fv8_fb</td><td>clean</td><td>0</td><td>89986183</td><td>1160.5801091194153</td></tr>
+<tr><td>current_sheet</td><td>2d</td><td>wenoz</td><td><strong>floored</strong></td><td>642</td><td>0</td><td>10.626406908035278</td></tr>
+<tr><td>blast_mhd_lowbeta</td><td>2d</td><td>fv8_fb</td><td><strong>floored</strong></td><td>152708</td><td>86170694</td><td>382.24168610572815</td></tr>
+<tr><td>jet_n600</td><td>2d</td><td>plm</td><td>clean</td><td>0</td><td>0</td><td>26.293771743774414</td></tr>
+<tr><td>jet_n600</td><td>2d</td><td>wenoz</td><td><strong>dt collapse</strong></td><td>98098</td><td>0</td><td>46.97315859794617</td></tr>
+<tr><td>jet_n600</td><td>2d</td><td>teno</td><td><strong>floored</strong></td><td>1560</td><td>0</td><td>42.42583513259888</td></tr>
+<tr><td>mhd_jet</td><td>2d</td><td>fv6_fb</td><td><strong>non-finite</strong></td><td>97393</td><td>40646287</td><td>44.80704689025879</td></tr>
+<tr><td>current_sheet_n512</td><td>2d</td><td>plm</td><td>clean</td><td>0</td><td>0</td><td>14.827360153198242</td></tr>
+<tr><td>jet_n600</td><td>2d</td><td>fv6_fb</td><td><strong>floored</strong></td><td>3355</td><td>190672457</td><td>6664.968143224716</td></tr>
+<tr><td>current_sheet_n1024</td><td>2d</td><td>fv4_fb</td><td>clean</td><td>0</td><td>2153430653</td><td>172.02649068832397</td></tr>
+<tr><td>current_sheet_n1024</td><td>2d</td><td>plm</td><td>clean</td><td>0</td><td>0</td><td>46.333914279937744</td></tr>
+<tr><td>mhd_jet_revs4</td><td>2d</td><td>fv8_fb</td><td><strong>non-finite</strong></td><td>5279</td><td>34489270</td><td>23.332226753234863</td></tr>
+<tr><td>jet</td><td>2d</td><td>wenoz</td><td><strong>floored</strong></td><td>5466</td><td>0</td><td>17.281517028808594</td></tr>
+<tr><td>orszag_tang</td><td>2d</td><td>fv8_fb</td><td><strong>floored</strong></td><td>54</td><td>93285611</td><td>1425.3590211868286</td></tr>
+<tr><td>kh_rr22</td><td>2d</td><td>plm</td><td>clean</td><td>0</td><td>0</td><td>19.056479692459106</td></tr>
+<tr><td>current_sheet_n512</td><td>2d</td><td>fv6_fb</td><td><strong>floored</strong></td><td>6</td><td>537693519</td><td>3399.263725042343</td></tr>
+<tr><td>rotor</td><td>2d</td><td>fv6_fb</td><td><strong>floored</strong></td><td>148</td><td>20056797</td><td>273.52879524230957</td></tr>
+<tr><td>current_sheet_n1024</td><td>2d</td><td>fv8_fb</td><td>clean</td><td>0</td><td>3015150945</td><td>27923.13966679573</td></tr>
+<tr><td>kh_rr22</td><td>2d</td><td>fv4_fb</td><td>clean</td><td>0</td><td>73353124</td><td>57.68581295013428</td></tr>
+<tr><td>kh_rr22_n256</td><td>2d</td><td>fv6_fb</td><td>clean</td><td>0</td><td>542358161</td><td>7427.124178886414</td></tr>
+<tr><td>current_sheet_n512</td><td>2d</td><td>wenoz</td><td>clean</td><td>0</td><td>0</td><td>22.701947450637817</td></tr>
+<tr><td>jet</td><td>2d</td><td>fv8_fb</td><td><strong>non-finite</strong></td><td>33600</td><td>62831203</td><td>607.3037672042847</td></tr>
+<tr><td>current_sheet_n512</td><td>2d</td><td>teno</td><td><strong>dt collapse</strong></td><td>79200</td><td>0</td><td>21.408766984939575</td></tr>
+<tr><td>current_sheet</td><td>2d</td><td>fv8_fb</td><td><strong>floored</strong></td><td>254</td><td>117941562</td><td>591.8266229629517</td></tr>
+<tr><td>blast_mhd</td><td>2d</td><td>fv6_fb</td><td>clean</td><td>0</td><td>102062017</td><td>946.5443339347839</td></tr>
+</tbody></table></div>
+<figure><img src="figures/stress_blast_mhd_mosaic.png?v=1791342122" alt="blast_mhd stress mosaic"><figcaption>blast_mhd stress mosaic</figcaption></figure>
+<figure><img src="figures/stress_blast_mhd_bmag_mosaic.png?v=1791342122" alt="blast_mhd |B| mosaic"><figcaption>blast_mhd |B| mosaic</figcaption></figure>
+<figure><img src="figures/stress_blast_mhd_lowbeta_mosaic.png?v=1791342122" alt="blast_mhd_lowbeta stress mosaic"><figcaption>blast_mhd_lowbeta stress mosaic</figcaption></figure>
+<figure><img src="figures/stress_blast_mhd_lowbeta_bmag_mosaic.png?v=1791342122" alt="blast_mhd_lowbeta |B| mosaic"><figcaption>blast_mhd_lowbeta |B| mosaic</figcaption></figure>
 <p>The double Harris sheet is seeded with the pgen tearing perturbation and run to $t=5$, a few Alfv\&#x27;en times, so plasmoid chains have formed on both sheets.</p>
-<p><strong>This case previously reported only $t=1$.</strong> The reason every high-order scheme collapsed before plasmoid time was an initial-condition defect, not a limiter failure: <code>current_sheet.cpp</code> wrote *primitive* variables into the *conserved* array -- momenta received $v$ rather than $\rho v$, and the total energy omitted both $\rho v^2/2$ and $B^2/2$. In the stock deck that makes $P=(\gamma-1)(17.86-50)=-12.9$ throughout the background, so <strong>95.8\% of cells sat on the pressure floor at $t=0$</strong> (measured: $e_{\rm int}$ floor count 62816/65536, median $\beta=5.9\times10^{-39}$). The initial state was a cold, zero-pressure, magnetically dominated medium, not a Harris equilibrium.</p>
+<p><strong>This case previously reported only $t=1$.</strong> The reason every high-order scheme collapsed before plasmoid time was an initial-condition defect, not a limiter failure: <code>current_sheet.cpp</code> wrote <em>primitive</em> variables into the <em>conserved</em> array -- momenta received $v$ rather than $\rho v$, and the total energy omitted both $\rho v^2/2$ and $B^2/2$. In the stock deck that makes $P=(\gamma-1)(17.86-50)=-12.9$ throughout the background, so <strong>95.8\% of cells sat on the pressure floor at $t=0$</strong> (measured: $e_{\rm int}$ floor count 62816/65536, median $\beta=5.9\times10^{-39}$). The initial state was a cold, zero-pressure, magnetically dominated medium, not a Harris equilibrium.</p>
 <p>The pgen now sets $\rho v$ and $E=p/(\gamma-1)+\rho v^2/2+B^2/2$, with the pressure taken from transverse force balance, $p(x)=p_0 n_g + (b_0^2/2)(\mathrm{sech}^2\frac{x+x_{01}}{a_0}+\mathrm{sech}^2\frac{x-x_{01}}{a_0})$, which is an exact equilibrium for any $d_0$ and $\gamma$ and reduces to the uniform-temperature form when $d_0=\gamma b_0^2/2$. Two gates confirm it: zero floored cells at $t=0$ with $p+B^2/2$ constant to output precision, and a static run ($\epsilon_b=\epsilon_v=0$, ideal MHD) whose residual $|v|_{\max}$ converges $8.1\times10^{-2}\to2.5\times10^{-2}\to8.0\times10^{-3}$ over $N=128/256/512$.</p>
 <p>With the corrected IC every scheme reaches $t=5$ <strong>when given its own a-posteriori protection</strong> -- MOOD for unlimited FV4/FV6/FV8, FOFC for the others (the two are mutually exclusive, and unlimited FV schemes require <code>mood=true</code>). The difference is cost, not survival: FV4 reaches $t=5$ with no EOS floor events at all, while TENO needs 2173 FOFC demotions, $\sim10^5$ floor hits, 48\% more cycles and half the timestep. FOFC never fires for PLM or WENO-Z.</p>
-<figure><img src="figures/stress_current_sheet_mosaic.png?v=1791244768" alt="current_sheet stress mosaic"><figcaption>current_sheet stress mosaic</figcaption></figure>
-<figure><img src="figures/stress_current_sheet_bmag_mosaic.png?v=1791244768" alt="current_sheet |B| mosaic"><figcaption>current_sheet |B| mosaic</figcaption></figure>
-<figure><img src="figures/stress_current_sheet_n1024_mosaic.png?v=1791244768" alt="current_sheet_n1024 stress mosaic"><figcaption>current_sheet_n1024 stress mosaic</figcaption></figure>
-<figure><img src="figures/stress_current_sheet_n1024_bmag_mosaic.png?v=1791244769" alt="current_sheet_n1024 |B| mosaic"><figcaption>current_sheet_n1024 |B| mosaic</figcaption></figure>
-<figure><img src="figures/stress_current_sheet_n512_mosaic.png?v=1791244769" alt="current_sheet_n512 stress mosaic"><figcaption>current_sheet_n512 stress mosaic</figcaption></figure>
-<figure><img src="figures/stress_current_sheet_n512_bmag_mosaic.png?v=1791244769" alt="current_sheet_n512 |B| mosaic"><figcaption>current_sheet_n512 |B| mosaic</figcaption></figure>
-<figure><img src="figures/stress_jet_mosaic.png?v=1791244881" alt="jet stress mosaic"><figcaption>jet stress mosaic</figcaption></figure>
-<figure><img src="figures/stress_jet_bmag_mosaic.png?v=1791244881" alt="jet |B| mosaic"><figcaption>jet |B| mosaic</figcaption></figure>
-<figure><img src="figures/stress_jet_n600_mosaic.png?v=1791244770" alt="jet_n600 stress mosaic"><figcaption>jet_n600 stress mosaic</figcaption></figure>
-<figure><img src="figures/stress_jet_n600_bmag_mosaic.png?v=1791244770" alt="jet_n600 |B| mosaic"><figcaption>jet_n600 |B| mosaic</figcaption></figure>
+<figure><img src="figures/stress_current_sheet_mosaic.png?v=1791342123" alt="current_sheet stress mosaic"><figcaption>current_sheet stress mosaic</figcaption></figure>
+<figure><img src="figures/stress_current_sheet_bmag_mosaic.png?v=1791342123" alt="current_sheet |B| mosaic"><figcaption>current_sheet |B| mosaic</figcaption></figure>
+<figure><img src="figures/stress_current_sheet_n1024_mosaic.png?v=1791342124" alt="current_sheet_n1024 stress mosaic"><figcaption>current_sheet_n1024 stress mosaic</figcaption></figure>
+<figure><img src="figures/stress_current_sheet_n1024_bmag_mosaic.png?v=1791342124" alt="current_sheet_n1024 |B| mosaic"><figcaption>current_sheet_n1024 |B| mosaic</figcaption></figure>
+<figure><img src="figures/stress_current_sheet_n512_mosaic.png?v=1791342124" alt="current_sheet_n512 stress mosaic"><figcaption>current_sheet_n512 stress mosaic</figcaption></figure>
+<figure><img src="figures/stress_current_sheet_n512_bmag_mosaic.png?v=1791342124" alt="current_sheet_n512 |B| mosaic"><figcaption>current_sheet_n512 |B| mosaic</figcaption></figure>
+<figure><img src="figures/stress_jet_mosaic.png?v=1791342125" alt="jet stress mosaic"><figcaption>jet stress mosaic</figcaption></figure>
+<figure><img src="figures/stress_jet_bmag_mosaic.png?v=1791342125" alt="jet |B| mosaic"><figcaption>jet |B| mosaic</figcaption></figure>
+<figure><img src="figures/stress_jet_n600_mosaic.png?v=1791342125" alt="jet_n600 stress mosaic"><figcaption>jet_n600 stress mosaic</figcaption></figure>
+<figure><img src="figures/stress_jet_n600_bmag_mosaic.png?v=1791342126" alt="jet_n600 |B| mosaic"><figcaption>jet_n600 |B| mosaic</figcaption></figure>
 <p>Magnetized Kelvin--Helmholtz of Rueda-Ram\&#x27;irez, Hindenlang, Chan \&amp; Gassner (2022, arXiv:2203.06062) section 5.2, replacing the Lecoanet MHD KH: the perturbation is a single deterministic mode (no random seed to reproduce across schemes or decompositions) and the shear layer $y_0=1/20$ is resolved. The field is tilted in the $xz$ plane, so the toroidal $B_z$ is nonzero and the run is genuinely pseudo-2D.</p>
-<figure><img src="figures/stress_kh_rr22_mosaic.png?v=1791244770" alt="kh_rr22 stress mosaic"><figcaption>kh_rr22 stress mosaic</figcaption></figure>
-<figure><img src="figures/stress_kh_rr22_bmag_mosaic.png?v=1791244770" alt="kh_rr22 |B| mosaic"><figcaption>kh_rr22 |B| mosaic</figcaption></figure>
+<figure><img src="figures/stress_kh_rr22_mosaic.png?v=1791342126" alt="kh_rr22 stress mosaic"><figcaption>kh_rr22 stress mosaic</figcaption></figure>
+<figure><img src="figures/stress_kh_rr22_bmag_mosaic.png?v=1791342126" alt="kh_rr22 |B| mosaic"><figcaption>kh_rr22 |B| mosaic</figcaption></figure>
+<figure><img src="figures/stress_kh_rr22_n256_mosaic.png?v=1791342126" alt="kh_rr22_n256 stress mosaic"><figcaption>kh_rr22_n256 stress mosaic</figcaption></figure>
+<figure><img src="figures/stress_kh_rr22_n256_bmag_mosaic.png?v=1791342126" alt="kh_rr22_n256 |B| mosaic"><figcaption>kh_rr22_n256 |B| mosaic</figcaption></figure>
+<figure><img src="figures/stress_mhd_jet_mosaic.png?v=1788842571" alt="mhd_jet stress mosaic"><figcaption>mhd_jet stress mosaic</figcaption></figure>
+<figure><img src="figures/stress_mhd_jet_bmag_mosaic.png?v=1788842571" alt="mhd_jet |B| mosaic"><figcaption>mhd_jet |B| mosaic</figcaption></figure>
+<figure><img src="figures/stress_mhd_jet_revs4_mosaic.png?v=1788842571" alt="mhd_jet_revs4 stress mosaic"><figcaption>mhd_jet_revs4 stress mosaic</figcaption></figure>
+<figure><img src="figures/stress_mhd_jet_revs4_bmag_mosaic.png?v=1788842572" alt="mhd_jet_revs4 |B| mosaic"><figcaption>mhd_jet_revs4 |B| mosaic</figcaption></figure>
 <p>The Orszag--Tang vortex is shown at $t=1$ on the classic $400^2$ Athena mesh.</p>
-<figure><img src="figures/stress_orszag_tang_mosaic.png?v=1791244771" alt="orszag_tang stress mosaic"><figcaption>orszag_tang stress mosaic</figcaption></figure>
-<figure><img src="figures/stress_orszag_tang_bmag_mosaic.png?v=1791244771" alt="orszag_tang |B| mosaic"><figcaption>orszag_tang |B| mosaic</figcaption></figure>
-<figure><img src="figures/stress_rotor_mosaic.png?v=1791244771" alt="rotor stress mosaic"><figcaption>rotor stress mosaic</figcaption></figure>
-<figure><img src="figures/stress_rotor_bmag_mosaic.png?v=1791244771" alt="rotor |B| mosaic"><figcaption>rotor |B| mosaic</figcaption></figure>
+<figure><img src="figures/stress_orszag_tang_mosaic.png?v=1791342127" alt="orszag_tang stress mosaic"><figcaption>orszag_tang stress mosaic</figcaption></figure>
+<figure><img src="figures/stress_orszag_tang_bmag_mosaic.png?v=1791342127" alt="orszag_tang |B| mosaic"><figcaption>orszag_tang |B| mosaic</figcaption></figure>
+<figure><img src="figures/stress_rotor_mosaic.png?v=1791342127" alt="rotor stress mosaic"><figcaption>rotor stress mosaic</figcaption></figure>
+<figure><img src="figures/stress_rotor_bmag_mosaic.png?v=1791342127" alt="rotor |B| mosaic"><figcaption>rotor |B| mosaic</figcaption></figure>
 <h3>3D ringing (Apollo)</h3>
 <p>Latest UCT-HLLD ringing mosaic from Apollo <code>feature/fallback</code> @ <code>d60ab73</code> (256³).</p>
 <h2>SR hydrodynamics</h2>
@@ -101,7 +392,14 @@ figcaption { color: #666; font-size: 0.85rem; }
 <h3>Shocks</h3>
 <p>_No shock cases for this physics._</p>
 <h3>Multi-D stress</h3>
-<p>_No local stress smokes for this physics._</p>
+<div class='tablewrap'><table><thead><tr><th>Case</th><th>Dim</th><th>Scheme</th><th>health</th><th>EOS floors</th><th>nmood</th><th>wall [s]</th></tr></thead><tbody>
+<tr><td>kh_srhydro</td><td>2d</td><td>fv8_fb</td><td>clean</td><td>0</td><td>7709131</td><td>113.93709182739258</td></tr>
+<tr><td>blast_srhydro</td><td>2d</td><td>fv8_fb</td><td>clean</td><td>0</td><td>473592</td><td>9.710411071777344</td></tr>
+<tr><td>blast_srhydro</td><td>2d</td><td>fv6_fb</td><td>clean</td><td>0</td><td>423096</td><td>9.177867889404297</td></tr>
+<tr><td>kh_srhydro</td><td>2d</td><td>fv6_fb</td><td>clean</td><td>0</td><td>7448713</td><td>112.9156928062439</td></tr>
+</tbody></table></div>
+<figure><img src="figures/stress_blast_srhydro_mosaic.png?v=1791342122" alt="blast_srhydro stress mosaic"><figcaption>blast_srhydro stress mosaic</figcaption></figure>
+<figure><img src="figures/stress_kh_srhydro_mosaic.png?v=1791342126" alt="kh_srhydro stress mosaic"><figcaption>kh_srhydro stress mosaic</figcaption></figure>
 <h2>SR MHD</h2>
 <h3>1D linear waves</h3>
 <p>_No results yet for this dimension._</p>
@@ -112,46 +410,237 @@ figcaption { color: #666; font-size: 0.85rem; }
 <h3>Shocks</h3>
 <p>_No shock cases for this physics._</p>
 <h3>Multi-D stress</h3>
-<p>_No local stress smokes for this physics._</p>
+<div class='tablewrap'><table><thead><tr><th>Case</th><th>Dim</th><th>Scheme</th><th>health</th><th>EOS floors</th><th>nmood</th><th>wall [s]</th></tr></thead><tbody>
+<tr><td>blast_srmhd</td><td>2d</td><td>fv6_fb</td><td><strong>floored</strong></td><td>798</td><td>1396089</td><td>10.567103862762451</td></tr>
+<tr><td>blast_srmhd_uct</td><td>2d</td><td>fv6_fb</td><td><strong>floored</strong></td><td>1844</td><td>1291018</td><td>13.308178901672363</td></tr>
+<tr><td>blast_srmhd_uct</td><td>2d</td><td>fv8_fb</td><td><strong>floored</strong></td><td>2072</td><td>1291034</td><td>13.894895076751709</td></tr>
+<tr><td>blast_srmhd</td><td>2d</td><td>fv8_fb</td><td><strong>floored</strong></td><td>689</td><td>1409532</td><td>10.62426495552063</td></tr>
+</tbody></table></div>
+<figure><img src="figures/stress_blast_srmhd_mosaic.png?v=1791342123" alt="blast_srmhd stress mosaic"><figcaption>blast_srmhd stress mosaic</figcaption></figure>
+<figure><img src="figures/stress_blast_srmhd_bmag_mosaic.png?v=1791342123" alt="blast_srmhd |B| mosaic"><figcaption>blast_srmhd |B| mosaic</figcaption></figure>
+<figure><img src="figures/stress_blast_srmhd_uct_mosaic.png?v=1791342123" alt="blast_srmhd_uct stress mosaic"><figcaption>blast_srmhd_uct stress mosaic</figcaption></figure>
+<figure><img src="figures/stress_blast_srmhd_uct_bmag_mosaic.png?v=1791342123" alt="blast_srmhd_uct |B| mosaic"><figcaption>blast_srmhd_uct |B| mosaic</figcaption></figure>
 <h2>GR hydrodynamics (Minkowski)</h2>
 <h3>1D linear waves</h3>
-<figure><img src="figures/lwave_grhydro_1d_mosaic.png?v=1791244740" alt="Linear-wave mosaic grhydro 1d"><figcaption>Linear-wave mosaic grhydro 1d</figcaption></figure>
-<figure><img src="figures/lwave_nmood_grhydro.png?v=1791244741" alt="FV4 demotions grhydro"><figcaption>FV4 demotions grhydro</figcaption></figure>
-<div class='tablewrap'><table><thead><tr><th>Scheme</th><th>Wave</th><th>N</th><th>L1</th><th>Order</th><th>nmood</th><th>ok</th></tr></thead><tbody><tr><td>fv4_fb</td><td>left-going acoustic</td><td>256</td><td>1.26141e-11</td><td>0.16</td><td>0</td><td>yes</td></tr><tr><td>fv4_fb</td><td>transverse shear z</td><td>256</td><td>3.321304e-12</td><td>1.10</td><td>0</td><td>yes</td></tr><tr><td>fv4_fb</td><td>right-going acoustic</td><td>256</td><td>9.194108e-12</td><td>-0.20</td><td>0</td><td>yes</td></tr><tr><td>fv6_fb</td><td>left-going acoustic</td><td>256</td><td>1.251686e-11</td><td>-0.00</td><td>0</td><td>yes</td></tr><tr><td>fv6_fb</td><td>transverse shear z</td><td>256</td><td>3.294177e-12</td><td>-0.99</td><td>0</td><td>yes</td></tr><tr><td>fv6_fb</td><td>right-going acoustic</td><td>256</td><td>9.270931e-12</td><td>-0.00</td><td>0</td><td>yes</td></tr><tr><td>fv8_fb</td><td>left-going acoustic</td><td>256</td><td>1.251801e-11</td><td>-0.00</td><td>0</td><td>yes</td></tr><tr><td>fv8_fb</td><td>transverse shear z</td><td>256</td><td>3.296206e-12</td><td>-0.99</td><td>0</td><td>yes</td></tr><tr><td>fv8_fb</td><td>right-going acoustic</td><td>256</td><td>9.268668e-12</td><td>-0.00</td><td>0</td><td>yes</td></tr><tr><td>plm</td><td>left-going acoustic</td><td>256</td><td>1.099402e-09</td><td>2.05</td><td>0</td><td>yes</td></tr><tr><td>plm</td><td>transverse shear z</td><td>256</td><td>9.014784e-09</td><td>2.09</td><td>0</td><td>yes</td></tr><tr><td>plm</td><td>right-going acoustic</td><td>256</td><td>8.684197e-10</td><td>2.03</td><td>0</td><td>yes</td></tr><tr><td>teno</td><td>left-going acoustic</td><td>256</td><td>1.251668e-11</td><td>-0.00</td><td>0</td><td>yes</td></tr><tr><td>teno</td><td>transverse shear z</td><td>256</td><td>3.298609e-12</td><td>-0.88</td><td>0</td><td>yes</td></tr><tr><td>teno</td><td>right-going acoustic</td><td>256</td><td>9.272032e-12</td><td>-0.00</td><td>0</td><td>yes</td></tr><tr><td>wenoz</td><td>left-going acoustic</td><td>256</td><td>1.251813e-11</td><td>-0.00</td><td>0</td><td>yes</td></tr><tr><td>wenoz</td><td>transverse shear z</td><td>256</td><td>3.297545e-12</td><td>-0.88</td><td>0</td><td>yes</td></tr><tr><td>wenoz</td><td>right-going acoustic</td><td>256</td><td>9.271985e-12</td><td>-0.00</td><td>0</td><td>yes</td></tr></tbody></table></div>
+<figure><img src="figures/lwave_grhydro_1d_mosaic.png?v=1791342081" alt="Linear-wave mosaic grhydro 1d"><figcaption>Linear-wave mosaic grhydro 1d</figcaption></figure>
+<figure><img src="figures/lwave_nmood_grhydro.png?v=1791342082" alt="FV4 demotions grhydro"><figcaption>FV4 demotions grhydro</figcaption></figure>
+<div class='tablewrap'><table><thead><tr><th>Scheme</th><th>Wave</th><th>N</th><th>L1</th><th>Order</th><th>nmood</th><th>ok</th></tr></thead><tbody>
+<tr><td>fv4_fb</td><td>left-going acoustic</td><td>256</td><td>1.26141e-11</td><td>0.16</td><td>0</td><td>yes</td></tr>
+<tr><td>fv4_fb</td><td>transverse shear z</td><td>256</td><td>3.321304e-12</td><td>1.10</td><td>0</td><td>yes</td></tr>
+<tr><td>fv4_fb</td><td>right-going acoustic</td><td>256</td><td>9.194108e-12</td><td>-0.20</td><td>0</td><td>yes</td></tr>
+<tr><td>fv6_fb</td><td>left-going acoustic</td><td>256</td><td>1.251686e-11</td><td>-0.00</td><td>0</td><td>yes</td></tr>
+<tr><td>fv6_fb</td><td>transverse shear z</td><td>256</td><td>3.294177e-12</td><td>-0.99</td><td>0</td><td>yes</td></tr>
+<tr><td>fv6_fb</td><td>right-going acoustic</td><td>256</td><td>9.270931e-12</td><td>-0.00</td><td>0</td><td>yes</td></tr>
+<tr><td>fv8_fb</td><td>left-going acoustic</td><td>256</td><td>1.251801e-11</td><td>-0.00</td><td>0</td><td>yes</td></tr>
+<tr><td>fv8_fb</td><td>transverse shear z</td><td>256</td><td>3.296206e-12</td><td>-0.99</td><td>0</td><td>yes</td></tr>
+<tr><td>fv8_fb</td><td>right-going acoustic</td><td>256</td><td>9.268668e-12</td><td>-0.00</td><td>0</td><td>yes</td></tr>
+<tr><td>plm</td><td>left-going acoustic</td><td>256</td><td>1.099402e-09</td><td>2.05</td><td>0</td><td>yes</td></tr>
+<tr><td>plm</td><td>transverse shear z</td><td>256</td><td>9.014784e-09</td><td>2.09</td><td>0</td><td>yes</td></tr>
+<tr><td>plm</td><td>right-going acoustic</td><td>256</td><td>8.684197e-10</td><td>2.03</td><td>0</td><td>yes</td></tr>
+<tr><td>teno</td><td>left-going acoustic</td><td>256</td><td>1.251668e-11</td><td>-0.00</td><td>0</td><td>yes</td></tr>
+<tr><td>teno</td><td>transverse shear z</td><td>256</td><td>3.298609e-12</td><td>-0.88</td><td>0</td><td>yes</td></tr>
+<tr><td>teno</td><td>right-going acoustic</td><td>256</td><td>9.272032e-12</td><td>-0.00</td><td>0</td><td>yes</td></tr>
+<tr><td>wenoz</td><td>left-going acoustic</td><td>256</td><td>1.251813e-11</td><td>-0.00</td><td>0</td><td>yes</td></tr>
+<tr><td>wenoz</td><td>transverse shear z</td><td>256</td><td>3.297545e-12</td><td>-0.88</td><td>0</td><td>yes</td></tr>
+<tr><td>wenoz</td><td>right-going acoustic</td><td>256</td><td>9.271985e-12</td><td>-0.00</td><td>0</td><td>yes</td></tr>
+</tbody></table></div>
 <h3>2D linear waves</h3>
-<figure><img src="figures/lwave_grhydro_2d_mosaic.png?v=1791244740" alt="Linear-wave mosaic grhydro 2d"><figcaption>Linear-wave mosaic grhydro 2d</figcaption></figure>
-<div class='tablewrap'><table><thead><tr><th>Scheme</th><th>Wave</th><th>N</th><th>L1</th><th>Order</th><th>nmood</th><th>ok</th></tr></thead><tbody><tr><td>fv4_fb</td><td>left-going acoustic</td><td>128</td><td>1.528824e-11</td><td>4.05</td><td>0</td><td>yes</td></tr><tr><td>fv4_fb</td><td>right-going acoustic</td><td>128</td><td>1.426472e-11</td><td>4.64</td><td>0</td><td>yes</td></tr><tr><td>fv6_fb</td><td>left-going acoustic</td><td>128</td><td>1.480681e-12</td><td>2.78</td><td>0</td><td>yes</td></tr><tr><td>fv6_fb</td><td>right-going acoustic</td><td>128</td><td>8.57987e-12</td><td>-0.50</td><td>0</td><td>yes</td></tr><tr><td>fv8_fb</td><td>left-going acoustic</td><td>128</td><td>1.499175e-12</td><td>2.77</td><td>0</td><td>yes</td></tr><tr><td>fv8_fb</td><td>right-going acoustic</td><td>128</td><td>8.627286e-12</td><td>0.05</td><td>0</td><td>yes</td></tr><tr><td>plm</td><td>left-going acoustic</td><td>128</td><td>1.351972e-08</td><td>1.86</td><td>0</td><td>yes</td></tr><tr><td>plm</td><td>right-going acoustic</td><td>128</td><td>1.623479e-08</td><td>1.84</td><td>0</td><td>yes</td></tr><tr><td>teno</td><td>left-going acoustic</td><td>128</td><td>2.215331e-12</td><td>4.05</td><td>0</td><td>yes</td></tr><tr><td>teno</td><td>right-going acoustic</td><td>128</td><td>8.710016e-12</td><td>2.25</td><td>0</td><td>yes</td></tr><tr><td>wenoz</td><td>left-going acoustic</td><td>128</td><td>2.215358e-12</td><td>4.05</td><td>0</td><td>yes</td></tr><tr><td>wenoz</td><td>right-going acoustic</td><td>128</td><td>8.71163e-12</td><td>2.25</td><td>0</td><td>yes</td></tr></tbody></table></div>
+<figure><img src="figures/lwave_grhydro_2d_mosaic.png?v=1791342081" alt="Linear-wave mosaic grhydro 2d"><figcaption>Linear-wave mosaic grhydro 2d</figcaption></figure>
+<div class='tablewrap'><table><thead><tr><th>Scheme</th><th>Wave</th><th>N</th><th>L1</th><th>Order</th><th>nmood</th><th>ok</th></tr></thead><tbody>
+<tr><td>fv4_fb</td><td>left-going acoustic</td><td>128</td><td>1.528824e-11</td><td>4.05</td><td>0</td><td>yes</td></tr>
+<tr><td>fv4_fb</td><td>right-going acoustic</td><td>128</td><td>1.426472e-11</td><td>4.64</td><td>0</td><td>yes</td></tr>
+<tr><td>fv6_fb</td><td>left-going acoustic</td><td>128</td><td>1.480681e-12</td><td>2.78</td><td>0</td><td>yes</td></tr>
+<tr><td>fv6_fb</td><td>right-going acoustic</td><td>128</td><td>8.57987e-12</td><td>-0.50</td><td>0</td><td>yes</td></tr>
+<tr><td>fv8_fb</td><td>left-going acoustic</td><td>128</td><td>1.499175e-12</td><td>2.77</td><td>0</td><td>yes</td></tr>
+<tr><td>fv8_fb</td><td>right-going acoustic</td><td>128</td><td>8.627286e-12</td><td>0.05</td><td>0</td><td>yes</td></tr>
+<tr><td>plm</td><td>left-going acoustic</td><td>128</td><td>1.351972e-08</td><td>1.86</td><td>0</td><td>yes</td></tr>
+<tr><td>plm</td><td>right-going acoustic</td><td>128</td><td>1.623479e-08</td><td>1.84</td><td>0</td><td>yes</td></tr>
+<tr><td>teno</td><td>left-going acoustic</td><td>128</td><td>2.215331e-12</td><td>4.05</td><td>0</td><td>yes</td></tr>
+<tr><td>teno</td><td>right-going acoustic</td><td>128</td><td>8.710016e-12</td><td>2.25</td><td>0</td><td>yes</td></tr>
+<tr><td>wenoz</td><td>left-going acoustic</td><td>128</td><td>2.215358e-12</td><td>4.05</td><td>0</td><td>yes</td></tr>
+<tr><td>wenoz</td><td>right-going acoustic</td><td>128</td><td>8.71163e-12</td><td>2.25</td><td>0</td><td>yes</td></tr>
+</tbody></table></div>
 <h3>3D linear waves</h3>
-<figure><img src="figures/lwave_grhydro_3d_mosaic.png?v=1791244740" alt="Linear-wave mosaic grhydro 3d"><figcaption>Linear-wave mosaic grhydro 3d</figcaption></figure>
-<div class='tablewrap'><table><thead><tr><th>Scheme</th><th>Wave</th><th>N</th><th>L1</th><th>Order</th><th>nmood</th><th>ok</th></tr></thead><tbody><tr><td>fv4_fb</td><td>left-going acoustic</td><td>64</td><td>3.043753e-10</td><td>3.99</td><td>0</td><td>yes</td></tr><tr><td>fv4_fb</td><td>right-going acoustic</td><td>64</td><td>3.683656e-10</td><td>3.94</td><td>0</td><td>yes</td></tr><tr><td>fv6_fb</td><td>left-going acoustic</td><td>64</td><td>2.452066e-11</td><td>3.29</td><td>0</td><td>yes</td></tr><tr><td>fv6_fb</td><td>right-going acoustic</td><td>64</td><td>1.394979e-11</td><td>3.84</td><td>0</td><td>yes</td></tr><tr><td>fv8_fb</td><td>left-going acoustic</td><td>64</td><td>2.478509e-11</td><td>2.98</td><td>0</td><td>yes</td></tr><tr><td>fv8_fb</td><td>right-going acoustic</td><td>64</td><td>1.126728e-11</td><td>1.95</td><td>0</td><td>yes</td></tr><tr><td>plm</td><td>left-going acoustic</td><td>64</td><td>6.227724e-08</td><td>1.47</td><td>0</td><td>yes</td></tr><tr><td>plm</td><td>right-going acoustic</td><td>64</td><td>6.453648e-08</td><td>1.55</td><td>0</td><td>yes</td></tr><tr><td>teno</td><td>left-going acoustic</td><td>64</td><td>6.745318e-11</td><td>4.50</td><td>0</td><td>yes</td></tr><tr><td>teno</td><td>right-going acoustic</td><td>64</td><td>5.922496e-11</td><td>4.83</td><td>0</td><td>yes</td></tr><tr><td>wenoz</td><td>left-going acoustic</td><td>64</td><td>6.745222e-11</td><td>4.53</td><td>0</td><td>yes</td></tr><tr><td>wenoz</td><td>right-going acoustic</td><td>64</td><td>5.922592e-11</td><td>4.86</td><td>0</td><td>yes</td></tr></tbody></table></div>
+<figure><img src="figures/lwave_grhydro_3d_mosaic.png?v=1791342081" alt="Linear-wave mosaic grhydro 3d"><figcaption>Linear-wave mosaic grhydro 3d</figcaption></figure>
+<div class='tablewrap'><table><thead><tr><th>Scheme</th><th>Wave</th><th>N</th><th>L1</th><th>Order</th><th>nmood</th><th>ok</th></tr></thead><tbody>
+<tr><td>fv4_fb</td><td>left-going acoustic</td><td>64</td><td>3.043753e-10</td><td>3.99</td><td>0</td><td>yes</td></tr>
+<tr><td>fv4_fb</td><td>right-going acoustic</td><td>64</td><td>3.683656e-10</td><td>3.94</td><td>0</td><td>yes</td></tr>
+<tr><td>fv6_fb</td><td>left-going acoustic</td><td>64</td><td>2.452066e-11</td><td>3.29</td><td>0</td><td>yes</td></tr>
+<tr><td>fv6_fb</td><td>right-going acoustic</td><td>64</td><td>1.394979e-11</td><td>3.84</td><td>0</td><td>yes</td></tr>
+<tr><td>fv8_fb</td><td>left-going acoustic</td><td>64</td><td>2.478509e-11</td><td>2.98</td><td>0</td><td>yes</td></tr>
+<tr><td>fv8_fb</td><td>right-going acoustic</td><td>64</td><td>1.126728e-11</td><td>1.95</td><td>0</td><td>yes</td></tr>
+<tr><td>plm</td><td>left-going acoustic</td><td>64</td><td>6.227724e-08</td><td>1.47</td><td>0</td><td>yes</td></tr>
+<tr><td>plm</td><td>right-going acoustic</td><td>64</td><td>6.453648e-08</td><td>1.55</td><td>0</td><td>yes</td></tr>
+<tr><td>teno</td><td>left-going acoustic</td><td>64</td><td>6.745318e-11</td><td>4.50</td><td>0</td><td>yes</td></tr>
+<tr><td>teno</td><td>right-going acoustic</td><td>64</td><td>5.922496e-11</td><td>4.83</td><td>0</td><td>yes</td></tr>
+<tr><td>wenoz</td><td>left-going acoustic</td><td>64</td><td>6.745222e-11</td><td>4.53</td><td>0</td><td>yes</td></tr>
+<tr><td>wenoz</td><td>right-going acoustic</td><td>64</td><td>5.922592e-11</td><td>4.86</td><td>0</td><td>yes</td></tr>
+</tbody></table></div>
 <h3>Shocks</h3>
-<figure><img src="figures/shock_mb2_gr_dens.png?v=1791245263" alt="shock_mb2_gr_dens"><figcaption>shock_mb2_gr_dens</figcaption></figure>
-<div class='tablewrap'><table><thead><tr><th>Case</th><th>Dim</th><th>Scheme</th><th>N</th><th>rc</th><th>nmood</th><th>wall [s]</th></tr></thead><tbody><tr><td>mb2_gr</td><td>1d</td><td>fv4_fb</td><td>256</td><td>0</td><td>13397</td><td>5.236825466156006</td></tr><tr><td>mb2_gr</td><td>1d</td><td>fv4_fb</td><td>512</td><td>0</td><td>25142</td><td>6.132622480392456</td></tr><tr><td>mb2_gr</td><td>1d</td><td>fv4_fb</td><td>1024</td><td>0</td><td>44057</td><td>7.560010671615601</td></tr><tr><td>mb2_gr</td><td>1d</td><td>fv6_fb</td><td>256</td><td>0</td><td>10970</td><td>1.4876806735992432</td></tr><tr><td>mb2_gr</td><td>1d</td><td>fv6_fb</td><td>512</td><td>0</td><td>18842</td><td>3.189343214035034</td></tr><tr><td>mb2_gr</td><td>1d</td><td>fv6_fb</td><td>1024</td><td>0</td><td>33205</td><td>8.998086929321289</td></tr><tr><td>mb2_gr</td><td>1d</td><td>fv8_fb</td><td>256</td><td>0</td><td>9913</td><td>1.3129429817199707</td></tr><tr><td>mb2_gr</td><td>1d</td><td>fv8_fb</td><td>512</td><td>0</td><td>16357</td><td>3.2180240154266357</td></tr><tr><td>mb2_gr</td><td>1d</td><td>fv8_fb</td><td>1024</td><td>0</td><td>27336</td><td>9.4079749584198</td></tr><tr><td>mb2_gr</td><td>1d</td><td>plm</td><td>256</td><td>0</td><td>0</td><td>5.976938486099243</td></tr><tr><td>mb2_gr</td><td>1d</td><td>plm</td><td>512</td><td>0</td><td>0</td><td>5.3372015953063965</td></tr><tr><td>mb2_gr</td><td>1d</td><td>plm</td><td>1024</td><td>0</td><td>0</td><td>6.497895002365112</td></tr><tr><td>mb2_gr</td><td>1d</td><td>teno</td><td>256</td><td>0</td><td>0</td><td>5.054182767868042</td></tr><tr><td>mb2_gr</td><td>1d</td><td>teno</td><td>512</td><td>0</td><td>0</td><td>5.706254482269287</td></tr><tr><td>mb2_gr</td><td>1d</td><td>teno</td><td>1024</td><td>0</td><td>0</td><td>6.717432022094727</td></tr><tr><td>mb2_gr</td><td>1d</td><td>wenoz</td><td>256</td><td>0</td><td>0</td><td>5.083803415298462</td></tr><tr><td>mb2_gr</td><td>1d</td><td>wenoz</td><td>512</td><td>0</td><td>0</td><td>5.588774919509888</td></tr><tr><td>mb2_gr</td><td>1d</td><td>wenoz</td><td>1024</td><td>0</td><td>0</td><td>6.645209789276123</td></tr></tbody></table></div>
+<figure><img src="figures/shock_mb2_gr_dens.png?v=1791342082" alt="shock_mb2_gr_dens"><figcaption>shock_mb2_gr_dens</figcaption></figure>
+<div class='tablewrap'><table><thead><tr><th>Case</th><th>Dim</th><th>Scheme</th><th>N</th><th>rc</th><th>nmood</th><th>wall [s]</th></tr></thead><tbody>
+<tr><td>mb2_gr</td><td>1d</td><td>fv4_fb</td><td>256</td><td>0</td><td>13397</td><td>5.236825466156006</td></tr>
+<tr><td>mb2_gr</td><td>1d</td><td>fv4_fb</td><td>512</td><td>0</td><td>25142</td><td>6.132622480392456</td></tr>
+<tr><td>mb2_gr</td><td>1d</td><td>fv4_fb</td><td>1024</td><td>0</td><td>44057</td><td>7.560010671615601</td></tr>
+<tr><td>mb2_gr</td><td>1d</td><td>fv6_fb</td><td>256</td><td>0</td><td>10970</td><td>1.4876806735992432</td></tr>
+<tr><td>mb2_gr</td><td>1d</td><td>fv6_fb</td><td>512</td><td>0</td><td>18842</td><td>3.189343214035034</td></tr>
+<tr><td>mb2_gr</td><td>1d</td><td>fv6_fb</td><td>1024</td><td>0</td><td>33205</td><td>8.998086929321289</td></tr>
+<tr><td>mb2_gr</td><td>1d</td><td>fv8_fb</td><td>256</td><td>0</td><td>9913</td><td>1.3129429817199707</td></tr>
+<tr><td>mb2_gr</td><td>1d</td><td>fv8_fb</td><td>512</td><td>0</td><td>16357</td><td>3.2180240154266357</td></tr>
+<tr><td>mb2_gr</td><td>1d</td><td>fv8_fb</td><td>1024</td><td>0</td><td>27336</td><td>9.4079749584198</td></tr>
+<tr><td>mb2_gr</td><td>1d</td><td>plm</td><td>256</td><td>0</td><td>0</td><td>5.976938486099243</td></tr>
+<tr><td>mb2_gr</td><td>1d</td><td>plm</td><td>512</td><td>0</td><td>0</td><td>5.3372015953063965</td></tr>
+<tr><td>mb2_gr</td><td>1d</td><td>plm</td><td>1024</td><td>0</td><td>0</td><td>6.497895002365112</td></tr>
+<tr><td>mb2_gr</td><td>1d</td><td>teno</td><td>256</td><td>0</td><td>0</td><td>5.054182767868042</td></tr>
+<tr><td>mb2_gr</td><td>1d</td><td>teno</td><td>512</td><td>0</td><td>0</td><td>5.706254482269287</td></tr>
+<tr><td>mb2_gr</td><td>1d</td><td>teno</td><td>1024</td><td>0</td><td>0</td><td>6.717432022094727</td></tr>
+<tr><td>mb2_gr</td><td>1d</td><td>wenoz</td><td>256</td><td>0</td><td>0</td><td>5.083803415298462</td></tr>
+<tr><td>mb2_gr</td><td>1d</td><td>wenoz</td><td>512</td><td>0</td><td>0</td><td>5.588774919509888</td></tr>
+<tr><td>mb2_gr</td><td>1d</td><td>wenoz</td><td>1024</td><td>0</td><td>0</td><td>6.645209789276123</td></tr>
+</tbody></table></div>
 <h3>Multi-D stress</h3>
-<p>_No local stress smokes for this physics._</p>
+<div class='tablewrap'><table><thead><tr><th>Case</th><th>Dim</th><th>Scheme</th><th>health</th><th>EOS floors</th><th>nmood</th><th>wall [s]</th></tr></thead><tbody>
+<tr><td>kh_grhydro</td><td>2d</td><td>fv8_fb</td><td>clean</td><td>0</td><td>9992357</td><td>197.65495610237122</td></tr>
+<tr><td>blast_grhydro_3d</td><td>3d</td><td>fv6_fb</td><td>clean</td><td>0</td><td>1624576</td><td>181.8482151031494</td></tr>
+<tr><td>blast_grhydro</td><td>2d</td><td>fv8_fb</td><td>clean</td><td>0</td><td>519772</td><td>16.928126335144043</td></tr>
+<tr><td>blast_grhydro</td><td>2d</td><td>fv6_fb</td><td>clean</td><td>0</td><td>461764</td><td>16.649996995925903</td></tr>
+<tr><td>kh_grhydro</td><td>2d</td><td>fv6_fb</td><td>clean</td><td>0</td><td>9648967</td><td>193.98315811157227</td></tr>
+<tr><td>blast_grhydro_3d</td><td>3d</td><td>fv8_fb</td><td>clean</td><td>0</td><td>1636240</td><td>193.8033049106598</td></tr>
+</tbody></table></div>
+<figure><img src="figures/stress_blast_grhydro_mosaic.png?v=1791342121" alt="blast_grhydro stress mosaic"><figcaption>blast_grhydro stress mosaic</figcaption></figure>
+<figure><img src="figures/stress_blast_grhydro_3d_mosaic.png?v=1791342121" alt="blast_grhydro_3d stress mosaic"><figcaption>blast_grhydro_3d stress mosaic</figcaption></figure>
+<figure><img src="figures/stress_kh_grhydro_mosaic.png?v=1791342126" alt="kh_grhydro stress mosaic"><figcaption>kh_grhydro stress mosaic</figcaption></figure>
 <h2>GRMHD (Minkowski)</h2>
 <h3>1D linear waves</h3>
-<figure><img src="figures/lwave_grmhd_1d_mosaic.png?v=1791244741" alt="Linear-wave mosaic grmhd 1d"><figcaption>Linear-wave mosaic grmhd 1d</figcaption></figure>
-<figure><img src="figures/lwave_nmood_grmhd.png?v=1791244741" alt="FV4 demotions grmhd"><figcaption>FV4 demotions grmhd</figcaption></figure>
-<div class='tablewrap'><table><thead><tr><th>Scheme</th><th>Wave</th><th>N</th><th>L1</th><th>Order</th><th>nmood</th><th>ok</th></tr></thead><tbody><tr><td>fv4_fb</td><td>left-going fast magnetosonic</td><td>256</td><td>5.183723e-11</td><td>1.22</td><td>0</td><td>yes</td></tr><tr><td>fv4_fb</td><td>left-going Alfvén</td><td>256</td><td>8.10974e-11</td><td>1.79</td><td>0</td><td>yes</td></tr><tr><td>fv4_fb</td><td>left-going slow magnetosonic</td><td>256</td><td>7.7931e-12</td><td>0.86</td><td>0</td><td>yes</td></tr><tr><td>fv4_fb</td><td>entropy/contact</td><td>256</td><td>6.377738e-12</td><td>-0.99</td><td>0</td><td>yes</td></tr><tr><td>fv4_fb</td><td>right-going slow magnetosonic</td><td>256</td><td>8.398216e-12</td><td>1.78</td><td>0</td><td>yes</td></tr><tr><td>fv4_fb</td><td>right-going Alfvén</td><td>256</td><td>4.455176e-11</td><td>2.16</td><td>0</td><td>yes</td></tr><tr><td>fv4_fb</td><td>right-going fast magnetosonic</td><td>256</td><td>3.284181e-11</td><td>1.72</td><td>0</td><td>yes</td></tr><tr><td>fv6_fb</td><td>left-going fast magnetosonic</td><td>256</td><td>5.207392e-11</td><td>1.23</td><td>0</td><td>yes</td></tr><tr><td>fv6_fb</td><td>left-going Alfvén</td><td>256</td><td>8.121116e-11</td><td>1.80</td><td>0</td><td>yes</td></tr><tr><td>fv6_fb</td><td>left-going slow magnetosonic</td><td>256</td><td>7.738174e-12</td><td>0.81</td><td>0</td><td>yes</td></tr><tr><td>fv6_fb</td><td>entropy/contact</td><td>256</td><td>6.381126e-12</td><td>-0.99</td><td>0</td><td>yes</td></tr><tr><td>fv6_fb</td><td>right-going slow magnetosonic</td><td>256</td><td>8.447548e-12</td><td>1.80</td><td>0</td><td>yes</td></tr><tr><td>fv6_fb</td><td>right-going Alfvén</td><td>256</td><td>4.453584e-11</td><td>2.17</td><td>0</td><td>yes</td></tr><tr><td>fv6_fb</td><td>right-going fast magnetosonic</td><td>256</td><td>3.290413e-11</td><td>1.72</td><td>0</td><td>yes</td></tr><tr><td>fv8_fb</td><td>left-going fast magnetosonic</td><td>256</td><td>5.207274e-11</td><td>1.23</td><td>0</td><td>yes</td></tr><tr><td>fv8_fb</td><td>left-going Alfvén</td><td>256</td><td>8.121179e-11</td><td>1.80</td><td>0</td><td>yes</td></tr><tr><td>fv8_fb</td><td>left-going slow magnetosonic</td><td>256</td><td>7.742714e-12</td><td>0.81</td><td>0</td><td>yes</td></tr><tr><td>fv8_fb</td><td>entropy/contact</td><td>256</td><td>6.375589e-12</td><td>-0.99</td><td>0</td><td>yes</td></tr><tr><td>fv8_fb</td><td>right-going slow magnetosonic</td><td>256</td><td>8.451996e-12</td><td>1.80</td><td>0</td><td>yes</td></tr><tr><td>fv8_fb</td><td>right-going Alfvén</td><td>256</td><td>4.454045e-11</td><td>2.17</td><td>0</td><td>yes</td></tr><tr><td>fv8_fb</td><td>right-going fast magnetosonic</td><td>256</td><td>3.290873e-11</td><td>1.72</td><td>0</td><td>yes</td></tr><tr><td>plm</td><td>left-going fast magnetosonic</td><td>256</td><td>3.423237e-09</td><td>2.01</td><td>0</td><td>yes</td></tr><tr><td>plm</td><td>left-going Alfvén</td><td>256</td><td>2.616158e-09</td><td>2.02</td><td>0</td><td>yes</td></tr><tr><td>plm</td><td>left-going slow magnetosonic</td><td>256</td><td>9.296147e-10</td><td>2.05</td><td>0</td><td>yes</td></tr><tr><td>plm</td><td>entropy/contact</td><td>256</td><td>1.747406e-09</td><td>2.11</td><td>0</td><td>yes</td></tr><tr><td>plm</td><td>right-going slow magnetosonic</td><td>256</td><td>2.244178e-09</td><td>2.09</td><td>0</td><td>yes</td></tr><tr><td>plm</td><td>right-going Alfvén</td><td>256</td><td>3.450083e-09</td><td>2.05</td><td>0</td><td>yes</td></tr><tr><td>plm</td><td>right-going fast magnetosonic</td><td>256</td><td>1.325634e-09</td><td>2.01</td><td>0</td><td>yes</td></tr><tr><td>teno</td><td>left-going fast magnetosonic</td><td>256</td><td>5.206991e-11</td><td>1.23</td><td>0</td><td>yes</td></tr><tr><td>teno</td><td>left-going Alfvén</td><td>256</td><td>8.121246e-11</td><td>1.80</td><td>0</td><td>yes</td></tr><tr><td>teno</td><td>left-going slow magnetosonic</td><td>256</td><td>7.744603e-12</td><td>0.81</td><td>0</td><td>yes</td></tr><tr><td>teno</td><td>entropy/contact</td><td>256</td><td>6.327116e-12</td><td>-1.00</td><td>0</td><td>yes</td></tr><tr><td>teno</td><td>right-going slow magnetosonic</td><td>256</td><td>8.443481e-12</td><td>1.81</td><td>0</td><td>yes</td></tr><tr><td>teno</td><td>right-going Alfvén</td><td>256</td><td>4.454427e-11</td><td>2.17</td><td>0</td><td>yes</td></tr><tr><td>teno</td><td>right-going fast magnetosonic</td><td>256</td><td>3.2907e-11</td><td>1.72</td><td>0</td><td>yes</td></tr><tr><td>wenoz</td><td>left-going fast magnetosonic</td><td>256</td><td>5.207114e-11</td><td>1.23</td><td>0</td><td>yes</td></tr><tr><td>wenoz</td><td>left-going Alfvén</td><td>256</td><td>8.12167e-11</td><td>1.80</td><td>0</td><td>yes</td></tr><tr><td>wenoz</td><td>left-going slow magnetosonic</td><td>256</td><td>7.743481e-12</td><td>0.81</td><td>0</td><td>yes</td></tr><tr><td>wenoz</td><td>entropy/contact</td><td>256</td><td>6.329077e-12</td><td>-1.00</td><td>0</td><td>yes</td></tr><tr><td>wenoz</td><td>right-going slow magnetosonic</td><td>256</td><td>8.443103e-12</td><td>1.81</td><td>0</td><td>yes</td></tr><tr><td>wenoz</td><td>right-going Alfvén</td><td>256</td><td>4.454208e-11</td><td>2.17</td><td>0</td><td>yes</td></tr><tr><td>wenoz</td><td>right-going fast magnetosonic</td><td>256</td><td>3.290584e-11</td><td>1.72</td><td>0</td><td>yes</td></tr></tbody></table></div>
+<figure><img src="figures/lwave_grmhd_1d_mosaic.png?v=1791342081" alt="Linear-wave mosaic grmhd 1d"><figcaption>Linear-wave mosaic grmhd 1d</figcaption></figure>
+<figure><img src="figures/lwave_nmood_grmhd.png?v=1791342082" alt="FV4 demotions grmhd"><figcaption>FV4 demotions grmhd</figcaption></figure>
+<div class='tablewrap'><table><thead><tr><th>Scheme</th><th>Wave</th><th>N</th><th>L1</th><th>Order</th><th>nmood</th><th>ok</th></tr></thead><tbody>
+<tr><td>fv4_fb</td><td>left-going fast magnetosonic</td><td>256</td><td>5.183723e-11</td><td>1.22</td><td>0</td><td>yes</td></tr>
+<tr><td>fv4_fb</td><td>left-going Alfvén</td><td>256</td><td>8.10974e-11</td><td>1.79</td><td>0</td><td>yes</td></tr>
+<tr><td>fv4_fb</td><td>left-going slow magnetosonic</td><td>256</td><td>7.7931e-12</td><td>0.86</td><td>0</td><td>yes</td></tr>
+<tr><td>fv4_fb</td><td>entropy/contact</td><td>256</td><td>6.377738e-12</td><td>-0.99</td><td>0</td><td>yes</td></tr>
+<tr><td>fv4_fb</td><td>right-going slow magnetosonic</td><td>256</td><td>8.398216e-12</td><td>1.78</td><td>0</td><td>yes</td></tr>
+<tr><td>fv4_fb</td><td>right-going Alfvén</td><td>256</td><td>4.455176e-11</td><td>2.16</td><td>0</td><td>yes</td></tr>
+<tr><td>fv4_fb</td><td>right-going fast magnetosonic</td><td>256</td><td>3.284181e-11</td><td>1.72</td><td>0</td><td>yes</td></tr>
+<tr><td>fv6_fb</td><td>left-going fast magnetosonic</td><td>256</td><td>5.207392e-11</td><td>1.23</td><td>0</td><td>yes</td></tr>
+<tr><td>fv6_fb</td><td>left-going Alfvén</td><td>256</td><td>8.121116e-11</td><td>1.80</td><td>0</td><td>yes</td></tr>
+<tr><td>fv6_fb</td><td>left-going slow magnetosonic</td><td>256</td><td>7.738174e-12</td><td>0.81</td><td>0</td><td>yes</td></tr>
+<tr><td>fv6_fb</td><td>entropy/contact</td><td>256</td><td>6.381126e-12</td><td>-0.99</td><td>0</td><td>yes</td></tr>
+<tr><td>fv6_fb</td><td>right-going slow magnetosonic</td><td>256</td><td>8.447548e-12</td><td>1.80</td><td>0</td><td>yes</td></tr>
+<tr><td>fv6_fb</td><td>right-going Alfvén</td><td>256</td><td>4.453584e-11</td><td>2.17</td><td>0</td><td>yes</td></tr>
+<tr><td>fv6_fb</td><td>right-going fast magnetosonic</td><td>256</td><td>3.290413e-11</td><td>1.72</td><td>0</td><td>yes</td></tr>
+<tr><td>fv8_fb</td><td>left-going fast magnetosonic</td><td>256</td><td>5.207274e-11</td><td>1.23</td><td>0</td><td>yes</td></tr>
+<tr><td>fv8_fb</td><td>left-going Alfvén</td><td>256</td><td>8.121179e-11</td><td>1.80</td><td>0</td><td>yes</td></tr>
+<tr><td>fv8_fb</td><td>left-going slow magnetosonic</td><td>256</td><td>7.742714e-12</td><td>0.81</td><td>0</td><td>yes</td></tr>
+<tr><td>fv8_fb</td><td>entropy/contact</td><td>256</td><td>6.375589e-12</td><td>-0.99</td><td>0</td><td>yes</td></tr>
+<tr><td>fv8_fb</td><td>right-going slow magnetosonic</td><td>256</td><td>8.451996e-12</td><td>1.80</td><td>0</td><td>yes</td></tr>
+<tr><td>fv8_fb</td><td>right-going Alfvén</td><td>256</td><td>4.454045e-11</td><td>2.17</td><td>0</td><td>yes</td></tr>
+<tr><td>fv8_fb</td><td>right-going fast magnetosonic</td><td>256</td><td>3.290873e-11</td><td>1.72</td><td>0</td><td>yes</td></tr>
+<tr><td>plm</td><td>left-going fast magnetosonic</td><td>256</td><td>3.423237e-09</td><td>2.01</td><td>0</td><td>yes</td></tr>
+<tr><td>plm</td><td>left-going Alfvén</td><td>256</td><td>2.616158e-09</td><td>2.02</td><td>0</td><td>yes</td></tr>
+<tr><td>plm</td><td>left-going slow magnetosonic</td><td>256</td><td>9.296147e-10</td><td>2.05</td><td>0</td><td>yes</td></tr>
+<tr><td>plm</td><td>entropy/contact</td><td>256</td><td>1.747406e-09</td><td>2.11</td><td>0</td><td>yes</td></tr>
+<tr><td>plm</td><td>right-going slow magnetosonic</td><td>256</td><td>2.244178e-09</td><td>2.09</td><td>0</td><td>yes</td></tr>
+<tr><td>plm</td><td>right-going Alfvén</td><td>256</td><td>3.450083e-09</td><td>2.05</td><td>0</td><td>yes</td></tr>
+<tr><td>plm</td><td>right-going fast magnetosonic</td><td>256</td><td>1.325634e-09</td><td>2.01</td><td>0</td><td>yes</td></tr>
+<tr><td>teno</td><td>left-going fast magnetosonic</td><td>256</td><td>5.206991e-11</td><td>1.23</td><td>0</td><td>yes</td></tr>
+<tr><td>teno</td><td>left-going Alfvén</td><td>256</td><td>8.121246e-11</td><td>1.80</td><td>0</td><td>yes</td></tr>
+<tr><td>teno</td><td>left-going slow magnetosonic</td><td>256</td><td>7.744603e-12</td><td>0.81</td><td>0</td><td>yes</td></tr>
+<tr><td>teno</td><td>entropy/contact</td><td>256</td><td>6.327116e-12</td><td>-1.00</td><td>0</td><td>yes</td></tr>
+<tr><td>teno</td><td>right-going slow magnetosonic</td><td>256</td><td>8.443481e-12</td><td>1.81</td><td>0</td><td>yes</td></tr>
+<tr><td>teno</td><td>right-going Alfvén</td><td>256</td><td>4.454427e-11</td><td>2.17</td><td>0</td><td>yes</td></tr>
+<tr><td>teno</td><td>right-going fast magnetosonic</td><td>256</td><td>3.2907e-11</td><td>1.72</td><td>0</td><td>yes</td></tr>
+<tr><td>wenoz</td><td>left-going fast magnetosonic</td><td>256</td><td>5.207114e-11</td><td>1.23</td><td>0</td><td>yes</td></tr>
+<tr><td>wenoz</td><td>left-going Alfvén</td><td>256</td><td>8.12167e-11</td><td>1.80</td><td>0</td><td>yes</td></tr>
+<tr><td>wenoz</td><td>left-going slow magnetosonic</td><td>256</td><td>7.743481e-12</td><td>0.81</td><td>0</td><td>yes</td></tr>
+<tr><td>wenoz</td><td>entropy/contact</td><td>256</td><td>6.329077e-12</td><td>-1.00</td><td>0</td><td>yes</td></tr>
+<tr><td>wenoz</td><td>right-going slow magnetosonic</td><td>256</td><td>8.443103e-12</td><td>1.81</td><td>0</td><td>yes</td></tr>
+<tr><td>wenoz</td><td>right-going Alfvén</td><td>256</td><td>4.454208e-11</td><td>2.17</td><td>0</td><td>yes</td></tr>
+<tr><td>wenoz</td><td>right-going fast magnetosonic</td><td>256</td><td>3.290584e-11</td><td>1.72</td><td>0</td><td>yes</td></tr>
+</tbody></table></div>
 <h3>2D linear waves</h3>
-<figure><img src="figures/lwave_grmhd_2d_mosaic.png?v=1791244741" alt="Linear-wave mosaic grmhd 2d"><figcaption>Linear-wave mosaic grmhd 2d</figcaption></figure>
-<div class='tablewrap'><table><thead><tr><th>Scheme</th><th>Wave</th><th>N</th><th>L1</th><th>Order</th><th>nmood</th><th>ok</th></tr></thead><tbody><tr><td>fv4_fb</td><td>left-going fast magnetosonic</td><td>128</td><td>1.369417e-09</td><td>2.12</td><td>0</td><td>yes</td></tr><tr><td>fv4_fb</td><td>right-going fast magnetosonic</td><td>128</td><td>1.320045e-09</td><td>2.08</td><td>0</td><td>yes</td></tr><tr><td>fv6_fb</td><td>left-going fast magnetosonic</td><td>128</td><td>1.335162e-09</td><td>2.00</td><td>0</td><td>yes</td></tr><tr><td>fv6_fb</td><td>right-going fast magnetosonic</td><td>128</td><td>1.29571e-09</td><td>2.00</td><td>0</td><td>yes</td></tr><tr><td>fv8_fb</td><td>left-going fast magnetosonic</td><td>128</td><td>1.335089e-09</td><td>2.00</td><td>0</td><td>yes</td></tr><tr><td>fv8_fb</td><td>right-going fast magnetosonic</td><td>128</td><td>1.295726e-09</td><td>2.00</td><td>0</td><td>yes</td></tr><tr><td>plm</td><td>left-going fast magnetosonic</td><td>128</td><td>4.470755e-08</td><td>1.84</td><td>0</td><td>yes</td></tr><tr><td>plm</td><td>right-going fast magnetosonic</td><td>128</td><td>1.988208e-08</td><td>1.85</td><td>0</td><td>yes</td></tr><tr><td>teno</td><td>left-going fast magnetosonic</td><td>128</td><td>1.334265e-09</td><td>2.00</td><td>0</td><td>yes</td></tr><tr><td>teno</td><td>right-going fast magnetosonic</td><td>128</td><td>1.295627e-09</td><td>2.00</td><td>0</td><td>yes</td></tr><tr><td>wenoz</td><td>left-going fast magnetosonic</td><td>128</td><td>1.334264e-09</td><td>2.00</td><td>0</td><td>yes</td></tr><tr><td>wenoz</td><td>right-going fast magnetosonic</td><td>128</td><td>1.295627e-09</td><td>2.00</td><td>0</td><td>yes</td></tr></tbody></table></div>
+<figure><img src="figures/lwave_grmhd_2d_mosaic.png?v=1791342082" alt="Linear-wave mosaic grmhd 2d"><figcaption>Linear-wave mosaic grmhd 2d</figcaption></figure>
+<div class='tablewrap'><table><thead><tr><th>Scheme</th><th>Wave</th><th>N</th><th>L1</th><th>Order</th><th>nmood</th><th>ok</th></tr></thead><tbody>
+<tr><td>fv4_fb</td><td>left-going fast magnetosonic</td><td>128</td><td>1.369417e-09</td><td>2.12</td><td>0</td><td>yes</td></tr>
+<tr><td>fv4_fb</td><td>right-going fast magnetosonic</td><td>128</td><td>1.320045e-09</td><td>2.08</td><td>0</td><td>yes</td></tr>
+<tr><td>fv6_fb</td><td>left-going fast magnetosonic</td><td>128</td><td>1.335162e-09</td><td>2.00</td><td>0</td><td>yes</td></tr>
+<tr><td>fv6_fb</td><td>right-going fast magnetosonic</td><td>128</td><td>1.29571e-09</td><td>2.00</td><td>0</td><td>yes</td></tr>
+<tr><td>fv8_fb</td><td>left-going fast magnetosonic</td><td>128</td><td>1.335089e-09</td><td>2.00</td><td>0</td><td>yes</td></tr>
+<tr><td>fv8_fb</td><td>right-going fast magnetosonic</td><td>128</td><td>1.295726e-09</td><td>2.00</td><td>0</td><td>yes</td></tr>
+<tr><td>plm</td><td>left-going fast magnetosonic</td><td>128</td><td>4.470755e-08</td><td>1.84</td><td>0</td><td>yes</td></tr>
+<tr><td>plm</td><td>right-going fast magnetosonic</td><td>128</td><td>1.988208e-08</td><td>1.85</td><td>0</td><td>yes</td></tr>
+<tr><td>teno</td><td>left-going fast magnetosonic</td><td>128</td><td>1.334265e-09</td><td>2.00</td><td>0</td><td>yes</td></tr>
+<tr><td>teno</td><td>right-going fast magnetosonic</td><td>128</td><td>1.295627e-09</td><td>2.00</td><td>0</td><td>yes</td></tr>
+<tr><td>wenoz</td><td>left-going fast magnetosonic</td><td>128</td><td>1.334264e-09</td><td>2.00</td><td>0</td><td>yes</td></tr>
+<tr><td>wenoz</td><td>right-going fast magnetosonic</td><td>128</td><td>1.295627e-09</td><td>2.00</td><td>0</td><td>yes</td></tr>
+</tbody></table></div>
 <h3>3D linear waves</h3>
-<figure><img src="figures/lwave_grmhd_3d_mosaic.png?v=1791244741" alt="Linear-wave mosaic grmhd 3d"><figcaption>Linear-wave mosaic grmhd 3d</figcaption></figure>
-<div class='tablewrap'><table><thead><tr><th>Scheme</th><th>Wave</th><th>N</th><th>L1</th><th>Order</th><th>nmood</th><th>ok</th></tr></thead><tbody><tr><td>fv4_fb</td><td>left-going fast magnetosonic</td><td>64</td><td>2.408413e-08</td><td>2.22</td><td>0</td><td>yes</td></tr><tr><td>fv4_fb</td><td>right-going fast magnetosonic</td><td>64</td><td>1.075696e-08</td><td>2.21</td><td>0</td><td>yes</td></tr><tr><td>fv6_fb</td><td>left-going fast magnetosonic</td><td>64</td><td>2.296624e-08</td><td>2.05</td><td>0</td><td>yes</td></tr><tr><td>fv6_fb</td><td>right-going fast magnetosonic</td><td>64</td><td>1.022898e-08</td><td>2.03</td><td>0</td><td>yes</td></tr><tr><td>fv8_fb</td><td>left-going fast magnetosonic</td><td>64</td><td>2.295714e-08</td><td>2.05</td><td>0</td><td>yes</td></tr><tr><td>fv8_fb</td><td>right-going fast magnetosonic</td><td>64</td><td>1.022468e-08</td><td>2.02</td><td>0</td><td>yes</td></tr><tr><td>plm</td><td>left-going fast magnetosonic</td><td>64</td><td>1.948717e-07</td><td>1.46</td><td>0</td><td>yes</td></tr><tr><td>plm</td><td>right-going fast magnetosonic</td><td>64</td><td>8.528868e-08</td><td>1.46</td><td>0</td><td>yes</td></tr><tr><td>teno</td><td>left-going fast magnetosonic</td><td>64</td><td>2.293793e-08</td><td>2.04</td><td>0</td><td>yes</td></tr><tr><td>teno</td><td>right-going fast magnetosonic</td><td>64</td><td>1.022882e-08</td><td>2.03</td><td>0</td><td>yes</td></tr><tr><td>wenoz</td><td>left-going fast magnetosonic</td><td>64</td><td>2.293787e-08</td><td>2.04</td><td>0</td><td>yes</td></tr><tr><td>wenoz</td><td>right-going fast magnetosonic</td><td>64</td><td>1.022883e-08</td><td>2.03</td><td>0</td><td>yes</td></tr></tbody></table></div>
+<figure><img src="figures/lwave_grmhd_3d_mosaic.png?v=1791342082" alt="Linear-wave mosaic grmhd 3d"><figcaption>Linear-wave mosaic grmhd 3d</figcaption></figure>
+<div class='tablewrap'><table><thead><tr><th>Scheme</th><th>Wave</th><th>N</th><th>L1</th><th>Order</th><th>nmood</th><th>ok</th></tr></thead><tbody>
+<tr><td>fv4_fb</td><td>left-going fast magnetosonic</td><td>64</td><td>2.408413e-08</td><td>2.22</td><td>0</td><td>yes</td></tr>
+<tr><td>fv4_fb</td><td>right-going fast magnetosonic</td><td>64</td><td>1.075696e-08</td><td>2.21</td><td>0</td><td>yes</td></tr>
+<tr><td>fv6_fb</td><td>left-going fast magnetosonic</td><td>64</td><td>2.296624e-08</td><td>2.05</td><td>0</td><td>yes</td></tr>
+<tr><td>fv6_fb</td><td>right-going fast magnetosonic</td><td>64</td><td>1.022898e-08</td><td>2.03</td><td>0</td><td>yes</td></tr>
+<tr><td>fv8_fb</td><td>left-going fast magnetosonic</td><td>64</td><td>2.295714e-08</td><td>2.05</td><td>0</td><td>yes</td></tr>
+<tr><td>fv8_fb</td><td>right-going fast magnetosonic</td><td>64</td><td>1.022468e-08</td><td>2.02</td><td>0</td><td>yes</td></tr>
+<tr><td>plm</td><td>left-going fast magnetosonic</td><td>64</td><td>1.948717e-07</td><td>1.46</td><td>0</td><td>yes</td></tr>
+<tr><td>plm</td><td>right-going fast magnetosonic</td><td>64</td><td>8.528868e-08</td><td>1.46</td><td>0</td><td>yes</td></tr>
+<tr><td>teno</td><td>left-going fast magnetosonic</td><td>64</td><td>2.293793e-08</td><td>2.04</td><td>0</td><td>yes</td></tr>
+<tr><td>teno</td><td>right-going fast magnetosonic</td><td>64</td><td>1.022882e-08</td><td>2.03</td><td>0</td><td>yes</td></tr>
+<tr><td>wenoz</td><td>left-going fast magnetosonic</td><td>64</td><td>2.293787e-08</td><td>2.04</td><td>0</td><td>yes</td></tr>
+<tr><td>wenoz</td><td>right-going fast magnetosonic</td><td>64</td><td>1.022883e-08</td><td>2.03</td><td>0</td><td>yes</td></tr>
+</tbody></table></div>
 <h3>Shocks</h3>
-<figure><img src="figures/shock_mub1_gr_dens.png?v=1791245263" alt="shock_mub1_gr_dens"><figcaption>shock_mub1_gr_dens</figcaption></figure>
-<div class='tablewrap'><table><thead><tr><th>Case</th><th>Dim</th><th>Scheme</th><th>N</th><th>rc</th><th>nmood</th><th>wall [s]</th></tr></thead><tbody><tr><td>mub1_gr</td><td>1d</td><td>fv4_fb</td><td>256</td><td>0</td><td>18875</td><td>5.615639686584473</td></tr><tr><td>mub1_gr</td><td>1d</td><td>fv4_fb</td><td>512</td><td>0</td><td>49559</td><td>6.514868259429932</td></tr><tr><td>mub1_gr</td><td>1d</td><td>fv4_fb</td><td>1024</td><td>0</td><td>137084</td><td>8.86355972290039</td></tr><tr><td>mub1_gr</td><td>1d</td><td>fv6_fb</td><td>256</td><td>0</td><td>86662</td><td>1.3191649913787842</td></tr><tr><td>mub1_gr</td><td>1d</td><td>fv6_fb</td><td>512</td><td>0</td><td>293940</td><td>3.160266876220703</td></tr><tr><td>mub1_gr</td><td>1d</td><td>fv6_fb</td><td>1024</td><td>0</td><td>1021282</td><td>8.895801067352295</td></tr><tr><td>mub1_gr</td><td>1d</td><td>fv8_fb</td><td>256</td><td>0</td><td>87413</td><td>1.6509120464324951</td></tr><tr><td>mub1_gr</td><td>1d</td><td>fv8_fb</td><td>512</td><td>0</td><td>297610</td><td>3.24454402923584</td></tr><tr><td>mub1_gr</td><td>1d</td><td>fv8_fb</td><td>1024</td><td>0</td><td>1039918</td><td>9.393831968307495</td></tr><tr><td>mub1_gr</td><td>1d</td><td>plm</td><td>256</td><td>0</td><td>0</td><td>5.131254196166992</td></tr><tr><td>mub1_gr</td><td>1d</td><td>plm</td><td>512</td><td>0</td><td>0</td><td>5.699239015579224</td></tr><tr><td>mub1_gr</td><td>1d</td><td>plm</td><td>1024</td><td>0</td><td>0</td><td>7.1900458335876465</td></tr><tr><td>mub1_gr</td><td>1d</td><td>teno</td><td>256</td><td>0</td><td>0</td><td>5.354448318481445</td></tr><tr><td>mub1_gr</td><td>1d</td><td>teno</td><td>512</td><td>0</td><td>0</td><td>6.118960380554199</td></tr><tr><td>mub1_gr</td><td>1d</td><td>teno</td><td>1024</td><td>0</td><td>0</td><td>7.702042102813721</td></tr><tr><td>mub1_gr</td><td>1d</td><td>wenoz</td><td>256</td><td>0</td><td>0</td><td>5.251308441162109</td></tr><tr><td>mub1_gr</td><td>1d</td><td>wenoz</td><td>512</td><td>0</td><td>0</td><td>6.196975946426392</td></tr><tr><td>mub1_gr</td><td>1d</td><td>wenoz</td><td>1024</td><td>0</td><td>0</td><td>7.92611837387085</td></tr></tbody></table></div>
+<figure><img src="figures/shock_mub1_gr_dens.png?v=1791342083" alt="shock_mub1_gr_dens"><figcaption>shock_mub1_gr_dens</figcaption></figure>
+<div class='tablewrap'><table><thead><tr><th>Case</th><th>Dim</th><th>Scheme</th><th>N</th><th>rc</th><th>nmood</th><th>wall [s]</th></tr></thead><tbody>
+<tr><td>mub1_gr</td><td>1d</td><td>fv4_fb</td><td>256</td><td>0</td><td>18875</td><td>5.615639686584473</td></tr>
+<tr><td>mub1_gr</td><td>1d</td><td>fv4_fb</td><td>512</td><td>0</td><td>49559</td><td>6.514868259429932</td></tr>
+<tr><td>mub1_gr</td><td>1d</td><td>fv4_fb</td><td>1024</td><td>0</td><td>137084</td><td>8.86355972290039</td></tr>
+<tr><td>mub1_gr</td><td>1d</td><td>fv6_fb</td><td>256</td><td>0</td><td>86662</td><td>1.3191649913787842</td></tr>
+<tr><td>mub1_gr</td><td>1d</td><td>fv6_fb</td><td>512</td><td>0</td><td>293940</td><td>3.160266876220703</td></tr>
+<tr><td>mub1_gr</td><td>1d</td><td>fv6_fb</td><td>1024</td><td>0</td><td>1021282</td><td>8.895801067352295</td></tr>
+<tr><td>mub1_gr</td><td>1d</td><td>fv8_fb</td><td>256</td><td>0</td><td>87413</td><td>1.6509120464324951</td></tr>
+<tr><td>mub1_gr</td><td>1d</td><td>fv8_fb</td><td>512</td><td>0</td><td>297610</td><td>3.24454402923584</td></tr>
+<tr><td>mub1_gr</td><td>1d</td><td>fv8_fb</td><td>1024</td><td>0</td><td>1039918</td><td>9.393831968307495</td></tr>
+<tr><td>mub1_gr</td><td>1d</td><td>plm</td><td>256</td><td>0</td><td>0</td><td>5.131254196166992</td></tr>
+<tr><td>mub1_gr</td><td>1d</td><td>plm</td><td>512</td><td>0</td><td>0</td><td>5.699239015579224</td></tr>
+<tr><td>mub1_gr</td><td>1d</td><td>plm</td><td>1024</td><td>0</td><td>0</td><td>7.1900458335876465</td></tr>
+<tr><td>mub1_gr</td><td>1d</td><td>teno</td><td>256</td><td>0</td><td>0</td><td>5.354448318481445</td></tr>
+<tr><td>mub1_gr</td><td>1d</td><td>teno</td><td>512</td><td>0</td><td>0</td><td>6.118960380554199</td></tr>
+<tr><td>mub1_gr</td><td>1d</td><td>teno</td><td>1024</td><td>0</td><td>0</td><td>7.702042102813721</td></tr>
+<tr><td>mub1_gr</td><td>1d</td><td>wenoz</td><td>256</td><td>0</td><td>0</td><td>5.251308441162109</td></tr>
+<tr><td>mub1_gr</td><td>1d</td><td>wenoz</td><td>512</td><td>0</td><td>0</td><td>6.196975946426392</td></tr>
+<tr><td>mub1_gr</td><td>1d</td><td>wenoz</td><td>1024</td><td>0</td><td>0</td><td>7.92611837387085</td></tr>
+</tbody></table></div>
 <h3>Multi-D stress</h3>
-<div class='tablewrap'><table><thead><tr><th>Case</th><th>Dim</th><th>Scheme</th><th>health</th><th>EOS floors</th><th>nmood</th><th>wall [s]</th></tr></thead><tbody><tr><td>blast_grmhd</td><td>2d</td><td>wenoz</td><td><strong>rc!=0</strong></td><td>0</td><td>0</td><td>3.345273733139038</td></tr><tr><td>blast_grmhd</td><td>2d</td><td>teno</td><td><strong>rc!=0</strong></td><td>0</td><td>0</td><td>3.432358503341675</td></tr><tr><td>blast_grmhd</td><td>2d</td><td>fv4_fb</td><td><strong>rc!=0</strong></td><td>0</td><td>0</td><td>3.4680516719818115</td></tr><tr><td>blast_grmhd</td><td>2d</td><td>plm</td><td><strong>rc!=0</strong></td><td>0</td><td>0</td><td>0.5711870193481445</td></tr></tbody></table></div>
-<figure><img src="figures/stress_blast_grmhd_mosaic.png?v=1791244767" alt="blast_grmhd stress mosaic"><figcaption>blast_grmhd stress mosaic</figcaption></figure>
-<figure><img src="figures/stress_blast_grmhd_bmag_mosaic.png?v=1791244767" alt="blast_grmhd |B| mosaic"><figcaption>blast_grmhd |B| mosaic</figcaption></figure>
+<div class='tablewrap'><table><thead><tr><th>Case</th><th>Dim</th><th>Scheme</th><th>health</th><th>EOS floors</th><th>nmood</th><th>wall [s]</th></tr></thead><tbody>
+<tr><td>blast_grmhd</td><td>2d</td><td>fv6_fb</td><td><strong>floored</strong></td><td>2441</td><td>12473625</td><td>64.05350708961487</td></tr>
+<tr><td>blast_grmhd_uct</td><td>2d</td><td>fv6_fb</td><td><strong>floored</strong></td><td>3563</td><td>11885516</td><td>75.10579800605774</td></tr>
+<tr><td>blast_grmhd</td><td>2d</td><td>wenoz</td><td><strong>rc!=0</strong></td><td>0</td><td>0</td><td>3.345273733139038</td></tr>
+<tr><td>blast_grmhd</td><td>2d</td><td>teno</td><td><strong>rc!=0</strong></td><td>0</td><td>0</td><td>3.432358503341675</td></tr>
+<tr><td>blast_grmhd</td><td>2d</td><td>fv4_fb</td><td><strong>rc!=0</strong></td><td>0</td><td>0</td><td>3.4680516719818115</td></tr>
+<tr><td>blast_grmhd</td><td>2d</td><td>fv8_fb</td><td><strong>floored</strong></td><td>2512</td><td>12600010</td><td>65.99214911460876</td></tr>
+<tr><td>blast_grmhd_uct</td><td>2d</td><td>fv8_fb</td><td><strong>floored</strong></td><td>19681</td><td>11942899</td><td>76.55016112327576</td></tr>
+<tr><td>blast_grmhd</td><td>2d</td><td>plm</td><td><strong>rc!=0</strong></td><td>0</td><td>0</td><td>0.5711870193481445</td></tr>
+</tbody></table></div>
+<figure><img src="figures/stress_blast_grmhd_mosaic.png?v=1791342121" alt="blast_grmhd stress mosaic"><figcaption>blast_grmhd stress mosaic</figcaption></figure>
+<figure><img src="figures/stress_blast_grmhd_bmag_mosaic.png?v=1791342121" alt="blast_grmhd |B| mosaic"><figcaption>blast_grmhd |B| mosaic</figcaption></figure>
+<figure><img src="figures/stress_blast_grmhd_uct_mosaic.png?v=1791342122" alt="blast_grmhd_uct stress mosaic"><figcaption>blast_grmhd_uct stress mosaic</figcaption></figure>
+<figure><img src="figures/stress_blast_grmhd_uct_bmag_mosaic.png?v=1791342122" alt="blast_grmhd_uct |B| mosaic"><figcaption>blast_grmhd_uct |B| mosaic</figcaption></figure>
 <h3>Multi-D blast (Apollo SRMHD)</h3>
 <p>Apollo <code>~/srmhd_blast</code> scheme comparison with FV4 (~/srmhd_blast on Apollo (fv4_fb vs plm/wenoz/ppmx/dc)). The mosaic uses the exact final frame ($t=4$) of each movie; full movies are linked below.</p>
-<div class='tablewrap'><table><thead><tr><th>Movie</th><th>Path</th></tr></thead><tbody></tbody></table></div>
+<div class='tablewrap'><table><thead><tr><th>Movie</th><th>Path</th></tr></thead><tbody>
+</tbody></table></div>
 <h2>Limitations</h2>
-<ul><li>No MOOD in dynamical GRMHD (<code>dyn_grmhd</code>).</li><li><code>mood=true</code> incompatible with BH excision and with <code>fofc=true</code>; the non-MOOD schemes therefore run with <code>fofc=true</code> as their counterpart a-posteriori protection.</li><li>MHD linear waves use <code>mood_nad_v=off</code>; velocity NAD at amp=1e-6 falsely demotes Alfvén/entropy families.</li><li>NR MHD uses <code>emf=uct_hlld</code> + <code>rsolver=hlld</code> for all schemes; GR MHD defaults to <code>ct_contact</code>; <code>uct_hll</code> is available since the relativistic solvers were fixed to pass the transport velocity to the EMF composition.</li><li>2D/3D linear waves use diagonal wavevectors and cover both left- and right-going acoustic (hydro) or fast-magnetosonic (MHD) modes.</li><li>Local 2D stress (paper-typical grids on Apollo A100s): hydro slotted cylinder (200², one rotation) / Liska–Wendroff implode (200²); MHD Orszag–Tang (400², $t=1$) / current sheet (256², $t=1$ tearing seed) / Lecoanet KH (256×512). Apollo multi-D stress: MHD ringing (<code>figures/apollo_ringing/</code>) and SRMHD blast with FV4 (<code>figures/apollo_grmhd/</code>, from <code>~/srmhd_blast</code>).</li><li>The stock current-sheet input is a resistive-diffusion test (<code>epsb=0</code>, <code>epsv=0.001</code>). The suite now enables the pgen tearing seed (<code>epsb=0.05</code>, <code>epsv=0.01</code>). High-order schemes still collapse near $t=1$; the mosaic uses the last common finite time ($t=1$). TENO has no finite evolved dump.</li></ul>
+<ul>
+<li>No MOOD in dynamical GRMHD (<code>dyn_grmhd</code>).</li>
+<li><code>mood=true</code> incompatible with BH excision and with <code>fofc=true</code>; the non-MOOD schemes therefore run with <code>fofc=true</code> as their counterpart a-posteriori protection.</li>
+<li>MHD linear waves use <code>mood_nad_v=off</code>; velocity NAD at amp=1e-6 falsely demotes Alfvén/entropy families.</li>
+<li>NR MHD uses <code>emf=uct_hlld</code> + <code>rsolver=hlld</code> for all schemes; GR MHD defaults to <code>ct_contact</code>; <code>uct_hll</code> is available since the relativistic solvers were fixed to pass the transport velocity to the EMF composition.</li>
+<li>2D/3D linear waves use diagonal wavevectors and cover both left- and right-going acoustic (hydro) or fast-magnetosonic (MHD) modes.</li>
+<li>Local 2D stress (paper-typical grids on Apollo A100s): hydro slotted cylinder (200², one rotation) / Liska–Wendroff implode (200²); MHD Orszag–Tang (400², $t=1$) / current sheet (256², $t=1$ tearing seed) / Lecoanet KH (256×512). Apollo multi-D stress: MHD ringing (<code>figures/apollo_ringing/</code>) and SRMHD blast with FV4 (<code>figures/apollo_grmhd/</code>, from <code>~/srmhd_blast</code>).</li>
+<li>The stock current-sheet input is a resistive-diffusion test (<code>epsb=0</code>, <code>epsv=0.001</code>). The suite now enables the pgen tearing seed (<code>epsb=0.05</code>, <code>epsv=0.01</code>). High-order schemes still collapse near $t=1$; the mosaic uses the last common finite time ($t=1$). TENO has no finite evolved dump.</li>
+</ul>
 <h2>Reproducibility</h2>
 <p>``<code>bash cmake -B build -DAthena_ENABLE_MPI=OFF -DPROBLEM=built_in_pgens cmake --build build --target athena -j8 validation/fallback/scripts/build_2d_problem_binaries.sh python3 validation/fallback/scripts/run_suite.py --athena build/src/athena --suite all python3 validation/fallback/scripts/analyze.py --write python3 validation/fallback/scripts/plot_results.py python3 validation/fallback/scripts/plot_2d_stress.py python3 validation/fallback/scripts/generate_report.py --pdf </code>``</p>
 </body></html>

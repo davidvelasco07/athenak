@@ -1,11 +1,11 @@
 # MOOD Fallback Validation Report
 
-_Generated 2026-10-06 00:07 UTC_
-_Commit `2787d427f`_
+_Generated 2026-10-07 03:02 UTC_
+_Commit `516bb4d9a`_
 
 ## Summary
 
-- Records analyzed: **888**
+- Records analyzed: **932**
 - FV4 linear-wave zero demotions: **True**
 - FV6 linear-wave zero demotions: **True**
 - FV8 linear-wave zero demotions: **True**
@@ -138,15 +138,25 @@ The report is organized by physics. Each section covers **1D / 2D / 3D** linear 
 | Case | Dim | Scheme | health | EOS floors | nmood | wall [s] |
 |---|---|---|---|---|---|---|
 | implode_hydro | 2d | fv6_fb | clean | 0 | 182542306 | 345.72102880477905 |
+| fu_jet_m80 | 2d | fv6_fb | **non-finite** | 44 | 218845191 | 58.73589515686035 |
+| blast_hydro | 2d | fv6_fb | clean | 0 | 22852700 | 144.23295998573303 |
 | blast_hydro | 2d | teno | **rc!=0** | 0 | 0 | 3.127929210662842 |
+| ha_jet | 2d | fv6_fb | **floored** | 12 | 10222131 | 205.2997190952301 |
 | slotted_cyl | 2d | fv8_fb | clean | 0 | 2377665 | 43.80655097961426 |
 | blast_hydro | 2d | wenoz | **rc!=0** | 0 | 0 | 3.156033754348755 |
+| blast_hydro | 2d | fv8_fb | clean | 0 | 23668572 | 131.51153302192688 |
 | blast_hydro | 2d | plm | **rc!=0** | 0 | 0 | 3.1566178798675537 |
+| ha_jet | 2d | fv8_fb | **floored** | 6 | 10656490 | 208.3671441078186 |
 | slotted_cyl | 2d | fv6_fb | clean | 0 | 2590992 | 43.63608407974243 |
 | implode_hydro | 2d | fv8_fb | clean | 0 | 189683550 | 352.6362769603729 |
+| fu_jet_m80 | 2d | fv8_fb | **floored** | 410 | 11131376 | 106.75207614898682 |
 | blast_hydro | 2d | fv4_fb | clean | 0 | 4646336 | 5.930562496185303 |
 
 ![blast_hydro stress mosaic](figures/stress_blast_hydro_mosaic.png)
+
+![fu_jet_m80 stress mosaic](figures/stress_fu_jet_m80_mosaic.png)
+
+![ha_jet stress mosaic](figures/stress_ha_jet_mosaic.png)
 
 ![implode_hydro stress mosaic](figures/stress_implode_hydro_mosaic.png)
 
@@ -329,45 +339,69 @@ Relaxed-DMP tolerance sweeps keep the base scheme, grid, Riemann solver, and int
 | jet_n600 | 2d | fv4_fb | **floored** | 550 | 425945941 | 96.45877623558044 |
 | blast_mhd | 2d | wenoz | clean | 0 | 0 | 4.424925327301025 |
 | jet | 2d | teno | **floored** | 2002 | 0 | 17.087567806243896 |
+| current_sheet_n1024 | 2d | fv6_fb | clean | 0 | 2980295958 | 26354.41700410843 |
+| rotor | 2d | fv8_fb | **floored** | 32 | 19992510 | 259.824697971344 |
+| current_sheet_n512 | 2d | fv8_fb | **floored** | 316 | 552930752 | 3765.5608942508698 |
 | orszag_tang | 2d | fv6_fb | **floored** | 69 | 91084393 | 1487.0636160373688 |
 | blast_mhd | 2d | plm | clean | 0 | 0 | 4.108715295791626 |
 | rotor | 2d | teno | clean | 0 | 0 | 4.676168203353882 |
 | jet | 2d | fv6_fb | **non-finite** | 3009 | 75406908 | 641.204922914505 |
+| kh_rr22_n256 | 2d | fv8_fb | clean | 0 | 558562997 | 7630.115083932877 |
 | rotor | 2d | plm | clean | 0 | 0 | 4.2501161098480225 |
 | current_sheet | 2d | fv6_fb | **floored** | 1190 | 112173446 | 566.8557329177856 |
 | blast_mhd | 2d | teno | clean | 0 | 0 | 4.338674068450928 |
+| blast_mhd | 2d | fv8_fb | clean | 0 | 102503498 | 979.7400200366974 |
 | jet | 2d | plm | **floored** | 28186 | 0 | 15.856359481811523 |
 | kh_rr22 | 2d | teno | clean | 0 | 0 | 27.219162940979004 |
 | kh_rr22 | 2d | wenoz | clean | 0 | 0 | 27.560834646224976 |
 | blast_mhd | 2d | fv4_fb | clean | 0 | 2865612 | 5.676389217376709 |
+| kh_rr22 | 2d | fv6_fb | clean | 0 | 89137357 | 1126.128788948059 |
 | current_sheet | 2d | plm | clean | 0 | 0 | 7.914682388305664 |
+| blast_mhd_lowbeta | 2d | fv6_fb | **floored** | 112117 | 90283532 | 377.54402208328247 |
 | rotor | 2d | wenoz | clean | 0 | 0 | 4.7452497482299805 |
+| mhd_jet | 2d | fv8_fb | **non-finite** | 5279 | 34489270 | 24.737060070037842 |
+| jet_n600 | 2d | fv8_fb | **floored** | 403 | 192374395 | 6125.73609995842 |
 | current_sheet | 2d | teno | **dt collapse** | 57853 | 0 | 434.2576529979706 |
 | current_sheet_n1024 | 2d | wenoz | clean | 0 | 0 | 80.21520495414734 |
+| mhd_jet_revs4 | 2d | fv6_fb | **non-finite** | 97393 | 40646287 | 41.8792622089386 |
 | rotor | 2d | fv4_fb | clean | 0 | 18877768 | 6.933132171630859 |
 | current_sheet_n512 | 2d | fv4_fb | clean | 0 | 445302218 | 45.406437397003174 |
 | current_sheet | 2d | fv4_fb | **floored** | 10 | 93507990 | 22.261358976364136 |
 | current_sheet_n1024 | 2d | teno | **dt collapse** | 1111726 | 0 | 63.33787560462952 |
 | jet | 2d | fv4_fb | clean | 0 | 59372029 | 31.7730495929718 |
+| kh_rr22 | 2d | fv8_fb | clean | 0 | 89986183 | 1160.5801091194153 |
 | current_sheet | 2d | wenoz | **floored** | 642 | 0 | 10.626406908035278 |
+| blast_mhd_lowbeta | 2d | fv8_fb | **floored** | 152708 | 86170694 | 382.24168610572815 |
 | jet_n600 | 2d | plm | clean | 0 | 0 | 26.293771743774414 |
 | jet_n600 | 2d | wenoz | **dt collapse** | 98098 | 0 | 46.97315859794617 |
 | jet_n600 | 2d | teno | **floored** | 1560 | 0 | 42.42583513259888 |
+| mhd_jet | 2d | fv6_fb | **non-finite** | 97393 | 40646287 | 44.80704689025879 |
 | current_sheet_n512 | 2d | plm | clean | 0 | 0 | 14.827360153198242 |
+| jet_n600 | 2d | fv6_fb | **floored** | 3355 | 190672457 | 6664.968143224716 |
 | current_sheet_n1024 | 2d | fv4_fb | clean | 0 | 2153430653 | 172.02649068832397 |
 | current_sheet_n1024 | 2d | plm | clean | 0 | 0 | 46.333914279937744 |
+| mhd_jet_revs4 | 2d | fv8_fb | **non-finite** | 5279 | 34489270 | 23.332226753234863 |
 | jet | 2d | wenoz | **floored** | 5466 | 0 | 17.281517028808594 |
 | orszag_tang | 2d | fv8_fb | **floored** | 54 | 93285611 | 1425.3590211868286 |
 | kh_rr22 | 2d | plm | clean | 0 | 0 | 19.056479692459106 |
+| current_sheet_n512 | 2d | fv6_fb | **floored** | 6 | 537693519 | 3399.263725042343 |
+| rotor | 2d | fv6_fb | **floored** | 148 | 20056797 | 273.52879524230957 |
+| current_sheet_n1024 | 2d | fv8_fb | clean | 0 | 3015150945 | 27923.13966679573 |
 | kh_rr22 | 2d | fv4_fb | clean | 0 | 73353124 | 57.68581295013428 |
+| kh_rr22_n256 | 2d | fv6_fb | clean | 0 | 542358161 | 7427.124178886414 |
 | current_sheet_n512 | 2d | wenoz | clean | 0 | 0 | 22.701947450637817 |
 | jet | 2d | fv8_fb | **non-finite** | 33600 | 62831203 | 607.3037672042847 |
 | current_sheet_n512 | 2d | teno | **dt collapse** | 79200 | 0 | 21.408766984939575 |
 | current_sheet | 2d | fv8_fb | **floored** | 254 | 117941562 | 591.8266229629517 |
+| blast_mhd | 2d | fv6_fb | clean | 0 | 102062017 | 946.5443339347839 |
 
 ![blast_mhd stress mosaic](figures/stress_blast_mhd_mosaic.png)
 
 ![blast_mhd |B| mosaic](figures/stress_blast_mhd_bmag_mosaic.png)
+
+![blast_mhd_lowbeta stress mosaic](figures/stress_blast_mhd_lowbeta_mosaic.png)
+
+![blast_mhd_lowbeta |B| mosaic](figures/stress_blast_mhd_lowbeta_bmag_mosaic.png)
 
 The double Harris sheet is seeded with the pgen tearing perturbation and run to $t=5$, a few Alfv\'en times, so plasmoid chains have formed on both sheets.
 
@@ -403,6 +437,18 @@ Magnetized Kelvin--Helmholtz of Rueda-Ram\'irez, Hindenlang, Chan \& Gassner (20
 
 ![kh_rr22 |B| mosaic](figures/stress_kh_rr22_bmag_mosaic.png)
 
+![kh_rr22_n256 stress mosaic](figures/stress_kh_rr22_n256_mosaic.png)
+
+![kh_rr22_n256 |B| mosaic](figures/stress_kh_rr22_n256_bmag_mosaic.png)
+
+![mhd_jet stress mosaic](figures/stress_mhd_jet_mosaic.png)
+
+![mhd_jet |B| mosaic](figures/stress_mhd_jet_bmag_mosaic.png)
+
+![mhd_jet_revs4 stress mosaic](figures/stress_mhd_jet_revs4_mosaic.png)
+
+![mhd_jet_revs4 |B| mosaic](figures/stress_mhd_jet_revs4_bmag_mosaic.png)
+
 The Orszag--Tang vortex is shown at $t=1$ on the classic $400^2$ Athena mesh.
 
 ![orszag_tang stress mosaic](figures/stress_orszag_tang_mosaic.png)
@@ -437,7 +483,16 @@ _No shock cases for this physics._
 
 ### Multi-D stress
 
-_No local stress smokes for this physics._
+| Case | Dim | Scheme | health | EOS floors | nmood | wall [s] |
+|---|---|---|---|---|---|---|
+| kh_srhydro | 2d | fv8_fb | clean | 0 | 7709131 | 113.93709182739258 |
+| blast_srhydro | 2d | fv8_fb | clean | 0 | 473592 | 9.710411071777344 |
+| blast_srhydro | 2d | fv6_fb | clean | 0 | 423096 | 9.177867889404297 |
+| kh_srhydro | 2d | fv6_fb | clean | 0 | 7448713 | 112.9156928062439 |
+
+![blast_srhydro stress mosaic](figures/stress_blast_srhydro_mosaic.png)
+
+![kh_srhydro stress mosaic](figures/stress_kh_srhydro_mosaic.png)
 
 ## SR MHD
 
@@ -459,7 +514,20 @@ _No shock cases for this physics._
 
 ### Multi-D stress
 
-_No local stress smokes for this physics._
+| Case | Dim | Scheme | health | EOS floors | nmood | wall [s] |
+|---|---|---|---|---|---|---|
+| blast_srmhd | 2d | fv6_fb | **floored** | 798 | 1396089 | 10.567103862762451 |
+| blast_srmhd_uct | 2d | fv6_fb | **floored** | 1844 | 1291018 | 13.308178901672363 |
+| blast_srmhd_uct | 2d | fv8_fb | **floored** | 2072 | 1291034 | 13.894895076751709 |
+| blast_srmhd | 2d | fv8_fb | **floored** | 689 | 1409532 | 10.62426495552063 |
+
+![blast_srmhd stress mosaic](figures/stress_blast_srmhd_mosaic.png)
+
+![blast_srmhd |B| mosaic](figures/stress_blast_srmhd_bmag_mosaic.png)
+
+![blast_srmhd_uct stress mosaic](figures/stress_blast_srmhd_uct_mosaic.png)
+
+![blast_srmhd_uct |B| mosaic](figures/stress_blast_srmhd_uct_bmag_mosaic.png)
 
 ## GR hydrodynamics (Minkowski)
 
@@ -555,7 +623,20 @@ _No local stress smokes for this physics._
 
 ### Multi-D stress
 
-_No local stress smokes for this physics._
+| Case | Dim | Scheme | health | EOS floors | nmood | wall [s] |
+|---|---|---|---|---|---|---|
+| kh_grhydro | 2d | fv8_fb | clean | 0 | 9992357 | 197.65495610237122 |
+| blast_grhydro_3d | 3d | fv6_fb | clean | 0 | 1624576 | 181.8482151031494 |
+| blast_grhydro | 2d | fv8_fb | clean | 0 | 519772 | 16.928126335144043 |
+| blast_grhydro | 2d | fv6_fb | clean | 0 | 461764 | 16.649996995925903 |
+| kh_grhydro | 2d | fv6_fb | clean | 0 | 9648967 | 193.98315811157227 |
+| blast_grhydro_3d | 3d | fv8_fb | clean | 0 | 1636240 | 193.8033049106598 |
+
+![blast_grhydro stress mosaic](figures/stress_blast_grhydro_mosaic.png)
+
+![blast_grhydro_3d stress mosaic](figures/stress_blast_grhydro_3d_mosaic.png)
+
+![kh_grhydro stress mosaic](figures/stress_kh_grhydro_mosaic.png)
 
 ## GRMHD (Minkowski)
 
@@ -677,14 +758,22 @@ _No local stress smokes for this physics._
 
 | Case | Dim | Scheme | health | EOS floors | nmood | wall [s] |
 |---|---|---|---|---|---|---|
+| blast_grmhd | 2d | fv6_fb | **floored** | 2441 | 12473625 | 64.05350708961487 |
+| blast_grmhd_uct | 2d | fv6_fb | **floored** | 3563 | 11885516 | 75.10579800605774 |
 | blast_grmhd | 2d | wenoz | **rc!=0** | 0 | 0 | 3.345273733139038 |
 | blast_grmhd | 2d | teno | **rc!=0** | 0 | 0 | 3.432358503341675 |
 | blast_grmhd | 2d | fv4_fb | **rc!=0** | 0 | 0 | 3.4680516719818115 |
+| blast_grmhd | 2d | fv8_fb | **floored** | 2512 | 12600010 | 65.99214911460876 |
+| blast_grmhd_uct | 2d | fv8_fb | **floored** | 19681 | 11942899 | 76.55016112327576 |
 | blast_grmhd | 2d | plm | **rc!=0** | 0 | 0 | 0.5711870193481445 |
 
 ![blast_grmhd stress mosaic](figures/stress_blast_grmhd_mosaic.png)
 
 ![blast_grmhd |B| mosaic](figures/stress_blast_grmhd_bmag_mosaic.png)
+
+![blast_grmhd_uct stress mosaic](figures/stress_blast_grmhd_uct_mosaic.png)
+
+![blast_grmhd_uct |B| mosaic](figures/stress_blast_grmhd_uct_bmag_mosaic.png)
 
 ### Multi-D blast (Apollo SRMHD)
 

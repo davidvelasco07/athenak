@@ -1,5 +1,5 @@
 {
-  "n_records": 888,
+  "n_records": 932,
   "linear": [
     {
       "case": "gr_hydro",
@@ -7887,6 +7887,28 @@
       "floors": 0
     },
     {
+      "case": "fu_jet_m80",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "fv6_fb",
+      "returncode": 0,
+      "nmood_total": 218845191,
+      "wall_s": 58.73589515686035,
+      "health": "non-finite",
+      "floors": 44
+    },
+    {
+      "case": "blast_srmhd",
+      "physics": "srmhd",
+      "dim": "2d",
+      "scheme": "fv6_fb",
+      "returncode": 0,
+      "nmood_total": 1396089,
+      "wall_s": 10.567103862762451,
+      "health": "floored",
+      "floors": 798
+    },
+    {
       "case": "jet",
       "physics": "mhd",
       "dim": "2d",
@@ -7896,6 +7918,39 @@
       "wall_s": 17.087567806243896,
       "health": "floored",
       "floors": 2002
+    },
+    {
+      "case": "current_sheet_n1024",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "fv6_fb",
+      "returncode": 0,
+      "nmood_total": 2980295958,
+      "wall_s": 26354.41700410843,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "rotor",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "fv8_fb",
+      "returncode": 0,
+      "nmood_total": 19992510,
+      "wall_s": 259.824697971344,
+      "health": "floored",
+      "floors": 32
+    },
+    {
+      "case": "current_sheet_n512",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "fv8_fb",
+      "returncode": 0,
+      "nmood_total": 552930752,
+      "wall_s": 3765.5608942508698,
+      "health": "floored",
+      "floors": 316
     },
     {
       "case": "orszag_tang",
@@ -7920,6 +7975,50 @@
       "floors": 0
     },
     {
+      "case": "blast_grmhd",
+      "physics": "grmhd",
+      "dim": "2d",
+      "scheme": "fv6_fb",
+      "returncode": 0,
+      "nmood_total": 12473625,
+      "wall_s": 64.05350708961487,
+      "health": "floored",
+      "floors": 2441
+    },
+    {
+      "case": "blast_srmhd_uct",
+      "physics": "srmhd",
+      "dim": "2d",
+      "scheme": "fv6_fb",
+      "returncode": 0,
+      "nmood_total": 1291018,
+      "wall_s": 13.308178901672363,
+      "health": "floored",
+      "floors": 1844
+    },
+    {
+      "case": "kh_grhydro",
+      "physics": "grhydro",
+      "dim": "2d",
+      "scheme": "fv8_fb",
+      "returncode": 0,
+      "nmood_total": 9992357,
+      "wall_s": 197.65495610237122,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "blast_grhydro_3d",
+      "physics": "grhydro",
+      "dim": "3d",
+      "scheme": "fv6_fb",
+      "returncode": 0,
+      "nmood_total": 1624576,
+      "wall_s": 181.8482151031494,
+      "health": "clean",
+      "floors": 0
+    },
+    {
       "case": "rotor",
       "physics": "mhd",
       "dim": "2d",
@@ -7931,6 +8030,17 @@
       "floors": 0
     },
     {
+      "case": "blast_grmhd_uct",
+      "physics": "grmhd",
+      "dim": "2d",
+      "scheme": "fv6_fb",
+      "returncode": 0,
+      "nmood_total": 11885516,
+      "wall_s": 75.10579800605774,
+      "health": "floored",
+      "floors": 3563
+    },
+    {
       "case": "jet",
       "physics": "mhd",
       "dim": "2d",
@@ -7940,6 +8050,28 @@
       "wall_s": 641.204922914505,
       "health": "non-finite",
       "floors": 3009
+    },
+    {
+      "case": "kh_rr22_n256",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "fv8_fb",
+      "returncode": 0,
+      "nmood_total": 558562997,
+      "wall_s": 7630.115083932877,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "kh_srhydro",
+      "physics": "srhydro",
+      "dim": "2d",
+      "scheme": "fv8_fb",
+      "returncode": 0,
+      "nmood_total": 7709131,
+      "wall_s": 113.93709182739258,
+      "health": "clean",
+      "floors": 0
     },
     {
       "case": "rotor",
@@ -7975,6 +8107,17 @@
       "floors": 0
     },
     {
+      "case": "blast_mhd",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "fv8_fb",
+      "returncode": 0,
+      "nmood_total": 102503498,
+      "wall_s": 979.7400200366974,
+      "health": "clean",
+      "floors": 0
+    },
+    {
       "case": "jet",
       "physics": "mhd",
       "dim": "2d",
@@ -7993,6 +8136,17 @@
       "returncode": 0,
       "nmood_total": 0,
       "wall_s": 27.219162940979004,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "blast_hydro",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "fv6_fb",
+      "returncode": 0,
+      "nmood_total": 22852700,
+      "wall_s": 144.23295998573303,
       "health": "clean",
       "floors": 0
     },
@@ -8041,6 +8195,17 @@
       "floors": 0
     },
     {
+      "case": "kh_rr22",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "fv6_fb",
+      "returncode": 0,
+      "nmood_total": 89137357,
+      "wall_s": 1126.128788948059,
+      "health": "clean",
+      "floors": 0
+    },
+    {
       "case": "current_sheet",
       "physics": "mhd",
       "dim": "2d",
@@ -8050,6 +8215,39 @@
       "wall_s": 7.914682388305664,
       "health": "clean",
       "floors": 0
+    },
+    {
+      "case": "blast_mhd_lowbeta",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "fv6_fb",
+      "returncode": 0,
+      "nmood_total": 90283532,
+      "wall_s": 377.54402208328247,
+      "health": "floored",
+      "floors": 112117
+    },
+    {
+      "case": "blast_srhydro",
+      "physics": "srhydro",
+      "dim": "2d",
+      "scheme": "fv8_fb",
+      "returncode": 0,
+      "nmood_total": 473592,
+      "wall_s": 9.710411071777344,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "ha_jet",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "fv6_fb",
+      "returncode": 0,
+      "nmood_total": 10222131,
+      "wall_s": 205.2997190952301,
+      "health": "floored",
+      "floors": 12
     },
     {
       "case": "slotted_cyl",
@@ -8063,6 +8261,17 @@
       "floors": 0
     },
     {
+      "case": "blast_grhydro",
+      "physics": "grhydro",
+      "dim": "2d",
+      "scheme": "fv8_fb",
+      "returncode": 0,
+      "nmood_total": 519772,
+      "wall_s": 16.928126335144043,
+      "health": "clean",
+      "floors": 0
+    },
+    {
       "case": "rotor",
       "physics": "mhd",
       "dim": "2d",
@@ -8072,6 +8281,28 @@
       "wall_s": 4.7452497482299805,
       "health": "clean",
       "floors": 0
+    },
+    {
+      "case": "mhd_jet",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "fv8_fb",
+      "returncode": 0,
+      "nmood_total": 34489270,
+      "wall_s": 24.737060070037842,
+      "health": "non-finite",
+      "floors": 5279
+    },
+    {
+      "case": "jet_n600",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "fv8_fb",
+      "returncode": 0,
+      "nmood_total": 192374395,
+      "wall_s": 6125.73609995842,
+      "health": "floored",
+      "floors": 403
     },
     {
       "case": "current_sheet",
@@ -8094,6 +8325,17 @@
       "wall_s": 80.21520495414734,
       "health": "clean",
       "floors": 0
+    },
+    {
+      "case": "mhd_jet_revs4",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "fv6_fb",
+      "returncode": 0,
+      "nmood_total": 40646287,
+      "wall_s": 41.8792622089386,
+      "health": "non-finite",
+      "floors": 97393
     },
     {
       "case": "blast_hydro",
@@ -8165,6 +8407,17 @@
       "case": "blast_hydro",
       "physics": "hydro",
       "dim": "2d",
+      "scheme": "fv8_fb",
+      "returncode": 0,
+      "nmood_total": 23668572,
+      "wall_s": 131.51153302192688,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "blast_hydro",
+      "physics": "hydro",
+      "dim": "2d",
       "scheme": "plm",
       "returncode": 1,
       "nmood_total": 0,
@@ -8184,6 +8437,17 @@
       "floors": 0
     },
     {
+      "case": "kh_rr22",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "fv8_fb",
+      "returncode": 0,
+      "nmood_total": 89986183,
+      "wall_s": 1160.5801091194153,
+      "health": "clean",
+      "floors": 0
+    },
+    {
       "case": "current_sheet",
       "physics": "mhd",
       "dim": "2d",
@@ -8193,6 +8457,39 @@
       "wall_s": 10.626406908035278,
       "health": "floored",
       "floors": 642
+    },
+    {
+      "case": "ha_jet",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "fv8_fb",
+      "returncode": 0,
+      "nmood_total": 10656490,
+      "wall_s": 208.3671441078186,
+      "health": "floored",
+      "floors": 6
+    },
+    {
+      "case": "blast_mhd_lowbeta",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "fv8_fb",
+      "returncode": 0,
+      "nmood_total": 86170694,
+      "wall_s": 382.24168610572815,
+      "health": "floored",
+      "floors": 152708
+    },
+    {
+      "case": "blast_srhydro",
+      "physics": "srhydro",
+      "dim": "2d",
+      "scheme": "fv6_fb",
+      "returncode": 0,
+      "nmood_total": 423096,
+      "wall_s": 9.177867889404297,
+      "health": "clean",
+      "floors": 0
     },
     {
       "case": "jet_n600",
@@ -8213,6 +8510,17 @@
       "returncode": 0,
       "nmood_total": 2590992,
       "wall_s": 43.63608407974243,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "blast_grhydro",
+      "physics": "grhydro",
+      "dim": "2d",
+      "scheme": "fv6_fb",
+      "returncode": 0,
+      "nmood_total": 461764,
+      "wall_s": 16.649996995925903,
       "health": "clean",
       "floors": 0
     },
@@ -8239,6 +8547,17 @@
       "floors": 1560
     },
     {
+      "case": "mhd_jet",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "fv6_fb",
+      "returncode": 0,
+      "nmood_total": 40646287,
+      "wall_s": 44.80704689025879,
+      "health": "non-finite",
+      "floors": 97393
+    },
+    {
       "case": "current_sheet_n512",
       "physics": "mhd",
       "dim": "2d",
@@ -8248,6 +8567,17 @@
       "wall_s": 14.827360153198242,
       "health": "clean",
       "floors": 0
+    },
+    {
+      "case": "jet_n600",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "fv6_fb",
+      "returncode": 0,
+      "nmood_total": 190672457,
+      "wall_s": 6664.968143224716,
+      "health": "floored",
+      "floors": 3355
     },
     {
       "case": "current_sheet_n1024",
@@ -8283,6 +8613,17 @@
       "floors": 0
     },
     {
+      "case": "mhd_jet_revs4",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "fv8_fb",
+      "returncode": 0,
+      "nmood_total": 34489270,
+      "wall_s": 23.332226753234863,
+      "health": "non-finite",
+      "floors": 5279
+    },
+    {
       "case": "jet",
       "physics": "mhd",
       "dim": "2d",
@@ -8316,6 +8657,28 @@
       "floors": 54
     },
     {
+      "case": "blast_grmhd",
+      "physics": "grmhd",
+      "dim": "2d",
+      "scheme": "fv8_fb",
+      "returncode": 0,
+      "nmood_total": 12600010,
+      "wall_s": 65.99214911460876,
+      "health": "floored",
+      "floors": 2512
+    },
+    {
+      "case": "blast_srmhd_uct",
+      "physics": "srmhd",
+      "dim": "2d",
+      "scheme": "fv8_fb",
+      "returncode": 0,
+      "nmood_total": 1291034,
+      "wall_s": 13.894895076751709,
+      "health": "floored",
+      "floors": 2072
+    },
+    {
       "case": "kh_rr22",
       "physics": "mhd",
       "dim": "2d",
@@ -8323,6 +8686,83 @@
       "returncode": 0,
       "nmood_total": 0,
       "wall_s": 19.056479692459106,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "fu_jet_m80",
+      "physics": "hydro",
+      "dim": "2d",
+      "scheme": "fv8_fb",
+      "returncode": 0,
+      "nmood_total": 11131376,
+      "wall_s": 106.75207614898682,
+      "health": "floored",
+      "floors": 410
+    },
+    {
+      "case": "blast_srmhd",
+      "physics": "srmhd",
+      "dim": "2d",
+      "scheme": "fv8_fb",
+      "returncode": 0,
+      "nmood_total": 1409532,
+      "wall_s": 10.62426495552063,
+      "health": "floored",
+      "floors": 689
+    },
+    {
+      "case": "current_sheet_n512",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "fv6_fb",
+      "returncode": 0,
+      "nmood_total": 537693519,
+      "wall_s": 3399.263725042343,
+      "health": "floored",
+      "floors": 6
+    },
+    {
+      "case": "rotor",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "fv6_fb",
+      "returncode": 0,
+      "nmood_total": 20056797,
+      "wall_s": 273.52879524230957,
+      "health": "floored",
+      "floors": 148
+    },
+    {
+      "case": "current_sheet_n1024",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "fv8_fb",
+      "returncode": 0,
+      "nmood_total": 3015150945,
+      "wall_s": 27923.13966679573,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "kh_grhydro",
+      "physics": "grhydro",
+      "dim": "2d",
+      "scheme": "fv6_fb",
+      "returncode": 0,
+      "nmood_total": 9648967,
+      "wall_s": 193.98315811157227,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "blast_grhydro_3d",
+      "physics": "grhydro",
+      "dim": "3d",
+      "scheme": "fv8_fb",
+      "returncode": 0,
+      "nmood_total": 1636240,
+      "wall_s": 193.8033049106598,
       "health": "clean",
       "floors": 0
     },
@@ -8338,6 +8778,17 @@
       "floors": 0
     },
     {
+      "case": "kh_rr22_n256",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "fv6_fb",
+      "returncode": 0,
+      "nmood_total": 542358161,
+      "wall_s": 7427.124178886414,
+      "health": "clean",
+      "floors": 0
+    },
+    {
       "case": "current_sheet_n512",
       "physics": "mhd",
       "dim": "2d",
@@ -8347,6 +8798,17 @@
       "wall_s": 22.701947450637817,
       "health": "clean",
       "floors": 0
+    },
+    {
+      "case": "blast_grmhd_uct",
+      "physics": "grmhd",
+      "dim": "2d",
+      "scheme": "fv8_fb",
+      "returncode": 0,
+      "nmood_total": 11942899,
+      "wall_s": 76.55016112327576,
+      "health": "floored",
+      "floors": 19681
     },
     {
       "case": "jet",
@@ -8382,6 +8844,17 @@
       "floors": 79200
     },
     {
+      "case": "kh_srhydro",
+      "physics": "srhydro",
+      "dim": "2d",
+      "scheme": "fv6_fb",
+      "returncode": 0,
+      "nmood_total": 7448713,
+      "wall_s": 112.9156928062439,
+      "health": "clean",
+      "floors": 0
+    },
+    {
       "case": "current_sheet",
       "physics": "mhd",
       "dim": "2d",
@@ -8400,6 +8873,17 @@
       "returncode": 0,
       "nmood_total": 4646336,
       "wall_s": 5.930562496185303,
+      "health": "clean",
+      "floors": 0
+    },
+    {
+      "case": "blast_mhd",
+      "physics": "mhd",
+      "dim": "2d",
+      "scheme": "fv6_fb",
+      "returncode": 0,
+      "nmood_total": 102062017,
+      "wall_s": 946.5443339347839,
       "health": "clean",
       "floors": 0
     }
