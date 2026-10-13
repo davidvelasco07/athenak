@@ -300,6 +300,10 @@ void HSEBoundary(Mesh *pm) {
   if (pmhd != nullptr) {
     auto b0 = pmhd->b0;
     auto bq = *bbc_full;
+    // during the well-balanced boundary phase b0 holds B' (mhd.hpp): the equilibrium
+    // ghosts are then B' = 0, which also stays valid after AMR regrids (bbc_full is
+    // sized for the initial blocks)
+    const bool bpert = pmhd->wb_b0_is_pert;
     par_for("hse_bc_b", DevExeSpace(), 0, (pmbp->nmb_thispack-1), 0, n3, 0, n2, 0, n1,
     KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
       auto user = [&](const int f) {return mb_bcs.d_view(m,f) == BoundaryFlag::user;};
@@ -313,13 +317,13 @@ void HSEBoundary(Mesh *pm) {
                (three_d && kk > ku && user(BoundaryFace::outer_x3));
       };
       if (k < n3 && j < n2 && gx(i, j, k, ie+1, je, ke)) {
-        b0.x1f(m,k,j,i) = bq.x1f(m,k,j,i);
+        b0.x1f(m,k,j,i) = bpert ? 0.0 : bq.x1f(m,k,j,i);
       }
       if (k < n3 && i < n1 && (multi_d || j < 2) && gx(i, j, k, ie, je+1, ke)) {
-        b0.x2f(m,k,j,i) = bq.x2f(m,k,j,i);
+        b0.x2f(m,k,j,i) = bpert ? 0.0 : bq.x2f(m,k,j,i);
       }
       if (j < n2 && i < n1 && (three_d || k < 2) && gx(i, j, k, ie, je, ke+1)) {
-        b0.x3f(m,k,j,i) = bq.x3f(m,k,j,i);
+        b0.x3f(m,k,j,i) = bpert ? 0.0 : bq.x3f(m,k,j,i);
       }
     });
   }
@@ -366,11 +370,11 @@ void HSERefinement(MeshBlockPack *pmbp) {
     refine_flag.template sync<DevExeSpace>();
     return;
   }
-  // pert: device reduction per block
-  auto *ph = pmbp->phydro;
-  auto &u0 = ph->u0;
-  auto &ueq = ph->u_eq;
-  const bool wb = ph->well_balanced;
+  // pert: device reduction per block (hydro or MHD; both store U' in u0 with WB)
+  const bool hyd = (pmbp->phydro != nullptr);
+  auto &u0 = hyd ? pmbp->phydro->u0 : pmbp->pmhd->u0;
+  auto &ueq = hyd ? pmbp->phydro->u_eq : pmbp->pmhd->u_eq;
+  const bool wb = hyd ? pmbp->phydro->well_balanced : pmbp->pmhd->well_balanced;
   const Real ref = amr_test.ref;
   const Real x2lo = amr_test.x2lo, x2hi = amr_test.x2hi;
   auto &msize = pmbp->pmb->mb_size;
@@ -629,10 +633,14 @@ void ProblemGenerator::Hydrostatic(ParameterInput *pin, const bool restart) {
                 << "hydrostatic: amr_test must be none, band or pert" << std::endl;
       std::exit(EXIT_FAILURE);
     }
-    if (amr_test.mode != 0 && (phydro == nullptr || !phydro->peos->eos_data.is_ideal ||
-        (!phydro->well_balanced && !phydro->wb_diagnostics))) {
+    const bool amr_ok = (phydro != nullptr) ?
+        (phydro->peos->eos_data.is_ideal &&
+         (phydro->well_balanced || phydro->wb_diagnostics)) :
+        (pmhd != nullptr && pmhd->peos->eos_data.is_ideal &&
+         (pmhd->well_balanced || pmhd->wb_diagnostics));
+    if (amr_test.mode != 0 && !amr_ok) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
-                << "hydrostatic amr_test needs ideal hydro with well_balanced or "
+                << "hydrostatic amr_test needs an ideal gas with well_balanced or "
                 << "wb_diagnostics (it measures U' against u_eq)" << std::endl;
       std::exit(EXIT_FAILURE);
     }

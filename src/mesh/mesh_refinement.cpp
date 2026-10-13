@@ -153,6 +153,11 @@ void MeshRefinement::AdaptiveMeshRefinement(Driver *pdriver, ParameterInput *pin
 
   // Refine/derefine mesh and evolved data, set boundary conditions/timestep on new mesh
   if (nnew != 0 || ndel != 0) { // at least one (de)refinement flagged
+    // well-balanced MHD: restrict/refine/move the PERTURBATION face field B' (the
+    // equilibrium is rebuilt analytically on the new blocks below)
+    if (pmy_mesh->pmb_pack->pmhd != nullptr) {
+      (void) pmy_mesh->pmb_pack->pmhd->WBFaceToPerturbation(pdriver, 0);
+    }
     RedistAndRefineMeshBlocks(pin, nnew, ndel);
 
     // Mark one mesh-topology update event (AMR and any resulting load balancing).
@@ -165,11 +170,19 @@ void MeshRefinement::AdaptiveMeshRefinement(Driver *pdriver, ParameterInput *pin
          pmy_mesh->pmb_pack->phydro->wb_diagnostics)) {
       pmy_mesh->pmb_pack->phydro->WBSetEquilibrium();
     }
+    if (pmy_mesh->pmb_pack->pmhd != nullptr &&
+        (pmy_mesh->pmb_pack->pmhd->well_balanced ||
+         pmy_mesh->pmb_pack->pmhd->wb_diagnostics)) {
+      pmy_mesh->pmb_pack->pmhd->WBSetEquilibrium();
+    }
 
     pdriver->InitBoundaryValuesAndPrimitives(pmy_mesh);
 
     MeshBlockPack* pmbp = pmy_mesh->pmb_pack;
     if (pmbp->pmhd != nullptr) {
+      // well-balanced: repair the perturbation faces (the repair is linear, so applied
+      // to the full field it would not return b_eq on the new internal faces)
+      (void) pmbp->pmhd->WBFaceToPerturbation(pdriver, 0);
       RepairAMRFC(pmbp->pmhd->b0);
       // Repair changes internal faces after the first exchange finalized exterior
       // faces. Refresh neighboring ghost fields and their primitives before the next

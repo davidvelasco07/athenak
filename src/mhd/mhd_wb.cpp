@@ -106,12 +106,15 @@ void MHD::WBInitialize(ProblemGenerator *ppgen, bool restart) {
   } else if (pmy_pack->pgrav != nullptr) {
     err = "cannot be used with self-gravity";
   }
+  // Physical BCs, restriction and prolongation act on the face field: with SMR/AMR or a
+  // boundary other than periodic/user, b0 is switched to the perturbation B' for the
+  // boundary phase (WBFaceToPerturbation/WBFaceToFull, see mhd.hpp).  Periodic ghosts
+  // of the full field and user ghosts holding the equilibrium are exact as they are.
+  wb_b_comm_pert = pm->multilevel;
   for (int f=0; f<6; ++f) {
-    // physical BCs act on the FULL face field b0; only periodic and user (equilibrium
-    // ghosts) boundaries are well-balanced for a non-uniform B_eq
     if (pm->mesh_bcs[f] != BoundaryFlag::periodic && pm->mesh_bcs[f] != BoundaryFlag::user
         && pm->mesh_bcs[f] != BoundaryFlag::undef) {
-      err = "supports only periodic and user boundaries (b0 is a full field)";
+      wb_b_comm_pert = true;
     }
   }
   if (!err.empty()) {
@@ -358,6 +361,65 @@ void MHD::WBEquilibriumFluxes() {
                                          uct_fl, aL3, dl3, dr3, vt1, vt2, sdet_);
     });
   }
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn TaskStatus MHD::WBFaceToPerturbation()
+//! \brief b0 <- b0 - b_eq over the full face arrays (ghosts included), so that the
+//! boundary phase (restriction, prolongation, physical and user BCs) acts on B'.  A
+//! no-op unless the run needs it (wb_b_comm_pert) and b0 is in its full state.  Shared
+//! block faces stay bitwise consistent: every block performs the same (b - e) + e.
+
+TaskStatus MHD::WBFaceToPerturbation(Driver *pdrive, int stage) {
+  if (!well_balanced || !wb_b_comm_pert || wb_b0_is_pert) return TaskStatus::complete;
+  const int nmb1 = pmy_pack->nmb_thispack - 1;
+  auto b1 = b0.x1f, b2 = b0.x2f, b3 = b0.x3f;
+  auto q1 = b_eq.x1f, q2 = b_eq.x2f, q3 = b_eq.x3f;
+  const int n1 = static_cast<int>(b0.x1f.extent(3));
+  const int n2 = static_cast<int>(b0.x2f.extent(2));
+  const int n3 = static_cast<int>(b0.x3f.extent(1));
+  par_for("wb_b_to_pert", DevExeSpace(), 0, nmb1, 0, n3-1, 0, n2-1, 0, n1-1,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    if (k < n3-1 && j < n2-1) {
+      b1(m,k,j,i) -= q1(m,k,j,i);
+    }
+    if (k < n3-1 && i < n1-1) {
+      b2(m,k,j,i) -= q2(m,k,j,i);
+    }
+    if (j < n2-1 && i < n1-1) {
+      b3(m,k,j,i) -= q3(m,k,j,i);
+    }
+  });
+  wb_b0_is_pert = true;
+  return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn TaskStatus MHD::WBFaceToFull()
+//! \brief b0 <- b0 + b_eq, the inverse of WBFaceToPerturbation, after the physical BCs.
+
+TaskStatus MHD::WBFaceToFull(Driver *pdrive, int stage) {
+  if (!well_balanced || !wb_b0_is_pert) return TaskStatus::complete;
+  const int nmb1 = pmy_pack->nmb_thispack - 1;
+  auto b1 = b0.x1f, b2 = b0.x2f, b3 = b0.x3f;
+  auto q1 = b_eq.x1f, q2 = b_eq.x2f, q3 = b_eq.x3f;
+  const int n1 = static_cast<int>(b0.x1f.extent(3));
+  const int n2 = static_cast<int>(b0.x2f.extent(2));
+  const int n3 = static_cast<int>(b0.x3f.extent(1));
+  par_for("wb_b_to_full", DevExeSpace(), 0, nmb1, 0, n3-1, 0, n2-1, 0, n1-1,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    if (k < n3-1 && j < n2-1) {
+      b1(m,k,j,i) += q1(m,k,j,i);
+    }
+    if (k < n3-1 && i < n1-1) {
+      b2(m,k,j,i) += q2(m,k,j,i);
+    }
+    if (j < n2-1 && i < n1-1) {
+      b3(m,k,j,i) += q3(m,k,j,i);
+    }
+  });
+  wb_b0_is_pert = false;
+  return TaskStatus::complete;
 }
 
 //----------------------------------------------------------------------------------------

@@ -661,11 +661,14 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
                  "would diffuse)";
       } else if (pin->DoesBlockExist("shearing_box")) {
         wb_err = "cannot be used with the shearing box / orbital advection";
-      } else if (pmy_pack->pmesh->multilevel) {
-        wb_err = "does not support SMR/AMR yet (b0 is prolongated as a full field)";
       } else if (psrc != nullptr &&
                  (psrc->self_gravity || psrc->ism_cooling || psrc->rel_cooling)) {
         wb_err = "supports only const_accel source terms";
+      } else if (pmy_pack->pmesh->multilevel &&
+                 pin->GetOrAddBoolean("mesh_refinement","prolong_prims",false)) {
+        // the coarse state is a perturbation; the primitive prolongation path would
+        // invert it as a full state (the MeshRefinement object does not exist yet here)
+        wb_err = "cannot be used with <mesh_refinement>/prolong_prims";
       }
       if (!wb_err.empty()) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__

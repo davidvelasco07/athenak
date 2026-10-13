@@ -70,6 +70,8 @@ struct MHDTaskIDs {
   TaskID sende;
   TaskID recve;
   TaskID ct;
+  TaskID wbtop;   // WB: b0 -> B' before the face-field boundary phase
+  TaskID wbtof;   // WB: b0 -> B' + b_eq after the physical BCs
   TaskID sendb_oa;
   TaskID recvb_oa;
   TaskID restb;
@@ -222,6 +224,16 @@ class MHD {
   // face EMFs of the face equilibrium
   DvceArray4D<Real> e3x1_eq, e2x1_eq, e1x2_eq, e3x2_eq, e2x3_eq, e1x3_eq;
   void (*wb_eq_func)(Mesh *pm) = nullptr;
+  // Boundary-phase convention for the face field: when wb_b_comm_pert is set (SMR/AMR, or
+  // a physical boundary other than periodic/user), b0 holds the PERTURBATION B' = b0 -
+  // b_eq from WBFaceToPerturbation (after CT) to WBFaceToFull (after the physical BCs),
+  // so restriction, prolongation, physical and user BCs act on B' exactly as they act on
+  // U', and ghost/fine faces come out as b_eq + (operator applied to B'): b_eq bit for
+  // bit at rest.  wb_b0_is_pert says which state b0 is in (user BCs must check it).
+  bool wb_b_comm_pert = false;
+  bool wb_b0_is_pert = false;
+  TaskStatus WBFaceToPerturbation(Driver *pdrive, int stage);
+  TaskStatus WBFaceToFull(Driver *pdrive, int stage);
   void WBInitialize(ProblemGenerator *ppgen, bool restart);
   void WBSetEquilibrium();
   void WBFormPerturbation();

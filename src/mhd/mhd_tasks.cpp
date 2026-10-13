@@ -62,7 +62,9 @@ void MHD::AssembleMHDTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) 
   id.sende     = tl["stagen"]->AddTask(&MHD::SendE, this, id.efld);
   id.recve     = tl["stagen"]->AddTask(&MHD::RecvE, this, id.sende);
   id.ct        = tl["stagen"]->AddTask(&MHD::CT, this, id.recve);
-  id.sendb_oa  = tl["stagen"]->AddTask(&MHD::SendB_OA, this, id.ct);
+  // well-balanced: the face-field boundary phase runs on B' = b0 - b_eq (mhd_wb.cpp)
+  id.wbtop     = tl["stagen"]->AddTask(&MHD::WBFaceToPerturbation, this, id.ct);
+  id.sendb_oa  = tl["stagen"]->AddTask(&MHD::SendB_OA, this, id.wbtop);
   id.recvb_oa  = tl["stagen"]->AddTask(&MHD::RecvB_OA, this, id.sendb_oa);
   id.restb     = tl["stagen"]->AddTask(&MHD::RestrictB, this, id.recvb_oa);
   id.sendb     = tl["stagen"]->AddTask(&MHD::SendB, this, id.restb);
@@ -71,7 +73,8 @@ void MHD::AssembleMHDTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) 
   id.recvb_shr = tl["stagen"]->AddTask(&MHD::RecvB_Shr, this, id.sendb_shr);
   id.prol      = tl["stagen"]->AddTask(&MHD::Prolongate, this, id.recvb_shr);
   id.bcs       = tl["stagen"]->AddTask(&MHD::ApplyPhysicalBCs, this, id.prol);
-  id.c2p       = tl["stagen"]->AddTask(&MHD::ConToPrim, this, id.bcs);
+  id.wbtof     = tl["stagen"]->AddTask(&MHD::WBFaceToFull, this, id.bcs);
+  id.c2p       = tl["stagen"]->AddTask(&MHD::ConToPrim, this, id.wbtof);
   id.newdt     = tl["stagen"]->AddTask(&MHD::NewTimeStep, this, id.c2p);
 
   // assemble "after_stagen" task list
