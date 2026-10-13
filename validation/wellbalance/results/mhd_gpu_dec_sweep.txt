@@ -1,0 +1,37 @@
+# Vista GH200, job 1070146 (tree at 715a0bde2 + script fixes): fv4+MOOD uct_hlld pulse (amp -0.95, iprob 3), 1 vs 4x4 blocks reassembled with cmp_global.py; pulse sweep as results/mhd_pulse_sweep.txt
+--- decomposition 1 vs 4x4 blocks (GH200)
+wb=true: IDENTICAL dec_true_64 vs dec_true_16
+wb=false: IDENTICAL dec_false_64 vs dec_false_16
+--- pulse sweep (GH200): max|dp|/eta at t=0.25
+m3_fv4mood_eta1e-12_wbfalse        t=0.250 dp/eta=3.192e+06 nmood=1097092
+m3_fv4mood_eta1e-12_wbtrue         t=0.250 dp/eta=2.377e-01 nmood=293903
+m3_fv4mood_eta1e-2_wbfalse         t=0.250 dp/eta=2.391e-01 nmood=935560
+m3_fv4mood_eta1e-2_wbtrue          t=0.250 dp/eta=2.361e-01 nmood=107484
+m3_fv4mood_eta1e-4_wbfalse         t=0.250 dp/eta=2.654e-01 nmood=1075768
+m3_fv4mood_eta1e-4_wbtrue          t=0.250 dp/eta=2.373e-01 nmood=110054
+m3_fv4mood_eta1e-8_wbfalse         t=0.250 dp/eta=3.185e+02 nmood=1096149
+m3_fv4mood_eta1e-8_wbtrue          t=0.250 dp/eta=2.373e-01 nmood=147915
+m3_plmfofc_eta1e-12_wbfalse        t=0.250 dp/eta=3.184e+06 nmood=0
+m3_plmfofc_eta1e-12_wbtrue         t=0.250 dp/eta=2.265e-01 nmood=0
+m3_plmfofc_eta1e-2_wbfalse         t=0.250 dp/eta=2.366e-01 nmood=0
+m3_plmfofc_eta1e-2_wbtrue          t=0.250 dp/eta=2.288e-01 nmood=0
+m3_plmfofc_eta1e-4_wbfalse         t=0.250 dp/eta=2.637e-01 nmood=0
+m3_plmfofc_eta1e-4_wbtrue          t=0.250 dp/eta=2.284e-01 nmood=0
+m3_plmfofc_eta1e-8_wbfalse         t=0.250 dp/eta=3.186e+02 nmood=0
+m3_plmfofc_eta1e-8_wbtrue          t=0.250 dp/eta=2.284e-01 nmood=0
+m4_fv4mood_eta1e-12_wbfalse        t=0.250 dp/eta=3.026e+11 nmood=679755
+m4_fv4mood_eta1e-12_wbtrue         t=0.250 dp/eta=2.263e-01 nmood=283299
+m4_fv4mood_eta1e-2_wbfalse         t=0.250 dp/eta=3.028e+01 nmood=624807
+m4_fv4mood_eta1e-2_wbtrue          t=0.250 dp/eta=3.608e-01 nmood=126051
+m4_fv4mood_eta1e-4_wbfalse         t=0.250 dp/eta=3.010e+03 nmood=671352
+m4_fv4mood_eta1e-4_wbtrue          t=0.250 dp/eta=3.609e-01 nmood=135840
+m4_fv4mood_eta1e-8_wbfalse         t=0.250 dp/eta=3.001e+07 nmood=675742
+m4_fv4mood_eta1e-8_wbtrue          t=0.250 dp/eta=2.236e-01 nmood=180407
+m4_plmfofc_eta1e-12_wbfalse        t=0.250 dp/eta=2.846e+11 nmood=0
+m4_plmfofc_eta1e-12_wbtrue         t=0.250 dp/eta=3.523e-01 nmood=0
+m4_plmfofc_eta1e-2_wbfalse         t=0.250 dp/eta=2.846e+01 nmood=0
+m4_plmfofc_eta1e-2_wbtrue          t=0.250 dp/eta=3.541e-01 nmood=0
+m4_plmfofc_eta1e-4_wbfalse         t=0.250 dp/eta=2.846e+03 nmood=0
+m4_plmfofc_eta1e-4_wbtrue          t=0.250 dp/eta=3.561e-01 nmood=0
+m4_plmfofc_eta1e-8_wbfalse         t=0.250 dp/eta=2.846e+07 nmood=0
+m4_plmfofc_eta1e-8_wbtrue          t=0.250 dp/eta=3.579e-01 nmood=0

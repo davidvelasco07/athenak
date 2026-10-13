@@ -96,8 +96,17 @@ payloads with `cmp.py` (same decomposition) or reassembled grids with `cmp_globa
 
 ## Not done
 
-GPU runs of the MHD gates (FMA may break `f - f_eq` cancellation; the hydro scheme was
-checked on GH200 earlier), moving equilibria, isothermal WB.
+Moving equilibria, isothermal WB; the fv6/fv8 rows and `rank_gates.sh` on GPU (queued).
+
+## GPU (Vista GH200, CUDA build, `results/mhd_gates_gpu.txt`, `results/mhd_gpu_dec_sweep.txt`)
+
+The 2026-10-13 matrix (plm / fv4+MOOD / plm+FOFC x ct_contact / uct_hll / uct_hlld x hlld /
+lhlld / hlle / llf, SMR, walls, AMR band, 4 ranks under `ibrun`) is exact on the GPU: every
+`wb=true` row 0.000e+00 in all perturbation columns, controls as on CPU, so FMA contraction
+does not break the `f - f_eq` cancellation. 0 demotions at rest (6.98e5 without WB on the
+arcade), 1 vs 4x4 blocks bitwise for WB on and off, and the pulse sweep reproduces the CPU
+table (`max|dp|/eta` 0.236-0.238 for fv4+MOOD, 0.227-0.229 for PLM+FOFC on iprob 3). Vista's
+`python3` has no h5py: `vis/python/bin_convert.py` now imports it lazily.
 
 Open issue (not exactness): with WB the MOOD detector works on the perturbation and demotes
 a fixed fraction of cell-steps on a smooth, well-resolved 1e-3 pulse (hundreds to 1e4 per run

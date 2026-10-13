@@ -85,8 +85,11 @@ The read_*(...) functions return a filedata dictionary-like object with
 
 import numpy as np
 import os
-import h5py
 import glob
+try:
+    import h5py   # only the athdf writer needs it; reading .bin files must work without it
+except ImportError:   # pragma: no cover
+    h5py = None
 
 
 def read_binary(filename):

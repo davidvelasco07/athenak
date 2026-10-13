@@ -15,7 +15,7 @@ echo "--- 1 vs 4 ranks bitwise (perturbed, amp 1e-2), same binary"
 mkdir -p rk
 while IFS='|' read -r n a; do
   for np in 1 4; do d=rk/${n}_np$np; rm -rf $d; mkdir -p $d; python3 mkdeck.py $d/in.athinput amp=1e-2 $a
-    (cd $d && mpirun -np $np $ATH -i in.athinput > log.txt 2>&1 < /dev/null) || echo "rc!=0 $d"; done
+    (cd $d && ${MPIRUN:-mpirun -np} $np $ATH -i in.athinput > log.txt 2>&1 < /dev/null) || echo "rc!=0 $d"; done
   printf "%-20s ranks=%s/%s " $n "$(grep -m1 'parallel ranks' rk/${n}_np1/log.txt | awk '{print $NF}')" "$(grep -m1 'parallel ranks' rk/${n}_np4/log.txt | awk '{print $NF}')"
   python3 -I cmp_global.py rk/${n}_np1 rk/${n}_np4 | tail -1
 done <<'LIST'
