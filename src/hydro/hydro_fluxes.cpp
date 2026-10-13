@@ -20,6 +20,7 @@
 #include "hydro.hpp"
 #include "eos/eos.hpp"
 #include "reconstruct/recon.hpp"
+#include "reconstruct/ppm_closure.hpp"
 #include "hydro/rsolvers/solve_face_hyd.hpp"
 
 namespace hydro {
@@ -74,6 +75,10 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
     // Reconstruction over cells i in [il1-1, iu1], j in [jtl, jtu], k in [ktl, ktu]
     ReconDispatch<IVX>(recon_method_, "hflux_x1_recon", nmb1,
         ktl, ktu, jtl, jtu, il1-1, iu1, eos_, true, nvars, w0_, wl_, wr_);
+    if (recon_method_ == ReconstructionMethod::fv4 && ppm_bc_closure) {
+      PPMBoundaryClosure<IVX>("hflux_x1_ppm_closure", nmb1, ktl, ktu, jtl, jtu, indcs_,
+          pmy_pack->pmb->mb_bcs, eos_, true, nvars, w0_, wl_, wr_);
+    }
 
     // Riemann solve over faces i in [il1, iu1]
     par_for("hflux_x1_rsolve", DevExeSpace(),
@@ -114,6 +119,10 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
     // Reconstruction over cells j in [jl2-1, ju2], i in [itl, itu], k in [ktl, ktu]
     ReconDispatch<IVY>(recon_method_, "hflux_x2_recon", nmb1,
         ktl, ktu, jl2-1, ju2, itl, itu, eos_, true, nvars, w0_, wl_, wr_);
+    if (recon_method_ == ReconstructionMethod::fv4 && ppm_bc_closure) {
+      PPMBoundaryClosure<IVY>("hflux_x2_ppm_closure", nmb1, ktl, ktu, itl, itu, indcs_,
+          pmy_pack->pmb->mb_bcs, eos_, true, nvars, w0_, wl_, wr_);
+    }
 
     // Riemann solve over faces j in [jl2, ju2]
     par_for("hflux_x2_rsolve", DevExeSpace(),
@@ -153,6 +162,10 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
     // Reconstruction over cells k in [kl3-1, ku3], j in [jtl, jtu], i in [itl, itu]
     ReconDispatch<IVZ>(recon_method_, "hflux_x3_recon", nmb1,
         kl3-1, ku3, jtl, jtu, itl, itu, eos_, true, nvars, w0_, wl_, wr_);
+    if (recon_method_ == ReconstructionMethod::fv4 && ppm_bc_closure) {
+      PPMBoundaryClosure<IVZ>("hflux_x3_ppm_closure", nmb1, jtl, jtu, itl, itu, indcs_,
+          pmy_pack->pmb->mb_bcs, eos_, true, nvars, w0_, wl_, wr_);
+    }
 
     // Riemann solve over faces k in [kl3, ku3]
     par_for("hflux_x3_rsolve", DevExeSpace(),

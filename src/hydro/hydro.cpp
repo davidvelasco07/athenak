@@ -183,9 +183,9 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
     // MOOD a-posteriori fallback (hydro_mood.cpp).  Requires a flux-range extension of
     // mood_max_revs cells (see hydro_fluxes.cpp).  Mutually exclusive with FOFC.
     use_mood = pin->GetOrAddBoolean("hydro","mood",false);
-    // default rcfl with rtol 1e-4 (below): the setting of the 2026-09 NAD study that keeps
-    // the Gresho vortex to M = 1e-4 and RTI at P0 = 1000 clean, and the only Courant-aware
-    // scale that needs no global range reductions (one Allreduce per stage)
+    // default rcfl with rtol 1e-4 (below): the setting of the 2026-09 NAD study that
+    // keeps the Gresho vortex to M = 1e-4 and RTI at P0 = 1000 clean, and the only
+    // Courant-aware scale that needs no global range reductions (one Allreduce per stage)
     std::string nadsc = pin->GetOrAddString("hydro","mood_nad_scale","rcfl");
     if (nadsc.compare("relative") == 0) {
       mood_nad_scale = 0;
@@ -221,6 +221,10 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
     // entirely, leaving the pure unlimited scheme.  Expect it to be unstable on hard
     // problems: that is the point of the control, not a defect to work around.
     mood_detect = pin->GetOrAddBoolean("hydro","mood_detect",true);
+    // One-sided closure of the unlimited fv4 at inflow/user (imposed-state) boundaries
+    // (reconstruct/ppm_closure.hpp); false = the old centred stencil across the imposed
+    // ghost state (the negative control).  fv4 only: the closure is 4th order.
+    ppm_bc_closure = pin->GetOrAddBoolean("hydro","ppm_boundary_closure",true);
     if (mood_nad_theta < 0.0 || mood_nad_theta > 1.0) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
         << std::endl << "<hydro> mood_nad_theta must be in [0,1]" << std::endl;
@@ -306,6 +310,13 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
           << std::endl << xorder << " reconstruction requires at least " << ng_base
           << " ghost zones, but <mesh>/nghost=" << indcs.ng << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      // the boundary closure extrapolates from four ghost cells
+      if (recon_method == ReconstructionMethod::fv4 && ppm_bc_closure && indcs.ng < 4) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+          << std::endl << "<hydro> reconstruct=fv4 with ppm_boundary_closure=true needs "
+          << "nghost >= 4" << std::endl;
         std::exit(EXIT_FAILURE);
       }
     } else if (xorder.compare("ppm") == 0) {
