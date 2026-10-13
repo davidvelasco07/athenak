@@ -230,6 +230,7 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
   const int n_fb = n_fb_tiers;
   const int nrevs = mood_max_revs;
   const bool is_ideal_ = eos_.is_ideal;
+  const Real gm_ = eos_.gamma, cs_iso_ = eos_.iso_cs;   // WB velocity band scale
   const int scale_mode = mood_nad_scale;
 
   // UCT face-coefficient arrays for the revise kernels (empty views when ct_contact —
@@ -264,7 +265,9 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
   Real gscale0 = 0.0, gscale1 = 0.0, gscale_s = 0.0;
   Real gscaleb[3] = {0.0, 0.0, 0.0};
   Real gscalev[3] = {0.0, 0.0, 0.0};   // velocity NAD scale (|v| in slot 0, or comps)
-  // rcfl: relative per-bound band x global advective Courant factor (see hydro_mood.cpp)
+  // rcfl: relative per-bound band x global advective Courant factor (see hydro_mood.cpp);
+  // with WB the factor is the Courant number of the signal speed |v| + c_f (upper bound
+  // sqrt(c_s^2 + B^2/rho) of the fast speed) for the reason given there.
   Real rcfl_fac = 1.0;
   if (scale_mode == 4) {
     // rcfl needs only the global advective Courant factor: one reduction (max |v|) and
@@ -273,6 +276,8 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
     Real gvmx = 0.0;
     const int ni = ie-is+1, nji = (je-js+1)*ni, nkji = (ke-ks+1)*nji;
     const int nmkji = nmb*nkji;
+    const bool ideal_ = is_ideal_;
+    const Real cs_iso = cs_iso_;
     Kokkos::parallel_reduce("mmood_gvmax",
     Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
     KOKKOS_LAMBDA(const int &idx, Real &vmx) {
@@ -283,6 +288,13 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
       j += js; k += ks;
       Real v = fmax(fabs(w0_(m,IVX,k,j,i)),
                fmax(fabs(w0_(m,IVY,k,j,i)), fabs(w0_(m,IVZ,k,j,i))));
+      if (wb) {   // signal speed of the full state
+        const Real d = w0_(m,IDN,k,j,i);
+        const Real cs2 = ideal_ ? gm_*(gm_-1.0)*w0_(m,IEN,k,j,i)/d : SQR(cs_iso);
+        const Real va2 = (SQR(bcc0_(m,IBX,k,j,i)) + SQR(bcc0_(m,IBY,k,j,i))
+                        + SQR(bcc0_(m,IBZ,k,j,i)))/d;
+        v += sqrt(fmax(cs2 + va2, 0.0));
+      }
       vmx = fmax(vmx, v);
     }, Kokkos::Max<Real>(gvmx));
     Real dxmin = std::numeric_limits<Real>::max();
@@ -308,6 +320,7 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
     const int nmkji = nmb*nkji;
     const bool ideal = is_ideal_;
     const bool want_v = (scale_mode == 3);
+    const Real cs_iso = cs_iso_;
     Kokkos::parallel_reduce("mmood_grange",
     Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
     KOKKOS_LAMBDA(const int &idx, Real &dmn, Real &dmx, Real &emn, Real &emx,
@@ -317,14 +330,24 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
       int j = (idx - m*nkji - k*nji)/ni;
       int i = (idx - m*nkji - k*nji - j*ni) + is;
       j += js; k += ks;
-      Real d = wnad_(m,IDN,k,j,i);
+      // global scales on the FULL state (hydro_mood.cpp: the tolerance is the
+      // WB-off one; only the DMP object is the perturbation)
+      Real d = wnad_(m,IDN,k,j,i) + (wb ? weq_(m,IDN,k,j,i) : 0.0);
       dmn = fmin(dmn, d); dmx = fmax(dmx, d);
       if (ideal) {
-        Real e = wnad_(m,IEN,k,j,i); emn = fmin(emn,e); emx = fmax(emx,e);
+        Real e = wnad_(m,IEN,k,j,i) + (wb ? weq_(m,IEN,k,j,i) : 0.0);
+        emn = fmin(emn,e); emx = fmax(emx,e);
       }
       if (want_v) {
         Real v = fmax(fabs(w0_(m,IVX,k,j,i)),
                  fmax(fabs(w0_(m,IVY,k,j,i)), fabs(w0_(m,IVZ,k,j,i))));
+        if (wb) {   // signal speed, as for rcfl above
+          const Real dd = w0_(m,IDN,k,j,i);
+          const Real cs2 = ideal ? gm_*(gm_-1.0)*w0_(m,IEN,k,j,i)/dd : SQR(cs_iso);
+          const Real va2 = (SQR(bcc0_(m,IBX,k,j,i)) + SQR(bcc0_(m,IBY,k,j,i))
+                          + SQR(bcc0_(m,IBZ,k,j,i)))/dd;
+          v += sqrt(fmax(cs2 + va2, 0.0));
+        }
         vmx = fmax(vmx, v);
       }
     }, Kokkos::Min<Real>(gdmn), Kokkos::Max<Real>(gdmx),
@@ -346,11 +369,15 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
       j += js; k += ks;
       if (bmag_mode) {
         Real b = bmag_(m,k,j,i);
+        if (wb) {
+          b += sqrt(SQR(bcceq_(m,IBX,k,j,i)) + SQR(bcceq_(m,IBY,k,j,i))
+                  + SQR(bcceq_(m,IBZ,k,j,i)));
+        }
         b0mn = fmin(b0mn, b); b0mx = fmax(b0mx, b);
       } else {
-        Real bx = bnad_(m,IBX,k,j,i);
-        Real by = bnad_(m,IBY,k,j,i);
-        Real bz = bnad_(m,IBZ,k,j,i);
+        Real bx = bnad_(m,IBX,k,j,i) + (wb ? bcceq_(m,IBX,k,j,i) : 0.0);
+        Real by = bnad_(m,IBY,k,j,i) + (wb ? bcceq_(m,IBY,k,j,i) : 0.0);
+        Real bz = bnad_(m,IBZ,k,j,i) + (wb ? bcceq_(m,IBZ,k,j,i) : 0.0);
         b0mn = fmin(b0mn, bx); b0mx = fmax(b0mx, bx);
         b1mn = fmin(b1mn, by); b1mx = fmax(b1mx, by);
         b2mn = fmin(b2mn, bz); b2mx = fmax(b2mx, bz);
@@ -931,8 +958,10 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
           } else {
             q_new = bcctest_(m,IBX+bidx,k,j,i) - (wb ? bcceq_(m,IBX+bidx,k,j,i) : 0.0);
           }
-          // DMP bounds from the stage-input state over the neighborhood
-          Real qmn, qmx;
+          // DMP bounds from the stage-input state over the neighborhood; with WB the
+          // bounds are on the perturbation and the tolerance scale smn/smx on the full
+          // state (hydro_mood.cpp)
+          Real qmn, qmx, smn, smx;
           if (vpass) {
             if (nad_vmag) {
               Real v0 = sqrt(SQR(w0_(m,IVX,k,j,i)) + SQR(w0_(m,IVY,k,j,i))
@@ -962,32 +991,80 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
             const int n = (pass == 0) ? IDN : IEN;
             const DvceArray5D<Real> &qref = (newtonian) ? wnad_ : u0_;
             qmn = qref(m,n,k,j,i); qmx = qmn;
+            smn = qmn + (wb ? weq_(m,n,k,j,i) : 0.0); smx = smn;
             for (int dk=-ndk; dk<=ndk; ++dk) {
             for (int dj=-ndj; dj<=ndj; ++dj) {
             for (int di=-ndi; di<=ndi; ++di) {
               Real q = qref(m,n,k+dk,j+dj,i+di);
               qmn = fmin(qmn, q);
               qmx = fmax(qmx, q);
+              if (wb) {
+                Real qf = q + weq_(m,n,k+dk,j+dj,i+di);
+                smn = fmin(smn, qf);
+                smx = fmax(smx, qf);
+              }
             }}}
           } else if (nad_bmag) {
             qmn = bmag_(m,k,j,i); qmx = qmn;
+            smn = qmn; smx = qmn;
+            if (wb) {
+              smn += sqrt(SQR(bcceq_(m,IBX,k,j,i)) + SQR(bcceq_(m,IBY,k,j,i))
+                        + SQR(bcceq_(m,IBZ,k,j,i)));
+              smx = smn;
+            }
             for (int dk=-ndk; dk<=ndk; ++dk) {
             for (int dj=-ndj; dj<=ndj; ++dj) {
             for (int di=-ndi; di<=ndi; ++di) {
               Real q = bmag_(m,k+dk,j+dj,i+di);
               qmn = fmin(qmn, q);
               qmx = fmax(qmx, q);
+              if (wb) {
+                Real qf = q + sqrt(SQR(bcceq_(m,IBX,k+dk,j+dj,i+di))
+                                 + SQR(bcceq_(m,IBY,k+dk,j+dj,i+di))
+                                 + SQR(bcceq_(m,IBZ,k+dk,j+dj,i+di)));
+                smn = fmin(smn, qf);
+                smx = fmax(smx, qf);
+              }
             }}}
           } else {
             const int n = IBX + bidx;
             qmn = bnad_(m,n,k,j,i); qmx = qmn;
+            smn = qmn + (wb ? bcceq_(m,n,k,j,i) : 0.0); smx = smn;
             for (int dk=-ndk; dk<=ndk; ++dk) {
             for (int dj=-ndj; dj<=ndj; ++dj) {
             for (int di=-ndi; di<=ndi; ++di) {
               Real q = bnad_(m,n,k+dk,j+dj,i+di);
               qmn = fmin(qmn, q);
               qmx = fmax(qmx, q);
+              if (wb) {
+                Real qf = q + bcceq_(m,n,k+dk,j+dj,i+di);
+                smn = fmin(smn, qf);
+                smx = fmax(smx, qf);
+              }
             }}}
+            if (wb) {
+              // a component whose equilibrium value vanishes (e.g. B2, B3 of a
+              // horizontal field) has no full-state scale of its own: add the local
+              // equilibrium field strength, the scale every component shares
+              const Real beq = sqrt(SQR(bcceq_(m,IBX,k,j,i)) + SQR(bcceq_(m,IBY,k,j,i))
+                                  + SQR(bcceq_(m,IBZ,k,j,i)));
+              smn = fabs(smn) + beq;
+              smx = fabs(smx) + beq;
+            }
+          }
+          if (!wb) {
+            smn = qmn; smx = qmx;
+          } else if (vpass) {
+            // WB velocity pass: v_eq = 0, so a band relative to |v| alone is a band
+            // relative to the perturbation (round-off fence at small amplitude); the
+            // velocity's physical scale in a static equilibrium is the signal speed,
+            // hence |v| + c_f (upper bound sqrt(c_s^2 + B^2/rho) of the fast speed)
+            const Real dd = w0_(m,IDN,k,j,i);
+            const Real cs2 = is_ideal_ ? gm_*(gm_-1.0)*w0_(m,IEN,k,j,i)/dd : SQR(cs_iso_);
+            const Real b2 = SQR(bcc0_(m,IBX,k,j,i)) + SQR(bcc0_(m,IBY,k,j,i))
+                          + SQR(bcc0_(m,IBZ,k,j,i));
+            const Real cf = sqrt(fmax(cs2 + b2/dd, 0.0));
+            smn = fabs(qmn) + cf; smx = fabs(qmx) + cf;
           }
           // tolerance (see hydro_mood.cpp for the scale-mode rationale)
           Real gsc;
@@ -1000,11 +1077,11 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
           }
           Real eps_m, eps_p;
           if (scale_mode == 0) {          // spd-style relative
-            eps_m = fmax(rtol*fabs(qmn), atol);
-            eps_p = fmax(rtol*fabs(qmx), atol);
+            eps_m = fmax(rtol*fabs(smn), atol);
+            eps_p = fmax(rtol*fabs(smx), atol);
           } else if (scale_mode == 4) {   // rcfl: relative band x advective Courant
-            eps_m = fmax(rtol*rcfl_fac*fabs(qmn), atol);
-            eps_p = fmax(rtol*rcfl_fac*fabs(qmx), atol);
+            eps_m = fmax(rtol*rcfl_fac*fabs(smn), atol);
+            eps_p = fmax(rtol*rcfl_fac*fabs(smx), atol);
           } else if (scale_mode == 1) {   // grange with Mach-softening exponent theta
             if (theta >= 1.0) {
               Real eps = fmax(rtol*gsc, atol);
@@ -1012,20 +1089,20 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
               eps_p = eps;
             } else {
               const Real gth = pow(gsc, theta);
-              eps_m = fmax(rtol*gth*pow(fabs(qmn), 1.0-theta), atol);
-              eps_p = fmax(rtol*gth*pow(fabs(qmx), 1.0-theta), atol);
+              eps_m = fmax(rtol*gth*pow(fabs(smn), 1.0-theta), atol);
+              eps_p = fmax(rtol*gth*pow(fabs(smx), 1.0-theta), atol);
             }
           } else {                        // gdu & gcfl: flat global scale
             Real eps = fmax(rtol*gsc, atol);
             eps_m = eps;
             eps_p = eps;
           }
-          eps_m = fmax(eps_m, eps0*fabs(qmn));
-          eps_p = fmax(eps_p, eps0*fabs(qmx));
+          eps_m = fmax(eps_m, eps0*fabs(smn));
+          eps_p = fmax(eps_p, eps0*fabs(smx));
           if (wb && !vpass) {
-            // Round-off floor tied to the EQUILIBRIUM (hydro_mood.cpp): the perturbation
-            // carries the cancellation error of F - F_eq (~eps*|F_eq|), so its bounds and
-            // candidate are only defined to eps*|q_eq|.  v_eq = 0, so no floor for v.
+            // Optional extra round-off floor tied to the EQUILIBRIUM (mood_eps0_eq,
+            // hydro_mood.cpp); normally redundant with the full-state scales above.
+            // v_eq = 0, so no floor for v.
             Real qeq;
             if (!bpass) {
               qeq = weq_(m,(pass == 0) ? IDN : IEN,k,j,i);

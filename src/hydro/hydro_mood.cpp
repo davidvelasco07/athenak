@@ -148,9 +148,14 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
   auto flx3 = uflx.x3f;
 
   // Well-balanced scheme (hydro_wb.cpp): u0/u1/utest and the fluxes are PERTURBATION
-  // quantities.  Following the paper (sec. 2.4.4) NAD/SED and their global scales act on
-  // the perturbation (rho', e' = e - e_eq), PAD on the full state, and revised faces go
-  // through the face equilibrium exactly like the base fluxes.
+  // quantities.  Following the paper (sec. 2.4.4) the NAD/SED test acts on the
+  // perturbation (rho', e' = e - e_eq), PAD on the full state, and revised faces go
+  // through the face equilibrium exactly like the base fluxes.  The TOLERANCE of the
+  // relaxed DMP (relative band, global scales, round-off floor) is however taken from
+  // the FULL state w_eq + w', exactly as the same run without WB would set it: the band
+  // expresses the discretization noise the scheme may add relative to the variable's
+  // physical scale, and a band relative to |w'| alone is |w'|/|w| tighter, which demoted
+  // a fixed fraction of cell-steps on smooth, well-resolved pulses (2026-10-13).
   const bool wb = well_balanced;
   auto &ueq_ = u_eq;
   auto &weq_ = w_eq;
@@ -193,6 +198,12 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
   Real gscale0 = 0.0, gscale1 = 0.0, gscale_s = 0.0;
   // rcfl: the relative per-bound band (Paper I) multiplied by the same global advective
   // Courant factor gcfl uses, so the tolerance is both local and timestep-aware.
+  // With WB the DMP acts on the perturbation of a (nearly) static equilibrium: the
+  // advective Courant number is then the perturbation's own Mach number and the band
+  // would shrink with the amplitude while the DMP overshoots of a smooth pulse shrink
+  // with it too (a fixed fraction of cell-steps was demoted at any amplitude,
+  // 2026-10-13).  What bounds the per-step change of a perturbation is the SIGNAL
+  // speed, so the WB factor is the Courant number of |v| + c_s (the acoustic CFL).
   Real rcfl_fac = 1.0;
   if (scale_mode == 4) {
     // rcfl needs only the global advective Courant factor: one reduction (max |v|) and
@@ -201,6 +212,8 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
     Real gvmx = 0.0;
     const int ni = ie-is+1, nji = (je-js+1)*ni, nkji = (ke-ks+1)*nji;
     const int nmkji = nmb*nkji;
+    const Real gm_ = eos_.gamma, cs_iso = eos_.iso_cs;
+    const bool ideal_ = is_ideal_;
     Kokkos::parallel_reduce("mood_gvmax",
     Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
     KOKKOS_LAMBDA(const int &idx, Real &vmx) {
@@ -211,6 +224,11 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
       j += js; k += ks;
       Real v = fmax(fabs(w0_(m,IVX,k,j,i)),
                fmax(fabs(w0_(m,IVY,k,j,i)), fabs(w0_(m,IVZ,k,j,i))));
+      if (wb) {   // signal speed of the full state
+        const Real cs2 = ideal_ ? gm_*(gm_-1.0)*w0_(m,IEN,k,j,i)/w0_(m,IDN,k,j,i)
+                                : SQR(cs_iso);
+        v += sqrt(fmax(cs2, 0.0));
+      }
       vmx = fmax(vmx, v);
     }, Kokkos::Max<Real>(gvmx));
     Real dxmin = std::numeric_limits<Real>::max();
@@ -236,6 +254,7 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
     const int nmkji = nmb*nkji;
     const bool ideal = is_ideal_;
     const bool want_v = (scale_mode == 3);
+    const Real gm_ = eos_.gamma, cs_iso = eos_.iso_cs;
     Kokkos::parallel_reduce("mood_grange",
     Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
     KOKKOS_LAMBDA(const int &idx, Real &dmn, Real &dmx, Real &emn, Real &emx,
@@ -245,12 +264,20 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
       int j = (idx - m*nkji - k*nji)/ni;
       int i = (idx - m*nkji - k*nji - j*ni) + is;
       j += js; k += ks;
-      Real d = wnad_(m,IDN,k,j,i);
+      Real d = wnad_(m,IDN,k,j,i) + (wb ? weq_(m,IDN,k,j,i) : 0.0);
       dmn = fmin(dmn, d); dmx = fmax(dmx, d);
-      if (ideal) { Real e = wnad_(m,IEN,k,j,i); emn = fmin(emn,e); emx = fmax(emx,e); }
+      if (ideal) {
+        Real e = wnad_(m,IEN,k,j,i) + (wb ? weq_(m,IEN,k,j,i) : 0.0);
+        emn = fmin(emn,e); emx = fmax(emx,e);
+      }
       if (want_v) {
         Real v = fmax(fabs(w0_(m,IVX,k,j,i)),
                  fmax(fabs(w0_(m,IVY,k,j,i)), fabs(w0_(m,IVZ,k,j,i))));
+        if (wb) {   // signal speed, as for rcfl above
+          const Real cs2 = ideal ? gm_*(gm_-1.0)*w0_(m,IEN,k,j,i)/w0_(m,IDN,k,j,i)
+                                 : SQR(cs_iso);
+          v += sqrt(fmax(cs2, 0.0));
+        }
         vmx = fmax(vmx, v);
       }
     }, Kokkos::Min<Real>(gdmn), Kokkos::Max<Real>(gdmx),
@@ -552,26 +579,35 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
                   + SQR(utest_(m,IM2,k,j,i)) + SQR(utest_(m,IM3,k,j,i)))/dtst;
           }
           // DMP bounds from the stage-input state over the neighborhood
+          // (WB: DMP bounds on the perturbation; the tolerance scale smn/smx from the
+          // full-state bounds, see the note at the top of the loop)
           const DvceArray5D<Real> &qref = (newtonian) ? wnad_ : u0_;
           Real qmn = qref(m,n,k,j,i), qmx = qmn;
+          Real smn = qmn + (wb ? weq_(m,n,k,j,i) : 0.0), smx = smn;
           for (int dk=-ndk; dk<=ndk; ++dk) {
           for (int dj=-ndj; dj<=ndj; ++dj) {
           for (int di=-ndi; di<=ndi; ++di) {
             Real q = qref(m,n,k+dk,j+dj,i+di);
             qmn = fmin(qmn, q);
             qmx = fmax(qmx, q);
+            if (wb) {
+              Real qf = q + weq_(m,n,k+dk,j+dj,i+di);
+              smn = fmin(smn, qf);
+              smx = fmax(smx, qf);
+            }
           }}}
+          if (!wb) { smn = qmn; smx = qmx; }
           // Coarse, scale-aware relaxation: a fraction rtol of the selected GLOBAL
           // scale (grange/gdu; or the spd-style per-bound |m|,|M| in relative mode),
           // floored by round-off (eps0*|bound|) and an absolute atol.  A global scale
           // stays uniform across cells — decomposition-invariant, no fence-sitters.
           Real eps_m, eps_p;
           if (scale_mode == 0) {          // spd-style relative
-            eps_m = fmax(rtol*fabs(qmn), atol);
-            eps_p = fmax(rtol*fabs(qmx), atol);
+            eps_m = fmax(rtol*fabs(smn), atol);
+            eps_p = fmax(rtol*fabs(smx), atol);
           } else if (scale_mode == 4) {   // rcfl: relative band x advective Courant
-            eps_m = fmax(rtol*rcfl_fac*fabs(qmn), atol);
-            eps_p = fmax(rtol*rcfl_fac*fabs(qmx), atol);
+            eps_m = fmax(rtol*rcfl_fac*fabs(smn), atol);
+            eps_p = fmax(rtol*rcfl_fac*fabs(smx), atol);
           } else if (scale_mode == 1) {   // grange with Mach-softening exponent theta:
             // eps = rtol * G^theta * |bound|^(1-theta); theta=1 -> pure global range
             const Real gsc = (pass == 0) ? gscale0 : gscale1;
@@ -581,8 +617,8 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
               eps_p = eps;
             } else {
               const Real gth = pow(gsc, theta);
-              eps_m = fmax(rtol*gth*pow(fabs(qmn), 1.0-theta), atol);
-              eps_p = fmax(rtol*gth*pow(fabs(qmx), 1.0-theta), atol);
+              eps_m = fmax(rtol*gth*pow(fabs(smn), 1.0-theta), atol);
+              eps_p = fmax(rtol*gth*pow(fabs(smx), 1.0-theta), atol);
             }
           } else {                        // gdu
             const Real gsc = (pass == 0) ? gscale0 : gscale1;
@@ -590,14 +626,13 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
             eps_m = eps;
             eps_p = eps;
           }
-          eps_m = fmax(eps_m, eps0*fabs(qmn));
-          eps_p = fmax(eps_p, eps0*fabs(qmx));
+          eps_m = fmax(eps_m, eps0*fabs(smn));
+          eps_p = fmax(eps_p, eps0*fabs(smx));
           if (wb) {
-            // Round-off floor tied to the EQUILIBRIUM: the perturbation carries the
-            // cancellation error of F - F_eq (~eps*|F_eq|), so its bounds and candidate
-            // are only defined to eps*|q_eq|.  Without this, gcfl gives 0 at rest,
-            // eps0*|bound'| -> 0, and every cell sits on the round-off fence.  w_eq is
-            // built from the global lattice, so the floor is decomposition-invariant.
+            // Optional extra round-off floor tied to the EQUILIBRIUM (mood_eps0_eq): the
+            // perturbation carries the cancellation error of F - F_eq (~eps*|F_eq|).
+            // With the full-state scales above it is normally redundant (eps0*|smn|
+            // already contains |q_eq|); kept for runs that set it explicitly.
             const Real eq_floor = eps0_eq*fabs(weq_(m,n,k,j,i));
             eps_m = fmax(eps_m, eq_floor);
             eps_p = fmax(eps_p, eq_floor);

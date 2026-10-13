@@ -1,0 +1,70 @@
+# MOOD demotion counts with the well-balanced scheme, before/after the detector tolerance fix (2026-10-13)
+# ref = 2aa1ca84a (tolerance scaled by the perturbation: full-state scales absent, advective Courant factor,
+#       MHD velocity/B-component bands relative to the perturbation); new = this commit; off = same run, WB off
+
+scheme N     amp    nmood_ref  nmood_new  nmood_off
+fv4    64    1e-3         312         25          0
+fv4    128   1e-3         869          7          0
+fv4    256   1e-3        2975          0          0
+fv6    64    1e-3         313         25          0
+fv6    128   1e-3         875          7          0
+fv6    256   1e-3        3349          0          0
+fv8    64    1e-3         396         25          0
+fv8    128   1e-3        1043          7          0
+fv8    256   1e-3        3425          0          0
+fv4    64    1.0          517        474        307
+fv4    128   1.0         1197       1110        433
+fv4    256   1.0         3848       2875        941
+fv6    64    1.0          561        476        304
+fv6    128   1.0         1159       1059        423
+fv6    256   1.0         4439       2944        911
+fv8    64    1.0          725        475        300
+fv8    128   1.0         1315       1067        429
+fv8    256   1.0         4564       2801        906
+--- 2D MHD iprob 3 strong pulse (amp -0.95, the decomposition deck), fv4+MOOD uct, 64^2
+m3 amp=-0.95: nmood ref=139788 new=56433 off=535452
+--- decomposition invariance of the new detector (fv4+MOOD uct, WB on, 1 vs 4x4 blocks)
+IDENTICAL nad/dec_new_64 vs nad/dec_new_16
+
+# MHD 64^2 pulse (iprob 3 uniform oblique B, fv4+MOOD uct_hlld): knob scan, new detector
+base_1e-2              nmood=3941     floors=0
+rtol1e-2_1e-2          nmood=0        floors=0
+atol1e-5_1e-2          nmood=3941     floors=0
+noenergy_1e-2          nmood=1910     floors=0
+nosed_1e-2             nmood=6227     floors=0
+nadbmag_1e-2           nmood=3953     floors=0
+relative_1e-2          nmood=10426    floors=0
+ctcontact_1e-2         nmood=3621     floors=0
+off_1e-2               nmood=935569   floors=0
+base_1e-12             nmood=0        floors=0
+rtol1e-2_1e-12         nmood=0        floors=0
+atol1e-5_1e-12         nmood=0        floors=0
+noenergy_1e-12         nmood=0        floors=0
+nosed_1e-12            nmood=0        floors=0
+nadbmag_1e-12          nmood=0        floors=0
+relative_1e-12         nmood=0        floors=0
+ctcontact_1e-12        nmood=0        floors=0
+off_1e-12              nmood=1097366  floors=0
+rest                   nmood=0        floors=0
+
+# Parker atmosphere (iprob 4), amp 1e-12, new detector
+base_1e-12             nmood=0        floors=0
+rtol1e-2_1e-12         nmood=0        floors=0
+atol1e-5_1e-12         nmood=0        floors=0
+noenergy_1e-12         nmood=0        floors=0
+nosed_1e-12            nmood=0        floors=0
+nadbmag_1e-12          nmood=0        floors=0
+<mhd> mood_nad_v = 'none' not implemented (off|mag|comps)
+ctcontact_1e-12        nmood=0        floors=0
+MHD MOOD with plm reconstruction, emf=uct and mood_max_revs=1 requires at least 5 ghost zones, but <mesh>/nghost=4
+rest                   nmood=0        floors=0
+
+# pulse sweep demotions (64^2, t=0.25): prob|scheme|wb | dp/eta at eta=1e-2,1e-4,1e-8,1e-12 | nmood
+m3|fv4mood|false | 0.239 | 0.265 | 319 | 3.19e+06 | nmood: 9.4e+05 | 1.1e+06 | 1.1e+06 | 1.1e+06 |
+m3|fv4mood|true | 0.241 | 0.253 | 0.253 | 0.251 | nmood: 3.9e+03 | 0 | 0 | 0 |
+m3|plmfofc|false | 0.237 | 0.264 | 319 | 3.18e+06 | nmood: 0 | 0 | 0 | 0 |
+m3|plmfofc|true | 0.229 | 0.228 | 0.228 | 0.227 | nmood: 0 | 0 | 0 | 0 |
+m4|fv4mood|false | 30.3 | 3.01e+03 | 3.01e+07 | 3.03e+11 | nmood: 6.2e+05 | 6.7e+05 | 6.8e+05 | 6.8e+05 |
+m4|fv4mood|true | 0.362 | 0.397 | 0.343 | 0.343 | nmood: 7.1e+03 | 0 | 0 | 0 |
+m4|plmfofc|false | 28.5 | 2.85e+03 | 2.85e+07 | 2.85e+11 | nmood: 0 | 0 | 0 | 0 |
+m4|plmfofc|true | 0.354 | 0.356 | 0.358 | 0.355 | nmood: 0 | 0 | 0 | 0 |

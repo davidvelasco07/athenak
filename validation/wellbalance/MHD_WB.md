@@ -59,11 +59,11 @@ at `t = 0.25`:
 
 | atmosphere | scheme | eta = 1e-2 | 1e-4 | 1e-8 | 1e-12 |
 |---|---|---|---|---|---|
-| uniform oblique B (iprob 3) | fv4+MOOD uct_hlld, WB on | 0.236 | 0.237 | 0.237 | 0.237 |
+| uniform oblique B (iprob 3) | fv4+MOOD uct_hlld, WB on | 0.241 | 0.253 | 0.253 | 0.251 |
 | | WB off | 0.239 | 0.265 | 3.2e2 | 3.2e6 |
 | | PLM+FOFC ct_contact, WB on | 0.229 | 0.228 | 0.228 | 0.227 |
 | | WB off | 0.237 | 0.264 | 3.2e2 | 3.2e6 |
-| Parker constant-beta (iprob 4) | fv4+MOOD uct_hlld, WB on | 0.361 | 0.361 | 0.222 | 0.221 |
+| Parker constant-beta (iprob 4) | fv4+MOOD uct_hlld, WB on | 0.362 | 0.397 | 0.343 | 0.343 |
 | | WB off | 30 | 3.0e3 | 3.0e7 | 3.0e11 |
 | | PLM+FOFC ct_contact, WB on | 0.354 | 0.356 | 0.358 | 0.355 |
 | | WB off | 28 | 2.8e3 | 2.8e7 | 2.8e11 |
@@ -71,8 +71,31 @@ at `t = 0.25`:
 With the scheme the response is scale-invariant down to `eta = 1e-12`; without it the
 truncation error of the equilibrium (Mach 0.29 on the Parker atmosphere) swamps every pulse
 below `eta ~ 1e-4` on the uniform-field case and every pulse on the Parker case. MOOD
-demotions with WB grow from 1.1e5 to 3.0e5 cell-stages as `eta` falls (round-off fence
-sitting at `mood_eps0_eq = 0`, as in hydro) against 0.9 to 1.1e6 without.
+demotions with WB: 3.9e3 (iprob 3) and 7.1e3 (iprob 4) cell-stages at `eta = 1e-2`, 0 at
+every smaller amplitude, against 0.9 to 1.1e6 without WB (`results/wb_nad_demotions.txt`).
+The remaining amplitude dependence of the fv4+MOOD `uct_hlld` rows (0.397 at 1e-4 vs 0.343
+at 1e-8 on Parker; identical with MOOD detection off) is the HLLD-UCT coefficient block of
+`hlld_mhd.hpp`: its `nu*` weight is forced to 0 when the Alfvén-speed split is below
+`1e-9` of the fast fan, so below `eta ~ 1e-7` the UCT weights take the degenerate branch;
+`ct_contact` (0.409 / 0.409) and `uct_hll` (0.397 / 0.397) are flat. Not changed here (it
+would alter round-off-level `B_x ~ 0` faces of every non-WB run); use `uct_hll` or
+`ct_contact` for perturbations that small, or lower that threshold deliberately.
+
+## MOOD detector tolerance with WB (fixed 2026-10-13)
+
+The relaxed DMP acts on the perturbation (`rho'`, `e'`, and in MHD `v`, `B'`), but its
+TOLERANCE is the one the same run would use without WB: relative bands and global scales
+from the full state `w_eq + w'`, the rcfl/gcfl Courant factor from the signal speed
+`|v| + c_s` (`|v| + c_f` in MHD) instead of the advective one, the MHD velocity band
+relative to `|v| + c_f` and the B-component band to the full-state bounds plus the local
+`|B_eq|` (components with a vanishing equilibrium value have no scale of their own). Before
+this, every one of those scales was the perturbation's own (advective Courant number =
+the pulse's Mach number, `|v| ~ |B'_2| ~ eta`), so the band shrank with the amplitude and a
+fixed fraction of cell-steps was demoted at ANY amplitude: 1D hydro pulse of `1e-3` at
+256 cells, 2975 demotions (WB off: 0); now 0. A strong pulse (amp 1) still demotes (2875,
+WB off 941), the `-0.95` MHD pulse 5.6e4 (WB off 5.4e5). WB-off paths are bitwise
+unchanged; the exact gates, 0 demotions at rest, 1 vs 4x4 blocks and 1 vs 4 ranks hold
+(`wb_nad_pulse.sh`, `wb_nad_knobs_*.sh`).
 
 ## Running the gates
 
@@ -108,7 +131,5 @@ arcade), 1 vs 4x4 blocks bitwise for WB on and off, and the pulse sweep reproduc
 table (`max|dp|/eta` 0.236-0.238 for fv4+MOOD, 0.227-0.229 for PLM+FOFC on iprob 3). Vista's
 `python3` has no h5py: `vis/python/bin_convert.py` now imports it lazily.
 
-Open issue (not exactness): with WB the MOOD detector works on the perturbation and demotes
-a fixed fraction of cell-steps on a smooth, well-resolved 1e-3 pulse (hundreds to 1e4 per run
-at 32..512 cells, `mood_eps0_eq = 1e-10` barely changes it) where the same run with WB off
-demotes nothing; the fallback then limits the pulse convergence to ~2nd order.
+The over-demotion of WB + MOOD on smooth pulses reported earlier in this file is fixed (see
+"MOOD detector tolerance with WB"); the `uct_hlld` small-amplitude branch above is open.
