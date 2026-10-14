@@ -188,25 +188,15 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
     // MOOD a-posteriori fallback (hydro_mood.cpp).  Requires a flux-range extension of
     // mood_max_revs cells (see hydro_fluxes.cpp).  Mutually exclusive with FOFC.
     use_mood = pin->GetOrAddBoolean("hydro","mood",false);
-    // default rcfl with rtol 1e-4 (below): the setting of the 2026-09 NAD study that
-    // keeps the Gresho vortex to M = 1e-4 and RTI at P0 = 1000 clean, and the only
-    // Courant-aware scale that needs no global range reductions (one Allreduce per stage)
-    std::string nadsc = pin->GetOrAddString("hydro","mood_nad_scale","rcfl");
-    if (nadsc.compare("relative") == 0) {
-      mood_nad_scale = 0;
-    } else if (nadsc.compare("grange") == 0) {
-      mood_nad_scale = 1;
-    } else if (nadsc.compare("gdu") == 0) {
-      mood_nad_scale = 2;
-    } else if (nadsc.compare("gcfl") == 0) {
-      mood_nad_scale = 3;
-    } else if (nadsc.compare("rcfl") == 0) {
-      // relative (per-bound |m|,|M|) band scaled by the global advective Courant number
-      mood_nad_scale = 4;
-    } else {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-        << std::endl << "<hydro> mood_nad_scale = '" << nadsc
-        << "' not implemented (relative|grange|gdu|gcfl|rcfl)" << std::endl;
+    // NAD uses only each cell's neighboring bounds; no domain-wide scales.
+    const std::string nadsc = pin->GetOrAddString("hydro","mood_nad_scale","relative");
+    if (nadsc != "relative") {
+      std::cerr << "<hydro> mood_nad_scale='" << nadsc
+                << "' has been removed; use relative with mood_rtol/mood_atol\n";
+      std::exit(EXIT_FAILURE);
+    }
+    if (pin->DoesParameterExist("hydro", "mood_nad_theta")) {
+      std::cerr << "<hydro> mood_nad_theta was removed with the global NAD scales\n";
       std::exit(EXIT_FAILURE);
     }
     mood_eps0  = pin->GetOrAddReal("hydro","mood_eps0",1.0e-12);
@@ -215,12 +205,8 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
     // PPM ringing of an eta=1e-12 pulse), while 0 keeps the detector scale-invariant for
     // linear perturbations and was measured bitwise decomposition-invariant.
     mood_eps0_eq = pin->GetOrAddReal("hydro","mood_eps0_eq",0.0);
-    // the default rtol follows the scale: rcfl is calibrated at 1e-4, the range-based
-    // scales (gcfl etc.) at 1e-5, so an explicit gcfl without mood_rtol is unchanged
-    mood_rtol = pin->GetOrAddReal("hydro","mood_rtol",
-                                  (mood_nad_scale == 4) ? 1.0e-4 : 1.0e-5);
+    mood_rtol = pin->GetOrAddReal("hydro","mood_rtol",1.0e-5);
     mood_atol = pin->GetOrAddReal("hydro","mood_atol",0.0);
-    mood_nad_theta = pin->GetOrAddReal("hydro","mood_nad_theta",1.0);
     mood_nad_energy = pin->GetOrAddBoolean("hydro","mood_nad_energy",true);
     mood_nad_scalars = pin->GetOrAddBoolean("hydro","mood_nad_scalars",true);
     // DETECTION OFF -- the negative control for the whole cascade.  reconstruct=fv4/fv6/fv8
@@ -235,11 +221,7 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
     // (reconstruct/ppm_closure.hpp); false = the old centred stencil across the imposed
     // ghost state (the negative control).  fv4 only: the closure is 4th order.
     ppm_bc_closure = pin->GetOrAddBoolean("hydro","ppm_boundary_closure",true);
-    if (mood_nad_theta < 0.0 || mood_nad_theta > 1.0) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-        << std::endl << "<hydro> mood_nad_theta must be in [0,1]" << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
+
     mood_sed = pin->GetOrAddBoolean("hydro","mood_sed",true);
     if (use_mood && use_fofc) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__

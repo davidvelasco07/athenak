@@ -173,8 +173,6 @@ class MHD {
   // MOOD a-posteriori fallback ("FB"). Shares fofc/utest/bcctest arrays.
   bool use_mood = false;
   int mood_max_revs = 1;
-  int mood_nad_scale;
-  Real mood_nad_theta;
   bool mood_nad_energy;
   bool mood_nad_scalars;    // include passive-scalar concentrations in NAD
   int mood_nad_b;           // 0=|B|, 1=components
@@ -190,8 +188,13 @@ class MHD {
   bool mood_sed;
   int n_fb_tiers;
   int mood_halo0;
-  // Experimental frozen-EMF halo audit, opt-in; uniform Newtonian ideal MHD only.
+  // Frozen-EMF MOOD: immutable candidate exchange, then local PLM/DC revisions.
   bool mood_frozen_emf = false;
+  MeshBoundaryValuesCC *pbval_mood_prim = nullptr;
+  MeshBoundaryValuesCC *pbval_mood_candidate = nullptr;
+  DvceArray5D<Real> mood_prim, mood_candidate, mood_coarse;
+  DvceEdgeFld4D<Real> mood_eplm{"mood_eplm",1,1,1,1};
+  DvceEdgeFld4D<Real> mood_edc{"mood_edc",1,1,1,1};
   DvceArray4D<int> fb_level;
   DvceArray4D<Real> bmag_ref;
   // Touched-cell restriction of revisions >= 2 (mhd_mood.cpp): only cells within the
@@ -261,6 +264,12 @@ class MHD {
   // ...in "stagen_tl" task list
   TaskStatus CopyCons(Driver *d, int stage);
   TaskStatus Fluxes(Driver *d, int stage);
+  TaskStatus ApplyFallback(Driver *d, int stage);
+  TaskStatus SendMOODPrimitives(Driver *d, int stage);
+  TaskStatus RecvMOODPrimitives(Driver *d, int stage);
+  TaskStatus SendMOODCandidate(Driver *d, int stage);
+  TaskStatus RecvMOODCandidate(Driver *d, int stage);
+  void RestoreMOODCandidate();
   TaskStatus SendFlux(Driver *d, int stage);
   TaskStatus RecvFlux(Driver *d, int stage);
   TaskStatus RKUpdate(Driver *d, int stage);

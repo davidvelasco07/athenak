@@ -46,7 +46,17 @@ void MHD::AssembleMHDTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) 
 
   // assemble "stagen" task list
   id.copyu     = tl["stagen"]->AddTask(&MHD::CopyCons, this, none);
-  id.flux      = tl["stagen"]->AddTask(&MHD::Fluxes, this, id.copyu);
+  TaskID flux_input = id.copyu;
+  if (mood_frozen_emf) {
+    TaskID sendp = tl["stagen"]->AddTask(&MHD::SendMOODPrimitives, this, flux_input);
+    flux_input = tl["stagen"]->AddTask(&MHD::RecvMOODPrimitives, this, sendp);
+  }
+  id.flux = tl["stagen"]->AddTask(&MHD::Fluxes, this, flux_input);
+  if (mood_frozen_emf) {
+    TaskID sendc = tl["stagen"]->AddTask(&MHD::SendMOODCandidate, this, id.flux);
+    TaskID recvc = tl["stagen"]->AddTask(&MHD::RecvMOODCandidate, this, sendc);
+    id.flux = tl["stagen"]->AddTask(&MHD::ApplyFallback, this, recvc);
+  }
   id.sendf     = tl["stagen"]->AddTask(&MHD::SendFlux, this, id.flux);
   id.recvf     = tl["stagen"]->AddTask(&MHD::RecvFlux, this, id.sendf);
   id.rkupdt    = tl["stagen"]->AddTask(&MHD::RKUpdate, this, id.recvf);
@@ -266,6 +276,11 @@ TaskStatus MHD::Fluxes(Driver *pdrive, int stage) {
   // STS-selected diffusion is advanced only in the parabolic half-sweeps.
   AddSelectedDiffusionFluxes(parabolic::DiffusionSelection::explicit_only);
 
+  if (!mood_frozen_emf) return ApplyFallback(pdrive, stage);
+  return TaskStatus::complete;
+}
+
+TaskStatus MHD::ApplyFallback(Driver *pdrive, int stage) {
   // call the MOOD fallback or FOFC if necessary
   if (use_mood) {
     if (rsolver_method == MHD_RSolver::advect) {

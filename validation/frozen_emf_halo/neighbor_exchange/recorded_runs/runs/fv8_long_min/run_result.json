@@ -1,0 +1,19 @@
+{
+  "name": "fv8_long_min",
+  "code": 0,
+  "seconds": 0.7882500839768909,
+  "order": 8,
+  "ng": 8,
+  "revisions": 2,
+  "blocks": 2,
+  "dim": 2,
+  "steps": 8,
+  "frozen": true,
+  "halo": null,
+  "seed": -1,
+  "dump": true,
+  "mpi": 1,
+  "amp": 0.1,
+  "drat": 2,
+  "owner": true
+}

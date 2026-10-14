@@ -1,0 +1,10 @@
+{
+  "name": "restart_full",
+  "code": 0,
+  "seconds": 0.6148171249660663,
+  "cmd": [
+    "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+    "-i",
+    "input.athinput"
+  ]
+}

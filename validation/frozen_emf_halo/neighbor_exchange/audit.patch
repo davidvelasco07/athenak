@@ -1,0 +1,231 @@
+--- a/src/mhd/mhd.hpp
++++ b/src/mhd/mhd.hpp
+@@ -190,6 +190,9 @@
+   int mood_halo0;
+   // Frozen-EMF MOOD: immutable candidate exchange, then local PLM/DC revisions.
+   bool mood_frozen_emf = false;
++  int mood_test_seed = -1;
++  bool mood_test_dump = false;
++  int mood_test_halo = -1;
+   MeshBoundaryValuesCC *pbval_mood_prim = nullptr;
+   MeshBoundaryValuesCC *pbval_mood_candidate = nullptr;
+   DvceArray5D<Real> mood_prim, mood_candidate, mood_coarse;
+--- a/src/mhd/mhd.cpp
++++ b/src/mhd/mhd.cpp
+@@ -597,6 +597,9 @@
+         (recon_method == ReconstructionMethod::fv4 ||
+          recon_method == ReconstructionMethod::fv6 ||
+          recon_method == ReconstructionMethod::fv8);
++    mood_test_dump = pin->GetOrAddBoolean("mhd", "mood_test_dump", false);
++    mood_test_seed = pin->GetOrAddInteger("mhd", "mood_test_seed", -1);
++    mood_test_halo = pin->GetOrAddInteger("mhd", "mood_test_halo", -1);
+     mood_frozen_emf = pin->GetOrAddBoolean("mhd", "mood_frozen_emf", frozen_supported);
+     if (mood_frozen_emf && !frozen_supported) {
+       std::cerr << "Frozen EMF requires dynamic MOOD with periodic uniform Newtonian "
+@@ -664,7 +667,7 @@
+       // h_f + nrevs - 1; with UCT it is wider (fv4: 2 per revision).
+       mood_halo0 = h_f*mood_max_revs;
+       if (mood_frozen_emf) {
+-        mood_halo0 = mood_max_revs;
++        mood_halo0 = mood_test_halo < 0 ? mood_max_revs : mood_test_halo;
+       }
+       // SED reads +/-3; the extra cell in ng_need covers the outer offset.
+       // Otherwise the stencil is the reconstruction half-width.
+--- a/src/mhd/mhd_mood.cpp
++++ b/src/mhd/mhd_mood.cpp
+@@ -24,19 +24,19 @@
+ //!   mhd_corner_e.cpp additionally drops the edge reconstruction to plm/dc at any edge
+ //!   whose adjacent cells are demoted).
+ //!
+-//! mood_frozen_emf exchanges the initial candidate and caches PLM/DC EMFs, then replaces
++//! Opt-in mood_frozen_emf caches base/PLM/DC EMFs once per stage, then replaces
+ //! only edges adjacent to demoted cells. Untouched high-order edges are retained.
+-//! This is the default for supported uniform periodic Newtonian cases and has a
+-//! one-cell revision reach; see
++//! This experimental uniform Newtonian path has a one-cell revision reach; see
+ //! validation/frozen_emf_halo/README.md for the measured bounds and limitations.
+ //!
+-//! Cross-block consistency (legacy recomposition path): shared-edge EMFs are
+-//! synchronized between MeshBlocks by
++//! Cross-block consistency (default recomposition path): shared-edge EMFs are synchronized between MeshBlocks by
+ //! SendE/RecvE, so div(B) and conservation hold regardless; the light-cone halo is
+ //! sized (mhd.cpp) so the COMPOSED edge values are also decomposition-invariant —
+ //! the final-iteration halo equals the transverse reach of the edge composition.
+ 
+ #include <algorithm>
++#include <fstream>
++#include "globals.hpp"
+ 
+ #include "athena.hpp"
+ #include "mesh/mesh.hpp"
+@@ -556,6 +556,47 @@
+       }
+     });
+   };
++  const int audit_seed = mood_test_seed;
++  // seed <= -3 enables an adversarial detector: after the first seed, every
++  // cell whose candidate changed from the frozen base is rejected. This tests
++  // the full dependency cone without relying on a shock to trigger every pass.
++  DvceArray5D<Real> audit_base_u, audit_base_b;
++  if (audit_seed <= -3) {
++    audit_base_u=DvceArray5D<Real>("audit_base_u",utest_.layout());
++    audit_base_b=DvceArray5D<Real>("audit_base_b",bcctest_.layout());
++  }
++
++  const int audit_nx = pmy_pack->pmesh->mesh_indcs.nx1;
++  const int audit_ny = pmy_pack->pmesh->mesh_indcs.nx2;
++  const int audit_nz = pmy_pack->pmesh->mesh_indcs.nx3;
++  const Real audit_xmin = pmy_pack->pmesh->mesh_size.x1min;
++  const Real audit_ymin = pmy_pack->pmesh->mesh_size.x2min;
++  const Real audit_zmin = pmy_pack->pmesh->mesh_size.x3min;
++  auto audit_dump = [&](int rev, int h) {
++    if (!mood_test_dump) return;
++    auto U=Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),utest_);
++    auto B=Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),bcctest_);
++    auto L=Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),fb_level_);
++    std::string name="audit_c"+std::to_string(pmy_pack->pmesh->ncycle)
++      +"_s"+std::to_string(stage)+"_r"+std::to_string(rev)
++      +"_rank"+std::to_string(global_variable::my_rank)+".dat";
++    std::ofstream out(name,std::ios::binary);
++    for (int m=0;m<nmb;++m) {
++      auto loc=pmy_pack->pmesh->lloc_eachmb[pmy_pack->pmb->mb_gid.h_view(m)];
++      for (int k=three_d?ks-h:ks;k<=(three_d?ke+h:ks);++k)
++      for (int j=js-h;j<=je+h;++j) for (int i=is-h;i<=ie+h;++i) {
++        double row[13];
++        row[0]=loc.lx1*indcs_.nx1+i-is;
++        row[1]=loc.lx2*indcs_.nx2+j-js;
++        row[2]=loc.lx3*indcs_.nx3+k-ks;
++        for (int n=0;n<5;++n) row[3+n]=U(m,n,k,j,i);
++        for (int n=0;n<3;++n) row[8+n]=B(m,n,k,j,i);
++        row[11]=L(m,k,j,i);
++        row[12]=(i>=is&&i<=ie&&j>=js&&j<=je&&k>=ks&&k<=ke)?1:0;
++        out.write(reinterpret_cast<const char*>(row),sizeof(row));
++      }
++    }
++  };
+   int ndemoted_total = 0;
+   for (int rev=1; rev<=nrevs; ++rev) {
+     const bool masked = touched_only && (rev > 1);
+@@ -759,6 +800,10 @@
+     // (3) NaN + NAD detection; combine with PAD; demote survivors and count them.
+     // Same tier-floor split as hydro: PAD/NaN may cascade to DC, NAD (density, energy,
+     // magnetic field) demotes to the PLM tier only.
++    if (audit_seed <= -3 && rev == 1) {
++      Kokkos::deep_copy(audit_base_u,utest_);
++      Kokkos::deep_copy(audit_base_b,bcctest_);
++    }
+     int ndemoted = 0, ndemoted_int = 0;
+     Kokkos::parallel_reduce("mmood_detect",
+     Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+@@ -1021,6 +1066,25 @@
+         }
+       }
+ 
++      // Test-only forced one-cell repair, or -2 to suppress all repairs.
++      if (audit_seed != -1) {
++        int gx=static_cast<int>(round((size_.d_view(m).x1min-audit_xmin)/size_.d_view(m).dx1))+i-is;
++        int gy=static_cast<int>(round((size_.d_view(m).x2min-audit_ymin)/size_.d_view(m).dx2))+j-js;
++        int gz=three_d ? static_cast<int>(round((size_.d_view(m).x3min-audit_zmin)/size_.d_view(m).dx3))+k-ks : 0;
++        gx=(gx%audit_nx+audit_nx)%audit_nx;
++        gy=(gy%audit_ny+audit_ny)%audit_ny;
++        gz=(gz%audit_nz+audit_nz)%audit_nz;
++        const int seed_cell=(audit_seed <= -3) ? -audit_seed-3 : audit_seed;
++        trouble=(seed_cell>=0 && rev==1 && (gz*audit_ny+gy)*audit_nx+gx==seed_cell);
++        if (audit_seed <= -3 && rev > 1) {
++          for (int n=0;n<nmhd_;++n) {
++            trouble=trouble || (utest_(m,n,k,j,i)!=audit_base_u(m,n,k,j,i));
++          }
++          for (int n=0;n<3;++n) {
++            trouble=trouble || (bcctest_(m,n,k,j,i)!=audit_base_b(m,n,k,j,i));
++          }
++        }
++      }
+       fofc_(m,k,j,i) = trouble;
+       if (trouble) {
+         fb_level_(m,k,j,i) += 1;
+@@ -1031,6 +1095,7 @@
+       }
+     }, Kokkos::Sum<int>(ndemoted), Kokkos::Sum<int>(ndemoted_int));
+ 
++    audit_dump(rev, dh);
+     if (ndemoted == 0) break;
+     ndemoted_total += ndemoted_int;
+ 
+--- a/src/outputs/binary.cpp
++++ b/src/outputs/binary.cpp
+@@ -93,7 +93,7 @@
+         << "  time=" << pm->time << std::endl
+         << "  cycle=" << pm->ncycle << std::endl
+         << "  size of location=" << sizeof(Real) << std::endl
+-        << "  size of variable=" << sizeof(float) << std::endl
++        << "  size of variable=" << sizeof(double) << std::endl
+         << "  number of variables=" << outvars.size() << std::endl
+         << "  variables:  ";
+     for (size_t n=0; n<outvars.size(); n++) {
+@@ -138,14 +138,14 @@
+   // ois, oie, ojs, oje, oks, oke + il1, il2, il3, level +
+   // x1min, x1max, x2min, x2max, x3min, x3max + data
+   std::size_t data_size = 10*sizeof(int32_t) + 6*sizeof(Real)
+-                        + (cells*nout_vars)*sizeof(float);
++                        + (cells*nout_vars)*sizeof(double);
+ 
+   int ns_mbs = pm->gids_eachrank[global_variable::my_rank];
+   int nb_mbs = pm->nmb_eachrank[global_variable::my_rank];
+ 
+   // allocate 1D vector of floats used to convert and output data
+   char *data = new char[nb_mbs*data_size];
+-  float *single_data = new float[cells];
++  double *single_data = new double[cells];
+ 
+   // Loop over MeshBlocks
+   for (int m=0; m<nout_mbs; ++m) {
+@@ -215,20 +215,20 @@
+     pdata+=sizeof(xv);
+ 
+     // output variables
+-    float tmp_data;
++    double tmp_data;
+     for (int n=0; n<nout_vars; n++) {
+       int cnt=0;
+       for (int k=oks; k<=oke; k++) {
+         for (int j=ojs; j<=oje; j++) {
+           for (int i=ois; i<=oie; i++) {
+-            tmp_data = static_cast<float>(outarray(n,m,k-oks,j-ojs,i-ois));
++            tmp_data = static_cast<double>(outarray(n,m,k-oks,j-ojs,i-ois));
+             single_data[cnt] = tmp_data;
+             cnt++;
+           }
+         }
+       }
+-      memcpy(pdata,single_data,cells*sizeof(float));
+-      pdata+=cells*sizeof(float);
++      memcpy(pdata,single_data,cells*sizeof(double));
++      pdata+=cells*sizeof(double);
+     }
+   }
+ 
+--- a/src/pgen/fluids/field_loop.cpp
++++ b/src/pgen/fluids/field_loop.cpp
+@@ -52,6 +52,12 @@
+ //! \brief Field loop advection problem generator.
+ 
+ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
++  // Validation-only dispatch; production field-loop generator is unchanged.
++  const auto name = pin->GetOrAddString("problem", "pgen_name", "field_loop");
++  if (name == "orszag_tang") { OrszagTang(pin, restart); return; }
++  if (name == "linear_wave") { LinearWave(pin, restart); return; }
++  if (name == "cpaw") { AlfvenWave(pin, restart); return; }
++  if (name == "shock_tube") { ShockTube(pin, restart); return; }
+   if (restart) return;
+   // Read initial conditions
+   Real rad = pin->GetOrAddReal("problem","rad",0.0);
+--- a/src/hydro/hydro_mood.cpp
++++ b/src/hydro/hydro_mood.cpp
+@@ -180,6 +180,7 @@
+   // only way to attribute a property to the detector rather than to the base scheme.
+   const int nrevs = mood_detect ? mood_max_revs : 0;
+   const bool is_ideal_ = eos_.is_ideal;
++
+ 
+   // Detection halo: candidate/detection are evaluated on the interior plus a halo of
+   // ghost cells so that both MeshBlocks sharing a face flag and demote it identically

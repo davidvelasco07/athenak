@@ -1,0 +1,19 @@
+{
+  "name": "fv8_3d_mpi4",
+  "code": 0,
+  "seconds": 0.8279285409953445,
+  "order": 8,
+  "ng": 8,
+  "revisions": 2,
+  "blocks": 2,
+  "dim": 3,
+  "steps": 1,
+  "frozen": true,
+  "halo": null,
+  "seed": -1,
+  "dump": true,
+  "mpi": 4,
+  "amp": 0.1,
+  "drat": 2,
+  "owner": true
+}

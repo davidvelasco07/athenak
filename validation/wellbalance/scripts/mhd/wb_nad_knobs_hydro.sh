@@ -12,6 +12,5 @@ KN="mood_atol = 1e-5"      run atol1e-5  amp=1e-3
 KN="mood_nad_energy = false" run noenergy amp=1e-3
 KN="mood_sed = false"      run nosed     amp=1e-3
 KN="mood_nad_scale = relative" run relative amp=1e-3
-KN="mood_nad_scale = gcfl" run gcfl      amp=1e-3
 KN=""              run off             amp=1e-3 wb=false
 KN="mood_rtol = 1e-2"      run off_rtol1e-2 amp=1e-3 wb=false

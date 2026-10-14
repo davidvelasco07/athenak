@@ -1,0 +1,44 @@
+{
+  "runs": [
+    {
+      "mode": "frozen",
+      "seconds": 1.911104,
+      "rss_bytes": null,
+      "ng": 8
+    },
+    {
+      "mode": "legacy",
+      "seconds": 2.677548,
+      "rss_bytes": null,
+      "ng": 18
+    },
+    {
+      "mode": "frozen",
+      "seconds": 1.896286,
+      "rss_bytes": null,
+      "ng": 8
+    },
+    {
+      "mode": "legacy",
+      "seconds": 2.694754,
+      "rss_bytes": null,
+      "ng": 18
+    },
+    {
+      "mode": "frozen",
+      "seconds": 1.905267,
+      "rss_bytes": null,
+      "ng": 8
+    },
+    {
+      "mode": "legacy",
+      "seconds": 2.690124,
+      "rss_bytes": null,
+      "ng": 18
+    }
+  ],
+  "median_seconds": {
+    "frozen": 1.905267,
+    "legacy": 2.690124
+  }
+}

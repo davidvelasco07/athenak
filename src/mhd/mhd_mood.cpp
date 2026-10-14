@@ -24,19 +24,19 @@
 //!   mhd_corner_e.cpp additionally drops the edge reconstruction to plm/dc at any edge
 //!   whose adjacent cells are demoted).
 //!
-//! Opt-in mood_frozen_emf caches base/PLM/DC EMFs once per stage, then replaces
+//! mood_frozen_emf exchanges the initial candidate and caches PLM/DC EMFs, then replaces
 //! only edges adjacent to demoted cells. Untouched high-order edges are retained.
-//! This experimental uniform Newtonian path has a one-cell revision reach; see
+//! This is the default for supported uniform periodic Newtonian cases and has a
+//! one-cell revision reach; see
 //! validation/frozen_emf_halo/README.md for the measured bounds and limitations.
 //!
-//! Cross-block consistency (default recomposition path): shared-edge EMFs are synchronized between MeshBlocks by
+//! Cross-block consistency (legacy recomposition path): shared-edge EMFs are
+//! synchronized between MeshBlocks by
 //! SendE/RecvE, so div(B) and conservation hold regardless; the light-cone halo is
 //! sized (mhd.cpp) so the COMPOSED edge values are also decomposition-invariant —
 //! the final-iteration halo equals the transverse reach of the edge composition.
 
 #include <algorithm>
-#include <limits>
-#include <type_traits>
 
 #include "athena.hpp"
 #include "mesh/mesh.hpp"
@@ -223,7 +223,6 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
   const Real eps0  = mood_eps0;
   const Real rtol = mood_rtol;
   const Real atol = mood_atol;
-  const Real theta = mood_nad_theta;
   const bool nad_energy = mood_nad_energy;
   // Passive scalars carry their own discontinuities, so they are tested as well.  In
   // kinematic/uniform-background advection they are the ONLY variable that varies, and
@@ -238,7 +237,6 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
   const int nrevs = mood_max_revs;
   const bool is_ideal_ = eos_.is_ideal;
   const Real gm_ = eos_.gamma, cs_iso_ = eos_.iso_cs;   // WB velocity band scale
-  const int scale_mode = mood_nad_scale;
 
   // UCT face-coefficient arrays for the revise kernels (empty views when ct_contact —
   // the solver then skips the UCT outputs).  Flag values match mhd_fluxes.cpp.
@@ -258,11 +256,12 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
     auto bn_ = bcc_nad;
     const int n1m = ncells1-1, n2m = ncells2-1, n3m = ncells3-1;
     const bool md = multi_d, td = three_d;
+    const bool full_average = mood_frozen_emf;
     par_for("mood_bnad", DevExeSpace(), 0, nmb1, 0, n3m, 0, n2m, 0, n1m,
     KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-      const int ip = (i < n1m) ? i+1 : i;
-      const int jp = (md && j < n2m) ? j+1 : j;
-      const int kp = (td && k < n3m) ? k+1 : k;
+      const int ip = (full_average || i < n1m) ? i+1 : i;
+      const int jp = (md && (full_average || j < n2m)) ? j+1 : j;
+      const int kp = (td && (full_average || k < n3m)) ? k+1 : k;
       bn_(m,IBX,k,j,i) = 0.5*(b0x1(m,k,j,i) + b0x1(m,k,j,ip));
       bn_(m,IBY,k,j,i) = 0.5*(b0x2(m,k,j,i) + b0x2(m,k,jp,i));
       bn_(m,IBZ,k,j,i) = 0.5*(b0x3(m,k,j,i) + b0x3(m,kp,j,i));
@@ -283,238 +282,6 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
                              + SQR(bcceq_(m,IBZ,k,j,i)));
       }
     });
-  }
-
-  // GLOBAL tolerance scales (see hydro_mood.cpp): index 0 = density, 1 = internal
-  // energy, 2..4 = B (component ranges in comps mode; slot 2 = |B| range in mag mode).
-  // All reduce over ACTIVE cells only.
-  Real gscale0 = 0.0, gscale1 = 0.0, gscale_s = 0.0;
-  Real gscaleb[3] = {0.0, 0.0, 0.0};
-  Real gscalev[3] = {0.0, 0.0, 0.0};   // velocity NAD scale (|v| in slot 0, or comps)
-  // rcfl: relative per-bound band x global advective Courant factor (see hydro_mood.cpp);
-  // with WB the factor is the Courant number of the signal speed |v| + c_f (upper bound
-  // sqrt(c_s^2 + B^2/rho) of the fast speed) for the reason given there.
-  Real rcfl_fac = 1.0;
-  if (scale_mode == 4) {
-    // rcfl needs only the global advective Courant factor: one reduction (max |v|) and
-    // ONE Allreduce that also carries -dxmin (MAX of -dx == -MIN of dx), so the
-    // SMR/AMR-safe global dxmin costs no extra collective.  No range reductions.
-    Real gvmx = 0.0;
-    const int ni = ie-is+1, nji = (je-js+1)*ni, nkji = (ke-ks+1)*nji;
-    const int nmkji = nmb*nkji;
-    const bool ideal_ = is_ideal_;
-    const Real cs_iso = cs_iso_;
-    Kokkos::parallel_reduce("mmood_gvmax",
-    Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
-    KOKKOS_LAMBDA(const int &idx, Real &vmx) {
-      int m = idx/nkji;
-      int k = (idx - m*nkji)/nji;
-      int j = (idx - m*nkji - k*nji)/ni;
-      int i = (idx - m*nkji - k*nji - j*ni) + is;
-      j += js; k += ks;
-      Real v = fmax(fabs(w0_(m,IVX,k,j,i)),
-               fmax(fabs(w0_(m,IVY,k,j,i)), fabs(w0_(m,IVZ,k,j,i))));
-      if (wb) {   // signal speed of the full state
-        const Real d = w0_(m,IDN,k,j,i);
-        const Real cs2 = ideal_ ? gm_*(gm_-1.0)*w0_(m,IEN,k,j,i)/d : SQR(cs_iso);
-        const Real va2 = (SQR(bcc0_(m,IBX,k,j,i)) + SQR(bcc0_(m,IBY,k,j,i))
-                        + SQR(bcc0_(m,IBZ,k,j,i)))/d;
-        v += sqrt(fmax(cs2 + va2, 0.0));
-      }
-      vmx = fmax(vmx, v);
-    }, Kokkos::Max<Real>(gvmx));
-    Real dxmin = std::numeric_limits<Real>::max();
-    auto &msize = pmy_pack->pmb->mb_size;
-    for (int m=0; m<nmb; ++m) {
-      dxmin = std::min(dxmin, static_cast<Real>(msize.h_view(m).dx1));
-      if (multi_d) dxmin = std::min(dxmin, static_cast<Real>(msize.h_view(m).dx2));
-      if (three_d) dxmin = std::min(dxmin, static_cast<Real>(msize.h_view(m).dx3));
-    }
-#if MPI_PARALLEL_ENABLED
-    Real rmx[2] = {gvmx, -dxmin};
-    MPI_Allreduce(MPI_IN_PLACE, rmx, 2, MPI_ATHENA_REAL, MPI_MAX, MPI_COMM_WORLD);
-    gvmx = rmx[0];
-    dxmin = -rmx[1];
-#endif
-    rcfl_fac = fmin(1.0, (pmy_pack->pmesh->dt)*gvmx/dxmin);
-  } else if (scale_mode == 1 || scale_mode == 3) {
-    Real gdmn = std::numeric_limits<Real>::max(), gdmx = -gdmn;
-    Real gemn = gdmn, gemx = gdmx;
-    Real gvmx = 0.0;
-    Real cfl_fac = 1.0;
-    const int ni = ie-is+1, nji = (je-js+1)*ni, nkji = (ke-ks+1)*nji;
-    const int nmkji = nmb*nkji;
-    const bool ideal = is_ideal_;
-    const bool want_v = (scale_mode == 3);
-    const Real cs_iso = cs_iso_;
-    Kokkos::parallel_reduce("mmood_grange",
-    Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
-    KOKKOS_LAMBDA(const int &idx, Real &dmn, Real &dmx, Real &emn, Real &emx,
-                  Real &vmx) {
-      int m = idx/nkji;
-      int k = (idx - m*nkji)/nji;
-      int j = (idx - m*nkji - k*nji)/ni;
-      int i = (idx - m*nkji - k*nji - j*ni) + is;
-      j += js; k += ks;
-      // global scales on the FULL state (hydro_mood.cpp: the tolerance is the
-      // WB-off one; only the DMP object is the perturbation)
-      Real d = wnad_(m,IDN,k,j,i) + (wb ? weq_(m,IDN,k,j,i) : 0.0);
-      dmn = fmin(dmn, d); dmx = fmax(dmx, d);
-      if (ideal) {
-        Real e = wnad_(m,IEN,k,j,i) + (wb ? weq_(m,IEN,k,j,i) : 0.0);
-        emn = fmin(emn,e); emx = fmax(emx,e);
-      }
-      if (want_v) {
-        Real v = fmax(fabs(w0_(m,IVX,k,j,i)),
-                 fmax(fabs(w0_(m,IVY,k,j,i)), fabs(w0_(m,IVZ,k,j,i))));
-        if (wb) {   // signal speed, as for rcfl above
-          const Real dd = w0_(m,IDN,k,j,i);
-          const Real cs2 = ideal ? gm_*(gm_-1.0)*w0_(m,IEN,k,j,i)/dd : SQR(cs_iso);
-          const Real va2 = (SQR(bcc0_(m,IBX,k,j,i)) + SQR(bcc0_(m,IBY,k,j,i))
-                          + SQR(bcc0_(m,IBZ,k,j,i)))/dd;
-          v += sqrt(fmax(cs2 + va2, 0.0));
-        }
-        vmx = fmax(vmx, v);
-      }
-    }, Kokkos::Min<Real>(gdmn), Kokkos::Max<Real>(gdmx),
-       Kokkos::Min<Real>(gemn), Kokkos::Max<Real>(gemx), Kokkos::Max<Real>(gvmx));
-
-    // B ranges (separate reduction to keep the reducer count manageable)
-    Real gb0mn = std::numeric_limits<Real>::max(), gb0mx = -gb0mn;
-    Real gb1mn = gb0mn, gb1mx = gb0mx;
-    Real gb2mn = gb0mn, gb2mx = gb0mx;
-    const bool bmag_mode = nad_bmag;
-    Kokkos::parallel_reduce("mmood_grangeb",
-    Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
-    KOKKOS_LAMBDA(const int &idx, Real &b0mn, Real &b0mx, Real &b1mn, Real &b1mx,
-                  Real &b2mn, Real &b2mx) {
-      int m = idx/nkji;
-      int k = (idx - m*nkji)/nji;
-      int j = (idx - m*nkji - k*nji)/ni;
-      int i = (idx - m*nkji - k*nji - j*ni) + is;
-      j += js; k += ks;
-      if (bmag_mode) {
-        Real b = bmag_(m,k,j,i);
-        if (wb) {
-          b += sqrt(SQR(bcceq_(m,IBX,k,j,i)) + SQR(bcceq_(m,IBY,k,j,i))
-                  + SQR(bcceq_(m,IBZ,k,j,i)));
-        }
-        b0mn = fmin(b0mn, b); b0mx = fmax(b0mx, b);
-      } else {
-        Real bx = bnad_(m,IBX,k,j,i) + (wb ? bcceq_(m,IBX,k,j,i) : 0.0);
-        Real by = bnad_(m,IBY,k,j,i) + (wb ? bcceq_(m,IBY,k,j,i) : 0.0);
-        Real bz = bnad_(m,IBZ,k,j,i) + (wb ? bcceq_(m,IBZ,k,j,i) : 0.0);
-        b0mn = fmin(b0mn, bx); b0mx = fmax(b0mx, bx);
-        b1mn = fmin(b1mn, by); b1mx = fmax(b1mx, by);
-        b2mn = fmin(b2mn, bz); b2mx = fmax(b2mx, bz);
-      }
-    }, Kokkos::Min<Real>(gb0mn), Kokkos::Max<Real>(gb0mx),
-       Kokkos::Min<Real>(gb1mn), Kokkos::Max<Real>(gb1mx),
-       Kokkos::Min<Real>(gb2mn), Kokkos::Max<Real>(gb2mx));
-#if MPI_PARALLEL_ENABLED
-    Real rmin[5] = {gdmn, gemn, gb0mn, gb1mn, gb2mn};
-    Real rmax[6] = {gdmx, gemx, gb0mx, gb1mx, gb2mx, gvmx};
-    MPI_Allreduce(MPI_IN_PLACE, rmin, 5, MPI_ATHENA_REAL, MPI_MIN, MPI_COMM_WORLD);
-    MPI_Allreduce(MPI_IN_PLACE, rmax, 6, MPI_ATHENA_REAL, MPI_MAX, MPI_COMM_WORLD);
-    gdmn = rmin[0]; gemn = rmin[1]; gb0mn = rmin[2]; gb1mn = rmin[3]; gb2mn = rmin[4];
-    gdmx = rmax[0]; gemx = rmax[1]; gb0mx = rmax[2]; gb1mx = rmax[3]; gb2mx = rmax[4];
-    gvmx = rmax[5];
-#endif
-    gscale0 = fmax(gdmx - gdmn, 0.0);
-    gscale1 = fmax(gemx - gemn, 0.0);
-    gscaleb[0] = fmax(gb0mx - gb0mn, 0.0);
-    gscaleb[1] = fmax(gb1mx - gb1mn, 0.0);
-    gscaleb[2] = fmax(gb2mx - gb2mn, 0.0);
-
-    // velocity ranges (stage-input primitive) for the NAD scale, same treatment as B
-    if (nad_von) {
-      Real gv0mn = std::numeric_limits<Real>::max(), gv0mx = -gv0mn;
-      Real gv1mn = gv0mn, gv1mx = gv0mx;
-      Real gv2mn = gv0mn, gv2mx = gv0mx;
-      const bool vmag_mode = nad_vmag;
-      Kokkos::parallel_reduce("mmood_grangev",
-      Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
-      KOKKOS_LAMBDA(const int &idx, Real &v0mn, Real &v0mx, Real &v1mn, Real &v1mx,
-                    Real &v2mn, Real &v2mx) {
-        int m = idx/nkji;
-        int k = (idx - m*nkji)/nji;
-        int j = (idx - m*nkji - k*nji)/ni;
-        int i = (idx - m*nkji - k*nji - j*ni) + is;
-        j += js; k += ks;
-        if (vmag_mode) {
-          Real v = sqrt(SQR(w0_(m,IVX,k,j,i)) + SQR(w0_(m,IVY,k,j,i))
-                      + SQR(w0_(m,IVZ,k,j,i)));
-          v0mn = fmin(v0mn, v); v0mx = fmax(v0mx, v);
-        } else {
-          Real vx = w0_(m,IVX,k,j,i), vy = w0_(m,IVY,k,j,i), vz = w0_(m,IVZ,k,j,i);
-          v0mn = fmin(v0mn, vx); v0mx = fmax(v0mx, vx);
-          v1mn = fmin(v1mn, vy); v1mx = fmax(v1mx, vy);
-          v2mn = fmin(v2mn, vz); v2mx = fmax(v2mx, vz);
-        }
-      }, Kokkos::Min<Real>(gv0mn), Kokkos::Max<Real>(gv0mx),
-         Kokkos::Min<Real>(gv1mn), Kokkos::Max<Real>(gv1mx),
-         Kokkos::Min<Real>(gv2mn), Kokkos::Max<Real>(gv2mx));
-#if MPI_PARALLEL_ENABLED
-      Real vmn[3] = {gv0mn, gv1mn, gv2mn};
-      Real vmx[3] = {gv0mx, gv1mx, gv2mx};
-      MPI_Allreduce(MPI_IN_PLACE, vmn, 3, MPI_ATHENA_REAL, MPI_MIN, MPI_COMM_WORLD);
-      MPI_Allreduce(MPI_IN_PLACE, vmx, 3, MPI_ATHENA_REAL, MPI_MAX, MPI_COMM_WORLD);
-      gv0mn = vmn[0]; gv1mn = vmn[1]; gv2mn = vmn[2];
-      gv0mx = vmx[0]; gv1mx = vmx[1]; gv2mx = vmx[2];
-#endif
-      gscalev[0] = fmax(gv0mx - gv0mn, 0.0);
-      gscalev[1] = fmax(gv1mx - gv1mn, 0.0);
-      gscalev[2] = fmax(gv2mx - gv2mn, 0.0);
-    }
-    if (scale_mode == 3) {
-      // min over ALL blocks of dx: with SMR/AMR a rank owning only coarse blocks would
-      // otherwise get a smaller Courant number, hence a different tolerance, than its
-      // neighbours, and the shared detection halo would be demoted inconsistently
-      Real dxmin = std::numeric_limits<Real>::max();
-      auto &msize = pmy_pack->pmb->mb_size;
-      for (int m=0; m<nmb; ++m) {
-        dxmin = std::min(dxmin, static_cast<Real>(msize.h_view(m).dx1));
-        if (multi_d) dxmin = std::min(dxmin, static_cast<Real>(msize.h_view(m).dx2));
-        if (three_d) dxmin = std::min(dxmin, static_cast<Real>(msize.h_view(m).dx3));
-      }
-#if MPI_PARALLEL_ENABLED
-      MPI_Allreduce(MPI_IN_PLACE, &dxmin, 1, MPI_ATHENA_REAL, MPI_MIN, MPI_COMM_WORLD);
-#endif
-      Real cfl_adv = (pmy_pack->pmesh->dt)*gvmx/dxmin;
-      cfl_fac = fmin(1.0, cfl_adv);
-      gscale0 *= cfl_fac;
-      gscale1 *= cfl_fac;
-      gscaleb[0] *= cfl_fac;
-      gscaleb[1] *= cfl_fac;
-      gscaleb[2] *= cfl_fac;
-      gscalev[0] *= cfl_fac;
-      gscalev[1] *= cfl_fac;
-      gscalev[2] *= cfl_fac;
-    }
-    if (nad_scalars) {
-      // Global dynamic range of the passive-scalar CONCENTRATION, minimized/maximized
-      // over every scalar component so one uniform tolerance covers them all.
-      Real gsmn = std::numeric_limits<Real>::max(), gsmx = -gsmn;
-      const int nlo = nmhd_, nhi = nvars - 1;
-      Kokkos::parallel_reduce("mmood_grange_s",
-      Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
-      KOKKOS_LAMBDA(const int &idx, Real &smn, Real &smx) {
-        int m = idx/nkji;
-        int k = (idx - m*nkji)/nji;
-        int j = (idx - m*nkji - k*nji)/ni;
-        int i = (idx - m*nkji - k*nji - j*ni) + is;
-        j += js; k += ks;
-        for (int n=nlo; n<=nhi; ++n) {
-          Real s = w0_(m,n,k,j,i);
-          smn = fmin(smn, s); smx = fmax(smx, s);
-        }
-      }, Kokkos::Min<Real>(gsmn), Kokkos::Max<Real>(gsmx));
-#if MPI_PARALLEL_ENABLED
-      MPI_Allreduce(MPI_IN_PLACE, &gsmn, 1, MPI_ATHENA_REAL, MPI_MIN, MPI_COMM_WORLD);
-      MPI_Allreduce(MPI_IN_PLACE, &gsmx, 1, MPI_ATHENA_REAL, MPI_MAX, MPI_COMM_WORLD);
-#endif
-      gscale_s = fmax(gsmx - gsmn, 0.0)*cfl_fac;
-    }
   }
 
   // Light-cone halo: the final iteration retains h_f = mood_halo0 - nrevs + 1 cells,
@@ -721,37 +488,22 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
     }
   };
 
-  // Reference implementation for the halo experiment, deliberately caching whole
-  // tiers. No base-order reconstruction runs after the initial candidate EMFs.
-  DvceEdgeFld4D<Real> ehigh("audit_high",1,1,1,1);
-  DvceEdgeFld4D<Real> eplm("audit_plm",1,1,1,1);
-  DvceEdgeFld4D<Real> edc("audit_dc",1,1,1,1);
+  // Cache fallback EMFs from immutable stage inputs. The initial high-order
+  // fluxes/EMFs have already been exchanged by the task graph. All revisions
+  // reuse these caches; no high-order corner composition is repeated.
+  auto &eplm = mood_eplm;
+  auto &edc = mood_edc;
   auto copy_edges = [&](DvceEdgeFld4D<Real> &dst, const DvceEdgeFld4D<Real> &src) {
     Kokkos::deep_copy(dst.x1e, src.x1e);
     Kokkos::deep_copy(dst.x2e, src.x2e);
     Kokkos::deep_copy(dst.x3e, src.x3e);
   };
   if (mood_frozen_emf) {
-    if (wb) { std::cerr << "Frozen EMF audit does not support well balance\n"; std::exit(1); }
-    ehigh = DvceEdgeFld4D<Real>("audit_high",nmb,ncells3,ncells2,ncells1);
-    eplm = DvceEdgeFld4D<Real>("audit_plm",nmb,ncells3,ncells2,ncells1);
-    edc = DvceEdgeFld4D<Real>("audit_dc",nmb,ncells3,ncells2,ncells1);
     const int h = mood_halo0, h2 = multi_d ? h : 0, h3 = three_d ? h : 0;
     auto compose = [&]() {
       ComposeCornerEMF(is-h,ie+h+1,js-h2,je+h2+1,ks-h3,
                        three_d ? ke+h3+1 : ks, false);
     };
-    compose();
-    copy_edges(ehigh, efld);
-    auto clone = [](const auto &v) {
-      using V = typename std::decay<decltype(v)>::type;
-      V saved("audit_saved", v.layout());
-      Kokkos::deep_copy(saved,v);
-      return saved;
-    };
-    auto f1save=clone(flx1), f2save=clone(flx2), f3save=clone(flx3);
-    auto e31save=clone(e3x1_), e21save=clone(e2x1_), e12save=clone(e1x2_);
-    auto e32save=clone(e3x2_), e23save=clone(e2x3_), e13save=clone(e1x3_);
     auto base_recon = recon_method;
     if (n_fb > 1) {
       revise_faces(h, 1);
@@ -764,12 +516,7 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
     compose();
     copy_edges(edc, efld);
     recon_method = base_recon;
-    copy_edges(efld, ehigh);
-    Kokkos::deep_copy(flx1,f1save); Kokkos::deep_copy(flx2,f2save);
-    Kokkos::deep_copy(flx3,f3save);
-    Kokkos::deep_copy(e3x1_,e31save); Kokkos::deep_copy(e2x1_,e21save);
-    Kokkos::deep_copy(e1x2_,e12save); Kokkos::deep_copy(e3x2_,e32save);
-    Kokkos::deep_copy(e2x3_,e23save); Kokkos::deep_copy(e1x3_,e13save);
+    RestoreMOODCandidate();
   }
   auto select_frozen_edges = [&](const int h) {
     auto E1=efld.x1e, E2=efld.x2e, E3=efld.x3e;
@@ -998,139 +745,6 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
     }
 
     //------------------------------------------------------------------------------------
-    // (1b) gdu scale from the first (pre-revision) candidate
-    if (scale_mode == 2 && rev == 1) {
-      Real gdd = 0.0, gde = 0.0, gb0 = 0.0, gb1 = 0.0, gb2 = 0.0;
-      const int nia = ie-is+1, njia = (je-js+1)*nia, nkjia = (ke-ks+1)*njia;
-      const int nmkjia = nmb*nkjia;
-      const bool ideal = is_ideal_;
-      const bool newt = newtonian;
-      const bool bmag_mode = nad_bmag;
-      Kokkos::parallel_reduce("mmood_gdu",
-      Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkjia),
-      KOKKOS_LAMBDA(const int &idx, Real &dd, Real &de, Real &db0, Real &db1,
-                    Real &db2) {
-        int m = idx/nkjia;
-        int k = (idx - m*nkjia)/njia;
-        int j = (idx - m*nkjia - k*njia)/nia;
-        int i = (idx - m*nkjia - k*njia - j*nia) + is;
-        j += js; k += ks;
-        Real d = fabs(utest_(m,IDN,k,j,i) - u0_(m,IDN,k,j,i));
-        if (isfinite(d)) dd = fmax(dd, d);
-        if (ideal) {
-          Real enew, eold;
-          if (newt) {
-            Real dtst = utest_(m,IDN,k,j,i) + (wb ? ueq_(m,IDN,k,j,i) : 0.0);
-            enew = (dtst > 0.0) ?
-                   (utest_(m,IEN,k,j,i) + (wb ? ueq_(m,IEN,k,j,i) : 0.0))
-                   - 0.5*(SQR(utest_(m,IM1,k,j,i))
-                   + SQR(utest_(m,IM2,k,j,i)) + SQR(utest_(m,IM3,k,j,i)))/dtst
-                   - 0.5*(SQR(bcctest_(m,IBX,k,j,i)) + SQR(bcctest_(m,IBY,k,j,i))
-                        + SQR(bcctest_(m,IBZ,k,j,i)))
-                   - (wb ? weq_(m,IEN,k,j,i) : 0.0) : 0.0;
-            eold = (dtst > 0.0) ? wnad_(m,IEN,k,j,i) : 0.0;
-          } else {
-            enew = utest_(m,IEN,k,j,i);
-            eold = u0_(m,IEN,k,j,i);
-          }
-          Real e = fabs(enew - eold);
-          if (isfinite(e)) de = fmax(de, e);
-        }
-        if (bmag_mode) {
-          Real bnew = sqrt(SQR(bcctest_(m,IBX,k,j,i)) + SQR(bcctest_(m,IBY,k,j,i))
-                         + SQR(bcctest_(m,IBZ,k,j,i)));
-          if (wb) {
-            bnew -= sqrt(SQR(bcceq_(m,IBX,k,j,i)) + SQR(bcceq_(m,IBY,k,j,i))
-                       + SQR(bcceq_(m,IBZ,k,j,i)));
-          }
-          Real b = fabs(bnew - bmag_(m,k,j,i));
-          if (isfinite(b)) db0 = fmax(db0, b);
-        } else {
-          Real bx = fabs(bcctest_(m,IBX,k,j,i) - bcc0_(m,IBX,k,j,i));
-          Real by = fabs(bcctest_(m,IBY,k,j,i) - bcc0_(m,IBY,k,j,i));
-          Real bz = fabs(bcctest_(m,IBZ,k,j,i) - bcc0_(m,IBZ,k,j,i));
-          if (isfinite(bx)) db0 = fmax(db0, bx);
-          if (isfinite(by)) db1 = fmax(db1, by);
-          if (isfinite(bz)) db2 = fmax(db2, bz);
-        }
-      }, Kokkos::Max<Real>(gdd), Kokkos::Max<Real>(gde), Kokkos::Max<Real>(gb0),
-         Kokkos::Max<Real>(gb1), Kokkos::Max<Real>(gb2));
-#if MPI_PARALLEL_ENABLED
-      Real rmx[5] = {gdd, gde, gb0, gb1, gb2};
-      MPI_Allreduce(MPI_IN_PLACE, rmx, 5, MPI_ATHENA_REAL, MPI_MAX, MPI_COMM_WORLD);
-      gdd = rmx[0]; gde = rmx[1]; gb0 = rmx[2]; gb1 = rmx[3]; gb2 = rmx[4];
-#endif
-      gscale0 = gdd;
-      gscale1 = gde;
-      gscaleb[0] = gb0;
-      gscaleb[1] = gb1;
-      gscaleb[2] = gb2;
-
-      if (nad_scalars) {
-        Real gds = 0.0;
-        const int nlo = nmhd_, nhi = nvars - 1;
-        Kokkos::parallel_reduce("mmood_gdu_s",
-        Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkjia),
-        KOKKOS_LAMBDA(const int &idx, Real &ds) {
-          int m = idx/nkjia;
-          int k = (idx - m*nkjia)/njia;
-          int j = (idx - m*nkjia - k*njia)/nia;
-          int i = (idx - m*nkjia - k*njia - j*nia) + is;
-          j += js; k += ks;
-          const Real dtst = utest_(m,IDN,k,j,i);
-          if (dtst > 0.0) {
-            for (int n=nlo; n<=nhi; ++n) {
-              Real s = fabs(utest_(m,n,k,j,i)/dtst - w0_(m,n,k,j,i));
-              if (isfinite(s)) ds = fmax(ds, s);
-            }
-          }
-        }, Kokkos::Max<Real>(gds));
-#if MPI_PARALLEL_ENABLED
-        MPI_Allreduce(MPI_IN_PLACE, &gds, 1, MPI_ATHENA_REAL, MPI_MAX, MPI_COMM_WORLD);
-#endif
-        gscale_s = gds;
-      }
-
-      if (nad_von) {
-        Real gvd0 = 0.0, gvd1 = 0.0, gvd2 = 0.0;
-        const bool vmag_mode2 = nad_vmag;
-        Kokkos::parallel_reduce("mmood_gduv",
-        Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkjia),
-        KOKKOS_LAMBDA(const int &idx, Real &vd0, Real &vd1, Real &vd2) {
-          int m = idx/nkjia;
-          int k = (idx - m*nkjia)/njia;
-          int j = (idx - m*nkjia - k*njia)/nia;
-          int i = (idx - m*nkjia - k*njia - j*nia) + is;
-          j += js; k += ks;
-          Real dtst = utest_(m,IDN,k,j,i);
-          if (dtst > 0.0) {
-            if (vmag_mode2) {
-              Real vn = sqrt(SQR(utest_(m,IM1,k,j,i)) + SQR(utest_(m,IM2,k,j,i))
-                           + SQR(utest_(m,IM3,k,j,i)))/dtst;
-              Real vo = sqrt(SQR(w0_(m,IVX,k,j,i)) + SQR(w0_(m,IVY,k,j,i))
-                           + SQR(w0_(m,IVZ,k,j,i)));
-              Real dv = fabs(vn - vo);
-              if (isfinite(dv)) vd0 = fmax(vd0, dv);
-            } else {
-              Real dvx = fabs(utest_(m,IM1,k,j,i)/dtst - w0_(m,IVX,k,j,i));
-              Real dvy = fabs(utest_(m,IM2,k,j,i)/dtst - w0_(m,IVY,k,j,i));
-              Real dvz = fabs(utest_(m,IM3,k,j,i)/dtst - w0_(m,IVZ,k,j,i));
-              if (isfinite(dvx)) vd0 = fmax(vd0, dvx);
-              if (isfinite(dvy)) vd1 = fmax(vd1, dvy);
-              if (isfinite(dvz)) vd2 = fmax(vd2, dvz);
-            }
-          }
-        }, Kokkos::Max<Real>(gvd0), Kokkos::Max<Real>(gvd1), Kokkos::Max<Real>(gvd2));
-#if MPI_PARALLEL_ENABLED
-        Real vd[3] = {gvd0, gvd1, gvd2};
-        MPI_Allreduce(MPI_IN_PLACE, vd, 3, MPI_ATHENA_REAL, MPI_MAX, MPI_COMM_WORLD);
-        gvd0 = vd[0]; gvd1 = vd[1]; gvd2 = vd[2];
-#endif
-        gscalev[0] = gvd0; gscalev[1] = gvd1; gscalev[2] = gvd2;
-      }
-    }
-
-    //------------------------------------------------------------------------------------
     // (2) PAD: flag cells where conversion to primitives would require floors
     // (sets fofc; b0/w0 passed but not used/changed)
     peos->use_c2p_mask = masked;
@@ -1146,8 +760,6 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
     // Same tier-floor split as hydro: PAD/NaN may cascade to DC, NAD (density, energy,
     // magnetic field) demotes to the PLM tier only.
     int ndemoted = 0, ndemoted_int = 0;
-    const Real gsb0 = gscaleb[0], gsb1 = gscaleb[1], gsb2 = gscaleb[2];
-    const Real gsv0 = gscalev[0], gsv1 = gscalev[1], gsv2 = gscalev[2];
     Kokkos::parallel_reduce("mmood_detect",
     Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
     KOKKOS_LAMBDA(const int &idx, int &sum, int &sum_int) {
@@ -1333,37 +945,9 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
             const Real cf = sqrt(fmax(cs2 + b2/dd, 0.0));
             smn = fabs(qmn) + cf; smx = fabs(qmx) + cf;
           }
-          // tolerance (see hydro_mood.cpp for the scale-mode rationale)
-          Real gsc;
-          if (vpass) {
-            gsc = (vidx == 0) ? gsv0 : ((vidx == 1) ? gsv1 : gsv2);
-          } else if (!bpass) {
-            gsc = (pass == 0) ? gscale0 : gscale1;
-          } else {
-            gsc = (bidx == 0) ? gsb0 : ((bidx == 1) ? gsb1 : gsb2);
-          }
-          Real eps_m, eps_p;
-          if (scale_mode == 0) {          // spd-style relative
-            eps_m = fmax(rtol*fabs(smn), atol);
-            eps_p = fmax(rtol*fabs(smx), atol);
-          } else if (scale_mode == 4) {   // rcfl: relative band x advective Courant
-            eps_m = fmax(rtol*rcfl_fac*fabs(smn), atol);
-            eps_p = fmax(rtol*rcfl_fac*fabs(smx), atol);
-          } else if (scale_mode == 1) {   // grange with Mach-softening exponent theta
-            if (theta >= 1.0) {
-              Real eps = fmax(rtol*gsc, atol);
-              eps_m = eps;
-              eps_p = eps;
-            } else {
-              const Real gth = pow(gsc, theta);
-              eps_m = fmax(rtol*gth*pow(fabs(smn), 1.0-theta), atol);
-              eps_p = fmax(rtol*gth*pow(fabs(smx), 1.0-theta), atol);
-            }
-          } else {                        // gdu & gcfl: flat global scale
-            Real eps = fmax(rtol*gsc, atol);
-            eps_m = eps;
-            eps_p = eps;
-          }
+          // Local relative relaxation of the neighboring lower/upper bounds.
+          Real eps_m = fmax(rtol*fabs(smn), atol);
+          Real eps_p = fmax(rtol*fabs(smx), atol);
           eps_m = fmax(eps_m, eps0*fabs(smn));
           eps_p = fmax(eps_p, eps0*fabs(smx));
           if (wb && !vpass) {
@@ -1425,16 +1009,8 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
             qmn = fmin(qmn, q);
             qmx = fmax(qmx, q);
           }}}
-          Real eps_m, eps_p;
-          if (scale_mode == 0 || scale_mode == 4) {
-            const Real rf = (scale_mode == 4) ? rcfl_fac : 1.0;
-            eps_m = fmax(rtol*rf*fabs(qmn), atol);
-            eps_p = fmax(rtol*rf*fabs(qmx), atol);
-          } else {
-            Real eps = fmax(rtol*gscale_s, atol);
-            eps_m = eps;
-            eps_p = eps;
-          }
+          Real eps_m = fmax(rtol*fabs(qmn), atol);
+          Real eps_p = fmax(rtol*fabs(qmx), atol);
           eps_m = fmax(eps_m, eps0*fabs(qmn));
           eps_p = fmax(eps_p, eps0*fabs(qmx));
           bool nad = (q_new < qmn - eps_m) || (q_new > qmx + eps_p);

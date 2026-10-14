@@ -1,0 +1,3 @@
+[mbp254][[9679,0],0][btl_tcp_component.c:1021:mca_btl_tcp_component_create_listen] bind() failed: Operation not permitted (1)
+### FATAL ERROR in /Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/source/src/mesh/mesh.cpp at line 109
+Both inner and outer x1 bcs must be periodic

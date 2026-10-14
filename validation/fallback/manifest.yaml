@@ -94,7 +94,7 @@ defaults:
   hydro_rsolver: hlle
   mhd_rsolver: hlld
   gr_rsolver: hlle
-  mood_nad_scale: gcfl
+  mood_nad_scale: relative
   mood_rtol: 1.0e-5
   mood_sed: true
   # Velocity NAD is too aggressive for transverse MHD Alfvén/entropy waves at amp=1e-6;

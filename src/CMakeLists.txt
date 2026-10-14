@@ -97,6 +97,7 @@ add_executable(
         mhd/mhd_ct.cpp
         mhd/mhd_fluxes.cpp
         mhd/mhd_fofc.cpp
+        mhd/mhd_mood_comm.cpp
         mhd/mhd_mood.cpp
         mhd/mhd_newdt.cpp
         mhd/mhd_sts.cpp

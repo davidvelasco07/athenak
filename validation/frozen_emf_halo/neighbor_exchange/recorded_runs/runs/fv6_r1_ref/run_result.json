@@ -1,0 +1,19 @@
+{
+  "name": "fv6_r1_ref",
+  "code": 0,
+  "seconds": 0.18512912496225908,
+  "order": 6,
+  "ng": 14,
+  "revisions": 1,
+  "blocks": 1,
+  "dim": 2,
+  "steps": 1,
+  "frozen": true,
+  "halo": null,
+  "seed": -1,
+  "dump": true,
+  "mpi": 1,
+  "amp": 0.1,
+  "drat": 2,
+  "owner": true
+}

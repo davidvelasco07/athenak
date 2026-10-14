@@ -1,0 +1,13 @@
+{
+  "name": "ot_fv8_mpi4",
+  "code": 0,
+  "seconds": 2.802759749989491,
+  "cmd": [
+    "mpiexec",
+    "-n",
+    "4",
+    "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+    "-i",
+    "input.athinput"
+  ]
+}

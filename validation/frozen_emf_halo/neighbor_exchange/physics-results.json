@@ -1,0 +1,822 @@
+{
+  "runs": [
+    {
+      "name": "ot_fv4_ref",
+      "code": 0,
+      "seconds": 8.406224915990606,
+      "cmd": [
+        "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+        "-i",
+        "input.athinput"
+      ]
+    },
+    {
+      "name": "ot_fv4_min",
+      "code": 0,
+      "seconds": 8.937263791973237,
+      "cmd": [
+        "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+        "-i",
+        "input.athinput"
+      ]
+    },
+    {
+      "name": "wave_fv4_n32",
+      "code": 0,
+      "seconds": 2.6793374159606174,
+      "cmd": [
+        "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+        "-i",
+        "input.athinput"
+      ]
+    },
+    {
+      "name": "wave_fv4_n64",
+      "code": 0,
+      "seconds": 14.234704457980115,
+      "cmd": [
+        "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+        "-i",
+        "input.athinput"
+      ]
+    },
+    {
+      "name": "ot_fv6_ref",
+      "code": 0,
+      "seconds": 8.81779095804086,
+      "cmd": [
+        "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+        "-i",
+        "input.athinput"
+      ]
+    },
+    {
+      "name": "ot_fv6_min",
+      "code": 0,
+      "seconds": 9.382867624983191,
+      "cmd": [
+        "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+        "-i",
+        "input.athinput"
+      ]
+    },
+    {
+      "name": "wave_fv6_n32",
+      "code": 0,
+      "seconds": 2.494241167034488,
+      "cmd": [
+        "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+        "-i",
+        "input.athinput"
+      ]
+    },
+    {
+      "name": "wave_fv6_n64",
+      "code": 0,
+      "seconds": 14.27639337501023,
+      "cmd": [
+        "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+        "-i",
+        "input.athinput"
+      ]
+    },
+    {
+      "name": "ot_fv8_ref",
+      "code": 0,
+      "seconds": 8.554043291020207,
+      "cmd": [
+        "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+        "-i",
+        "input.athinput"
+      ]
+    },
+    {
+      "name": "ot_fv8_min",
+      "code": 0,
+      "seconds": 9.573484166990966,
+      "cmd": [
+        "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+        "-i",
+        "input.athinput"
+      ]
+    },
+    {
+      "name": "wave_fv8_n32",
+      "code": 0,
+      "seconds": 2.833739332971163,
+      "cmd": [
+        "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+        "-i",
+        "input.athinput"
+      ]
+    },
+    {
+      "name": "wave_fv8_n64",
+      "code": 0,
+      "seconds": 16.09760662500048,
+      "cmd": [
+        "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+        "-i",
+        "input.athinput"
+      ]
+    },
+    {
+      "name": "ot_llf_ref",
+      "code": 0,
+      "seconds": 0.5068415830028243,
+      "cmd": [
+        "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+        "-i",
+        "input.athinput"
+      ]
+    },
+    {
+      "name": "ot_llf_min",
+      "code": 0,
+      "seconds": 0.558654457970988,
+      "cmd": [
+        "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+        "-i",
+        "input.athinput"
+      ]
+    },
+    {
+      "name": "ot_hlle_ref",
+      "code": 0,
+      "seconds": 0.5605965409777127,
+      "cmd": [
+        "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+        "-i",
+        "input.athinput"
+      ]
+    },
+    {
+      "name": "ot_hlle_min",
+      "code": 0,
+      "seconds": 0.565029457968194,
+      "cmd": [
+        "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+        "-i",
+        "input.athinput"
+      ]
+    },
+    {
+      "name": "ot_lhlld_ref",
+      "code": 0,
+      "seconds": 0.5517314999597147,
+      "cmd": [
+        "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+        "-i",
+        "input.athinput"
+      ]
+    },
+    {
+      "name": "ot_lhlld_min",
+      "code": 0,
+      "seconds": 0.6052555839996785,
+      "cmd": [
+        "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+        "-i",
+        "input.athinput"
+      ]
+    },
+    {
+      "name": "hydro_ref",
+      "code": 0,
+      "seconds": 0.35072658298304304,
+      "cmd": [
+        "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+        "-i",
+        "input.athinput"
+      ]
+    },
+    {
+      "name": "hydro_min",
+      "code": 0,
+      "seconds": 0.45700720796594396,
+      "cmd": [
+        "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+        "-i",
+        "input.athinput"
+      ]
+    }
+  ],
+  "metrics": {
+    "ot_fv4_ref": {
+      "time": 0.25,
+      "finite": true,
+      "conservation_drift": {
+        "dens": 1.942890293094024e-15,
+        "mom1": 6.938893903907228e-18,
+        "mom2": 2.3310346708438345e-18,
+        "mom3": 0.0,
+        "ener": 3.219646771412954e-15
+      },
+      "density_min": 0.06410386822410184,
+      "divb_max": 1.4921397450962104e-13,
+      "primitive_min": {
+        "dens": 0.06410386822410184,
+        "velx": -1.2921044277238365,
+        "vely": -1.3402141599884838,
+        "velz": 0.0,
+        "eint": 0.025207687510373406
+      }
+    },
+    "ot_fv4_min": {
+      "time": 0.25,
+      "finite": true,
+      "conservation_drift": {
+        "dens": 1.942890293094024e-15,
+        "mom1": 6.938893903907228e-18,
+        "mom2": 2.3310346708438345e-18,
+        "mom3": 0.0,
+        "ener": 3.219646771412954e-15
+      },
+      "density_min": 0.06410386822410184,
+      "divb_max": 1.4921397450962104e-13,
+      "primitive_min": {
+        "dens": 0.06410386822410184,
+        "velx": -1.2921044277238365,
+        "vely": -1.3402141599884838,
+        "velz": 0.0,
+        "eint": 0.025207687510373406
+      }
+    },
+    "wave_fv4_n32": {
+      "time": 0.5,
+      "finite": true,
+      "conservation_drift": {
+        "dens": 7.993605777301127e-15,
+        "mom1": 4.833861649272103e-19,
+        "mom2": 1.5811331872987233e-19,
+        "mom3": 5.872777654236632e-20,
+        "ener": 7.738584250851198e-15
+      },
+      "density_min": 0.999999565620989,
+      "divb_max": 2.5224267119483557e-13,
+      "primitive_min": {
+        "dens": 0.999999565620989,
+        "velx": -8.689277446465574e-07,
+        "vely": -4.0971810467626316e-07,
+        "velz": -1.4488478659402525e-07,
+        "eint": 0.8999993480319024
+      }
+    },
+    "wave_fv4_n64": {
+      "time": 0.5,
+      "finite": true,
+      "conservation_drift": {
+        "dens": 1.5765166949677223e-14,
+        "mom1": 1.7617142921227072e-19,
+        "mom2": 2.4846272778894555e-19,
+        "mom3": 9.938421538657229e-20,
+        "ener": 1.512541467211825e-14
+      },
+      "density_min": 0.9999995566801907,
+      "divb_max": 8.526512829121202e-13,
+      "primitive_min": {
+        "dens": 0.9999995566801907,
+        "velx": -8.863845134201611e-07,
+        "vely": -4.179442553374311e-07,
+        "velz": -1.4777620025316483e-07,
+        "eint": 0.8999993349901476
+      }
+    },
+    "ot_fv6_ref": {
+      "time": 0.25,
+      "finite": true,
+      "conservation_drift": {
+        "dens": 1.970645868709653e-15,
+        "mom1": 0.0,
+        "mom2": 5.963111948670274e-19,
+        "mom3": 0.0,
+        "ener": 3.219646771412954e-15
+      },
+      "density_min": 0.06405558771658665,
+      "divb_max": 1.8118839761882555e-13,
+      "primitive_min": {
+        "dens": 0.06405558771658665,
+        "velx": -1.2929584909316547,
+        "vely": -1.3402999845114039,
+        "velz": 0.0,
+        "eint": 0.025178073162463163
+      }
+    },
+    "ot_fv6_min": {
+      "time": 0.25,
+      "finite": true,
+      "conservation_drift": {
+        "dens": 1.970645868709653e-15,
+        "mom1": 0.0,
+        "mom2": 5.963111948670274e-19,
+        "mom3": 0.0,
+        "ener": 3.219646771412954e-15
+      },
+      "density_min": 0.06405558771658665,
+      "divb_max": 1.8118839761882555e-13,
+      "primitive_min": {
+        "dens": 0.06405558771658665,
+        "velx": -1.2929584909316547,
+        "vely": -1.3402999845114039,
+        "velz": 0.0,
+        "eint": 0.025178073162463163
+      }
+    },
+    "wave_fv6_n32": {
+      "time": 0.5,
+      "finite": true,
+      "conservation_drift": {
+        "dens": 7.882583474838611e-15,
+        "mom1": 1.3055568159286428e-18,
+        "mom2": 1.8341149845275986e-18,
+        "mom3": 5.624304085050225e-19,
+        "ener": 7.562707336059125e-15
+      },
+      "density_min": 0.9999995640631011,
+      "divb_max": 2.4513724383723456e-13,
+      "primitive_min": {
+        "dens": 0.9999995640631011,
+        "velx": -8.71144447975014e-07,
+        "vely": -4.1102471327243627e-07,
+        "velz": -1.4530784030800963e-07,
+        "eint": 0.899999345605522
+      }
+    },
+    "wave_fv6_n64": {
+      "time": 0.5,
+      "finite": true,
+      "conservation_drift": {
+        "dens": 1.5765166949677223e-14,
+        "mom1": 2.0317189202894725e-20,
+        "mom2": 1.1214606167851376e-21,
+        "mom3": 2.654200139529168e-20,
+        "ener": 1.4949537757326178e-14
+      },
+      "density_min": 0.9999995562689156,
+      "divb_max": 7.958078640513122e-13,
+      "primitive_min": {
+        "dens": 0.9999995562689156,
+        "velx": -8.872403113219493e-07,
+        "vely": -4.182500755424834e-07,
+        "velz": -1.478949066879286e-07,
+        "eint": 0.8999993346388455
+      }
+    },
+    "ot_fv8_ref": {
+      "time": 0.25,
+      "finite": true,
+      "conservation_drift": {
+        "dens": 1.970645868709653e-15,
+        "mom1": 0.0,
+        "mom2": 5.800481622797449e-18,
+        "mom3": 0.0,
+        "ener": 3.219646771412954e-15
+      },
+      "density_min": 0.06402392337771556,
+      "divb_max": 1.8118839761882555e-13,
+      "primitive_min": {
+        "dens": 0.06402392337771556,
+        "velx": -1.293098944287606,
+        "vely": -1.3403790929476551,
+        "velz": 0.0,
+        "eint": 0.0251573814651416
+      }
+    },
+    "ot_fv8_min": {
+      "time": 0.25,
+      "finite": true,
+      "conservation_drift": {
+        "dens": 1.970645868709653e-15,
+        "mom1": 0.0,
+        "mom2": 5.800481622797449e-18,
+        "mom3": 0.0,
+        "ener": 3.219646771412954e-15
+      },
+      "density_min": 0.06402392337771556,
+      "divb_max": 1.8118839761882555e-13,
+      "primitive_min": {
+        "dens": 0.06402392337771556,
+        "velx": -1.293098944287606,
+        "vely": -1.3403790929476551,
+        "velz": 0.0,
+        "eint": 0.0251573814651416
+      }
+    },
+    "wave_fv8_n32": {
+      "time": 0.5,
+      "finite": true,
+      "conservation_drift": {
+        "dens": 8.104628079763643e-15,
+        "mom1": 1.7618269922499932e-18,
+        "mom2": 1.9696593200164666e-18,
+        "mom3": 7.995989778078502e-19,
+        "ener": 7.738584250851198e-15
+      },
+      "density_min": 0.999999563812723,
+      "divb_max": 2.948752353404416e-13,
+      "primitive_min": {
+        "dens": 0.999999563812723,
+        "velx": -8.721872884071119e-07,
+        "vely": -4.1101970698095847e-07,
+        "velz": -1.4544998243120024e-07,
+        "eint": 0.8999993456933393
+      }
+    },
+    "wave_fv8_n64": {
+      "time": 0.5,
+      "finite": true,
+      "conservation_drift": {
+        "dens": 1.587618925213974e-14,
+        "mom1": 6.877903040372687e-19,
+        "mom2": 9.012264500662198e-19,
+        "mom3": 3.3203460765941336e-19,
+        "ener": 1.4949537757326178e-14
+      },
+      "density_min": 0.9999995570944042,
+      "divb_max": 8.384404281969182e-13,
+      "primitive_min": {
+        "dens": 0.9999995570944042,
+        "velx": -8.854832325103784e-07,
+        "vely": -4.1745382229476584e-07,
+        "velz": -1.475907092525545e-07,
+        "eint": 0.8999993358141141
+      }
+    },
+    "ot_llf_ref": {
+      "time": 0.014075782344198033,
+      "finite": true,
+      "conservation_drift": {
+        "dens": 2.7755575615628914e-17,
+        "mom1": 0.0,
+        "mom2": 5.421010862427522e-20,
+        "mom3": 0.0,
+        "ener": 2.220446049250313e-16
+      },
+      "density_min": 0.21841793636967743,
+      "divb_max": 4.263256414560601e-14,
+      "primitive_min": {
+        "dens": 0.21841793636967743,
+        "velx": -1.0309004001275115,
+        "vely": -1.0665104486233337,
+        "velz": 0.0,
+        "eint": 0.19502438099394806
+      }
+    },
+    "ot_llf_min": {
+      "time": 0.014075782344198033,
+      "finite": true,
+      "conservation_drift": {
+        "dens": 2.7755575615628914e-17,
+        "mom1": 0.0,
+        "mom2": 5.421010862427522e-20,
+        "mom3": 0.0,
+        "ener": 2.220446049250313e-16
+      },
+      "density_min": 0.21841793636967743,
+      "divb_max": 4.263256414560601e-14,
+      "primitive_min": {
+        "dens": 0.21841793636967743,
+        "velx": -1.0309004001275115,
+        "vely": -1.0665104486233337,
+        "velz": 0.0,
+        "eint": 0.19502438099394806
+      }
+    },
+    "ot_hlle_ref": {
+      "time": 0.014071599482940235,
+      "finite": true,
+      "conservation_drift": {
+        "dens": 2.7755575615628914e-17,
+        "mom1": 0.0,
+        "mom2": 5.421010862427522e-20,
+        "mom3": 0.0,
+        "ener": 1.6653345369377348e-16
+      },
+      "density_min": 0.2184280825853317,
+      "divb_max": 3.197442310920451e-14,
+      "primitive_min": {
+        "dens": 0.2184280825853317,
+        "velx": -1.0314003028560494,
+        "vely": -1.067223196909716,
+        "velz": 0.0,
+        "eint": 0.19503473435175064
+      }
+    },
+    "ot_hlle_min": {
+      "time": 0.014071599482940235,
+      "finite": true,
+      "conservation_drift": {
+        "dens": 2.7755575615628914e-17,
+        "mom1": 0.0,
+        "mom2": 5.421010862427522e-20,
+        "mom3": 0.0,
+        "ener": 1.6653345369377348e-16
+      },
+      "density_min": 0.2184280825853317,
+      "divb_max": 3.197442310920451e-14,
+      "primitive_min": {
+        "dens": 0.2184280825853317,
+        "velx": -1.0314003028560494,
+        "vely": -1.067223196909716,
+        "velz": 0.0,
+        "eint": 0.19503473435175064
+      }
+    },
+    "ot_lhlld_ref": {
+      "time": 0.01407196855511134,
+      "finite": true,
+      "conservation_drift": {
+        "dens": 2.7755575615628914e-17,
+        "mom1": 0.0,
+        "mom2": 4.87890977618477e-19,
+        "mom3": 0.0,
+        "ener": 2.220446049250313e-16
+      },
+      "density_min": 0.21851177092137172,
+      "divb_max": 2.6645352591003757e-14,
+      "primitive_min": {
+        "dens": 0.21851177092137172,
+        "velx": -1.0315816956736485,
+        "vely": -1.0672698822099747,
+        "velz": 0.0,
+        "eint": 0.19516313645239325
+      }
+    },
+    "ot_lhlld_min": {
+      "time": 0.01407196855511134,
+      "finite": true,
+      "conservation_drift": {
+        "dens": 2.7755575615628914e-17,
+        "mom1": 0.0,
+        "mom2": 4.87890977618477e-19,
+        "mom3": 0.0,
+        "ener": 2.220446049250313e-16
+      },
+      "density_min": 0.21851177092137172,
+      "divb_max": 2.6645352591003757e-14,
+      "primitive_min": {
+        "dens": 0.21851177092137172,
+        "velx": -1.0315816956736485,
+        "vely": -1.0672698822099747,
+        "velz": 0.0,
+        "eint": 0.19516313645239325
+      }
+    },
+    "hydro_ref": {
+      "time": 0.05,
+      "finite": true,
+      "conservation_drift": {
+        "dens": 8.881784197001252e-16,
+        "mom1": 8.673617379884035e-19,
+        "mom2": 0.0,
+        "mom3": 0.0,
+        "ener": 1.4432899320127035e-15
+      },
+      "density_min": 0.12499908777497877
+    },
+    "hydro_min": {
+      "time": 0.05,
+      "finite": true,
+      "conservation_drift": {
+        "dens": 8.881784197001252e-16,
+        "mom1": 8.673617379884035e-19,
+        "mom2": 0.0,
+        "mom3": 0.0,
+        "ener": 1.4432899320127035e-15
+      },
+      "density_min": 0.12499908777497877
+    }
+  },
+  "comparisons": {
+    "ot_fv4_ref vs ot_fv4_min": {
+      "halo.mhd_fb_level.00001.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_divb.00000.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_divb.00001.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_fb_level.00000.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_w.00000.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_w.00001.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_u_bcc.00001.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_u_bcc.00000.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      }
+    },
+    "ot_fv6_ref vs ot_fv6_min": {
+      "halo.mhd_fb_level.00001.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_divb.00000.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_divb.00001.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_fb_level.00000.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_w.00000.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_w.00001.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_u_bcc.00001.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_u_bcc.00000.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      }
+    },
+    "ot_fv8_ref vs ot_fv8_min": {
+      "halo.mhd_fb_level.00001.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_divb.00000.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_divb.00001.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_fb_level.00000.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_w.00000.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_w.00001.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_u_bcc.00001.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_u_bcc.00000.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      }
+    },
+    "ot_llf_ref vs ot_llf_min": {
+      "halo.mhd_fb_level.00001.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_divb.00000.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_divb.00001.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_fb_level.00000.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_w.00000.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_w.00001.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_u_bcc.00001.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_u_bcc.00000.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      }
+    },
+    "ot_hlle_ref vs ot_hlle_min": {
+      "halo.mhd_fb_level.00001.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_divb.00000.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_divb.00001.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_fb_level.00000.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_w.00000.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_w.00001.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_u_bcc.00001.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_u_bcc.00000.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      }
+    },
+    "ot_lhlld_ref vs ot_lhlld_min": {
+      "halo.mhd_fb_level.00001.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_divb.00000.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_divb.00001.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_fb_level.00000.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_w.00000.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_w.00001.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_u_bcc.00001.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_u_bcc.00000.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      }
+    },
+    "hydro_ref vs hydro_min": {
+      "halo.hydro_u.00000.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.hydro_u.00001.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.hydro_fb_level.00000.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.hydro_fb_level.00001.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.hydro_w.00001.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.hydro_w.00000.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      }
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "name": "fv4_r3_ref",
+  "code": 0,
+  "seconds": 0.2410555409733206,
+  "order": 4,
+  "ng": 14,
+  "revisions": 3,
+  "blocks": 1,
+  "dim": 2,
+  "steps": 1,
+  "frozen": true,
+  "halo": null,
+  "seed": -1,
+  "dump": true,
+  "mpi": 1,
+  "amp": 0.1,
+  "drat": 2,
+  "owner": true
+}

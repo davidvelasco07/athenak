@@ -1,0 +1,10 @@
+{
+  "name": "wave_legacy_fv4_n64",
+  "code": 0,
+  "seconds": 15.147476417012513,
+  "cmd": [
+    "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+    "-i",
+    "input.athinput"
+  ]
+}

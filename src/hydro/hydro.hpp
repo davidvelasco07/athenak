@@ -135,8 +135,6 @@ class Hydro {
   // revision iteration, utest holds the candidate update.
   bool use_mood = false;    // flag to enable MOOD fallback
   int mood_max_revs = 1;    // max revision iterations per RK stage
-  int mood_nad_scale;       // NAD tolerance scale: 0=relative(|bound|), 1=grange, 2=gdu, 3=gcfl
-  Real mood_nad_theta;      // grange Mach-softening: eps = rtol*G^theta*|bound|^(1-theta)
   bool mood_nad_energy;     // include the energy variable in NAD (density always on)
   bool mood_nad_scalars;    // include passive-scalar concentrations in NAD
   bool mood_detect;         // false = run the unlimited base with NO detection

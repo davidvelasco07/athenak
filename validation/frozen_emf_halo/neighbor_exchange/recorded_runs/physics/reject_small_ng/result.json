@@ -1,0 +1,10 @@
+{
+  "name": "reject_small_ng",
+  "code": 1,
+  "seconds": 0.03912349999882281,
+  "cmd": [
+    "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+    "-i",
+    "input.athinput"
+  ]
+}

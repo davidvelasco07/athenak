@@ -1,0 +1,20 @@
+[
+  {
+    "order": 4,
+    "ng": 5,
+    "default_selection": true,
+    "output_matches_audit_at_float_precision": true
+  },
+  {
+    "order": 6,
+    "ng": 6,
+    "default_selection": true,
+    "output_matches_audit_at_float_precision": true
+  },
+  {
+    "order": 8,
+    "ng": 8,
+    "default_selection": true,
+    "output_matches_audit_at_float_precision": true
+  }
+]

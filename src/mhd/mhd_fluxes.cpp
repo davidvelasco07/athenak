@@ -100,7 +100,7 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
   const auto recon_method_ = recon_method;
 
   // Face-normal flux range. MOOD needs base fluxes over mood_halo0; FOFC over 1.
-  const int mext = use_mood ? mood_halo0 : (use_fofc ? 1 : 0);
+  const int mext = mood_frozen_emf ? 0 : use_mood ? mood_halo0 : (use_fofc ? 1 : 0);
   int il1 = is-mext, iu1 = ie+1+mext;
   int jl2 = js-mext, ju2 = je+1+mext;
   int kl3 = ks-mext, ku3 = ke+1+mext;
@@ -129,7 +129,7 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
     // Without this the halo candidate differed between MeshBlocks and the demotion
     // pattern of fv4+MOOD under UCT depended on the block decomposition.
     if (use_mood) {
-      uct_ext += mood_halo0;
+      if (!mood_frozen_emf) uct_ext += mood_halo0;
     }
   }
   const int ext = std::max(uct_ext, mext);

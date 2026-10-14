@@ -44,7 +44,7 @@ for s in "${schemes[@]}"; do
       INPUT="$INPUT_UCT"
       ov=(time/integrator=rk3 mhd/reconstruct=fv4 mhd/mood=true mesh/nghost=6
           mhd/emf=uct_hlld mhd/rsolver=hlld mhd/mood_edge=auto
-          mhd/mood_nad_scale=gcfl mhd/mood_rtol=1.0e-5 mhd/mood_nad_v=off)
+          mhd/mood_nad_scale=relative mhd/mood_rtol=1.0e-5 mhd/mood_nad_v=off)
       ;;
   esac
   echo "=== $s ==="

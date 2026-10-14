@@ -1,0 +1,222 @@
+{
+  "runs": [
+    {
+      "name": "ot_before",
+      "code": 0,
+      "seconds": 0.5527107500238344,
+      "cmd": [
+        "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/athena-pre-local",
+        "-i",
+        "input.athinput"
+      ]
+    },
+    {
+      "name": "ot_after",
+      "code": 0,
+      "seconds": 0.28746308299014345,
+      "cmd": [
+        "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+        "-i",
+        "input.athinput"
+      ]
+    },
+    {
+      "name": "hydro_before",
+      "code": 0,
+      "seconds": 0.07210066699190065,
+      "cmd": [
+        "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/athena-pre-local",
+        "-i",
+        "input.athinput"
+      ]
+    },
+    {
+      "name": "hydro_after",
+      "code": 0,
+      "seconds": 0.06883283396018669,
+      "cmd": [
+        "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+        "-i",
+        "input.athinput"
+      ]
+    },
+    {
+      "name": "reject_mhd_gcfl",
+      "code": 1,
+      "seconds": 0.040755458001513034,
+      "cmd": [
+        "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+        "-i",
+        "input.athinput"
+      ]
+    },
+    {
+      "name": "reject_mhd_rcfl",
+      "code": 1,
+      "seconds": 0.038009790994692594,
+      "cmd": [
+        "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+        "-i",
+        "input.athinput"
+      ]
+    },
+    {
+      "name": "reject_mhd_grange",
+      "code": 1,
+      "seconds": 0.03919004200724885,
+      "cmd": [
+        "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+        "-i",
+        "input.athinput"
+      ]
+    },
+    {
+      "name": "reject_mhd_gdu",
+      "code": 1,
+      "seconds": 0.0409281249740161,
+      "cmd": [
+        "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+        "-i",
+        "input.athinput"
+      ]
+    },
+    {
+      "name": "reject_hydro_gcfl",
+      "code": 1,
+      "seconds": 0.038123624981381,
+      "cmd": [
+        "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+        "-i",
+        "input.athinput"
+      ]
+    },
+    {
+      "name": "reject_hydro_rcfl",
+      "code": 1,
+      "seconds": 0.03769962501246482,
+      "cmd": [
+        "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+        "-i",
+        "input.athinput"
+      ]
+    },
+    {
+      "name": "reject_hydro_grange",
+      "code": 1,
+      "seconds": 0.03809654200449586,
+      "cmd": [
+        "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+        "-i",
+        "input.athinput"
+      ]
+    },
+    {
+      "name": "reject_hydro_gdu",
+      "code": 1,
+      "seconds": 0.04075970797566697,
+      "cmd": [
+        "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+        "-i",
+        "input.athinput"
+      ]
+    },
+    {
+      "name": "reject_small_ng",
+      "code": 1,
+      "seconds": 0.03912349999882281,
+      "cmd": [
+        "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+        "-i",
+        "input.athinput"
+      ]
+    },
+    {
+      "name": "reject_nonperiodic",
+      "code": 1,
+      "seconds": 0.04018304095370695,
+      "cmd": [
+        "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+        "-i",
+        "input.athinput"
+      ]
+    },
+    {
+      "name": "restart_full",
+      "code": 0,
+      "seconds": 0.6148171249660663,
+      "cmd": [
+        "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+        "-i",
+        "input.athinput"
+      ]
+    }
+  ],
+  "relative_equivalence": {
+    "ot": {
+      "halo.mhd_fb_level.00001.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_divb.00000.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_divb.00001.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_fb_level.00000.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_w.00000.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_w.00001.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_u_bcc.00001.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.mhd_u_bcc.00000.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      }
+    },
+    "hydro": {
+      "halo.hydro_u.00000.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.hydro_u.00001.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.hydro_fb_level.00000.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.hydro_fb_level.00001.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.hydro_w.00001.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      },
+      "halo.hydro_w.00000.bin": {
+        "max_abs": 0.0,
+        "time_equal": true
+      }
+    }
+  },
+  "restart": {
+    "halo.mhd_fb_level.00001.bin": 0.0,
+    "halo.mhd_divb.00001.bin": 0.0,
+    "halo.mhd_w.00001.bin": 0.0,
+    "halo.mhd_u_bcc.00001.bin": 0.0
+  }
+}

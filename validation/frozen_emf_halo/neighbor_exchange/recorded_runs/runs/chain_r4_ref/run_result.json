@@ -1,0 +1,19 @@
+{
+  "name": "chain_r4_ref",
+  "code": 0,
+  "seconds": 0.29639425000641495,
+  "order": 4,
+  "ng": 14,
+  "revisions": 4,
+  "blocks": 1,
+  "dim": 2,
+  "steps": 1,
+  "frozen": true,
+  "halo": null,
+  "seed": -2079,
+  "dump": true,
+  "mpi": 1,
+  "amp": 0.1,
+  "drat": 2,
+  "owner": true
+}

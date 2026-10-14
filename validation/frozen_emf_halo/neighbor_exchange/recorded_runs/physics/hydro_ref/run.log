@@ -1,0 +1,29 @@
+[mbp254][[32452,0],0][btl_tcp_component.c:1021:mca_btl_tcp_component_create_listen] bind() failed: Operation not permitted (1)
+
+Root grid = 1 x 1 x 1 MeshBlocks
+Total number of MeshBlocks = 1
+Number of logical  levels of refinement = 0 (1 levels total)
+Number of physical levels of refinement = 0 (1 levels total)
+Number of parallel ranks = 1
+### WARNING in /Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/source/src/parameter_input.cpp: input parameter <mesh>/ix3_bc = periodic was not used by the code (check for a typo)
+### WARNING in /Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/source/src/parameter_input.cpp: input parameter <mesh>/ox3_bc = periodic was not used by the code (check for a typo)
+### WARNING in /Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/source/src/parameter_input.cpp: input parameter <meshblock>/nx3 = 1 was not used by the code (check for a typo)
+### WARNING in /Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/source/src/parameter_input.cpp: input parameter <hydro>/emf = uct was not used by the code (check for a typo)
+### WARNING in /Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/source/src/parameter_input.cpp: input parameter <hydro>/mood_edge = flag was not used by the code (check for a typo)
+### WARNING in /Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/source/src/parameter_input.cpp: input parameter <hydro>/mood_test_halo = -1 was not used by the code (check for a typo)
+### WARNING in /Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/source/src/parameter_input.cpp: input parameter <hydro>/mood_test_seed = -1 was not used by the code (check for a typo)
+### WARNING in /Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/source/src/parameter_input.cpp: input parameter <hydro>/mood_test_dump = false was not used by the code (check for a typo)
+### WARNING in /Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/source/src/parameter_input.cpp: input parameter <hydro>/mood_touched_only = false was not used by the code (check for a typo)
+
+Setup complete, executing task list(s)...
+
+elapsed=1.703808e-02 cycle=0 time=0.000000e+00 dt=3.025768e-03
+
+Terminating on time limit
+time=5.000000e-02 cycle=28
+tlim=5.000000e-02 nlim=-1
+
+MeshBlock-cycles = 28
+cpu time used  = 2.969345e-01
+zone-cycles/cpu_second = 3.862401e+05
+particle-updates/cpu_second = 0.000000e+00

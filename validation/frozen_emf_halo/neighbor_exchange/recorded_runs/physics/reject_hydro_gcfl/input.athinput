@@ -1,0 +1,77 @@
+<job>
+basename = halo
+<mesh>
+nghost = 8
+nx1 = 64
+nx2 = 64
+nx3 = 1
+x1min = -0.5
+x1max = 0.5
+x2min = -0.5
+x2max = 0.5
+x3min = -0.5
+x3max = 0.5
+ix1_bc = periodic
+ox1_bc = periodic
+ix2_bc = periodic
+ox2_bc = periodic
+ix3_bc = periodic
+ox3_bc = periodic
+<meshblock>
+nx1 = 32
+nx2 = 32
+nx3 = 1
+<time>
+evolution = dynamic
+integrator = rk3
+cfl_number = 0.25
+nlim = -1
+tlim = 0.25
+ndiag = 50
+<hydro>
+eos = ideal
+reconstruct = fv8
+rsolver = hllc
+emf = uct
+gamma = 1.6666666666666667
+mood = true
+mood_edge = flag
+mood_test_halo = -1
+mood_test_seed = -1
+mood_test_dump = false
+mood_max_revs = 2
+mood_nad_scale = gcfl
+mood_rtol = 1.e-5
+mood_sed = true
+mood_touched_only = false
+<problem>
+pgen_name = shock_tube
+shock_dir = 1
+xshock = 0.0
+dl = 1.0
+ul = 0.0
+vl = 0.0
+wl = 0.0
+pl = 1.0
+dr = 0.125
+ur = 0.0
+vr = 0.0
+wr = 0.0
+pr = 0.1
+<output1>
+file_type = bin
+variable = hydro_u
+dt = 100
+<output2>
+file_type = bin
+variable = hydro_fb_level
+dt = 100
+<output3>
+file_type = bin
+variable = hydro_w
+dt = 100
+<output4>
+file_type = hst
+dt = 100
+
+data_format = %.17e

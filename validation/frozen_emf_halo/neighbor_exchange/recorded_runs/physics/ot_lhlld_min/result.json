@@ -1,0 +1,10 @@
+{
+  "name": "ot_lhlld_min",
+  "code": 0,
+  "seconds": 0.6052555839996785,
+  "cmd": [
+    "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+    "-i",
+    "input.athinput"
+  ]
+}

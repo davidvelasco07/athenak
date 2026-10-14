@@ -1,0 +1,10 @@
+{
+  "name": "wave_voff_frozen_n32",
+  "code": 0,
+  "seconds": 2.559376082965173,
+  "cmd": [
+    "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+    "-i",
+    "input.athinput"
+  ]
+}

@@ -1,0 +1,31 @@
+
+Root grid = 2 x 2 x 1 MeshBlocks
+Total number of MeshBlocks = 4
+Number of logical  levels of refinement = 1 (2 levels total)
+Number of physical levels of refinement = 0 (1 levels total)
+Number of parallel ranks = 4
+  Rank = 0: 1 MeshBlocks, cost = 1
+  Rank = 1: 1 MeshBlocks, cost = 1
+  Rank = 2: 1 MeshBlocks, cost = 1
+  Rank = 3: 1 MeshBlocks, cost = 1
+Load Balancing:
+  Maximum normalized cost = 1, Average = 1
+### WARNING in /Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/source/src/parameter_input.cpp: input parameter <mesh>/ix3_bc = periodic was not used by the code (check for a typo)
+### WARNING in /Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/source/src/parameter_input.cpp: input parameter <mesh>/ox3_bc = periodic was not used by the code (check for a typo)
+### WARNING in /Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/source/src/parameter_input.cpp: input parameter <meshblock>/nx3 = 1 was not used by the code (check for a typo)
+
+Setup complete, executing task list(s)...
+
+elapsed=1.948758e-02 cycle=0 time=0.000000e+00 dt=1.766499e-03
+elapsed=7.792227e-01 cycle=50 time=8.347748e-02 dt=1.580678e-03
+elapsed=1.533075e+00 cycle=100 time=1.627571e-01 dt=1.575681e-03
+elapsed=2.293772e+00 cycle=150 time=2.389148e-01 dt=1.498551e-03
+
+Terminating on time limit
+time=2.500000e-01 cycle=158
+tlim=2.500000e-01 nlim=-1
+
+MeshBlock-cycles = 632
+cpu time used  = 2.431423e+00
+zone-cycles/cpu_second = 2.661684e+05
+particle-updates/cpu_second = 0.000000e+00

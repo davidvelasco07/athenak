@@ -29,7 +29,6 @@
 //! Like FOFC, revised faces lose any viscous/conduction flux contribution.
 
 #include <algorithm>
-#include <limits>
 
 #include "athena.hpp"
 #include "mesh/mesh.hpp"
@@ -168,7 +167,6 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
   const Real eps0  = mood_eps0;
   const Real rtol = mood_rtol;
   const Real atol = mood_atol;
-  const Real theta = mood_nad_theta;
   const bool nad_energy = mood_nad_energy;
   // Passive scalars carry their own discontinuities, so they are tested as well.  In
   // kinematic/uniform-background advection they are the ONLY variable that varies, and
@@ -182,160 +180,6 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
   // only way to attribute a property to the detector rather than to the base scheme.
   const int nrevs = mood_detect ? mood_max_revs : 0;
   const bool is_ideal_ = eos_.is_ideal;
-
-  const int scale_mode = mood_nad_scale;
-
-  // GLOBAL tolerance scale per NAD variable (index 0 = density, 1 = energy).  A single
-  // global scalar keeps the tolerance uniform across cells — decomposition-invariant
-  // and free of fence-sitting cells — while making it dynamics-aware:
-  //   grange: domain-wide dynamic range of the stage-input state (collapses ~M^2 at
-  //           low Mach where a relative |bound| tolerance goes blind);
-  //   gdu:    domain-wide max per-stage change |u*-u| of the first (pre-revision)
-  //           candidate — additionally timestep-aware, and immune to stratified
-  //           backgrounds since the statics cancel in the per-step difference
-  //           (computed after the first candidate below).
-  // Both reduce over ACTIVE cells only (never ghosts) for layout independence.
-  Real gscale0 = 0.0, gscale1 = 0.0, gscale_s = 0.0;
-  // rcfl: the relative per-bound band (Paper I) multiplied by the same global advective
-  // Courant factor gcfl uses, so the tolerance is both local and timestep-aware.
-  // With WB the DMP acts on the perturbation of a (nearly) static equilibrium: the
-  // advective Courant number is then the perturbation's own Mach number and the band
-  // would shrink with the amplitude while the DMP overshoots of a smooth pulse shrink
-  // with it too (a fixed fraction of cell-steps was demoted at any amplitude,
-  // 2026-10-13).  What bounds the per-step change of a perturbation is the SIGNAL
-  // speed, so the WB factor is the Courant number of |v| + c_s (the acoustic CFL).
-  Real rcfl_fac = 1.0;
-  if (scale_mode == 4) {
-    // rcfl needs only the global advective Courant factor: one reduction (max |v|) and
-    // ONE Allreduce that also carries -dxmin (MAX of -dx == -MIN of dx), so the
-    // SMR/AMR-safe global dxmin costs no extra collective.  No range reductions.
-    Real gvmx = 0.0;
-    const int ni = ie-is+1, nji = (je-js+1)*ni, nkji = (ke-ks+1)*nji;
-    const int nmkji = nmb*nkji;
-    const Real gm_ = eos_.gamma, cs_iso = eos_.iso_cs;
-    const bool ideal_ = is_ideal_;
-    Kokkos::parallel_reduce("mood_gvmax",
-    Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
-    KOKKOS_LAMBDA(const int &idx, Real &vmx) {
-      int m = idx/nkji;
-      int k = (idx - m*nkji)/nji;
-      int j = (idx - m*nkji - k*nji)/ni;
-      int i = (idx - m*nkji - k*nji - j*ni) + is;
-      j += js; k += ks;
-      Real v = fmax(fabs(w0_(m,IVX,k,j,i)),
-               fmax(fabs(w0_(m,IVY,k,j,i)), fabs(w0_(m,IVZ,k,j,i))));
-      if (wb) {   // signal speed of the full state
-        const Real cs2 = ideal_ ? gm_*(gm_-1.0)*w0_(m,IEN,k,j,i)/w0_(m,IDN,k,j,i)
-                                : SQR(cs_iso);
-        v += sqrt(fmax(cs2, 0.0));
-      }
-      vmx = fmax(vmx, v);
-    }, Kokkos::Max<Real>(gvmx));
-    Real dxmin = std::numeric_limits<Real>::max();
-    auto &msize = pmy_pack->pmb->mb_size;
-    for (int m=0; m<nmb; ++m) {
-      dxmin = std::min(dxmin, static_cast<Real>(msize.h_view(m).dx1));
-      if (multi_d) dxmin = std::min(dxmin, static_cast<Real>(msize.h_view(m).dx2));
-      if (three_d) dxmin = std::min(dxmin, static_cast<Real>(msize.h_view(m).dx3));
-    }
-#if MPI_PARALLEL_ENABLED
-    Real rmx[2] = {gvmx, -dxmin};
-    MPI_Allreduce(MPI_IN_PLACE, rmx, 2, MPI_ATHENA_REAL, MPI_MAX, MPI_COMM_WORLD);
-    gvmx = rmx[0];
-    dxmin = -rmx[1];
-#endif
-    rcfl_fac = fmin(1.0, (pmy_pack->pmesh->dt)*gvmx/dxmin);
-  } else if (scale_mode == 1 || scale_mode == 3) {
-    Real gdmn = std::numeric_limits<Real>::max(), gdmx = -gdmn;
-    Real gemn = gdmn, gemx = gdmx;
-    Real gvmx = 0.0;
-    Real cfl_fac = 1.0;
-    const int ni = ie-is+1, nji = (je-js+1)*ni, nkji = (ke-ks+1)*nji;
-    const int nmkji = nmb*nkji;
-    const bool ideal = is_ideal_;
-    const bool want_v = (scale_mode == 3);
-    const Real gm_ = eos_.gamma, cs_iso = eos_.iso_cs;
-    Kokkos::parallel_reduce("mood_grange",
-    Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
-    KOKKOS_LAMBDA(const int &idx, Real &dmn, Real &dmx, Real &emn, Real &emx,
-                  Real &vmx) {
-      int m = idx/nkji;
-      int k = (idx - m*nkji)/nji;
-      int j = (idx - m*nkji - k*nji)/ni;
-      int i = (idx - m*nkji - k*nji - j*ni) + is;
-      j += js; k += ks;
-      Real d = wnad_(m,IDN,k,j,i) + (wb ? weq_(m,IDN,k,j,i) : 0.0);
-      dmn = fmin(dmn, d); dmx = fmax(dmx, d);
-      if (ideal) {
-        Real e = wnad_(m,IEN,k,j,i) + (wb ? weq_(m,IEN,k,j,i) : 0.0);
-        emn = fmin(emn,e); emx = fmax(emx,e);
-      }
-      if (want_v) {
-        Real v = fmax(fabs(w0_(m,IVX,k,j,i)),
-                 fmax(fabs(w0_(m,IVY,k,j,i)), fabs(w0_(m,IVZ,k,j,i))));
-        if (wb) {   // signal speed, as for rcfl above
-          const Real cs2 = ideal ? gm_*(gm_-1.0)*w0_(m,IEN,k,j,i)/w0_(m,IDN,k,j,i)
-                                 : SQR(cs_iso);
-          v += sqrt(fmax(cs2, 0.0));
-        }
-        vmx = fmax(vmx, v);
-      }
-    }, Kokkos::Min<Real>(gdmn), Kokkos::Max<Real>(gdmx),
-       Kokkos::Min<Real>(gemn), Kokkos::Max<Real>(gemx), Kokkos::Max<Real>(gvmx));
-#if MPI_PARALLEL_ENABLED
-    Real rmin[2] = {gdmn, gemn}, rmax[3] = {gdmx, gemx, gvmx};
-    MPI_Allreduce(MPI_IN_PLACE, rmin, 2, MPI_ATHENA_REAL, MPI_MIN, MPI_COMM_WORLD);
-    MPI_Allreduce(MPI_IN_PLACE, rmax, 3, MPI_ATHENA_REAL, MPI_MAX, MPI_COMM_WORLD);
-    gdmn = rmin[0]; gemn = rmin[1]; gdmx = rmax[0]; gemx = rmax[1]; gvmx = rmax[2];
-#endif
-    gscale0 = fmax(gdmx - gdmn, 0.0);
-    gscale1 = fmax(gemx - gemn, 0.0);
-    if (scale_mode == 3) {
-      // global advective Courant number of the full step
-      // min over ALL blocks of dx: with SMR/AMR a rank owning only coarse blocks would
-      // otherwise get a smaller Courant number, hence a different tolerance, than its
-      // neighbours, and the shared detection halo would be demoted inconsistently
-      Real dxmin = std::numeric_limits<Real>::max();
-      auto &msize = pmy_pack->pmb->mb_size;
-      for (int m=0; m<nmb; ++m) {
-        dxmin = std::min(dxmin, static_cast<Real>(msize.h_view(m).dx1));
-        if (multi_d) dxmin = std::min(dxmin, static_cast<Real>(msize.h_view(m).dx2));
-        if (three_d) dxmin = std::min(dxmin, static_cast<Real>(msize.h_view(m).dx3));
-      }
-#if MPI_PARALLEL_ENABLED
-      MPI_Allreduce(MPI_IN_PLACE, &dxmin, 1, MPI_ATHENA_REAL, MPI_MIN, MPI_COMM_WORLD);
-#endif
-      Real cfl_adv = (pmy_pack->pmesh->dt)*gvmx/dxmin;
-      cfl_fac = fmin(1.0, cfl_adv);
-      gscale0 *= cfl_fac;
-      gscale1 *= cfl_fac;
-    }
-    if (nad_scalars) {
-      // Global dynamic range of the passive-scalar CONCENTRATION, minimized/maximized
-      // over every scalar component so one uniform tolerance covers them all (same
-      // decomposition-invariance argument as the density/energy scales above).
-      Real gsmn = std::numeric_limits<Real>::max(), gsmx = -gsmn;
-      const int nlo = nhyd_, nhi = nvars - 1;
-      Kokkos::parallel_reduce("mood_grange_s",
-      Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
-      KOKKOS_LAMBDA(const int &idx, Real &smn, Real &smx) {
-        int m = idx/nkji;
-        int k = (idx - m*nkji)/nji;
-        int j = (idx - m*nkji - k*nji)/ni;
-        int i = (idx - m*nkji - k*nji - j*ni) + is;
-        j += js; k += ks;
-        for (int n=nlo; n<=nhi; ++n) {
-          Real s = w0_(m,n,k,j,i);
-          smn = fmin(smn, s); smx = fmax(smx, s);
-        }
-      }, Kokkos::Min<Real>(gsmn), Kokkos::Max<Real>(gsmx));
-#if MPI_PARALLEL_ENABLED
-      MPI_Allreduce(MPI_IN_PLACE, &gsmn, 1, MPI_ATHENA_REAL, MPI_MIN, MPI_COMM_WORLD);
-      MPI_Allreduce(MPI_IN_PLACE, &gsmx, 1, MPI_ATHENA_REAL, MPI_MAX, MPI_COMM_WORLD);
-#endif
-      gscale_s = fmax(gsmx - gsmn, 0.0)*cfl_fac;
-    }
-  }
 
   // Detection halo: candidate/detection are evaluated on the interior plus a halo of
   // ghost cells so that both MeshBlocks sharing a face flag and demote it identically
@@ -421,72 +265,6 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
         utest_(m,n,k,j,i) = gam0*u0_(m,n,k,j,i) + gam1*u1_(m,n,k,j,i) - divf;
       }
     });
-
-    //------------------------------------------------------------------------------------
-    // (1b) gdu scale: on the first iteration, the global max per-stage change of the
-    // NAD variables over the ACTIVE cells of the pre-revision candidate.  Frozen for
-    // the remaining iterations (the first candidate depends only on the base fluxes,
-    // so this scalar is identical on every rank/block layout).
-    if (scale_mode == 2 && rev == 1) {
-      Real gdd = 0.0, gde = 0.0, gds = 0.0;
-      const int ni = ie-is+1, nji = (je-js+1)*ni, nkji_a = (ke-ks+1)*nji;
-      const int nmkji_a = nmb*nkji_a;
-      const bool ideal = is_ideal_;
-      const bool newt = newtonian;
-      const bool do_s = nad_scalars;
-      const int nlo = nhyd_, nhi = nvars - 1;
-      Kokkos::parallel_reduce("mood_gdu",
-      Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji_a),
-      KOKKOS_LAMBDA(const int &idx, Real &dd, Real &de, Real &ds) {
-        int m = idx/nkji_a;
-        int k = (idx - m*nkji_a)/nji;
-        int j = (idx - m*nkji_a - k*nji)/ni;
-        int i = (idx - m*nkji_a - k*nji - j*ni) + is;
-        j += js; k += ks;
-        Real d = fabs(utest_(m,IDN,k,j,i) - u0_(m,IDN,k,j,i));
-        if (isfinite(d)) dd = fmax(dd, d);
-        if (ideal) {
-          Real enew, eold;
-          if (newt && wb) {
-            Real dtst = utest_(m,IDN,k,j,i) + ueq_(m,IDN,k,j,i);
-            const Real efull = utest_(m,IEN,k,j,i) + ueq_(m,IEN,k,j,i);
-            enew = (dtst > 0.0) ?
-                   efull - 0.5*(SQR(utest_(m,IM1,k,j,i))
-                   + SQR(utest_(m,IM2,k,j,i)) + SQR(utest_(m,IM3,k,j,i)))/dtst : 0.0;
-            eold = (dtst > 0.0) ? w0_(m,IEN,k,j,i) : 0.0;
-          } else if (newt) {
-            Real dtst = utest_(m,IDN,k,j,i);
-            enew = (dtst > 0.0) ?
-                   utest_(m,IEN,k,j,i) - 0.5*(SQR(utest_(m,IM1,k,j,i))
-                   + SQR(utest_(m,IM2,k,j,i)) + SQR(utest_(m,IM3,k,j,i)))/dtst : 0.0;
-            eold = (dtst > 0.0) ? w0_(m,IEN,k,j,i) : 0.0;
-          } else {
-            enew = utest_(m,IEN,k,j,i);
-            eold = u0_(m,IEN,k,j,i);
-          }
-          Real e = fabs(enew - eold);
-          if (isfinite(e)) de = fmax(de, e);
-        }
-        if (do_s) {
-          const Real dtst = wb ? (utest_(m,IDN,k,j,i) + ueq_(m,IDN,k,j,i))
-                               : utest_(m,IDN,k,j,i);
-          if (dtst > 0.0) {
-            for (int n=nlo; n<=nhi; ++n) {
-              Real s = fabs(utest_(m,n,k,j,i)/dtst - w0_(m,n,k,j,i));
-              if (isfinite(s)) ds = fmax(ds, s);
-            }
-          }
-        }
-      }, Kokkos::Max<Real>(gdd), Kokkos::Max<Real>(gde), Kokkos::Max<Real>(gds));
-#if MPI_PARALLEL_ENABLED
-      Real rmx[3] = {gdd, gde, gds};
-      MPI_Allreduce(MPI_IN_PLACE, rmx, 3, MPI_ATHENA_REAL, MPI_MAX, MPI_COMM_WORLD);
-      gdd = rmx[0]; gde = rmx[1]; gds = rmx[2];
-#endif
-      gscale0 = gdd;
-      gscale1 = gde;
-      gscale_s = gds;
-    }
 
     //------------------------------------------------------------------------------------
     // (2) PAD: flag cells where conversion to primitives would require floors
@@ -597,35 +375,9 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
             }
           }}}
           if (!wb) { smn = qmn; smx = qmx; }
-          // Coarse, scale-aware relaxation: a fraction rtol of the selected GLOBAL
-          // scale (grange/gdu; or the spd-style per-bound |m|,|M| in relative mode),
-          // floored by round-off (eps0*|bound|) and an absolute atol.  A global scale
-          // stays uniform across cells — decomposition-invariant, no fence-sitters.
-          Real eps_m, eps_p;
-          if (scale_mode == 0) {          // spd-style relative
-            eps_m = fmax(rtol*fabs(smn), atol);
-            eps_p = fmax(rtol*fabs(smx), atol);
-          } else if (scale_mode == 4) {   // rcfl: relative band x advective Courant
-            eps_m = fmax(rtol*rcfl_fac*fabs(smn), atol);
-            eps_p = fmax(rtol*rcfl_fac*fabs(smx), atol);
-          } else if (scale_mode == 1) {   // grange with Mach-softening exponent theta:
-            // eps = rtol * G^theta * |bound|^(1-theta); theta=1 -> pure global range
-            const Real gsc = (pass == 0) ? gscale0 : gscale1;
-            if (theta >= 1.0) {
-              Real eps = fmax(rtol*gsc, atol);
-              eps_m = eps;
-              eps_p = eps;
-            } else {
-              const Real gth = pow(gsc, theta);
-              eps_m = fmax(rtol*gth*pow(fabs(smn), 1.0-theta), atol);
-              eps_p = fmax(rtol*gth*pow(fabs(smx), 1.0-theta), atol);
-            }
-          } else {                        // gdu
-            const Real gsc = (pass == 0) ? gscale0 : gscale1;
-            Real eps = fmax(rtol*gsc, atol);
-            eps_m = eps;
-            eps_p = eps;
-          }
+          // Local relative relaxation of the neighboring lower/upper bounds.
+          Real eps_m = fmax(rtol*fabs(smn), atol);
+          Real eps_p = fmax(rtol*fabs(smx), atol);
           eps_m = fmax(eps_m, eps0*fabs(smn));
           eps_p = fmax(eps_p, eps0*fabs(smx));
           if (wb) {
@@ -667,16 +419,8 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
             qmn = fmin(qmn, q);
             qmx = fmax(qmx, q);
           }}}
-          Real eps_m, eps_p;
-          if (scale_mode == 0 || scale_mode == 4) {
-            const Real rf = (scale_mode == 4) ? rcfl_fac : 1.0;
-            eps_m = fmax(rtol*rf*fabs(qmn), atol);
-            eps_p = fmax(rtol*rf*fabs(qmx), atol);
-          } else {
-            Real eps = fmax(rtol*gscale_s, atol);
-            eps_m = eps;
-            eps_p = eps;
-          }
+          Real eps_m = fmax(rtol*fabs(qmn), atol);
+          Real eps_p = fmax(rtol*fabs(qmx), atol);
           eps_m = fmax(eps_m, eps0*fabs(qmn));
           eps_p = fmax(eps_p, eps0*fabs(qmx));
           bool nad = (q_new < qmn - eps_m) || (q_new > qmx + eps_p);

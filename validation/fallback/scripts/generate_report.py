@@ -100,7 +100,7 @@ def write_markdown(analysis, commit, manif):
     lines.append(
         "We compare unlimited central finite-volume face interpolation at 4th, 6th and 8th order (`reconstruct=fv4|fv6|fv8`) with a-posteriori MOOD fallback (RK3) against "
         "PLM+RK2, WENOZ+RK3, and TENO-5+RK3. Detection uses NAD "
-        "(`mood_nad_scale=gcfl`, `mood_rtol=1e-5`; `mood_nad_v=off` for MHD *linear waves* "
+        "(`mood_nad_scale=relative`, `mood_rtol=1e-5`; `mood_nad_v=off` for MHD *linear waves* "
         "only -- see the note below) plus "
         "PAD/NaN. Passive-scalar concentrations are included in the relaxed-DMP test, "
         "so scalar discontinuities can trigger fallback even on a uniform-density "

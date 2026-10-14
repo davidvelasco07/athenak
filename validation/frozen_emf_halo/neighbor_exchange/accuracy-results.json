@@ -1,0 +1,122 @@
+{
+  "runs": [
+    {
+      "name": "wave_legacy_fv4_n32",
+      "code": 0,
+      "seconds": 3.2748505829949863,
+      "cmd": [
+        "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+        "-i",
+        "input.athinput"
+      ]
+    },
+    {
+      "name": "wave_legacy_fv4_n64",
+      "code": 0,
+      "seconds": 15.147476417012513,
+      "cmd": [
+        "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+        "-i",
+        "input.athinput"
+      ]
+    },
+    {
+      "name": "wave_legacy_fv6_n32",
+      "code": 0,
+      "seconds": 4.362068582966458,
+      "cmd": [
+        "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+        "-i",
+        "input.athinput"
+      ]
+    },
+    {
+      "name": "wave_legacy_fv6_n64",
+      "code": 0,
+      "seconds": 18.84245358296903,
+      "cmd": [
+        "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+        "-i",
+        "input.athinput"
+      ]
+    },
+    {
+      "name": "wave_legacy_fv8_n32",
+      "code": 0,
+      "seconds": 5.608978832955472,
+      "cmd": [
+        "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+        "-i",
+        "input.athinput"
+      ]
+    },
+    {
+      "name": "wave_legacy_fv8_n64",
+      "code": 0,
+      "seconds": 23.228023708972614,
+      "cmd": [
+        "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+        "-i",
+        "input.athinput"
+      ]
+    },
+    {
+      "name": "wave_voff_legacy_n32",
+      "code": 0,
+      "seconds": 4.136025541985873,
+      "cmd": [
+        "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+        "-i",
+        "input.athinput"
+      ]
+    },
+    {
+      "name": "wave_voff_legacy_n64",
+      "code": 0,
+      "seconds": 16.816820790991187,
+      "cmd": [
+        "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+        "-i",
+        "input.athinput"
+      ]
+    },
+    {
+      "name": "wave_voff_frozen_n32",
+      "code": 0,
+      "seconds": 2.559376082965173,
+      "cmd": [
+        "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+        "-i",
+        "input.athinput"
+      ]
+    },
+    {
+      "name": "wave_voff_frozen_n64",
+      "code": 0,
+      "seconds": 13.621033709030598,
+      "cmd": [
+        "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+        "-i",
+        "input.athinput"
+      ]
+    }
+  ],
+  "rms_l1": {
+    "wave_voff_frozen_n64": 1.623232e-10,
+    "wave_fv6_n32": 1.748129e-08,
+    "wave_fv4_n32": 1.798973e-08,
+    "wave_legacy_fv8_n32": 1.777476e-08,
+    "wave_legacy_fv6_n64": 2.874603e-09,
+    "wave_fv8_n64": 3.939018e-09,
+    "wave_legacy_fv4_n64": 3.299673e-09,
+    "wave_voff_legacy_n64": 1.623228e-10,
+    "wave_fv4_n64": 3.298506e-09,
+    "wave_legacy_fv8_n64": 3.895997e-09,
+    "wave_voff_frozen_n32": 6.592683e-10,
+    "wave_fv6_n64": 2.910328e-09,
+    "wave_fv8_n32": 1.73207e-08,
+    "wave_legacy_fv4_n32": 1.793331e-08,
+    "wave_legacy_fv6_n32": 1.72434e-08,
+    "wave_voff_legacy_n32": 6.592682e-10
+  }
+}

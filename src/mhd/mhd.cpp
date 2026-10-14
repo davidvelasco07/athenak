@@ -285,43 +285,25 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
 
     // MOOD a-posteriori fallback (mhd_mood.cpp).
     use_mood = pin->GetOrAddBoolean("mhd","mood",false);
-    // default rcfl with rtol 1e-4 (below): the setting of the 2026-09 NAD study that keeps
-    // low-Mach flow clean, and the only Courant-aware scale that needs no global range
-    // reductions (one Allreduce per stage instead of four)
-    std::string nadsc = pin->GetOrAddString("mhd","mood_nad_scale","rcfl");
-    if (nadsc.compare("relative") == 0) {
-      mood_nad_scale = 0;
-    } else if (nadsc.compare("grange") == 0) {
-      mood_nad_scale = 1;
-    } else if (nadsc.compare("gdu") == 0) {
-      mood_nad_scale = 2;
-    } else if (nadsc.compare("gcfl") == 0) {
-      mood_nad_scale = 3;
-    } else if (nadsc.compare("rcfl") == 0) {
-      // relative (per-bound |m|,|M|) band scaled by the global advective Courant number
-      mood_nad_scale = 4;
-    } else {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-        << std::endl << "<mhd> mood_nad_scale = '" << nadsc
-        << "' not implemented (relative|grange|gdu|gcfl|rcfl)" << std::endl;
+    // NAD uses only each cell's neighboring bounds; no domain-wide scales.
+    const std::string nadsc = pin->GetOrAddString("mhd","mood_nad_scale","relative");
+    if (nadsc != "relative") {
+      std::cerr << "<mhd> mood_nad_scale='" << nadsc
+                << "' has been removed; use relative with mood_rtol/mood_atol\n";
+      std::exit(EXIT_FAILURE);
+    }
+    if (pin->DoesParameterExist("mhd", "mood_nad_theta")) {
+      std::cerr << "<mhd> mood_nad_theta was removed with the global NAD scales\n";
       std::exit(EXIT_FAILURE);
     }
     mood_eps0  = pin->GetOrAddReal("mhd","mood_eps0",1.0e-12);
     // well-balanced round-off floor relative to the equilibrium (see hydro.cpp)
     mood_eps0_eq = pin->GetOrAddReal("mhd","mood_eps0_eq",0.0);
-    // the default rtol follows the scale: rcfl is calibrated at 1e-4, the range-based
-    // scales (gcfl etc.) at 1e-5, so an explicit gcfl without mood_rtol is unchanged
-    mood_rtol = pin->GetOrAddReal("mhd","mood_rtol",
-                                  (mood_nad_scale == 4) ? 1.0e-4 : 1.0e-5);
+    mood_rtol = pin->GetOrAddReal("mhd","mood_rtol",1.0e-5);
     mood_atol = pin->GetOrAddReal("mhd","mood_atol",0.0);
-    mood_nad_theta = pin->GetOrAddReal("mhd","mood_nad_theta",1.0);
     mood_nad_energy = pin->GetOrAddBoolean("mhd","mood_nad_energy",true);
     mood_nad_scalars = pin->GetOrAddBoolean("mhd","mood_nad_scalars",true);
-    if (mood_nad_theta < 0.0 || mood_nad_theta > 1.0) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-        << std::endl << "<mhd> mood_nad_theta must be in [0,1]" << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
+
     std::string nadb = pin->GetOrAddString("mhd","mood_nad_b","comps");
     if (nadb.compare("mag") == 0) {
       mood_nad_b = 0;
@@ -371,11 +353,6 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
         << std::endl << "<mhd> mood_edge = '" << medge
         << "' not implemented (auto|blend|flag)" << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    mood_frozen_emf = pin->GetOrAddBoolean("mhd", "mood_frozen_emf", false);
-    if (mood_frozen_emf && !use_mood) {
-      std::cerr << "mood_frozen_emf requires mood=true\n";
       std::exit(EXIT_FAILURE);
     }
     mood_sed = pin->GetOrAddBoolean("mhd","mood_sed",true);
@@ -605,11 +582,44 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
                 << std::endl;
       std::exit(EXIT_FAILURE);
     }
+    // Use frozen candidates by default for the validated uniform periodic case.
+    // An explicit false keeps the original recomposition path for comparisons.
+    const bool frozen_supported = use_mood && evolution_t == "dynamic" &&
+        emf_method != MHD_EMF::ct_contact && mood_edge_flag != 0 &&
+        !mood_touched_only && pmy_pack->pmesh->multi_d &&
+        !pmy_pack->pmesh->multilevel && pmy_pack->pmesh->strictly_periodic &&
+        peos->eos_data.is_ideal && nscalars == 0 && mood_nad_bcc_avg &&
+        pvisc == nullptr && presist == nullptr && pcond == nullptr &&
+        !pin->DoesBlockExist("shearing_box") &&
+        !pin->GetOrAddBoolean("mhd", "well_balanced", false) &&
+        !pmy_pack->pcoord->is_special_relativistic &&
+        !pmy_pack->pcoord->is_general_relativistic &&
+        (recon_method == ReconstructionMethod::fv4 ||
+         recon_method == ReconstructionMethod::fv6 ||
+         recon_method == ReconstructionMethod::fv8);
+    mood_frozen_emf = pin->GetOrAddBoolean("mhd", "mood_frozen_emf", frozen_supported);
+    if (mood_frozen_emf && !frozen_supported) {
+      std::cerr << "Frozen EMF requires dynamic MOOD with periodic uniform Newtonian "
+                << "multidimensional UCT, FV4/FV6/FV8, ideal EOS, mood_nad_bcc=avg, "
+                << "mood_edge=flag/auto, mood_touched_only=false, and no diffusion, "
+                << "scalars, shear or well balance\n";
+      std::exit(EXIT_FAILURE);
+    }
+    if (mood_frozen_emf) {
+      const auto &q = pmy_pack->pmesh->mb_indcs;
+      if (q.ng > q.nx1 || q.ng > q.nx2 ||
+          (pmy_pack->pmesh->three_d && q.ng > q.nx3)) {
+        std::cerr << "Frozen EMF neighbor exchange requires block dimensions >= nghost\n";
+        std::exit(EXIT_FAILURE);
+      }
+    }
+
     // Ghost-zone requirements for UCT.  The corner composition at an edge reads
     // `reach` faces to either side, and each of those faces was reconstructed from a
     // stencil of half-width `radius`, so the ghost layer has to cover both.
     if (emf_method != MHD_EMF::ct_contact) {
       int ng_need = ReconEdgeReach(recon_method) + ReconStencilRadius(recon_method);
+      if (mood_frozen_emf) ng_need = 2*ReconStencilRadius(recon_method);
       if (ng_need < 3) { ng_need = 3; }
       if (pmy_pack->pmesh->mb_indcs.ng < ng_need) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -654,27 +664,10 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
       // h_f + nrevs - 1; with UCT it is wider (fv4: 2 per revision).
       mood_halo0 = h_f*mood_max_revs;
       if (mood_frozen_emf) {
-        if (!is_uct || !mood_edge_flag || mood_touched_only ||
-            !pmy_pack->pmesh->multi_d || pmy_pack->pmesh->multilevel ||
-            !peos->eos_data.is_ideal || nscalars != 0 ||
-            pvisc != nullptr || presist != nullptr || pcond != nullptr ||
-            pin->DoesBlockExist("shearing_box") ||
-            pin->GetOrAddBoolean("mhd", "well_balanced", false) ||
-            !mood_nad_bcc_avg ||
-            (recon_method != ReconstructionMethod::fv4 &&
-             recon_method != ReconstructionMethod::fv6 &&
-             recon_method != ReconstructionMethod::fv8) ||
-            pmy_pack->pcoord->is_special_relativistic ||
-            pmy_pack->pcoord->is_general_relativistic) {
-          std::cerr << "Frozen EMF audit requires uniform Newtonian multidimensional UCT,"
-                    << " FV4/FV6/FV8, ideal EOS, mood_nad_bcc=avg, mood_edge=flag,\n"
-                    << " mood_touched_only=false, and no diffusion, scalars, shear or well balance\n";
-          std::exit(EXIT_FAILURE);
-        }
         mood_halo0 = mood_max_revs;
       }
-      // SED reads a +/-2 neighborhood even for PLM; otherwise the stencil is the
-      // reconstruction half-width.
+      // SED reads +/-3; the extra cell in ng_need covers the outer offset.
+      // Otherwise the stencil is the reconstruction half-width.
       int stencil = ReconStencilRadius(recon_method);
       if (mood_sed && stencil < 2) { stencil = 2; }
       int ng_need = mood_halo0 + 1 + stencil;
@@ -682,11 +675,11 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
       if (mood_halo0 + h_f > ng_need) {
         ng_need = mood_halo0 + h_f;
       }
-      // The initial candidate must be valid throughout the revision halo.
-      // FV_N reconstruction plus face-to-center B interpolation needs N cells.
-      // Frozen edge replacement propagates one cell per revision.
+      // The immutable high-order candidate is exchanged once before revisions.
+      // PLM needs two cells; SED samples +/-3. Keep the SED-safe floor even if
+      // SED is disabled. Frozen edge replacement propagates one cell per revision.
       if (mood_frozen_emf) {
-        ng_need = mood_halo0 + 2*ReconStencilRadius(recon_method);
+        ng_need = std::max(2*ReconStencilRadius(recon_method), mood_halo0 + 3);
       }
       auto &indcs = pmy_pack->pmesh->mb_indcs;
       if (indcs.ng < ng_need) {
@@ -821,6 +814,18 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
         Kokkos::realloc(sdet, nmb, 3, ncells3, ncells2, ncells1);
       }
 
+      if (mood_frozen_emf) {
+        pbval_mood_prim = new MeshBoundaryValuesCC(ppack, pin, false);
+        pbval_mood_prim->InitializeBuffers(nmhd+3);
+        pbval_mood_candidate = new MeshBoundaryValuesCC(ppack, pin, false);
+        const int ndir = pmy_pack->pmesh->three_d ? 3 : 2;
+        pbval_mood_candidate->InitializeBuffers(ndir*nmhd+3);
+        Kokkos::realloc(mood_prim, nmb, nmhd+3, ncells3, ncells2, ncells1);
+        Kokkos::realloc(mood_candidate, nmb, ndir*nmhd+3, ncells3, ncells2, ncells1);
+        mood_eplm = DvceEdgeFld4D<Real>("mood_eplm",nmb,ncells3,ncells2,ncells1);
+        mood_edc = DvceEdgeFld4D<Real>("mood_edc",nmb,ncells3,ncells2,ncells1);
+      }
+
       // allocate arrays of flags/candidate state used with FOFC and MOOD
       if (use_fofc || use_mood) {
         // MOOD tests passive scalars too, so the candidate must carry them
@@ -894,6 +899,8 @@ MHD::~MHD() {
   if (psbox_u != nullptr) {delete psbox_u;}
   if (porb_b != nullptr) {delete porb_b;}
   if (porb_u != nullptr) {delete porb_u;}
+  delete pbval_mood_candidate;
+  delete pbval_mood_prim;
   delete pbval_b;
   delete pbval_u;
   if (psrc!= nullptr) {delete psrc;}

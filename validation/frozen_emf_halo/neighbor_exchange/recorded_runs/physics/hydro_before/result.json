@@ -1,0 +1,10 @@
+{
+  "name": "hydro_before",
+  "code": 0,
+  "seconds": 0.07210066699190065,
+  "cmd": [
+    "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/athena-pre-local",
+    "-i",
+    "input.athinput"
+  ]
+}

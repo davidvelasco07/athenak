@@ -1,0 +1,10 @@
+{
+  "name": "ot_fv6_ref",
+  "code": 0,
+  "seconds": 8.81779095804086,
+  "cmd": [
+    "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+    "-i",
+    "input.athinput"
+  ]
+}

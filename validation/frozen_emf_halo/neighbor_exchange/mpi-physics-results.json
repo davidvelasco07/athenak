@@ -1,0 +1,69 @@
+{
+  "run": {
+    "name": "ot_fv8_mpi4",
+    "code": 0,
+    "seconds": 2.802759749989491,
+    "cmd": [
+      "mpiexec",
+      "-n",
+      "4",
+      "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+      "-i",
+      "input.athinput"
+    ]
+  },
+  "comparison": {
+    "halo.mhd_fb_level.00001.bin": {
+      "max_abs": 0.0,
+      "time_equal": true
+    },
+    "halo.mhd_divb.00000.bin": {
+      "max_abs": 0.0,
+      "time_equal": true
+    },
+    "halo.mhd_divb.00001.bin": {
+      "max_abs": 0.0,
+      "time_equal": true
+    },
+    "halo.mhd_fb_level.00000.bin": {
+      "max_abs": 0.0,
+      "time_equal": true
+    },
+    "halo.mhd_w.00000.bin": {
+      "max_abs": 0.0,
+      "time_equal": true
+    },
+    "halo.mhd_w.00001.bin": {
+      "max_abs": 0.0,
+      "time_equal": true
+    },
+    "halo.mhd_u_bcc.00001.bin": {
+      "max_abs": 0.0,
+      "time_equal": true
+    },
+    "halo.mhd_u_bcc.00000.bin": {
+      "max_abs": 0.0,
+      "time_equal": true
+    }
+  },
+  "metrics": {
+    "time": 0.25,
+    "finite": true,
+    "conservation_drift": {
+      "dens": 1.970645868709653e-15,
+      "mom1": 0.0,
+      "mom2": 5.800481622797449e-18,
+      "mom3": 0.0,
+      "ener": 3.219646771412954e-15
+    },
+    "density_min": 0.06402392337771556,
+    "divb_max": 1.8118839761882555e-13,
+    "primitive_min": {
+      "dens": 0.06402392337771556,
+      "velx": -1.293098944287606,
+      "vely": -1.3403790929476551,
+      "velz": 0.0,
+      "eint": 0.0251573814651416
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "reject_hydro_rcfl",
+  "code": 1,
+  "seconds": 0.03769962501246482,
+  "cmd": [
+    "/Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/build/src/athena",
+    "-i",
+    "input.athinput"
+  ]
+}

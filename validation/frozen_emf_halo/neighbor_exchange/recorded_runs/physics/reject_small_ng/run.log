@@ -1,0 +1,9 @@
+[mbp254][[12430,0],0][btl_tcp_component.c:1021:mca_btl_tcp_component_create_listen] bind() failed: Operation not permitted (1)
+
+Root grid = 2 x 2 x 1 MeshBlocks
+Total number of MeshBlocks = 4
+Number of logical  levels of refinement = 1 (2 levels total)
+Number of physical levels of refinement = 0 (1 levels total)
+Number of parallel ranks = 1
+### FATAL ERROR in /Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/neighbor/source/src/mhd/mhd.cpp at line 628
+UCT EMF with fv8 reconstruction requires at least 8 ghost zones, but <mesh>/nghost=7
