@@ -27,7 +27,7 @@ mood_atol = 0.0             # default
 produce an explicit error and must be migrated. This includes saved restart
 parameters; the restart test below concerns checkpoints written by the new code.
 No global field range, update amplitude, speed, or mesh-size reduction is used
-for the detector tolerance. The existing collective demotion count for loop
+for the detector tolerance. The existing per-pack demotion count for local loop
 termination remains, as does normal timestep selection.
 
 ## Implementation
