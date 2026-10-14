@@ -41,42 +41,17 @@ TaskStatus Hydro::RecvMOODPrimitives(Driver *pdrive, int stage) {
 }
 
 TaskStatus Hydro::SendMOODCandidate(Driver *pdrive, int stage) {
-  const auto &q = pmy_pack->pmesh->mb_indcs;
-  const bool md = pmy_pack->pmesh->multi_d, td = pmy_pack->pmesh->three_d;
-  const int nmb1 = pmy_pack->nmb_thispack-1, nv = nhydro;
-  pbval_mood_candidate->InitRecv((td ? 3 : (md ? 2 : 1))*nv);
-  auto data = mood_candidate;
-  auto f1 = uflx.x1f, f2 = uflx.x2f, f3 = uflx.x3f;
-  par_for("hyd_mood_pack_candidate", DevExeSpace(), 0,nmb1,
-          q.ks,q.ke,q.js,q.je,q.is,q.ie,
-  KOKKOS_LAMBDA(int m, int k, int j, int i) {
-    for (int n=0; n<nv; ++n) {
-      data(m,n,k,j,i) = f1(m,n,k,j,i);
-      if (md) data(m,nv+n,k,j,i) = f2(m,n,k,j,i);
-      if (td) data(m,2*nv+n,k,j,i) = f3(m,n,k,j,i);
-    }
-  });
-  return pbval_mood_candidate->PackAndSendCC(mood_candidate, mood_coarse);
+  const int ndir = pmy_pack->pmesh->three_d ? 3 : (pmy_pack->pmesh->multi_d ? 2 : 1);
+  auto status = pbval_mood_candidate->InitRecv(ndir*nhydro);
+  if (status != TaskStatus::complete) return status;
+  return pbval_mood_candidate->PackAndSendOwnedFluxCC(uflx);
 }
 
 TaskStatus Hydro::RecvMOODCandidate(Driver *pdrive, int stage) {
-  auto status = pbval_mood_candidate->RecvAndUnpackCC(mood_candidate, mood_coarse);
+  auto status = pbval_mood_candidate->RecvAndUnpackOwnedFluxCC(uflx);
   if (status != TaskStatus::complete) return status;
   pbval_mood_candidate->ClearSend();
   pbval_mood_candidate->ClearRecv();
-  const bool md = pmy_pack->pmesh->multi_d, td = pmy_pack->pmesh->three_d;
-  const int nmb1 = pmy_pack->nmb_thispack-1, nv = nhydro;
-  auto data = mood_candidate;
-  auto f1 = uflx.x1f, f2 = uflx.x2f, f3 = uflx.x3f;
-  par_for("hyd_mood_unpack_candidate", DevExeSpace(), 0,nmb1,
-          0,data.extent_int(2)-1,0,data.extent_int(3)-1,0,data.extent_int(4)-1,
-  KOKKOS_LAMBDA(int m, int k, int j, int i) {
-    for (int n=0; n<nv; ++n) {
-      f1(m,n,k,j,i) = data(m,n,k,j,i);
-      if (md) f2(m,n,k,j,i) = data(m,nv+n,k,j,i);
-      if (td) f3(m,n,k,j,i) = data(m,2*nv+n,k,j,i);
-    }
-  });
   return TaskStatus::complete;
 }
 

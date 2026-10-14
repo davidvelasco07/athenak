@@ -1,0 +1,55 @@
+{
+  "direct": {
+    "code": 0,
+    "demotions": 5568856,
+    "density_floors": 0,
+    "energy_floors": 0,
+    "c2p_failures": 192,
+    "time": 4.799999999999999,
+    "conservation_drift": {
+      "mass": 5.04535995848876e-06,
+      "1-mom": 6.938893903907228e-18,
+      "2-mom": 2.7755575615628914e-17,
+      "3-mom": 0.0,
+      "tot-E": 1.8540505292421608e-05
+    }
+  },
+  "staged": {
+    "code": 0,
+    "demotions": 5568856,
+    "density_floors": 0,
+    "energy_floors": 0,
+    "c2p_failures": 192,
+    "time": 4.799999999999999,
+    "conservation_drift": {
+      "mass": 5.04535995848876e-06,
+      "1-mom": 6.938893903907228e-18,
+      "2-mom": 2.7755575615628914e-17,
+      "3-mom": 0.0,
+      "tot-E": 1.8540505292421608e-05
+    }
+  },
+  "legacy": {
+    "code": 0,
+    "demotions": 5568856,
+    "density_floors": 0,
+    "energy_floors": 0,
+    "c2p_failures": 192,
+    "time": 4.799999999999999,
+    "conservation_drift": {
+      "mass": 5.04535995848876e-06,
+      "1-mom": 6.938893903907228e-18,
+      "2-mom": 2.7755575615628914e-17,
+      "3-mom": 0.0,
+      "tot-E": 1.8540505292421608e-05
+    }
+  },
+  "direct_vs_staged": {
+    "test.hydro_u.00001.bin": {
+      "time_difference": 0.0,
+      "max_abs": 0.0,
+      "normalized_max": 0.0,
+      "different": 0
+    }
+  }
+}

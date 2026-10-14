@@ -138,7 +138,7 @@ class Hydro {
   bool mood_frozen_flux = false;
   MeshBoundaryValuesCC *pbval_mood_prim = nullptr;
   MeshBoundaryValuesCC *pbval_mood_candidate = nullptr;
-  DvceArray5D<Real> mood_prim, mood_candidate, mood_coarse;
+  DvceArray5D<Real> mood_prim, mood_coarse;
   int mood_max_revs = 1;    // max revision iterations per RK stage
   bool mood_nad_energy;     // include the energy variable in NAD (density always on)
   bool mood_nad_scalars;    // include passive-scalar concentrations in NAD

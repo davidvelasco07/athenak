@@ -4,14 +4,14 @@ import argparse, json, re, subprocess, time, sys, hashlib, statistics, os, platf
 import numpy as np
 
 CASES=[r+'_'+m for r in ('nr','sr','gr') for m in ('hydro','mhd')]
-def deck(case,order,nx,block,steps,frozen=True,ng=None,outputs=True,dim=2):
+def deck(case,order,nx,block,steps,frozen=True,ng=None,outputs=True,dim=2,revisions=2):
     regime,mod=case.split('_');rel=regime!='nr';is_mhd=mod=='mhd'
-    if ng is None:ng=max(order if is_mhd else order//2+1,5) if frozen else (2*order+2 if is_mhd else order//2+3)
+    if ng is None:ng=max(order if is_mhd else order//2+1,revisions+3) if frozen else (order+revisions*(order//2+1) if is_mhd else order//2+1+revisions)
     parts={'job':{'basename':'test'},'mesh':{'nghost':ng},'meshblock':{},
       'time':{'evolution':'dynamic','integrator':'rk3','cfl_number':.2,'nlim':steps,'tlim':100,'ndiag':steps},
       'coord':{'special_rel':str(regime=='sr').lower(),'general_rel':str(regime=='gr').lower(),'minkowski':'true'},
       mod:{'eos':'ideal','reconstruct':f'fv{order}','rsolver':'hlle','gamma':4/3 if rel else 5/3,
-           'mood':'true','mood_detect':'true','mood_max_revs':2,'mood_nad_scale':'rcfl',
+           'mood':'true','mood_detect':'true','mood_max_revs':revisions,'mood_nad_scale':'rcfl',
            'mood_rtol':1.e-4,'mood_sed':'true','dfloor':1.e-12,'pfloor':1.e-12,
            'mood_frozen_emf' if is_mhd else 'mood_frozen_flux':str(frozen).lower()},
       'problem':{'inner_radius':.8,'outer_radius':1.,'pn_amb':.005 if rel else .1,
@@ -84,18 +84,23 @@ def main():
     ap.add_argument('--dim',type=int,choices=[2,3],default=2)
     ap.add_argument('--block',type=int,default=64)
     ap.add_argument('--nx',type=int,default=64);ap.add_argument('--steps',type=int,default=16)
+    ap.add_argument('--baseline-exe',type=Path,help='Previous frozen implementation for paired timings')
+    ap.add_argument('--revisions',type=int,default=2)
     ap.add_argument('--require-dc',action='store_true')
     ap.add_argument('--mpi',type=int,default=1)
     ap.add_argument('--repeats',type=int,default=3);ap.add_argument('--resume',action='store_true')
     a=ap.parse_args();a.source=a.source.resolve();a.exe=a.exe.resolve();a.output=a.output.resolve();a.output.mkdir(parents=True,exist_ok=True)
     sys.path.insert(0,str(a.source/'vis/python'));import bin_convert as bc
+    if a.baseline_exe:a.baseline_exe=a.baseline_exe.resolve()
     report={'phase':a.phase,'host':platform.node(),'cuda_visible_devices':os.environ.get('CUDA_VISIBLE_DEVICES'),'nx':a.nx,'dim':a.dim,'block':a.block,'steps':a.steps,'repeats':a.repeats,'executable_sha256':hashlib.sha256(a.exe.read_bytes()).hexdigest(),'runs':[],'comparisons':{},'timings':{}}
+    report['revisions']=a.revisions
+    if a.baseline_exe:report['baseline_sha256']=hashlib.sha256(a.baseline_exe.read_bytes()).hexdigest()
     def save(): (a.output/'results.json').write_text(json.dumps(report,indent=2))
-    def run(name,s,info):
+    def run(name,s,info,exe=None):
         out=a.output/name;out.mkdir(exist_ok=True);(out/'input.athinput').write_text(s)
         start=time.monotonic()
         ranks=a.mpi if not name.endswith('_reference') else 1
-        cmd=(['mpiexec','-n',str(ranks)] if ranks>1 else [])+[str(a.exe),'-i','input.athinput']
+        cmd=(['mpiexec','-n',str(ranks)] if ranks>1 else [])+[str(exe or a.exe),'-i','input.athinput']
         if not (a.resume and (out/'result.json').exists()):
             with (out/'stdout.txt').open('w') as f:
                 try:code=subprocess.run(cmd,cwd=out,stdout=f,stderr=subprocess.STDOUT,timeout=900).returncode
@@ -122,8 +127,8 @@ def main():
         for order in map(int,a.orders.split(',')):
             base=f'{case}_fv{order}'
             if a.phase=='correctness':
-                for variant,blocks,ng in [('reference',1,20),('minimum',2,max(order if case.endswith('_mhd') else order//2+1,5))]:
-                    run(base+'_'+variant,deck(case,order,a.nx,a.nx//blocks,a.steps,ng=ng,dim=a.dim),dict(case=case,order=order,frozen=True,ng=ng))
+                for variant,blocks,ng in [('reference',1,20),('minimum',2,max(order if case.endswith('_mhd') else order//2+1,a.revisions+3))]:
+                    run(base+'_'+variant,deck(case,order,a.nx,a.nx//blocks,a.steps,ng=ng,dim=a.dim,revisions=a.revisions),dict(case=case,order=order,frozen=True,ng=ng))
                 c=compare(a.output/(base+'_reference'),a.output/(base+'_minimum'))
                 report['comparisons'][base]=c;save()
                 assert c and all(v['time_difference']<1.e-12 and v['normalized_max']<2.e-6 for v in c.values()),(base,c)
@@ -131,12 +136,16 @@ def main():
                 times={}
                 # Alternate paths to reduce thermal/clock drift bias; all runs demote.
                 for repeat in range(a.repeats+1):
-                    for label,frozen in [('new',True),('legacy',False)]:
+                    variants=[('new',True,a.exe),('legacy',False,a.exe)]
+                    if a.baseline_exe:variants.append(('staged',True,a.baseline_exe))
+                    for label,frozen,exe in variants:
                         name=f'{base}_{label}_{repeat}'
-                        r=run(name,deck(case,order,a.nx,a.block,a.steps,frozen=frozen,outputs=False,dim=a.dim),dict(case=case,order=order,frozen=frozen,repeat=repeat,warmup=repeat==0))
+                        r=run(name,deck(case,order,a.nx,a.block,a.steps,frozen=frozen,outputs=False,dim=a.dim,revisions=a.revisions),dict(case=case,order=order,frozen=frozen,repeat=repeat,warmup=repeat==0),exe=exe)
                         if repeat:times.setdefault(label,[]).append(r['solver_seconds'])
                 report['timings'][base]={k:statistics.median(v) for k,v in times.items()}
                 report['timings'][base]['samples_seconds']=times
-                report['timings'][base]['new_over_legacy']=statistics.median(times['new'])/statistics.median(times['legacy']);save()
+                report['timings'][base]['new_over_legacy']=statistics.median(times['new'])/statistics.median(times['legacy'])
+                if a.baseline_exe:report['timings'][base]['new_over_staged']=statistics.median(times['new'])/statistics.median(times['staged'])
+                save()
     print('MATRIX_PASS',flush=True)
 if __name__=='__main__':main()

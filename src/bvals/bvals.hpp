@@ -224,6 +224,10 @@ class MeshBoundaryValuesCC : public MeshBoundaryValues {
   // functions to communicate CC data
   TaskStatus PackAndSendCC(DvceArray5D<Real> &a, DvceArray5D<Real> &ca);
   TaskStatus RecvAndUnpackCC(DvceArray5D<Real> &a, DvceArray5D<Real> &ca);
+  // Uniform-grid owner flux halos: face (k,j,i) belongs to cell (k,j,i).
+  // Uses CC boundary indices, without a full-volume CC staging array.
+  TaskStatus PackAndSendOwnedFluxCC(DvceFaceFld5D<Real> &flx);
+  TaskStatus RecvAndUnpackOwnedFluxCC(DvceFaceFld5D<Real> &flx);
   // functions to communicate fluxes of CC data
   TaskStatus PackAndSendFluxCC(DvceFaceFld5D<Real> &flx);
   TaskStatus RecvAndUnpackFluxCC(DvceFaceFld5D<Real> &flx);

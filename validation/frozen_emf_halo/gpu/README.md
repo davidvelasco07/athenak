@@ -1,5 +1,8 @@
 # Frozen fallback on Apollo: hydro and MHD in NR/SR/GR
 
+The hydro staging copies described by this initial benchmark have since been removed.
+See [direct hydro exchange validation and timings](direct_exchange/README.md) for the update.
+
 Validated on 2026-10-14, Apollo GPU 1, NVIDIA A100-PCIE-40GB, CUDA 12.4.
 All six configurations explicitly enable the new immutable-candidate path.
 The detector uses cell-local `rcfl`, `rtol=1e-4`, SED and two revisions.

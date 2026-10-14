@@ -527,7 +527,6 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
         }
         pbval_mood_candidate = new MeshBoundaryValuesCC(ppack, pin, false);
         pbval_mood_candidate->InitializeBuffers(ndir*nhydro);
-        Kokkos::realloc(mood_candidate, nmb, ndir*nhydro, ncells3, ncells2, ncells1);
       }
 
       // allocate arrays of flags/candidate state used with FOFC and MOOD
