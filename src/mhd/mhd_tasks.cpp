@@ -463,7 +463,7 @@ TaskStatus MHD::RecvU_Shr(Driver *pdrive, int stage) {
 
 TaskStatus MHD::EField(Driver *pdrive, int stage) {
   // Use CT to compute corner E
-  CornerE(pdrive, stage);
+  if (!(use_mood && mood_frozen_emf)) CornerE(pdrive, stage);
 
   AddSelectedDiffusionEMF(parabolic::DiffusionSelection::explicit_only);
 

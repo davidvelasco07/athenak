@@ -1,0 +1,18 @@
+{
+  "name": "long_fv4_one_less",
+  "code": 0,
+  "seconds": 0.5651576250093058,
+  "order": 4,
+  "ng": 5,
+  "revisions": 2,
+  "blocks": 2,
+  "dim": 2,
+  "steps": 8,
+  "frozen": true,
+  "halo": null,
+  "seed": -1,
+  "dump": true,
+  "mpi": 1,
+  "amp": 0.1,
+  "drat": 2
+}

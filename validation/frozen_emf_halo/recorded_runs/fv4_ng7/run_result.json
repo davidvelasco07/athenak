@@ -1,0 +1,18 @@
+{
+  "name": "fv4_ng7",
+  "code": 0,
+  "seconds": 0.1297012499999255,
+  "order": 4,
+  "ng": 7,
+  "revisions": 2,
+  "blocks": 2,
+  "dim": 2,
+  "steps": 1,
+  "frozen": true,
+  "halo": null,
+  "seed": -1,
+  "dump": true,
+  "mpi": 1,
+  "amp": 0.1,
+  "drat": 2
+}

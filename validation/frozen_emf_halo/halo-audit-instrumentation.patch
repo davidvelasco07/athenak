@@ -1,0 +1,177 @@
+--- a/src/mhd/mhd.hpp
++++ b/src/mhd/mhd.hpp
+@@ -194,6 +194,7 @@
+   bool mood_frozen_emf = false;
+   int mood_test_halo = -1;
+   int mood_test_seed = -1;
++  bool mood_test_dump = false;
+   DvceArray4D<int> fb_level;
+   DvceArray4D<Real> bmag_ref;
+   // Touched-cell restriction of revisions >= 2 (mhd_mood.cpp): only cells within the
+--- a/src/mhd/mhd.cpp
++++ b/src/mhd/mhd.cpp
+@@ -375,6 +375,7 @@
+     }
+     mood_frozen_emf = pin->GetOrAddBoolean("mhd", "mood_frozen_emf", false);
+     mood_test_halo = pin->GetOrAddInteger("mhd", "mood_test_halo", -1);
++    mood_test_dump = pin->GetOrAddBoolean("mhd", "mood_test_dump", false);
+     mood_test_seed = pin->GetOrAddInteger("mhd", "mood_test_seed", -1);
+     mood_sed = pin->GetOrAddBoolean("mhd","mood_sed",true);
+     // Restrict revisions >= 2 to the cells a revised face can reach (mhd_mood.cpp).
+--- a/src/mhd/mhd_mood.cpp
++++ b/src/mhd/mhd_mood.cpp
+@@ -32,6 +32,8 @@
+ #include <algorithm>
+ #include <limits>
+ #include <type_traits>
++#include <fstream>
++#include "globals.hpp"
+ 
+ #include "athena.hpp"
+ #include "mesh/mesh.hpp"
+@@ -804,6 +806,47 @@
+       }
+     });
+   };
++  const int audit_seed = mood_test_seed;
++  // seed <= -3 enables an adversarial detector: after the first seed, every
++  // cell whose candidate changed from the frozen base is rejected. This tests
++  // the full dependency cone without relying on a shock to trigger every pass.
++  DvceArray5D<Real> audit_base_u, audit_base_b;
++  if (audit_seed <= -3) {
++    audit_base_u=DvceArray5D<Real>("audit_base_u",utest_.layout());
++    audit_base_b=DvceArray5D<Real>("audit_base_b",bcctest_.layout());
++  }
++
++  const int audit_nx = pmy_pack->pmesh->mesh_indcs.nx1;
++  const int audit_ny = pmy_pack->pmesh->mesh_indcs.nx2;
++  const int audit_nz = pmy_pack->pmesh->mesh_indcs.nx3;
++  const Real audit_xmin = pmy_pack->pmesh->mesh_size.x1min;
++  const Real audit_ymin = pmy_pack->pmesh->mesh_size.x2min;
++  const Real audit_zmin = pmy_pack->pmesh->mesh_size.x3min;
++  auto audit_dump = [&](int rev, int h) {
++    if (!mood_test_dump) return;
++    auto U=Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),utest_);
++    auto B=Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),bcctest_);
++    auto L=Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),fb_level_);
++    std::string name="audit_c"+std::to_string(pmy_pack->pmesh->ncycle)
++      +"_s"+std::to_string(stage)+"_r"+std::to_string(rev)
++      +"_rank"+std::to_string(global_variable::my_rank)+".dat";
++    std::ofstream out(name,std::ios::binary);
++    for (int m=0;m<nmb;++m) {
++      auto loc=pmy_pack->pmesh->lloc_eachmb[pmy_pack->pmb->mb_gid.h_view(m)];
++      for (int k=three_d?ks-h:ks;k<=(three_d?ke+h:ks);++k)
++      for (int j=js-h;j<=je+h;++j) for (int i=is-h;i<=ie+h;++i) {
++        double row[13];
++        row[0]=loc.lx1*indcs_.nx1+i-is;
++        row[1]=loc.lx2*indcs_.nx2+j-js;
++        row[2]=loc.lx3*indcs_.nx3+k-ks;
++        for (int n=0;n<5;++n) row[3+n]=U(m,n,k,j,i);
++        for (int n=0;n<3;++n) row[8+n]=B(m,n,k,j,i);
++        row[11]=L(m,k,j,i);
++        row[12]=(i>=is&&i<=ie&&j>=js&&j<=je&&k>=ks&&k<=ke)?1:0;
++        out.write(reinterpret_cast<const char*>(row),sizeof(row));
++      }
++    }
++  };
+   int ndemoted_total = 0;
+   for (int rev=1; rev<=nrevs; ++rev) {
+     const bool masked = touched_only && (rev > 1);
+@@ -1140,6 +1183,10 @@
+     // (3) NaN + NAD detection; combine with PAD; demote survivors and count them.
+     // Same tier-floor split as hydro: PAD/NaN may cascade to DC, NAD (density, energy,
+     // magnetic field) demotes to the PLM tier only.
++    if (audit_seed <= -3 && rev == 1) {
++      Kokkos::deep_copy(audit_base_u,utest_);
++      Kokkos::deep_copy(audit_base_b,bcctest_);
++    }
+     int ndemoted = 0, ndemoted_int = 0;
+     const Real gsb0 = gscaleb[0], gsb1 = gscaleb[1], gsb2 = gscaleb[2];
+     const Real gsv0 = gscalev[0], gsv1 = gscalev[1], gsv2 = gscalev[2];
+@@ -1440,6 +1487,25 @@
+         }
+       }
+ 
++      // Test-only forced one-cell repair, or -2 to suppress all repairs.
++      if (audit_seed != -1) {
++        int gx=static_cast<int>(round((size_.d_view(m).x1min-audit_xmin)/size_.d_view(m).dx1))+i-is;
++        int gy=static_cast<int>(round((size_.d_view(m).x2min-audit_ymin)/size_.d_view(m).dx2))+j-js;
++        int gz=three_d ? static_cast<int>(round((size_.d_view(m).x3min-audit_zmin)/size_.d_view(m).dx3))+k-ks : 0;
++        gx=(gx%audit_nx+audit_nx)%audit_nx;
++        gy=(gy%audit_ny+audit_ny)%audit_ny;
++        gz=(gz%audit_nz+audit_nz)%audit_nz;
++        const int seed_cell=(audit_seed <= -3) ? -audit_seed-3 : audit_seed;
++        trouble=(seed_cell>=0 && rev==1 && (gz*audit_ny+gy)*audit_nx+gx==seed_cell);
++        if (audit_seed <= -3 && rev > 1) {
++          for (int n=0;n<nmhd_;++n) {
++            trouble=trouble || (utest_(m,n,k,j,i)!=audit_base_u(m,n,k,j,i));
++          }
++          for (int n=0;n<3;++n) {
++            trouble=trouble || (bcctest_(m,n,k,j,i)!=audit_base_b(m,n,k,j,i));
++          }
++        }
++      }
+       fofc_(m,k,j,i) = trouble;
+       if (trouble) {
+         fb_level_(m,k,j,i) += 1;
+@@ -1450,6 +1516,7 @@
+       }
+     }, Kokkos::Sum<int>(ndemoted), Kokkos::Sum<int>(ndemoted_int));
+ 
++    audit_dump(rev, dh);
+     if (ndemoted == 0) break;
+     ndemoted_total += ndemoted_int;
+ 
+--- a/src/outputs/binary.cpp
++++ b/src/outputs/binary.cpp
+@@ -93,7 +93,7 @@
+         << "  time=" << pm->time << std::endl
+         << "  cycle=" << pm->ncycle << std::endl
+         << "  size of location=" << sizeof(Real) << std::endl
+-        << "  size of variable=" << sizeof(float) << std::endl
++        << "  size of variable=" << sizeof(double) << std::endl
+         << "  number of variables=" << outvars.size() << std::endl
+         << "  variables:  ";
+     for (size_t n=0; n<outvars.size(); n++) {
+@@ -138,14 +138,14 @@
+   // ois, oie, ojs, oje, oks, oke + il1, il2, il3, level +
+   // x1min, x1max, x2min, x2max, x3min, x3max + data
+   std::size_t data_size = 10*sizeof(int32_t) + 6*sizeof(Real)
+-                        + (cells*nout_vars)*sizeof(float);
++                        + (cells*nout_vars)*sizeof(double);
+ 
+   int ns_mbs = pm->gids_eachrank[global_variable::my_rank];
+   int nb_mbs = pm->nmb_eachrank[global_variable::my_rank];
+ 
+   // allocate 1D vector of floats used to convert and output data
+   char *data = new char[nb_mbs*data_size];
+-  float *single_data = new float[cells];
++  double *single_data = new double[cells];
+ 
+   // Loop over MeshBlocks
+   for (int m=0; m<nout_mbs; ++m) {
+@@ -215,20 +215,20 @@
+     pdata+=sizeof(xv);
+ 
+     // output variables
+-    float tmp_data;
++    double tmp_data;
+     for (int n=0; n<nout_vars; n++) {
+       int cnt=0;
+       for (int k=oks; k<=oke; k++) {
+         for (int j=ojs; j<=oje; j++) {
+           for (int i=ois; i<=oie; i++) {
+-            tmp_data = static_cast<float>(outarray(n,m,k-oks,j-ojs,i-ois));
++            tmp_data = static_cast<double>(outarray(n,m,k-oks,j-ojs,i-ois));
+             single_data[cnt] = tmp_data;
+             cnt++;
+           }
+         }
+       }
+-      memcpy(pdata,single_data,cells*sizeof(float));
+-      pdata+=cells*sizeof(float);
++      memcpy(pdata,single_data,cells*sizeof(double));
++      pdata+=cells*sizeof(double);
+     }
+   }
+ 

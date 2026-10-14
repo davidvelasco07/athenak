@@ -1,0 +1,18 @@
+{
+  "name": "chain_r2_full",
+  "code": 0,
+  "seconds": 0.1876645419979468,
+  "order": 8,
+  "ng": 16,
+  "revisions": 2,
+  "blocks": 2,
+  "dim": 2,
+  "steps": 1,
+  "frozen": true,
+  "halo": null,
+  "seed": -2081,
+  "dump": true,
+  "mpi": 1,
+  "amp": 0.1,
+  "drat": 2
+}

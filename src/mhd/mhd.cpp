@@ -373,6 +373,11 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
         << "' not implemented (auto|blend|flag)" << std::endl;
       std::exit(EXIT_FAILURE);
     }
+    mood_frozen_emf = pin->GetOrAddBoolean("mhd", "mood_frozen_emf", false);
+    if (mood_frozen_emf && !use_mood) {
+      std::cerr << "mood_frozen_emf requires mood=true\n";
+      std::exit(EXIT_FAILURE);
+    }
     mood_sed = pin->GetOrAddBoolean("mhd","mood_sed",true);
     // Restrict revisions >= 2 to the cells a revised face can reach (mhd_mood.cpp).
     // Same answer bit for bit; skips the candidate update, the floor test (the GR
@@ -648,6 +653,26 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
       // CornerE: halo0 = h_f*nrevs.  With ct_contact (h_f = 1) this is the former
       // h_f + nrevs - 1; with UCT it is wider (fv4: 2 per revision).
       mood_halo0 = h_f*mood_max_revs;
+      if (mood_frozen_emf) {
+        if (!is_uct || !mood_edge_flag || mood_touched_only ||
+            !pmy_pack->pmesh->multi_d || pmy_pack->pmesh->multilevel ||
+            !peos->eos_data.is_ideal || nscalars != 0 ||
+            pvisc != nullptr || presist != nullptr || pcond != nullptr ||
+            pin->DoesBlockExist("shearing_box") ||
+            pin->GetOrAddBoolean("mhd", "well_balanced", false) ||
+            !mood_nad_bcc_avg ||
+            (recon_method != ReconstructionMethod::fv4 &&
+             recon_method != ReconstructionMethod::fv6 &&
+             recon_method != ReconstructionMethod::fv8) ||
+            pmy_pack->pcoord->is_special_relativistic ||
+            pmy_pack->pcoord->is_general_relativistic) {
+          std::cerr << "Frozen EMF audit requires uniform Newtonian multidimensional UCT,"
+                    << " FV4/FV6/FV8, ideal EOS, mood_nad_bcc=avg, mood_edge=flag,\n"
+                    << " mood_touched_only=false, and no diffusion, scalars, shear or well balance\n";
+          std::exit(EXIT_FAILURE);
+        }
+        mood_halo0 = mood_max_revs;
+      }
       // SED reads a +/-2 neighborhood even for PLM; otherwise the stencil is the
       // reconstruction half-width.
       int stencil = ReconStencilRadius(recon_method);
@@ -656,6 +681,12 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
       // the detector composes the UCT candidate over the halo: edge stencil reach past it
       if (mood_halo0 + h_f > ng_need) {
         ng_need = mood_halo0 + h_f;
+      }
+      // The initial candidate must be valid throughout the revision halo.
+      // FV_N reconstruction plus face-to-center B interpolation needs N cells.
+      // Frozen edge replacement propagates one cell per revision.
+      if (mood_frozen_emf) {
+        ng_need = mood_halo0 + 2*ReconStencilRadius(recon_method);
       }
       auto &indcs = pmy_pack->pmesh->mb_indcs;
       if (indcs.ng < ng_need) {

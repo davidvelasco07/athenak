@@ -1,0 +1,18 @@
+{
+  "name": "fv4_3d_one_less",
+  "code": 0,
+  "seconds": 1.5464055000338703,
+  "order": 4,
+  "ng": 5,
+  "revisions": 2,
+  "blocks": 2,
+  "dim": 3,
+  "steps": 1,
+  "frozen": true,
+  "halo": null,
+  "seed": -1,
+  "dump": true,
+  "mpi": 1,
+  "amp": 0.1,
+  "drat": 2
+}

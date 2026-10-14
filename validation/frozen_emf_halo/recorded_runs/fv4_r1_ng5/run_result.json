@@ -1,0 +1,18 @@
+{
+  "name": "fv4_r1_ng5",
+  "code": 0,
+  "seconds": 0.13210220803739503,
+  "order": 4,
+  "ng": 5,
+  "revisions": 1,
+  "blocks": 2,
+  "dim": 2,
+  "steps": 1,
+  "frozen": true,
+  "halo": null,
+  "seed": -1,
+  "dump": true,
+  "mpi": 1,
+  "amp": 0.1,
+  "drat": 2
+}

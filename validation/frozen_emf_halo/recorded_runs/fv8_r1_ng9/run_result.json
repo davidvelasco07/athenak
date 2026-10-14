@@ -1,0 +1,18 @@
+{
+  "name": "fv8_r1_ng9",
+  "code": 0,
+  "seconds": 0.132075542001985,
+  "order": 8,
+  "ng": 9,
+  "revisions": 1,
+  "blocks": 2,
+  "dim": 2,
+  "steps": 1,
+  "frozen": true,
+  "halo": null,
+  "seed": -1,
+  "dump": true,
+  "mpi": 1,
+  "amp": 0.1,
+  "drat": 2
+}

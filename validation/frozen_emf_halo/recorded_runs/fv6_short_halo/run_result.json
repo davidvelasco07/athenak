@@ -1,0 +1,18 @@
+{
+  "name": "fv6_short_halo",
+  "code": 0,
+  "seconds": 0.28824445902137086,
+  "order": 6,
+  "ng": 16,
+  "revisions": 2,
+  "blocks": 2,
+  "dim": 2,
+  "steps": 1,
+  "frozen": true,
+  "halo": 1,
+  "seed": -1,
+  "dump": true,
+  "mpi": 1,
+  "amp": 0.1,
+  "drat": 2
+}

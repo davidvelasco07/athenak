@@ -1,0 +1,24 @@
+[mbp254][[61016,0],0][btl_tcp_component.c:1021:mca_btl_tcp_component_create_listen] bind() failed: Operation not permitted (1)
+
+Root grid = 2 x 2 x 1 MeshBlocks
+Total number of MeshBlocks = 4
+Number of logical  levels of refinement = 1 (2 levels total)
+Number of physical levels of refinement = 0 (1 levels total)
+Number of parallel ranks = 1
+### WARNING in /Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/source/src/parameter_input.cpp: input parameter <mesh>/ix3_bc = periodic was not used by the code (check for a typo)
+### WARNING in /Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/source/src/parameter_input.cpp: input parameter <mesh>/ox3_bc = periodic was not used by the code (check for a typo)
+### WARNING in /Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/source/src/parameter_input.cpp: input parameter <meshblock>/nx3 = 1 was not used by the code (check for a typo)
+
+Setup complete, executing task list(s)...
+
+elapsed=2.364033e-02 cycle=0 time=0.000000e+00 dt=1.000000e-04
+elapsed=1.015045e-01 cycle=1 time=1.000000e-04 dt=2.000000e-04
+
+Terminating on cycle limit
+time=1.000000e-04 cycle=1
+tlim=1.000000e-04 nlim=1
+
+MeshBlock-cycles = 4
+cpu time used  = 7.787558e-02
+zone-cycles/cpu_second = 5.259671e+04
+particle-updates/cpu_second = 0.000000e+00

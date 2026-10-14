@@ -1,0 +1,504 @@
+--- a/src/mhd/mhd.hpp
++++ b/src/mhd/mhd.hpp
+@@ -190,6 +190,10 @@
+   bool mood_sed;
+   int n_fb_tiers;
+   int mood_halo0;
++  // Experimental frozen-EMF halo audit, opt-in; uniform Newtonian ideal MHD only.
++  bool mood_frozen_emf = false;
++  int mood_test_halo = -1;
++  int mood_test_seed = -1;
+   DvceArray4D<int> fb_level;
+   DvceArray4D<Real> bmag_ref;
+   // Touched-cell restriction of revisions >= 2 (mhd_mood.cpp): only cells within the
+--- a/src/mhd/mhd.cpp
++++ b/src/mhd/mhd.cpp
+@@ -373,6 +373,9 @@
+         << "' not implemented (auto|blend|flag)" << std::endl;
+       std::exit(EXIT_FAILURE);
+     }
++    mood_frozen_emf = pin->GetOrAddBoolean("mhd", "mood_frozen_emf", false);
++    mood_test_halo = pin->GetOrAddInteger("mhd", "mood_test_halo", -1);
++    mood_test_seed = pin->GetOrAddInteger("mhd", "mood_test_seed", -1);
+     mood_sed = pin->GetOrAddBoolean("mhd","mood_sed",true);
+     // Restrict revisions >= 2 to the cells a revised face can reach (mhd_mood.cpp).
+     // Same answer bit for bit; skips the candidate update, the floor test (the GR
+@@ -648,6 +651,17 @@
+       // CornerE: halo0 = h_f*nrevs.  With ct_contact (h_f = 1) this is the former
+       // h_f + nrevs - 1; with UCT it is wider (fv4: 2 per revision).
+       mood_halo0 = h_f*mood_max_revs;
++      if (mood_frozen_emf) {
++        if (!is_uct || !mood_edge_flag || mood_touched_only ||
++            !pmy_pack->pmesh->multi_d || pmy_pack->pmesh->multilevel ||
++            pmy_pack->pcoord->is_special_relativistic ||
++            pmy_pack->pcoord->is_general_relativistic) {
++          std::cerr << "Frozen EMF audit requires uniform Newtonian multidimensional UCT,"
++                    << " mood_edge=flag and mood_touched_only=false\n";
++          std::exit(EXIT_FAILURE);
++        }
++        mood_halo0 = (mood_test_halo >= 0) ? mood_test_halo : mood_max_revs;
++      }
+       // SED reads a +/-2 neighborhood even for PLM; otherwise the stencil is the
+       // reconstruction half-width.
+       int stencil = ReconStencilRadius(recon_method);
+@@ -656,6 +670,11 @@
+       // the detector composes the UCT candidate over the halo: edge stencil reach past it
+       if (mood_halo0 + h_f > ng_need) {
+         ng_need = mood_halo0 + h_f;
++      }
++      // Audit floor protects array accesses. Decomposition consistency may need
++      // more cells because face-to-center interpolation loses validity near ghosts.
++      if (mood_frozen_emf) {
++        ng_need = mood_halo0 + std::max(3, ReconEdgeReach(recon_method));
+       }
+       auto &indcs = pmy_pack->pmesh->mb_indcs;
+       if (indcs.ng < ng_need) {
+--- a/src/mhd/mhd_mood.cpp
++++ b/src/mhd/mhd_mood.cpp
+@@ -31,6 +31,7 @@
+ 
+ #include <algorithm>
+ #include <limits>
++#include <type_traits>
+ 
+ #include "athena.hpp"
+ #include "mesh/mesh.hpp"
+@@ -513,7 +514,7 @@
+ 
+   // Light-cone halo: the final iteration retains h_f = mood_halo0 - nrevs + 1 cells,
+   // the transverse reach of the corner-EMF composition (see mhd.cpp).
+-  const int h_f = mood_halo0/nrevs;   // composition reach per revision (mhd.cpp)
++  const int h_f = mood_frozen_emf ? 1 : mood_halo0/nrevs;   // composition reach per revision (mhd.cpp)
+ 
+   const int ndi = 1;
+   const int ndj = (multi_d) ? 1 : 0;
+@@ -562,10 +563,251 @@
+   const int r_touch = (uct_fl > 0 && multi_d) ? ReconEdgeReach(recon_method) + 2 : 1;
+   peos->c2p_mask = mood_touched;
+ 
++  auto revise_faces = [&](const int dh, const int force_tier) {
++    const int extra = (force_tier > 0) ? ((force_tier >= n_fb) ? 1 : 2) : 0;
++    const int de = dh + extra;
++    const int de2 = multi_d ? de : 0, de3 = three_d ? de : 0;
++    // x1 faces
++    par_for("mmood_rev_x1", DevExeSpace(), 0, nmb1, ks-de3, ke+de3, js-de2, je+de2, is-dh, ie+1+dh,
++    KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
++      if (force_tier > 0 || fofc_(m,k,j,i-1) || fofc_(m,k,j,i)) {
++        int lv_l = fb_level_(m,k,j,i-1), lv_r = fb_level_(m,k,j,i);
++        int tier = (force_tier > 0) ? force_tier : ((lv_l > lv_r) ? lv_l : lv_r);
++        ReconstructionMethod frecon = (tier >= n_fb) ?
++            ReconstructionMethod::dc : ReconstructionMethod::plm;
++        ReconFace<IVX>(frecon, m, k, j, i, nvars, wnad_, wl_, wr_);
++        ReconFace<IVX>(frecon, m, k, j, i, 3, bnad_, bl_, br_);
++        if (wb) {
++          AddFaceEquilibriumMHD(eos_, true, nmhd_, m, k, j, i, weqf1, beqf1,
++                                wl_, wr_, bl_, br_);
++        }
++        auto eos = eos_;
++        auto indcs = indcs_;
++        auto size = size_;
++        auto coord = coord_;
++        auto wl = wl_;  auto wr = wr_;  auto bl = bl_;  auto br = br_;
++        auto bx = b0x1;  auto flx = flx1;  auto eyl = e3x1_;  auto ezl = e2x1_;
++        const int is_ = is, js_ = js, ks_ = ks;
++        SolveFaceMHD<rsolver_method_, IVX>(eos, indcs, size, coord,
++                                           m, k, j, i, is_, js_, ks_,
++                                           wl, wr, bl, br, bx, flx, eyl, ezl,
++                                           uct_fl, aL1, dl1, dr1, vt1_1, vt2_1, sdet_);
++        if (wb) {
++          // perturbation flux and face EMFs; scalars upwinded on the FULL mass flux
++          for (int n=0; n<nmhd_; ++n) {
++            flx1(m,n,k,j,i) -= feq1(m,n,k,j,i);
++          }
++          eyl(m,k,j,i) -= e31q(m,k,j,i);
++          ezl(m,k,j,i) -= e21q(m,k,j,i);
++          const Real fd = flx1(m,IDN,k,j,i) + feq1(m,IDN,k,j,i);
++          for (int n=nmhd_; n<nvars; ++n) {
++            flx1(m,n,k,j,i) = (fd >= 0.0) ? fd*wl_(m,n,k,j,i) : fd*wr_(m,n,k,j,i);
++          }
++        } else {
++          for (int n=nmhd_; n<nvars; ++n) {
++            if (flx1(m,IDN,k,j,i) >= 0.0) {
++              flx1(m,n,k,j,i) = flx1(m,IDN,k,j,i)*wl_(m,n,k,j,i);
++            } else {
++              flx1(m,n,k,j,i) = flx1(m,IDN,k,j,i)*wr_(m,n,k,j,i);
++            }
++          }
++        }
++      }
++    });
++
++    // x2 faces
++    if (multi_d) {
++      par_for("mmood_rev_x2", DevExeSpace(), 0, nmb1, ks-de3, ke+de3, js-dh, je+1+dh, is-de, ie+de,
++      KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
++        if (force_tier > 0 || fofc_(m,k,j-1,i) || fofc_(m,k,j,i)) {
++          int lv_l = fb_level_(m,k,j-1,i), lv_r = fb_level_(m,k,j,i);
++          int tier = (force_tier > 0) ? force_tier : ((lv_l > lv_r) ? lv_l : lv_r);
++          ReconstructionMethod frecon = (tier >= n_fb) ?
++              ReconstructionMethod::dc : ReconstructionMethod::plm;
++          ReconFace<IVY>(frecon, m, k, j, i, nvars, wnad_, wl_, wr_);
++          ReconFace<IVY>(frecon, m, k, j, i, 3, bnad_, bl_, br_);
++          if (wb) {
++            AddFaceEquilibriumMHD(eos_, true, nmhd_, m, k, j, i, weqf2, beqf2,
++                                  wl_, wr_, bl_, br_);
++          }
++          auto eos = eos_;
++          auto indcs = indcs_;
++          auto size = size_;
++          auto coord = coord_;
++          auto wl = wl_;  auto wr = wr_;  auto bl = bl_;  auto br = br_;
++          auto bx = b0x2;  auto flx = flx2;  auto eyl = e1x2_;  auto ezl = e3x2_;
++          const int is_ = is, js_ = js, ks_ = ks;
++          SolveFaceMHD<rsolver_method_, IVY>(eos, indcs, size, coord,
++                                             m, k, j, i, is_, js_, ks_,
++                                             wl, wr, bl, br, bx, flx, eyl, ezl,
++                                             uct_fl, aL2, dl2, dr2, vt1_2, vt2_2, sdet_);
++          if (wb) {
++            // perturbation flux and face EMFs; scalars upwinded on the FULL mass flux
++            for (int n=0; n<nmhd_; ++n) {
++              flx2(m,n,k,j,i) -= feq2(m,n,k,j,i);
++            }
++            eyl(m,k,j,i) -= e12q(m,k,j,i);
++            ezl(m,k,j,i) -= e32q(m,k,j,i);
++            const Real fd = flx2(m,IDN,k,j,i) + feq2(m,IDN,k,j,i);
++            for (int n=nmhd_; n<nvars; ++n) {
++              flx2(m,n,k,j,i) = (fd >= 0.0) ? fd*wl_(m,n,k,j,i) : fd*wr_(m,n,k,j,i);
++            }
++          } else {
++            for (int n=nmhd_; n<nvars; ++n) {
++              if (flx2(m,IDN,k,j,i) >= 0.0) {
++                flx2(m,n,k,j,i) = flx2(m,IDN,k,j,i)*wl_(m,n,k,j,i);
++              } else {
++                flx2(m,n,k,j,i) = flx2(m,IDN,k,j,i)*wr_(m,n,k,j,i);
++              }
++            }
++          }
++        }
++      });
++    }
++
++    // x3 faces
++    if (three_d) {
++      par_for("mmood_rev_x3", DevExeSpace(), 0, nmb1, ks-dh, ke+1+dh, js-de2, je+de2, is-de, ie+de,
++      KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
++        if (force_tier > 0 || fofc_(m,k-1,j,i) || fofc_(m,k,j,i)) {
++          int lv_l = fb_level_(m,k-1,j,i), lv_r = fb_level_(m,k,j,i);
++          int tier = (force_tier > 0) ? force_tier : ((lv_l > lv_r) ? lv_l : lv_r);
++          ReconstructionMethod frecon = (tier >= n_fb) ?
++              ReconstructionMethod::dc : ReconstructionMethod::plm;
++          ReconFace<IVZ>(frecon, m, k, j, i, nvars, wnad_, wl_, wr_);
++          ReconFace<IVZ>(frecon, m, k, j, i, 3, bnad_, bl_, br_);
++          if (wb) {
++            AddFaceEquilibriumMHD(eos_, true, nmhd_, m, k, j, i, weqf3, beqf3,
++                                  wl_, wr_, bl_, br_);
++          }
++          auto eos = eos_;
++          auto indcs = indcs_;
++          auto size = size_;
++          auto coord = coord_;
++          auto wl = wl_;  auto wr = wr_;  auto bl = bl_;  auto br = br_;
++          auto bx = b0x3;  auto flx = flx3;  auto eyl = e2x3_;  auto ezl = e1x3_;
++          const int is_ = is, js_ = js, ks_ = ks;
++          SolveFaceMHD<rsolver_method_, IVZ>(eos, indcs, size, coord,
++                                             m, k, j, i, is_, js_, ks_,
++                                             wl, wr, bl, br, bx, flx, eyl, ezl,
++                                             uct_fl, aL3, dl3, dr3, vt1_3, vt2_3, sdet_);
++          if (wb) {
++            // perturbation flux and face EMFs; scalars upwinded on the FULL mass flux
++            for (int n=0; n<nmhd_; ++n) {
++              flx3(m,n,k,j,i) -= feq3(m,n,k,j,i);
++            }
++            eyl(m,k,j,i) -= e23q(m,k,j,i);
++            ezl(m,k,j,i) -= e13q(m,k,j,i);
++            const Real fd = flx3(m,IDN,k,j,i) + feq3(m,IDN,k,j,i);
++            for (int n=nmhd_; n<nvars; ++n) {
++              flx3(m,n,k,j,i) = (fd >= 0.0) ? fd*wl_(m,n,k,j,i) : fd*wr_(m,n,k,j,i);
++            }
++          } else {
++            for (int n=nmhd_; n<nvars; ++n) {
++              if (flx3(m,IDN,k,j,i) >= 0.0) {
++                flx3(m,n,k,j,i) = flx3(m,IDN,k,j,i)*wl_(m,n,k,j,i);
++              } else {
++                flx3(m,n,k,j,i) = flx3(m,IDN,k,j,i)*wr_(m,n,k,j,i);
++              }
++            }
++          }
++        }
++      });
++    }
++  };
++
++  // Reference implementation for the halo experiment, deliberately caching whole
++  // tiers. No base-order reconstruction runs after the initial candidate EMFs.
++  DvceEdgeFld4D<Real> ehigh("audit_high",1,1,1,1);
++  DvceEdgeFld4D<Real> eplm("audit_plm",1,1,1,1);
++  DvceEdgeFld4D<Real> edc("audit_dc",1,1,1,1);
++  auto copy_edges = [&](DvceEdgeFld4D<Real> &dst, const DvceEdgeFld4D<Real> &src) {
++    Kokkos::deep_copy(dst.x1e, src.x1e);
++    Kokkos::deep_copy(dst.x2e, src.x2e);
++    Kokkos::deep_copy(dst.x3e, src.x3e);
++  };
++  if (mood_frozen_emf) {
++    if (wb) { std::cerr << "Frozen EMF audit does not support well balance\n"; std::exit(1); }
++    ehigh = DvceEdgeFld4D<Real>("audit_high",nmb,ncells3,ncells2,ncells1);
++    eplm = DvceEdgeFld4D<Real>("audit_plm",nmb,ncells3,ncells2,ncells1);
++    edc = DvceEdgeFld4D<Real>("audit_dc",nmb,ncells3,ncells2,ncells1);
++    const int h = mood_halo0, h2 = multi_d ? h : 0, h3 = three_d ? h : 0;
++    auto compose = [&]() {
++      ComposeCornerEMF(is-h,ie+h+1,js-h2,je+h2+1,ks-h3,
++                       three_d ? ke+h3+1 : ks, false);
++    };
++    compose();
++    copy_edges(ehigh, efld);
++    auto clone = [](const auto &v) {
++      using V = typename std::decay<decltype(v)>::type;
++      V saved("audit_saved", v.layout());
++      Kokkos::deep_copy(saved,v);
++      return saved;
++    };
++    auto f1save=clone(flx1), f2save=clone(flx2), f3save=clone(flx3);
++    auto e31save=clone(e3x1_), e21save=clone(e2x1_), e12save=clone(e1x2_);
++    auto e32save=clone(e3x2_), e23save=clone(e2x3_), e13save=clone(e1x3_);
++    auto base_recon = recon_method;
++    if (n_fb > 1) {
++      revise_faces(h, 1);
++      recon_method = ReconstructionMethod::plm;
++      compose();
++      copy_edges(eplm, efld);
++    }
++    revise_faces(h, n_fb);
++    recon_method = ReconstructionMethod::dc;
++    compose();
++    copy_edges(edc, efld);
++    recon_method = base_recon;
++    copy_edges(efld, ehigh);
++    Kokkos::deep_copy(flx1,f1save); Kokkos::deep_copy(flx2,f2save);
++    Kokkos::deep_copy(flx3,f3save);
++    Kokkos::deep_copy(e3x1_,e31save); Kokkos::deep_copy(e2x1_,e21save);
++    Kokkos::deep_copy(e1x2_,e12save); Kokkos::deep_copy(e3x2_,e32save);
++    Kokkos::deep_copy(e2x3_,e23save); Kokkos::deep_copy(e1x3_,e13save);
++  }
++  auto select_frozen_edges = [&](const int h) {
++    auto E1=efld.x1e, E2=efld.x2e, E3=efld.x3e;
++    auto P1=eplm.x1e, P2=eplm.x2e, P3=eplm.x3e;
++    auto D1=edc.x1e, D2=edc.x2e, D3=edc.x3e;
++    const bool td=three_d;
++    par_for("audit_select_edges", DevExeSpace(), 0,nmb1,
++            td ? ks-h : ks, td ? ke+h+1 : ks, js-h,je+h+1,is-h,ie+h+1,
++    KOKKOS_LAMBDA(const int m,const int k,const int j,const int i) {
++      int t3=0;
++      for (int dj=-1;dj<=0;++dj) for (int di=-1;di<=0;++di) {
++        const int t=fb_level_(m,k,j+dj,i+di); t3=(t>t3)?t:t3;
++      }
++      if (t3>0) E3(m,k,j,i)=(t3>=n_fb)?D3(m,k,j,i):P3(m,k,j,i);
++      if (td) {
++        int t1=0,t2=0;
++        for (int dk=-1;dk<=0;++dk) for (int dj=-1;dj<=0;++dj) {
++          const int t=fb_level_(m,k+dk,j+dj,i); t1=(t>t1)?t:t1;
++        }
++        for (int dk=-1;dk<=0;++dk) for (int di=-1;di<=0;++di) {
++          const int t=fb_level_(m,k+dk,j,i+di); t2=(t>t2)?t:t2;
++        }
++        if (t1>0) E1(m,k,j,i)=(t1>=n_fb)?D1(m,k,j,i):P1(m,k,j,i);
++        if (t2>0) E2(m,k,j,i)=(t2>=n_fb)?D2(m,k,j,i):P2(m,k,j,i);
++      } else {
++        int t1=fb_level_(m,ks,j-1,i), t=fb_level_(m,ks,j,i);
++        t1=(t>t1)?t:t1;
++        int t2=fb_level_(m,ks,j,i-1); t2=(t>t2)?t:t2;
++        if (t1>0) {
++          E1(m,ks,j,i)=(t1>=n_fb)?D1(m,ks,j,i):P1(m,ks,j,i);
++          E1(m,ke+1,j,i)=E1(m,ks,j,i);
++        }
++        if (t2>0) {
++          E2(m,ks,j,i)=(t2>=n_fb)?D2(m,ks,j,i):P2(m,ks,j,i);
++          E2(m,ke+1,j,i)=E2(m,ks,j,i);
++        }
++      }
++    });
++  };
+   int ndemoted_total = 0;
+   for (int rev=1; rev<=nrevs; ++rev) {
+     const bool masked = touched_only && (rev > 1);
+-    const int dh = h_f*(nrevs - rev + 1);   // light-cone halo of this revision
++    const int dh = mood_frozen_emf ? std::max(0, mood_halo0-rev+1) : h_f*(nrevs-rev+1);   // light-cone halo of this revision
+     int il = is-dh, iu = ie+dh, jl = js, ju = je, kl = ks, ku = ke;
+     if (multi_d) { jl = js-dh; ju = je+dh; }
+     if (three_d) { kl = ks-dh; ku = ke+dh; }
+@@ -683,7 +925,7 @@
+       // out to this reach (mhd_fluxes.cpp), so every halo cell sees the same composed
+       // candidate as the neighbouring block's interior and the demotion pattern is
+       // block-decomposition invariant.
+-      ComposeCornerEMF(il, iu+1, jl, ju+1, kl, (three_d ? ku+1 : ks), masked);
++      if (!mood_frozen_emf) ComposeCornerEMF(il, iu+1, jl, ju+1, kl, (three_d ? ku+1 : ks), masked);
+       auto bt1 = b0_test.x1f;  auto bt2 = b0_test.x2f;  auto bt3 = b0_test.x3f;
+       auto e1c = efld.x1e;  auto e2c = efld.x2e;  auto e3c = efld.x3e;
+       const bool td = three_d;
+@@ -1216,153 +1458,9 @@
+     // fluxes, face-centered E-fields, and (UCT) the face coefficients, all through the
+     // same per-face Riemann re-solve as the base scheme.
+ 
+-    // x1 faces
+-    par_for("mmood_rev_x1", DevExeSpace(), 0, nmb1, kl, ku, jl, ju, is-dh, ie+1+dh,
+-    KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+-      if (fofc_(m,k,j,i-1) || fofc_(m,k,j,i)) {
+-        int lv_l = fb_level_(m,k,j,i-1), lv_r = fb_level_(m,k,j,i);
+-        int tier = (lv_l > lv_r) ? lv_l : lv_r;
+-        ReconstructionMethod frecon = (tier >= n_fb) ?
+-            ReconstructionMethod::dc : ReconstructionMethod::plm;
+-        ReconFace<IVX>(frecon, m, k, j, i, nvars, wnad_, wl_, wr_);
+-        ReconFace<IVX>(frecon, m, k, j, i, 3, bnad_, bl_, br_);
+-        if (wb) {
+-          AddFaceEquilibriumMHD(eos_, true, nmhd_, m, k, j, i, weqf1, beqf1,
+-                                wl_, wr_, bl_, br_);
+-        }
+-        auto eos = eos_;
+-        auto indcs = indcs_;
+-        auto size = size_;
+-        auto coord = coord_;
+-        auto wl = wl_;  auto wr = wr_;  auto bl = bl_;  auto br = br_;
+-        auto bx = b0x1;  auto flx = flx1;  auto eyl = e3x1_;  auto ezl = e2x1_;
+-        const int is_ = is, js_ = js, ks_ = ks;
+-        SolveFaceMHD<rsolver_method_, IVX>(eos, indcs, size, coord,
+-                                           m, k, j, i, is_, js_, ks_,
+-                                           wl, wr, bl, br, bx, flx, eyl, ezl,
+-                                           uct_fl, aL1, dl1, dr1, vt1_1, vt2_1, sdet_);
+-        if (wb) {
+-          // perturbation flux and face EMFs; scalars upwinded on the FULL mass flux
+-          for (int n=0; n<nmhd_; ++n) {
+-            flx1(m,n,k,j,i) -= feq1(m,n,k,j,i);
+-          }
+-          eyl(m,k,j,i) -= e31q(m,k,j,i);
+-          ezl(m,k,j,i) -= e21q(m,k,j,i);
+-          const Real fd = flx1(m,IDN,k,j,i) + feq1(m,IDN,k,j,i);
+-          for (int n=nmhd_; n<nvars; ++n) {
+-            flx1(m,n,k,j,i) = (fd >= 0.0) ? fd*wl_(m,n,k,j,i) : fd*wr_(m,n,k,j,i);
+-          }
+-        } else {
+-          for (int n=nmhd_; n<nvars; ++n) {
+-            if (flx1(m,IDN,k,j,i) >= 0.0) {
+-              flx1(m,n,k,j,i) = flx1(m,IDN,k,j,i)*wl_(m,n,k,j,i);
+-            } else {
+-              flx1(m,n,k,j,i) = flx1(m,IDN,k,j,i)*wr_(m,n,k,j,i);
+-            }
+-          }
+-        }
+-      }
+-    });
+-
+-    // x2 faces
+-    if (multi_d) {
+-      par_for("mmood_rev_x2", DevExeSpace(), 0, nmb1, kl, ku, js-dh, je+1+dh, il, iu,
+-      KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+-        if (fofc_(m,k,j-1,i) || fofc_(m,k,j,i)) {
+-          int lv_l = fb_level_(m,k,j-1,i), lv_r = fb_level_(m,k,j,i);
+-          int tier = (lv_l > lv_r) ? lv_l : lv_r;
+-          ReconstructionMethod frecon = (tier >= n_fb) ?
+-              ReconstructionMethod::dc : ReconstructionMethod::plm;
+-          ReconFace<IVY>(frecon, m, k, j, i, nvars, wnad_, wl_, wr_);
+-          ReconFace<IVY>(frecon, m, k, j, i, 3, bnad_, bl_, br_);
+-          if (wb) {
+-            AddFaceEquilibriumMHD(eos_, true, nmhd_, m, k, j, i, weqf2, beqf2,
+-                                  wl_, wr_, bl_, br_);
+-          }
+-          auto eos = eos_;
+-          auto indcs = indcs_;
+-          auto size = size_;
+-          auto coord = coord_;
+-          auto wl = wl_;  auto wr = wr_;  auto bl = bl_;  auto br = br_;
+-          auto bx = b0x2;  auto flx = flx2;  auto eyl = e1x2_;  auto ezl = e3x2_;
+-          const int is_ = is, js_ = js, ks_ = ks;
+-          SolveFaceMHD<rsolver_method_, IVY>(eos, indcs, size, coord,
+-                                             m, k, j, i, is_, js_, ks_,
+-                                             wl, wr, bl, br, bx, flx, eyl, ezl,
+-                                             uct_fl, aL2, dl2, dr2, vt1_2, vt2_2, sdet_);
+-          if (wb) {
+-            // perturbation flux and face EMFs; scalars upwinded on the FULL mass flux
+-            for (int n=0; n<nmhd_; ++n) {
+-              flx2(m,n,k,j,i) -= feq2(m,n,k,j,i);
+-            }
+-            eyl(m,k,j,i) -= e12q(m,k,j,i);
+-            ezl(m,k,j,i) -= e32q(m,k,j,i);
+-            const Real fd = flx2(m,IDN,k,j,i) + feq2(m,IDN,k,j,i);
+-            for (int n=nmhd_; n<nvars; ++n) {
+-              flx2(m,n,k,j,i) = (fd >= 0.0) ? fd*wl_(m,n,k,j,i) : fd*wr_(m,n,k,j,i);
+-            }
+-          } else {
+-            for (int n=nmhd_; n<nvars; ++n) {
+-              if (flx2(m,IDN,k,j,i) >= 0.0) {
+-                flx2(m,n,k,j,i) = flx2(m,IDN,k,j,i)*wl_(m,n,k,j,i);
+-              } else {
+-                flx2(m,n,k,j,i) = flx2(m,IDN,k,j,i)*wr_(m,n,k,j,i);
+-              }
+-            }
+-          }
+-        }
+-      });
+-    }
+-
+-    // x3 faces
+-    if (three_d) {
+-      par_for("mmood_rev_x3", DevExeSpace(), 0, nmb1, ks-dh, ke+1+dh, jl, ju, il, iu,
+-      KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+-        if (fofc_(m,k-1,j,i) || fofc_(m,k,j,i)) {
+-          int lv_l = fb_level_(m,k-1,j,i), lv_r = fb_level_(m,k,j,i);
+-          int tier = (lv_l > lv_r) ? lv_l : lv_r;
+-          ReconstructionMethod frecon = (tier >= n_fb) ?
+-              ReconstructionMethod::dc : ReconstructionMethod::plm;
+-          ReconFace<IVZ>(frecon, m, k, j, i, nvars, wnad_, wl_, wr_);
+-          ReconFace<IVZ>(frecon, m, k, j, i, 3, bnad_, bl_, br_);
+-          if (wb) {
+-            AddFaceEquilibriumMHD(eos_, true, nmhd_, m, k, j, i, weqf3, beqf3,
+-                                  wl_, wr_, bl_, br_);
+-          }
+-          auto eos = eos_;
+-          auto indcs = indcs_;
+-          auto size = size_;
+-          auto coord = coord_;
+-          auto wl = wl_;  auto wr = wr_;  auto bl = bl_;  auto br = br_;
+-          auto bx = b0x3;  auto flx = flx3;  auto eyl = e2x3_;  auto ezl = e1x3_;
+-          const int is_ = is, js_ = js, ks_ = ks;
+-          SolveFaceMHD<rsolver_method_, IVZ>(eos, indcs, size, coord,
+-                                             m, k, j, i, is_, js_, ks_,
+-                                             wl, wr, bl, br, bx, flx, eyl, ezl,
+-                                             uct_fl, aL3, dl3, dr3, vt1_3, vt2_3, sdet_);
+-          if (wb) {
+-            // perturbation flux and face EMFs; scalars upwinded on the FULL mass flux
+-            for (int n=0; n<nmhd_; ++n) {
+-              flx3(m,n,k,j,i) -= feq3(m,n,k,j,i);
+-            }
+-            eyl(m,k,j,i) -= e23q(m,k,j,i);
+-            ezl(m,k,j,i) -= e13q(m,k,j,i);
+-            const Real fd = flx3(m,IDN,k,j,i) + feq3(m,IDN,k,j,i);
+-            for (int n=nmhd_; n<nvars; ++n) {
+-              flx3(m,n,k,j,i) = (fd >= 0.0) ? fd*wl_(m,n,k,j,i) : fd*wr_(m,n,k,j,i);
+-            }
+-          } else {
+-            for (int n=nmhd_; n<nvars; ++n) {
+-              if (flx3(m,IDN,k,j,i) >= 0.0) {
+-                flx3(m,n,k,j,i) = flx3(m,IDN,k,j,i)*wl_(m,n,k,j,i);
+-              } else {
+-                flx3(m,n,k,j,i) = flx3(m,IDN,k,j,i)*wr_(m,n,k,j,i);
+-              }
+-            }
+-          }
+-        }
+-      });
+-    }
++    revise_faces(dh, 0);
++    if (mood_frozen_emf) select_frozen_edges(dh);
++
+   }
+ 
+   pmy_pack->pmesh->ecounter.nmood += ndemoted_total;
+--- a/src/mhd/mhd_tasks.cpp
++++ b/src/mhd/mhd_tasks.cpp
+@@ -463,7 +463,7 @@
+ 
+ TaskStatus MHD::EField(Driver *pdrive, int stage) {
+   // Use CT to compute corner E
+-  CornerE(pdrive, stage);
++  if (!mood_frozen_emf) CornerE(pdrive, stage);
+ 
+   AddSelectedDiffusionEMF(parabolic::DiffusionSelection::explicit_only);
+ 

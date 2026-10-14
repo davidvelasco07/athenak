@@ -190,6 +190,8 @@ class MHD {
   bool mood_sed;
   int n_fb_tiers;
   int mood_halo0;
+  // Experimental frozen-EMF halo audit, opt-in; uniform Newtonian ideal MHD only.
+  bool mood_frozen_emf = false;
   DvceArray4D<int> fb_level;
   DvceArray4D<Real> bmag_ref;
   // Touched-cell restriction of revisions >= 2 (mhd_mood.cpp): only cells within the

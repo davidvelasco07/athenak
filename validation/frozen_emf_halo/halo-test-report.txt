@@ -1,0 +1,100 @@
+Frozen-EMF MOOD halo experiment — 14 October 2026
+
+With retained high-order EMFs and local fallback replacements, the tested
+two-revision ghost counts are FV4: 6, FV6: 8, FV8: 10.
+
+The initial detection halo is one cell per revision. For the current FV_N
+reconstruction and face-to-centre magnetic interpolation, the derived bound is
+
+    initial detection halo = number of revisions
+    nghost >= N + number of revisions
+
+                       1 revision   2 revisions   3 revisions   4 revisions
+    FV4                     5            6             7             8
+    FV6                     7            8             9            10
+    FV8                     9           10            11            12
+
+All entries matched the large-block reference at every tested candidate cell
+and flag, including the shrinking ghost halo, in the 2D sweep. The bounds for
+two revisions also passed in 3D. This is a result for the isolated prototype,
+not a change to the source worktree or production runs.
+
+Why these numbers follow from the retained-EMF method
+
+The high-order fluxes and EMFs are evaluated once per stage. The prototype
+also computes complete PLM/DC fallback EMFs from immutable stage data. A cell
+demotion changes only its adjacent face fluxes and the EMFs on edges bounding
+those faces. Every other edge retains its original high-order EMF. The final
+CT update uses these selected EMFs without calling the full corner composition
+again. A revision can therefore influence neighboring candidates by at most
+one cell in any coordinate direction.
+
+FV_N has cell reconstruction radius r=N/2 and edge reach r+1. The stage-input
+face-to-centre B interpolation reaches another r-1 cells beyond a cell's
+face interval. Its combination with face/edge reconstruction gives an initial
+input footprint of (r+1)+(r-1)=N cells beyond the candidate region. Adding the
+revision halo gives N+revisions. The original constructor's two-revision
+checks were 9/12/15 for FV4/FV6/FV8; this experiment supports 6/8/10 for the
+changed method. This does not validate the old recomposition method's bounds.
+
+Evidence
+
+72 completed CPU runs used Kokkos bounds checking, double-precision output,
+UCT-HLLD, RK3, periodic boundaries, and the field-loop problem with magnetic
+amplitude 0.1 and a density ratio of 2. Reference and test runs both used the
+same frozen-EMF method. Comparisons required exact equality, not a tolerance.
+
+* 2D: 64x64 cells, one block versus four blocks, FV4/FV6/FV8, 1–4 revisions.
+* 3D: 32x32x32 rotated loop, one block versus eight blocks, all three orders
+  with two revisions.
+* Eight-step RK3 runs: all three orders at their proposed two-revision counts.
+* Four MPI ranks: FV8 in both 2D and 3D at nghost=10.
+* All positive cases matched initial/final fields, final flags and div(B),
+  and every saved candidate and flag in the detector halo exactly.
+* Physical-boundary ghost comparisons used the same global coordinates in
+  the reference; they were not wrapped onto a different periodic copy.
+
+A forced single-cell FV8 repair at global cell (32,32) changed exactly nine
+candidate cells: the surrounding 3x3 neighborhood. No candidate outside one
+cell changed. This directly measures the revision's support while the base
+order is FV8.
+
+An adversarial test detector seeded one cell and then rejected every candidate
+changed by previous repairs. With 1–4 revisions, the full detection halo
+matched the reference exactly. Reducing that halo by one produced different
+final solutions in all four cases (maximum absolute field differences about
+4.6e-4 to 6.5e-4). This is a deliberately synthetic detector for testing the
+dependency cone, not a physical stability test.
+
+The ordinary FV4 loop also produced a different final solution when the
+two-revision detection halo was shortened from two cells to one, even with
+16 input ghost cells. Adequate input data cannot replace the revision halo.
+
+Reducing nghost by one below N+revisions changed outer-halo candidates in the
+2D/3D checks. For example, with two revisions FV4 at nghost=5 also changed
+48 halo flags in the first stage's first detection pass. The ordinary loop's
+final interior fields still matched at the one-cell-smaller ghost counts;
+that alone would have missed the incorrect ghost candidates. Thus the counts
+above certify exact tested halo computation, rather than claiming every
+smaller count immediately destabilizes the physical solution.
+
+After eight steps, max|div(B)| was 7.55e-15, 7.11e-15 and 6.44e-15 for
+FV4/FV6/FV8, respectively, identical to the corresponding large-block runs.
+
+Scope and saved artifacts
+
+Baseline: 2d251bb09d67fe76ac97d419041c33dc906db2ca from fallback-validation.
+The original worktree was read only. The experiment is in an isolated copy.
+
+This is a reference implementation that caches full fallback tiers to make
+the dependency test unambiguous. It is not optimized for production memory
+or speed. SMR/AMR, GR/SR, well balance, diffusion, GPU execution, and nonperiodic
+boundaries were not certified. In particular, these numbers should not yet
+replace production checks for those configurations.
+
+halo-test-results.json contains all run parameters, comparisons, source
+hashes, and the executable hash. frozen-emf-prototype.patch contains the
+experimental method; halo-audit-instrumentation.patch adds snapshots, forced
+detectors, and double-precision binary output. Apply both to the recorded
+baseline to obtain the tested source. The reproduction archive includes the
+scripts and per-run inputs/logs, without the large raw snapshot arrays.

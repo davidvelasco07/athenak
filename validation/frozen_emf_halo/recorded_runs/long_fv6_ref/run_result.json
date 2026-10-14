@@ -1,0 +1,18 @@
+{
+  "name": "long_fv6_ref",
+  "code": 0,
+  "seconds": 0.5587692090193741,
+  "order": 6,
+  "ng": 16,
+  "revisions": 2,
+  "blocks": 1,
+  "dim": 2,
+  "steps": 8,
+  "frozen": true,
+  "halo": null,
+  "seed": -1,
+  "dump": true,
+  "mpi": 1,
+  "amp": 0.1,
+  "drat": 2
+}

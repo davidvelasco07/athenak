@@ -1,0 +1,18 @@
+{
+  "name": "fv8_3d_ref",
+  "code": 0,
+  "seconds": 1.3325444589718245,
+  "order": 8,
+  "ng": 14,
+  "revisions": 2,
+  "blocks": 1,
+  "dim": 3,
+  "steps": 1,
+  "frozen": true,
+  "halo": null,
+  "seed": -1,
+  "dump": true,
+  "mpi": 1,
+  "amp": 0.1,
+  "drat": 2
+}
