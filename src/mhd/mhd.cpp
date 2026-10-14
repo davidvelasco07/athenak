@@ -398,7 +398,7 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
     } else if (xorder.compare("fv4") == 0 ||
                xorder.compare("fv6") == 0 ||
                xorder.compare("fv8") == 0) {
-      // Unlimited central face interpolation (no upwind dissipation of its own).
+      // Unlimited cell-polynomial reconstruction (fv.hpp); no limiter of its own.
       if (xorder.compare("fv4") == 0) {
         recon_method = ReconstructionMethod::fv4;
       } else if (xorder.compare("fv6") == 0) {

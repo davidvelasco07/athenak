@@ -21,7 +21,7 @@ extension to static magnetohydrostatic equilibria, `grad p = rho g + J x B`, `v 
 | feature | status | gate |
 |---|---|---|
 | base scheme plm, Riemann solvers llf / hlle / hlld / lhlld | exact | `mhd_gates.sh` "base scheme" |
-| fv6 / fv8 + MOOD (hydro and MHD, ct_contact and uct) | exact; the single-valued face equilibrium (and the UCT equilibrium edge value) is the scheme's own central interpolant, so `fvN(w_eq) + fvN(w')` is `fvN(w_eq + w')` up to round-off | "fv6 / fv8", "hydro", `wb_onoff_1d.sh` |
+| fv6 / fv8 + MOOD (hydro and MHD, ct_contact and uct) | exact; the face equilibrium (and the UCT equilibrium edge value) is a single-valued central interpolant at the scheme's order, added to both sides. Since 2026-10-14 the fvN base reconstruction is the two-sided cell polynomial (fv.hpp), so the equilibrium is no longer the base scheme applied to `w_eq`; the gate stays exact at rest because the perturbation states vanish there | "fv6 / fv8", "hydro", `wb_onoff_1d.sh` |
 | `emf = ct_contact`, `uct_hll`, `uct_hlld` | exact (the UCT edge reconstruction acts on `b0 - b_eq` plus a single-valued equilibrium edge value) | all rows |
 | MOOD fallback (`fv4 + mood`), `mood_edge = flag` and `blend`, `mood_nad_b = comps` and `mag` | exact, 0 demotions at rest | "fv4 + MOOD", `nmood_check.sh` |
 | FOFC (`plm + fofc`) | exact; replacement fluxes through the face equilibrium | "plm + FOFC" |
@@ -49,8 +49,11 @@ of this document (2026-10-13 morning) were run with a build that had `Athena_ENA
 so `mpirun -np 4` ran four serial copies and the rows were vacuous; gate.sh now prints the
 rank count the code reports. For fv4+MOOD under UCT this required composing the
 staggered candidate field over the whole light-cone halo and growing that halo by the edge
-reach per revision (`mood_halo0 = reach * mood_max_revs`), so fv4+MOOD with `uct_*` now needs
-`nghost >= 7` (8 with SMR/AMR, which need an even count); ct_contact is unchanged.
+reach per revision (`mood_halo0 = reach * mood_max_revs`). With the central single-valued edge
+interpolant that meant `nghost >= 7` for fv4+MOOD with `uct_*`; since the two-sided cell-polynomial
+reconstruction of 2026-10-14 the edge reach is radius+1 (3, 4, 5 for fv4, fv6, fv8) and the
+requirement with the default two revisions is `nghost >= 9 / 12 / 15` (even counts with
+SMR/AMR); ct_contact is unchanged.
 
 ## Pulse sweep (`scripts/mhd/pulse_sweep.sh`, `results/mhd_pulse_sweep.{txt,png}`)
 

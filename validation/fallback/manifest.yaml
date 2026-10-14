@@ -17,7 +17,8 @@ schemes:
     reconstruct: fv4
     mood: true
     nghost_hydro: 5
-    nghost_mhd_uct: 6
+    # UCT: edge reach (radius+1) x mood_max_revs 2 + 1 + radius, mhd.cpp
+    nghost_mhd_uct: 9
   fv6_fb:
     fofc: false
     integrator: rk3
@@ -25,15 +26,16 @@ schemes:
     mood: true
     # radius 3 + 1 + mood_max_revs 2
     nghost_hydro: 6
-    # UCT edge reach 3 + mood halo: see mhd.cpp
-    nghost_mhd_uct: 8
+    # UCT: edge reach (radius+1) x mood_max_revs 2 + 1 + radius, mhd.cpp
+    nghost_mhd_uct: 12
   fv8_fb:
     fofc: false
     integrator: rk3
     reconstruct: fv8
     mood: true
     nghost_hydro: 7
-    nghost_mhd_uct: 10
+    # UCT: edge reach (radius+1) x mood_max_revs 2 + 1 + radius, mhd.cpp
+    nghost_mhd_uct: 15
   plm:
     fofc: true          # a-posteriori counterpart of MOOD (see scheme_overrides)
     integrator: rk2

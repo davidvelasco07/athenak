@@ -112,10 +112,11 @@ void ReconCellT(const EOS_Data &eos, const bool apply_floors,
   } else if constexpr (recon == ReconstructionMethod::fv4 ||
                        recon == ReconstructionMethod::fv6 ||
                        recon == ReconstructionMethod::fv8) {
-    // Unlimited central face interpolation (fv.hpp).  Both cells sharing a face get
-    // the same value (wl = wr), so the Riemann solver returns the pure physical flux
-    // with no upwind dissipation.  Stability relies entirely on the MOOD a-posteriori
-    // fallback (enforced in the Hydro/MHD constructor).
+    // Unlimited cell-polynomial reconstruction (fv.hpp): cell i evaluates its own
+    // degree-p polynomial at its two faces, so the two cells sharing a face give
+    // different states and the Riemann solver adds O(h^{p+1}) upwind dissipation.
+    // Stability relies entirely on the MOOD a-posteriori fallback (enforced in the
+    // Hydro/MHD constructor).
     if constexpr (recon == ReconstructionMethod::fv4) {
       FV4(q(m, n, k - 2*dk, j - 2*dj, i - 2*di),
           q(m, n, k -   dk, j -   dj, i -   di),

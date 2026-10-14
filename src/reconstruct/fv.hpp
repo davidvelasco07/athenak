@@ -6,42 +6,56 @@
 // Licensed under the 3-clause BSD License (the "LICENSE")
 //========================================================================================
 //! \file fv.hpp
-//! \brief UNLIMITED central finite-volume face interpolation of cell averages at 4th,
-//! 6th and 8th order on a uniform grid (reconstruct = fv4 | fv6 | fv8).
+//! \brief UNLIMITED finite-volume reconstruction of cell averages at 4th, 6th and 8th
+//! order on a uniform grid (reconstruct = fv4 | fv6 | fv8).
 //!
-//! Each function returns the point value at the face between cells i and i+1 from the
-//! N cell averages symmetric about that face.  The weights are the unique ones exact for
-//! polynomials up to degree N-1 (hence order N for smooth data):
+//! Two families of interpolants live here.
 //!
-//!   fv4:  ( -q_{i-1} +  7 q_i  +  7 q_{i+1} -  q_{i+2}) / 12
-//!   fv6:  (  q_{i-2} -  8 q_{i-1} + 37 q_i + 37 q_{i+1} -  8 q_{i+2} +  q_{i+3}) / 60
-//!   fv8:  (-3 q_{i-3} + 29 q_{i-2} - 139 q_{i-1} + 533 q_i
-//!              + 533 q_{i+1} - 139 q_{i+2} + 29 q_{i+3} - 3 q_{i+4}) / 840
+//! 1. Cell-polynomial face states (FV4 / FV6 / FV8, used by the Riemann solver).  Each
+//!    cell i carries its own degree-p reconstruction polynomial P_i from the symmetric
+//!    kernel of 2r+1 = p+2 cell averages q_{i-r} .. q_{i+r} (the average of the two
+//!    degree-p kernels of p+1 cells that straddle the cell, Palafoutas, Velasco-Romero &
+//!    Teyssier 2025, JCP 522, Table 1), evaluated at its own two faces:
 //!
-//! The interpolant is symmetric so both cells sharing the face receive the SAME value
-//! (wl = wr): the Riemann solver then returns the pure physical flux with no upwind
-//! dissipation and no limiting at all.  Stability relies entirely on the MOOD a-posteriori
-//! fallback (reconstruct=fvN requires mood=true, enforced in the Hydro/MHD constructors).
-//! fv4 is the unlimited base of PPM4/PPMX (CS08 eqn 16); fv6/fv8 are the natural
-//! higher-order extensions used by MOOD-type schemes (Clain, Diot & Loubere 2011).
+//!      qr_i   = P_i(x_{i-1/2}),   ql_{i+1} = P_i(x_{i+1/2}).
 //!
-//! The arguments are added in reflection-symmetric pairs (outer to inner) so the result
-//! is bit-identical under reversal of the stencil, which keeps exactly symmetric
-//! problems exactly symmetric.
+//!    The two cells sharing a face therefore give DIFFERENT states (the jump is
+//!    O(h^{p+1}) for smooth data) and the Riemann solver adds upwind dissipation at that
+//!    order.  Left-face weights on q_{i-r} .. q_{i+r} (right face = reversed):
 //!
-//! REFERENCES:
-//! (CS) P. Colella & M. Sekora, "A limiter for PPM that preserves accuracy at smooth
-//! extrema", JCP, 227, 7069 (2008)
+//!      fv4 (p=3):  (  -1,   10,   20,    -6,     1) / 24
+//!      fv6 (p=5):  (   1,  -10,   59,    94,   -31,     8,   -1) / 120
+//!      fv8 (p=7):  (  -3,   34, -194,   898,  1276,  -446,  142,  -30,  3) / 1680
 //!
-//! (CDL) S. Clain, S. Diot & R. Loubere, "A high-order finite volume method for systems
-//! of conservation laws -- Multi-dimensional Optimal Order Detection (MOOD)", JCP, 230,
-//! 4028 (2011)
-
+//!    The right-face value is the SAME function applied to the reversed arguments, so
+//!    the pair is bit-identical under reflection of the stencil and exactly symmetric
+//!    problems stay exactly symmetric.
+//!
+//! 2. Single-valued central face interpolants (FV4Face / FV6Face / FV8Face, FVFaceAt):
+//!    the point value at the face between cells i and i+1 from the N cell averages
+//!    symmetric about that face, the unique weights exact for polynomials up to degree
+//!    N-1:
+//!
+//!      fv4:  ( -q_{i-1} +  7 q_i  +  7 q_{i+1} -  q_{i+2}) / 12
+//!      fv6:  (  q_{i-2} -  8 q_{i-1} + 37 q_i + 37 q_{i+1} -  8 q_{i+2} +  q_{i+3}) / 60
+//!      fv8:  (-3 q_{i-3} + 29 q_{i-2} - 139 q_{i-1} + 533 q_i
+//!                 + 533 q_{i+1} - 139 q_{i+2} + 29 q_{i+3} - 3 q_{i+4}) / 840
+//!
+//!    These are interpolations, not reconstructions to an interface: the face-to-centre
+//!    interpolation of the staggered field (eos/ideal_mhd.cpp), the UCT edge value of
+//!    the face field (mhd_corner_e.cpp ReconstructEdge, where both sides get the same
+//!    value) and the well-balanced face equilibrium (FVFaceAt) use them.  fv4 is the
+//!    unlimited base of PPM4/PPMX (CS08 eqn 16).
+//!
+//! Either way there is no limiter: stability relies entirely on the MOOD a-posteriori
+//! fallback (reconstruct=fvN requires mood=true, enforced in the Hydro/MHD constructors;
+//! Clain, Diot & Loubere 2011).
+//!
 #include "athena.hpp"
 
 //----------------------------------------------------------------------------------------
 //! \fn FV4Face()
-//! \brief 4th-order face value at i+1/2 from the 4 cell averages q_{i-1} .. q_{i+2}.
+//! \brief 4th-order central (single-valued) face value at i+1/2 from q_{i-1} .. q_{i+2}.
 
 KOKKOS_INLINE_FUNCTION
 Real FV4Face(const Real &q_im1, const Real &q_i, const Real &q_ip1, const Real &q_ip2) {
@@ -50,7 +64,7 @@ Real FV4Face(const Real &q_im1, const Real &q_i, const Real &q_ip1, const Real &
 
 //----------------------------------------------------------------------------------------
 //! \fn FV6Face()
-//! \brief 6th-order face value at i+1/2 from the 6 cell averages q_{i-2} .. q_{i+3}.
+//! \brief 6th-order central (single-valued) face value at i+1/2 from q_{i-2} .. q_{i+3}.
 
 KOKKOS_INLINE_FUNCTION
 Real FV6Face(const Real &q_im2, const Real &q_im1, const Real &q_i,
@@ -60,7 +74,7 @@ Real FV6Face(const Real &q_im2, const Real &q_im1, const Real &q_i,
 
 //----------------------------------------------------------------------------------------
 //! \fn FV8Face()
-//! \brief 8th-order face value at i+1/2 from the 8 cell averages q_{i-3} .. q_{i+4}.
+//! \brief 8th-order central (single-valued) face value at i+1/2 from q_{i-3} .. q_{i+4}.
 
 KOKKOS_INLINE_FUNCTION
 Real FV8Face(const Real &q_im3, const Real &q_im2, const Real &q_im1, const Real &q_i,
@@ -70,16 +84,43 @@ Real FV8Face(const Real &q_im3, const Real &q_im2, const Real &q_im1, const Real
 }
 
 //----------------------------------------------------------------------------------------
+//! \fn FV4Left() / FV6Left() / FV8Left()
+//! \brief Value of the cell polynomial P_i at the LEFT face x_{i-1/2}, from the kernel
+//! q_{i-r} .. q_{i+r} (r = 2, 3, 4).  The right-face value P_i(x_{i+1/2}) is the same
+//! function on the reversed arguments.
+
+KOKKOS_INLINE_FUNCTION
+Real FV4Left(const Real &q_im2, const Real &q_im1, const Real &q_i,
+             const Real &q_ip1, const Real &q_ip2) {
+  return (20.0*q_i + (10.0*q_im1 - 6.0*q_ip1) + (q_ip2 - q_im2))/24.0;
+}
+
+KOKKOS_INLINE_FUNCTION
+Real FV6Left(const Real &q_im3, const Real &q_im2, const Real &q_im1, const Real &q_i,
+             const Real &q_ip1, const Real &q_ip2, const Real &q_ip3) {
+  return (94.0*q_i + (59.0*q_im1 - 31.0*q_ip1) + (8.0*q_ip2 - 10.0*q_im2)
+          + (q_im3 - q_ip3))/120.0;
+}
+
+KOKKOS_INLINE_FUNCTION
+Real FV8Left(const Real &q_im4, const Real &q_im3, const Real &q_im2, const Real &q_im1,
+             const Real &q_i, const Real &q_ip1, const Real &q_ip2, const Real &q_ip3,
+             const Real &q_ip4) {
+  return (1276.0*q_i + (898.0*q_im1 - 446.0*q_ip1) + (142.0*q_ip2 - 194.0*q_im2)
+          + (34.0*q_im3 - 30.0*q_ip3) + (3.0*q_ip4 - 3.0*q_im4))/1680.0;
+}
+
+//----------------------------------------------------------------------------------------
 //! \fn FV4() / FV6() / FV8()
 //! \brief Cell-oriented wrappers with the same interface convention as PLM/PPM4/WENOZ:
-//! return the interpolated values at the L/R faces of cell i, i.e. ql(i+1) (right face)
-//! and qr(i) (left face).  The stencil is q_{i-r} .. q_{i+r} with r = N/2.
+//! return the states of cell i at its two faces, ql(i+1) = P_i(x_{i+1/2}) (right face)
+//! and qr(i) = P_i(x_{i-1/2}) (left face), from the kernel q_{i-r} .. q_{i+r}, r = N/2.
 
 KOKKOS_INLINE_FUNCTION
 void FV4(const Real &q_im2, const Real &q_im1, const Real &q_i, const Real &q_ip1,
          const Real &q_ip2, Real &ql_ip1, Real &qr_i) {
-  ql_ip1 = FV4Face(q_im1, q_i, q_ip1, q_ip2);
-  qr_i   = FV4Face(q_im2, q_im1, q_i, q_ip1);
+  qr_i   = FV4Left(q_im2, q_im1, q_i, q_ip1, q_ip2);
+  ql_ip1 = FV4Left(q_ip2, q_ip1, q_i, q_im1, q_im2);
   return;
 }
 
@@ -87,8 +128,8 @@ KOKKOS_INLINE_FUNCTION
 void FV6(const Real &q_im3, const Real &q_im2, const Real &q_im1, const Real &q_i,
          const Real &q_ip1, const Real &q_ip2, const Real &q_ip3,
          Real &ql_ip1, Real &qr_i) {
-  ql_ip1 = FV6Face(q_im2, q_im1, q_i, q_ip1, q_ip2, q_ip3);
-  qr_i   = FV6Face(q_im3, q_im2, q_im1, q_i, q_ip1, q_ip2);
+  qr_i   = FV6Left(q_im3, q_im2, q_im1, q_i, q_ip1, q_ip2, q_ip3);
+  ql_ip1 = FV6Left(q_ip3, q_ip2, q_ip1, q_i, q_im1, q_im2, q_im3);
   return;
 }
 
@@ -96,8 +137,8 @@ KOKKOS_INLINE_FUNCTION
 void FV8(const Real &q_im4, const Real &q_im3, const Real &q_im2, const Real &q_im1,
          const Real &q_i, const Real &q_ip1, const Real &q_ip2, const Real &q_ip3,
          const Real &q_ip4, Real &ql_ip1, Real &qr_i) {
-  ql_ip1 = FV8Face(q_im3, q_im2, q_im1, q_i, q_ip1, q_ip2, q_ip3, q_ip4);
-  qr_i   = FV8Face(q_im4, q_im3, q_im2, q_im1, q_i, q_ip1, q_ip2, q_ip3);
+  qr_i   = FV8Left(q_im4, q_im3, q_im2, q_im1, q_i, q_ip1, q_ip2, q_ip3, q_ip4);
+  ql_ip1 = FV8Left(q_ip4, q_ip3, q_ip2, q_ip1, q_i, q_im1, q_im2, q_im3, q_im4);
   return;
 }
 

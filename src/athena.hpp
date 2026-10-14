@@ -72,9 +72,9 @@ enum MetricIndex {I00=0, I01=1, I02=2, I03=3, I11=4, I12=5, I13=6, I22=7, I23=8,
 enum ParticlesIndex {PGID=0, PTAG=1, IPX=0, IPVX=1, IPY=2, IPVY=3, IPZ=4, IPVZ=5};
 
 // integer constants to specify spatial reconstruction methods
-// fv4/fv6/fv8 = UNLIMITED 4th/6th/8th-order central face interpolation of cell averages
-// (reconstruct/fv.hpp).  Both cells sharing a face get the same value, so the Riemann
-// solver adds no upwind dissipation; these require mood=true for stability.
+// fv4/fv6/fv8 = UNLIMITED 4th/6th/8th-order cell-polynomial reconstruction of cell
+// averages (reconstruct/fv.hpp): each cell evaluates its own degree-p polynomial at its
+// faces, so the Riemann solver sees an O(h^{p+1}) jump; these require mood=true.
 enum ReconstructionMethod {dc, plm, ppm4, ppmx, wenoz, teno, fv4, fv6, fv8};
 
 // Half-width (cells on each side of the cell being reconstructed) of the stencil read
@@ -103,16 +103,16 @@ inline constexpr int FVFaceRadius(ReconstructionMethod r) {
 }
 
 // Reach of the UCT edge reconstruction (mhd_corner_e.cpp ReconstructEdge): the edge at
-// i-1/2 reads face values i-reach .. i+reach-1.  The limited methods reconstruct L/R
-// states from the two cells sharing the edge (reach = radius+1); the unlimited fvN
-// methods interpolate the single edge value from N faces (reach = N/2).
+// i-1/2 reads face values i-reach .. i+reach-1.  Every method reconstructs L/R states
+// from the two cells sharing the edge, each from its own stencil (reach = radius+1);
+// for the unlimited fvN methods that is the cell polynomial of fv.hpp.
 inline constexpr int ReconEdgeReach(ReconstructionMethod r) {
   switch (r) {
     case ReconstructionMethod::dc:   return 1;
     case ReconstructionMethod::plm:  return 2;
-    case ReconstructionMethod::fv4:  return 2;
-    case ReconstructionMethod::fv6:  return 3;
-    case ReconstructionMethod::fv8:  return 4;
+    case ReconstructionMethod::fv4:  return 3;
+    case ReconstructionMethod::fv6:  return 4;
+    case ReconstructionMethod::fv8:  return 5;
     default:                         return 3;  // ppm4, ppmx, wenoz, teno
   }
 }
