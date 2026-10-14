@@ -22,7 +22,8 @@
 //! solver as the base scheme.  The detect/demote/revise loop runs up to mood_max_revs
 //! iterations, exiting early once no new cell is flagged.
 //!
-//! The loop runs inside the Fluxes task, before SendFlux/RecvFlux, so revised fluxes
+//! The loop runs before SendFlux/RecvFlux (after the immutable candidate exchange
+//! when mood_frozen_flux is enabled), so revised fluxes
 //! are restricted at fine/coarse AMR boundaries like any other flux (conservative).
 //! Detection is evaluated on the interior plus one ghost layer so neighboring
 //! MeshBlocks make identical decisions about their shared faces (as FOFC does).
@@ -187,8 +188,8 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
   // iteration-r candidate depends on flux revisions one cell away in iteration r-1, so
   // only cells at least one cell inside the previous halo stay consistent with the
   // neighbor block.  The final iteration retains the one-cell halo needed for the
-  // shared faces.  The base fluxes are computed over the full nrevs-wide halo
-  // (hydro_fluxes.cpp).
+  // shared faces. The base fluxes over this halo are exchanged from owners when
+  // mood_frozen_flux is enabled, or computed locally on the legacy path.
   const int hmax = nrevs;
   int il = is-hmax, iu = ie+hmax, jl = js, ju = je, kl = ks, ku = ke;
   if (multi_d) { jl = js-hmax, ju = je+hmax; }

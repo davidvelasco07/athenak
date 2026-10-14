@@ -134,6 +134,11 @@ class Hydro {
   // fofc/utest arrays: fofc marks cells flagged (newly demoted) in the current
   // revision iteration, utest holds the candidate update.
   bool use_mood = false;    // flag to enable MOOD fallback
+  // Immutable owner flux exchange before the local fallback revisions (NR/SR/GR).
+  bool mood_frozen_flux = false;
+  MeshBoundaryValuesCC *pbval_mood_prim = nullptr;
+  MeshBoundaryValuesCC *pbval_mood_candidate = nullptr;
+  DvceArray5D<Real> mood_prim, mood_candidate, mood_coarse;
   int mood_max_revs = 1;    // max revision iterations per RK stage
   bool mood_nad_energy;     // include the energy variable in NAD (density always on)
   bool mood_nad_scalars;    // include passive-scalar concentrations in NAD
@@ -177,6 +182,11 @@ class Hydro {
   // ...in "stagen_tl" list
   TaskStatus CopyCons(Driver *d, int stage);
   TaskStatus Fluxes(Driver *d, int stage);
+  TaskStatus SendMOODPrimitives(Driver *d, int stage);
+  TaskStatus RecvMOODPrimitives(Driver *d, int stage);
+  TaskStatus SendMOODCandidate(Driver *d, int stage);
+  TaskStatus RecvMOODCandidate(Driver *d, int stage);
+  TaskStatus ApplyFallback(Driver *d, int stage);
   TaskStatus SendFlux(Driver *d, int stage);
   TaskStatus RecvFlux(Driver *d, int stage);
   TaskStatus RKUpdate(Driver *d, int stage);

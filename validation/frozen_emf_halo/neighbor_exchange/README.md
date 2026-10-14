@@ -2,7 +2,7 @@
 
 ## Branch behavior
 
-The frozen-EMF method is the default for dynamic, Newtonian, ideal MHD with
+The frozen-EMF method is the default for dynamic ideal NR/SR/GR MHD with
 FV4/FV6/FV8, UCT, a uniform periodic multidimensional grid, `mood_edge=auto|flag`,
 `mood_nad_bcc=avg`, and `mood_touched_only=false`. Diffusion, shear, well balance,
 passive scalars and refinement are excluded. Unsupported configurations keep the
@@ -25,7 +25,7 @@ mood_atol = 0.0             # default
 
 For `mood_nad_scale=rcfl`, `mood_rtol` defaults to `1.e-4`. The relative band is
 multiplied by `min(1, dt * speed(cell) / dx(cell))`, using the immutable stage-input
-state, full-step timestep, maximum absolute velocity component, and minimum
+state, full-step timestep, maximum absolute stored velocity component, and minimum
 active-direction spacing of that cell's block. Well-balanced runs retain the
 local sound-speed (hydro) or fast-speed upper-bound (MHD) contribution. The
 absolute and round-off floors are unchanged. The factor applies to every NAD
@@ -144,10 +144,12 @@ measurement is claimed.
 
 ## Limits
 
-GPU execution, SMR/AMR, nonperiodic boundaries, relativity, diffusion, shear,
+The original study below did not certify GPU execution or relativity. The
+[new GPU matrix](../gpu/README.md) covers the subsequent NR/SR/GR extension.
+SMR/AMR, nonperiodic boundaries, excision, diffusion, shear,
 passive scalars, well balance and touched-only revisions are not certified for
 the frozen method. The unsupported physical configurations stay on the legacy path by default.
-GPU execution of the otherwise supported configuration has not been tested here.
+The original CPU results on this page remain unchanged; GPU evidence is separate.
 The local NAD change applies to hydro/MHD generally; the previous studies using
 global scales are historical results and must be rerun to assess those regimes.
 

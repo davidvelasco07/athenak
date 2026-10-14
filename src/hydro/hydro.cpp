@@ -355,6 +355,34 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
       std::exit(EXIT_FAILURE);
     }
 
+    // Owner exchange freezes the high-order candidate before revisions. The flux
+    // solver and the local detector retain their NR/SR/GR specializations.
+    const bool frozen_supported = use_mood && evolution_t == "dynamic" &&
+        !pmy_pack->pmesh->multilevel && pmy_pack->pmesh->strictly_periodic &&
+        peos->eos_data.is_ideal && nscalars == 0 &&
+        pvisc == nullptr && pcond == nullptr && !well_balanced &&
+        !pin->DoesBlockExist("shearing_box") &&
+        !(pmy_pack->pcoord->is_general_relativistic &&
+          pmy_pack->pcoord->coord_data.bh_excise) &&
+        (recon_method == ReconstructionMethod::fv4 ||
+         recon_method == ReconstructionMethod::fv6 ||
+         recon_method == ReconstructionMethod::fv8);
+    mood_frozen_flux = pin->GetOrAddBoolean("hydro", "mood_frozen_flux", frozen_supported);
+    if (mood_frozen_flux && !frozen_supported) {
+      std::cerr << "Frozen hydro fluxes require dynamic MOOD with periodic uniform "
+                << "FV4/FV6/FV8, ideal EOS, and no diffusion, scalars, shear, "
+                << "excision or well balance\n";
+      std::exit(EXIT_FAILURE);
+    }
+    if (mood_frozen_flux) {
+      const auto &q = pmy_pack->pmesh->mb_indcs;
+      if (q.ng > q.nx1 || (pmy_pack->pmesh->multi_d && q.ng > q.nx2) ||
+          (pmy_pack->pmesh->three_d && q.ng > q.nx3)) {
+        std::cerr << "Frozen flux neighbor exchange requires block dimensions >= nghost\n";
+        std::exit(EXIT_FAILURE);
+      }
+    }
+
     // MOOD cascade: base -> plm -> dc, or plm -> dc if the base scheme is already PLM.
     if (use_mood) {
       n_fb_tiers = (recon_method == ReconstructionMethod::plm) ? 1 : 2;
@@ -367,6 +395,11 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
       // radius+1 covers the reconstruction stencil; each revision consumes one more
       // ghost layer of the light-cone halo.
       int ng_need = ReconStencilRadius(recon_method) + 1 + mood_max_revs;
+      if (mood_frozen_flux) {
+        // Hydro has no transverse corner composition: only the face-normal
+        // reconstruction radius plus one, or the PLM/SED revision halo.
+        ng_need = std::max(ReconStencilRadius(recon_method) + 1, mood_max_revs + 3);
+      }
       auto &indcs = pmy_pack->pmesh->mb_indcs;
       if (indcs.ng < ng_need) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -481,6 +514,22 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
       Kokkos::realloc(wl3d, nmb, (nhydro+nscalars), ncells3, ncells2, ncells1);
       Kokkos::realloc(wr3d, nmb, (nhydro+nscalars), ncells3, ncells2, ncells1);
 
+      if (mood_frozen_flux) {
+        const int ndir = pmy_pack->pmesh->three_d ? 3 :
+                         (pmy_pack->pmesh->multi_d ? 2 : 1);
+        // NR/SR and Minkowski C2P use only the already-exchanged cell state.
+        // Curved metrics additionally depend on locally computed coordinates.
+        if (pmy_pack->pcoord->is_general_relativistic &&
+            !pmy_pack->pcoord->coord_data.is_minkowski) {
+          pbval_mood_prim = new MeshBoundaryValuesCC(ppack, pin, false);
+          pbval_mood_prim->InitializeBuffers(nhydro);
+          Kokkos::realloc(mood_prim, nmb, nhydro, ncells3, ncells2, ncells1);
+        }
+        pbval_mood_candidate = new MeshBoundaryValuesCC(ppack, pin, false);
+        pbval_mood_candidate->InitializeBuffers(ndir*nhydro);
+        Kokkos::realloc(mood_candidate, nmb, ndir*nhydro, ncells3, ncells2, ncells1);
+      }
+
       // allocate arrays of flags/candidate state used with FOFC and MOOD
       if (use_fofc || use_mood) {
         // MOOD tests passive scalars too, so the candidate must carry them
@@ -517,6 +566,8 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
 // destructor
 
 Hydro::~Hydro() {
+  delete pbval_mood_candidate;
+  delete pbval_mood_prim;
   if (psbox_u != nullptr) {delete psbox_u;}
   if (porb_u != nullptr) {delete porb_u;}
   delete pbval_u;

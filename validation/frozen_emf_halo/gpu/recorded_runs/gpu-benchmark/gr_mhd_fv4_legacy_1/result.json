@@ -1,0 +1,25 @@
+{
+  "name": "gr_mhd_fv4_legacy_1",
+  "code": 0,
+  "wall_seconds": 0.616535784676671,
+  "solver_seconds": 0.2223289,
+  "case": "gr_mhd",
+  "order": 4,
+  "frozen": false,
+  "repeat": 1,
+  "warmup": false,
+  "demotions": 120758,
+  "density_floors": 0,
+  "energy_floors": 0,
+  "c2p_failures": 0,
+  "conservation_drift": {
+    "mass": 4.163336342344337e-16,
+    "1-mom": 0.0,
+    "2-mom": 0.0,
+    "3-mom": 0.0,
+    "tot-E": 1.4123754563220517e-15
+  },
+  "final_time": 0.3,
+  "cycles": 32,
+  "million_zonecycles_per_second": 9.432655853557499
+}

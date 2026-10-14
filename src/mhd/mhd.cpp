@@ -594,17 +594,17 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
         pvisc == nullptr && presist == nullptr && pcond == nullptr &&
         !pin->DoesBlockExist("shearing_box") &&
         !pin->GetOrAddBoolean("mhd", "well_balanced", false) &&
-        !pmy_pack->pcoord->is_special_relativistic &&
-        !pmy_pack->pcoord->is_general_relativistic &&
+        !(pmy_pack->pcoord->is_general_relativistic &&
+          pmy_pack->pcoord->coord_data.bh_excise) &&
         (recon_method == ReconstructionMethod::fv4 ||
          recon_method == ReconstructionMethod::fv6 ||
          recon_method == ReconstructionMethod::fv8);
     mood_frozen_emf = pin->GetOrAddBoolean("mhd", "mood_frozen_emf", frozen_supported);
     if (mood_frozen_emf && !frozen_supported) {
-      std::cerr << "Frozen EMF requires dynamic MOOD with periodic uniform Newtonian "
+      std::cerr << "Frozen EMF requires dynamic MOOD with periodic uniform "
                 << "multidimensional UCT, FV4/FV6/FV8, ideal EOS, mood_nad_bcc=avg, "
                 << "mood_edge=flag/auto, mood_touched_only=false, and no diffusion, "
-                << "scalars, shear or well balance\n";
+                << "scalars, shear, excision or well balance\n";
       std::exit(EXIT_FAILURE);
     }
     if (mood_frozen_emf) {

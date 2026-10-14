@@ -1,0 +1,25 @@
+========= COMPUTE-SANITIZER
+
+Root grid = 2 x 2 x 1 MeshBlocks
+Total number of MeshBlocks = 4
+Number of logical  levels of refinement = 1 (2 levels total)
+Number of physical levels of refinement = 0 (1 levels total)
+Number of parallel ranks = 1
+### WARNING in /home/velasco/codex-validation/local-rcfl-gpu-20261014/source/src/parameter_input.cpp: input parameter <mesh>/ix3_bc = periodic was not used by the code (check for a typo)
+### WARNING in /home/velasco/codex-validation/local-rcfl-gpu-20261014/source/src/parameter_input.cpp: input parameter <mesh>/ox3_bc = periodic was not used by the code (check for a typo)
+### WARNING in /home/velasco/codex-validation/local-rcfl-gpu-20261014/source/src/parameter_input.cpp: input parameter <meshblock>/nx3 = 1 was not used by the code (check for a typo)
+### WARNING in /home/velasco/codex-validation/local-rcfl-gpu-20261014/source/src/parameter_input.cpp: input parameter <mhd>/mood_detect = true was not used by the code (check for a typo)
+
+Setup complete, executing task list(s)...
+
+elapsed=8.221886e-02 cycle=0 time=0.000000e+00 dt=3.750000e-02
+
+Terminating on cycle limit
+time=7.500000e-02 cycle=2
+tlim=1.000000e+02 nlim=2
+
+MeshBlock-cycles = 8
+cpu time used  = 2.999986e-01
+zone-cycles/cpu_second = 2.730679e+04
+particle-updates/cpu_second = 0.000000e+00
+========= ERROR SUMMARY: 0 errors

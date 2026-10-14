@@ -1,0 +1,26 @@
+{
+  "name": "gr_mhd_fv8_new_1",
+  "code": 0,
+  "mpi_ranks": 1,
+  "wall_seconds": 1.7179226782172918,
+  "solver_seconds": 1.324495,
+  "case": "gr_mhd",
+  "order": 8,
+  "frozen": true,
+  "repeat": 1,
+  "warmup": false,
+  "demotions": 4601745,
+  "density_floors": 0,
+  "energy_floors": 0,
+  "c2p_failures": 0,
+  "conservation_drift": {
+    "mass": 1.1102230246251565e-16,
+    "1-mom": 8.326672684688674e-17,
+    "2-mom": 5.551115123125783e-17,
+    "3-mom": 0.0,
+    "tot-E": 4.016056627844702e-16
+  },
+  "final_time": 1.2,
+  "cycles": 32,
+  "million_zonecycles_per_second": 6.333438782328359
+}

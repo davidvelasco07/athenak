@@ -1,0 +1,25 @@
+{
+  "name": "sr_mhd_fv8_new_1",
+  "code": 0,
+  "wall_seconds": 0.6661317683756351,
+  "solver_seconds": 0.2645375,
+  "case": "sr_mhd",
+  "order": 8,
+  "frozen": true,
+  "repeat": 1,
+  "warmup": false,
+  "demotions": 149728,
+  "density_floors": 0,
+  "energy_floors": 0,
+  "c2p_failures": 0,
+  "conservation_drift": {
+    "mass": 4.440892098500626e-16,
+    "1-mom": 4.440892098500626e-16,
+    "2-mom": 4.440892098500626e-16,
+    "3-mom": 0.0,
+    "tot-E": 1.694850547586462e-15
+  },
+  "final_time": 0.3766298,
+  "cycles": 32,
+  "million_zonecycles_per_second": 7.927617067523508
+}

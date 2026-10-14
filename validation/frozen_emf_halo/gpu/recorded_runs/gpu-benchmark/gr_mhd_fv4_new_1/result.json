@@ -1,0 +1,25 @@
+{
+  "name": "gr_mhd_fv4_new_1",
+  "code": 0,
+  "wall_seconds": 0.7170516978949308,
+  "solver_seconds": 0.2868703,
+  "case": "gr_mhd",
+  "order": 4,
+  "frozen": true,
+  "repeat": 1,
+  "warmup": false,
+  "demotions": 121828,
+  "density_floors": 0,
+  "energy_floors": 0,
+  "c2p_failures": 0,
+  "conservation_drift": {
+    "mass": 4.163336342344337e-16,
+    "1-mom": 4.440892098500626e-16,
+    "2-mom": 0.0,
+    "3-mom": 0.0,
+    "tot-E": 1.4123754563220517e-15
+  },
+  "final_time": 0.3,
+  "cycles": 32,
+  "million_zonecycles_per_second": 7.31045353945668
+}

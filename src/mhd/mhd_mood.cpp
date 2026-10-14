@@ -26,7 +26,7 @@
 //!
 //! mood_frozen_emf exchanges the initial candidate and caches PLM/DC EMFs, then replaces
 //! only edges adjacent to demoted cells. Untouched high-order edges are retained.
-//! This is the default for supported uniform periodic Newtonian cases and has a
+//! This is the default for supported uniform periodic NR/SR/GR cases and has a
 //! one-cell revision reach; see
 //! validation/frozen_emf_halo/README.md for the measured bounds and limitations.
 //!

@@ -69,6 +69,7 @@ add_executable(
         hydro/hydro_fluxes.cpp
         hydro/hydro_fofc.cpp
         hydro/hydro_mood.cpp
+        hydro/hydro_mood_comm.cpp
         hydro/hydro_newdt.cpp
         hydro/hydro_sts.cpp
         hydro/hydro_tasks.cpp

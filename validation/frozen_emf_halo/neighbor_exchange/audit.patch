@@ -21,7 +21,7 @@
 +    mood_test_halo = pin->GetOrAddInteger("mhd", "mood_test_halo", -1);
      mood_frozen_emf = pin->GetOrAddBoolean("mhd", "mood_frozen_emf", frozen_supported);
      if (mood_frozen_emf && !frozen_supported) {
-       std::cerr << "Frozen EMF requires dynamic MOOD with periodic uniform Newtonian "
+       std::cerr << "Frozen EMF requires dynamic MOOD with periodic uniform "
 @@ -666,7 +669,7 @@
        // h_f + nrevs - 1; with UCT it is wider (fv4: 2 per revision).
        mood_halo0 = h_f*mood_max_revs;
@@ -35,11 +35,11 @@
 +++ b/src/mhd/mhd_mood.cpp
 @@ -37,6 +37,8 @@
  //! the final-iteration halo equals the transverse reach of the edge composition.
- 
+
  #include <algorithm>
 +#include <fstream>
 +#include "globals.hpp"
- 
+
  #include "athena.hpp"
  #include "mesh/mesh.hpp"
 @@ -220,6 +222,15 @@
@@ -126,12 +126,12 @@
 +      if (probe_rcfl && rev == 1 && !danger && lv < 1) {
 +        rcfl_probe(m,k,j,i) = cell_rtol;
        }
- 
+
        bool trouble = danger;
 @@ -1041,6 +1101,25 @@
          }
        }
- 
+
 +      // Test-only forced one-cell repair, or -2 to suppress all repairs.
 +      if (audit_seed != -1) {
 +        int gx=static_cast<int>(round((size_.d_view(m).x1min-audit_xmin)/size_.d_view(m).dx1))+i-is;
@@ -184,16 +184,16 @@
 +    audit_dump(rev, dh);
      if (ndemoted == 0) break;
      ndemoted_total += ndemoted_int;
- 
+
 --- a/src/hydro/hydro_mood.cpp
 +++ b/src/hydro/hydro_mood.cpp
 @@ -29,6 +29,8 @@
  //! Like FOFC, revised faces lose any viscous/conduction flux contribution.
- 
+
  #include <algorithm>
 +#include <fstream>
 +#include "globals.hpp"
- 
+
  #include "athena.hpp"
  #include "mesh/mesh.hpp"
 @@ -164,6 +166,15 @@
@@ -221,7 +221,7 @@
 +      if (probe_rcfl && rev == 1 && !danger && lv < 1) {
 +        rcfl_probe(m,k,j,i) = cell_rtol;
        }
- 
+
        bool trouble = danger;
 @@ -463,6 +478,26 @@
          }
@@ -247,7 +247,7 @@
 +      }
 +    }
 +
- 
+
      if (ndemoted == 0) break;
      ndemoted_total += ndemoted_int;
 --- a/src/outputs/binary.cpp
@@ -267,20 +267,20 @@
    std::size_t data_size = 10*sizeof(int32_t) + 6*sizeof(Real)
 -                        + (cells*nout_vars)*sizeof(float);
 +                        + (cells*nout_vars)*sizeof(double);
- 
+
    int ns_mbs = pm->gids_eachrank[global_variable::my_rank];
    int nb_mbs = pm->nmb_eachrank[global_variable::my_rank];
- 
+
    // allocate 1D vector of floats used to convert and output data
    char *data = new char[nb_mbs*data_size];
 -  float *single_data = new float[cells];
 +  double *single_data = new double[cells];
- 
+
    // Loop over MeshBlocks
    for (int m=0; m<nout_mbs; ++m) {
 @@ -215,20 +215,20 @@
      pdata+=sizeof(xv);
- 
+
      // output variables
 -    float tmp_data;
 +    double tmp_data;
@@ -302,12 +302,12 @@
 +      pdata+=cells*sizeof(double);
      }
    }
- 
+
 --- a/src/pgen/fluids/field_loop.cpp
 +++ b/src/pgen/fluids/field_loop.cpp
 @@ -52,6 +52,12 @@
  //! \brief Field loop advection problem generator.
- 
+
  void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
 +  // Validation-only dispatch; production field-loop generator is unchanged.
 +  const auto name = pin->GetOrAddString("problem", "pgen_name", "field_loop");

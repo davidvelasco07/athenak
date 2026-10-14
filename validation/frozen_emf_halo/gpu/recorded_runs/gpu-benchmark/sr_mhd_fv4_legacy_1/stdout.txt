@@ -1,0 +1,25 @@
+
+Root grid = 4 x 4 x 1 MeshBlocks
+Total number of MeshBlocks = 16
+Number of logical  levels of refinement = 2 (3 levels total)
+Number of physical levels of refinement = 0 (1 levels total)
+Number of parallel ranks = 1
+### WARNING in /home/velasco/codex-validation/local-rcfl-gpu-20261014/source/src/parameter_input.cpp: input parameter <mesh>/ix3_bc = periodic was not used by the code (check for a typo)
+### WARNING in /home/velasco/codex-validation/local-rcfl-gpu-20261014/source/src/parameter_input.cpp: input parameter <mesh>/ox3_bc = periodic was not used by the code (check for a typo)
+### WARNING in /home/velasco/codex-validation/local-rcfl-gpu-20261014/source/src/parameter_input.cpp: input parameter <meshblock>/nx3 = 1 was not used by the code (check for a typo)
+### WARNING in /home/velasco/codex-validation/local-rcfl-gpu-20261014/source/src/parameter_input.cpp: input parameter <coord>/minkowski = true was not used by the code (check for a typo)
+### WARNING in /home/velasco/codex-validation/local-rcfl-gpu-20261014/source/src/parameter_input.cpp: input parameter <mhd>/mood_detect = true was not used by the code (check for a typo)
+
+Setup complete, executing task list(s)...
+
+elapsed=1.442613e-02 cycle=0 time=0.000000e+00 dt=1.259883e-02
+elapsed=2.283506e-01 cycle=32 time=3.767139e-01 dt=1.092147e-02
+
+Terminating on cycle limit
+time=3.767139e-01 cycle=32
+tlim=1.000000e+02 nlim=32
+
+MeshBlock-cycles = 512
+cpu time used  = 2.139305e-01
+zone-cycles/cpu_second = 9.802961e+06
+particle-updates/cpu_second = 0.000000e+00

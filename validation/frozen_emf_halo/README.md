@@ -3,10 +3,13 @@
 ## Current method
 
 The [neighbor-exchange implementation](neighbor_exchange/README.md) is the default
-for supported uniform periodic FV4/FV6/FV8 MHD configurations. It exchanges the
+for supported uniform periodic FV4/FV6/FV8 MHD configurations, including NR/SR/GR.
+Hydro now has the analogous immutable-flux exchange (`mood_frozen_flux`).
+See the [GPU matrix](gpu/README.md) for the six-configuration validation. It exchanges the
 immutable high-order data before the revision loop, retains untouched EMFs and
-uses cached PLM/DC values for revised edges. The two-revision ghost counts are
-**5/6/8**, with `nghost >= max(FV_order, revisions + 3)`.
+uses cached PLM/DC values for revised edges. The two-revision MHD ghost counts are
+**5/6/8**, with `nghost >= max(FV_order, revisions + 3)`. Hydro needs **5** for all three
+orders at two revisions: `max(reconstruction_radius + 1, revisions + 3)`.
 
 Hydro/MHD detection supports `relative` (default) and cell-local `rcfl` tolerances.
 `gcfl`, `grange`, `gdu` and the associated `mood_nad_theta` option remain removed. The current

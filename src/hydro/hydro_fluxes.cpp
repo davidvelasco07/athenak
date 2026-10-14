@@ -60,11 +60,12 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
   // reconstruction/solve ranges are extended on both sides: by one cell for FOFC, and
   // by mood_max_revs cells for MOOD (each revision iteration shrinks the halo of ghost
   // cells whose candidate is consistent with the neighbor block by one — the
-  // parallel-MOOD "light cone").
+  // parallel-MOOD "light cone"). Frozen fluxes instead exchange the owned candidate
+  // once, so the initial high-order solve needs no revision extension.
   int il1 = is, iu1 = ie+1, jl2 = js, ju2 = je+1, kl3 = ks, ku3 = ke+1;
   int itl = is, itu = ie, jtl = js, jtu = je, ktl = ks, ktu = ke;
   if (use_fofc || use_mood) {
-    const int ext = (use_mood) ? mood_max_revs : 1;
+    const int ext = mood_frozen_flux ? 0 : (use_mood ? mood_max_revs : 1);
     il1 = is-ext; iu1 = ie+1+ext;
     jl2 = js-ext; ju2 = je+1+ext;
     kl3 = ks-ext; ku3 = ke+1+ext;

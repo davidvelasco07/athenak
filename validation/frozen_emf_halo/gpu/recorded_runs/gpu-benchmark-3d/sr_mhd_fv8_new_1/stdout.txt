@@ -1,0 +1,22 @@
+
+Root grid = 2 x 2 x 2 MeshBlocks
+Total number of MeshBlocks = 8
+Number of logical  levels of refinement = 1 (2 levels total)
+Number of physical levels of refinement = 0 (1 levels total)
+Number of parallel ranks = 1
+### WARNING in /home/velasco/codex-validation/local-rcfl-gpu-20261014/source/src/parameter_input.cpp: input parameter <coord>/minkowski = true was not used by the code (check for a typo)
+### WARNING in /home/velasco/codex-validation/local-rcfl-gpu-20261014/source/src/parameter_input.cpp: input parameter <mhd>/mood_detect = true was not used by the code (check for a typo)
+
+Setup complete, executing task list(s)...
+
+elapsed=3.067658e-02 cycle=0 time=0.000000e+00 dt=5.039531e-02
+elapsed=1.290090e+00 cycle=32 time=1.356385e+00 dt=3.907692e-02
+
+Terminating on cycle limit
+time=1.356385e+00 cycle=32
+tlim=1.000000e+02 nlim=32
+
+MeshBlock-cycles = 256
+cpu time used  = 1.259422e+00
+zone-cycles/cpu_second = 6.660680e+06
+particle-updates/cpu_second = 0.000000e+00

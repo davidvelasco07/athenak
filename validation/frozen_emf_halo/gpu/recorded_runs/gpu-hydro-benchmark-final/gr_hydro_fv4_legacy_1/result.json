@@ -1,0 +1,26 @@
+{
+  "name": "gr_hydro_fv4_legacy_1",
+  "code": 0,
+  "mpi_ranks": 1,
+  "wall_seconds": 0.46652851812541485,
+  "solver_seconds": 0.1181123,
+  "case": "gr_hydro",
+  "order": 4,
+  "frozen": false,
+  "repeat": 1,
+  "warmup": false,
+  "demotions": 72952,
+  "density_floors": 0,
+  "energy_floors": 0,
+  "c2p_failures": 0,
+  "conservation_drift": {
+    "mass": 1.6653345369377348e-16,
+    "1-mom": 2.220446049250313e-16,
+    "2-mom": 0.0,
+    "3-mom": 0.0,
+    "tot-E": 1.0231402952425978e-15
+  },
+  "final_time": 0.3,
+  "cycles": 32,
+  "million_zonecycles_per_second": 17.755576684223403
+}

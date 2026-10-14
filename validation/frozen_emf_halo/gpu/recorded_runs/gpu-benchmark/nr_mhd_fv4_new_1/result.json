@@ -1,0 +1,25 @@
+{
+  "name": "nr_mhd_fv4_new_1",
+  "code": 0,
+  "wall_seconds": 0.66608258895576,
+  "solver_seconds": 0.2510353,
+  "case": "nr_mhd",
+  "order": 4,
+  "frozen": true,
+  "repeat": 1,
+  "warmup": false,
+  "demotions": 97166,
+  "density_floors": 0,
+  "energy_floors": 0,
+  "c2p_failures": 0,
+  "conservation_drift": {
+    "mass": 0.0,
+    "1-mom": 0.0,
+    "2-mom": 0.0,
+    "3-mom": 0.0,
+    "tot-E": 3.194180794502829e-16
+  },
+  "final_time": 0.06852644,
+  "cycles": 32,
+  "million_zonecycles_per_second": 8.35401236399821
+}

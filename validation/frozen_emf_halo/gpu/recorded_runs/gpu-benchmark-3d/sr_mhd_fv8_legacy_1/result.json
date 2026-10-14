@@ -1,0 +1,26 @@
+{
+  "name": "sr_mhd_fv8_legacy_1",
+  "code": 0,
+  "mpi_ranks": 1,
+  "wall_seconds": 2.5695669148117304,
+  "solver_seconds": 2.128288,
+  "case": "sr_mhd",
+  "order": 8,
+  "frozen": false,
+  "repeat": 1,
+  "warmup": false,
+  "demotions": 4631428,
+  "density_floors": 0,
+  "energy_floors": 0,
+  "c2p_failures": 0,
+  "conservation_drift": {
+    "mass": 8.326672684688674e-17,
+    "1-mom": 1.3877787807814457e-17,
+    "2-mom": 1.3877787807814457e-17,
+    "3-mom": 2.7755575615628914e-17,
+    "tot-E": 6.024084941767054e-16
+  },
+  "final_time": 1.35686,
+  "cycles": 32,
+  "million_zonecycles_per_second": 3.9414816039934446
+}

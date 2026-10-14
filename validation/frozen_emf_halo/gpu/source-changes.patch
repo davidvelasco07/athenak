@@ -1,0 +1,332 @@
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index 50663ed4d..7a0ce792b 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -69,6 +69,7 @@ add_executable(
+         hydro/hydro_fluxes.cpp
+         hydro/hydro_fofc.cpp
+         hydro/hydro_mood.cpp
++        hydro/hydro_mood_comm.cpp
+         hydro/hydro_newdt.cpp
+         hydro/hydro_sts.cpp
+         hydro/hydro_tasks.cpp
+diff --git a/src/hydro/hydro.cpp b/src/hydro/hydro.cpp
+index 5f9e825ce..1522335e3 100644
+--- a/src/hydro/hydro.cpp
++++ b/src/hydro/hydro.cpp
+@@ -355,6 +355,34 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
+       std::exit(EXIT_FAILURE);
+     }
+ 
++    // Owner exchange freezes the high-order candidate before revisions. The flux
++    // solver and the local detector retain their NR/SR/GR specializations.
++    const bool frozen_supported = use_mood && evolution_t == "dynamic" &&
++        !pmy_pack->pmesh->multilevel && pmy_pack->pmesh->strictly_periodic &&
++        peos->eos_data.is_ideal && nscalars == 0 &&
++        pvisc == nullptr && pcond == nullptr && !well_balanced &&
++        !pin->DoesBlockExist("shearing_box") &&
++        !(pmy_pack->pcoord->is_general_relativistic &&
++          pmy_pack->pcoord->coord_data.bh_excise) &&
++        (recon_method == ReconstructionMethod::fv4 ||
++         recon_method == ReconstructionMethod::fv6 ||
++         recon_method == ReconstructionMethod::fv8);
++    mood_frozen_flux = pin->GetOrAddBoolean("hydro", "mood_frozen_flux", frozen_supported);
++    if (mood_frozen_flux && !frozen_supported) {
++      std::cerr << "Frozen hydro fluxes require dynamic MOOD with periodic uniform "
++                << "FV4/FV6/FV8, ideal EOS, and no diffusion, scalars, shear, "
++                << "excision or well balance\n";
++      std::exit(EXIT_FAILURE);
++    }
++    if (mood_frozen_flux) {
++      const auto &q = pmy_pack->pmesh->mb_indcs;
++      if (q.ng > q.nx1 || (pmy_pack->pmesh->multi_d && q.ng > q.nx2) ||
++          (pmy_pack->pmesh->three_d && q.ng > q.nx3)) {
++        std::cerr << "Frozen flux neighbor exchange requires block dimensions >= nghost\n";
++        std::exit(EXIT_FAILURE);
++      }
++    }
++
+     // MOOD cascade: base -> plm -> dc, or plm -> dc if the base scheme is already PLM.
+     if (use_mood) {
+       n_fb_tiers = (recon_method == ReconstructionMethod::plm) ? 1 : 2;
+@@ -367,6 +395,11 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
+       // radius+1 covers the reconstruction stencil; each revision consumes one more
+       // ghost layer of the light-cone halo.
+       int ng_need = ReconStencilRadius(recon_method) + 1 + mood_max_revs;
++      if (mood_frozen_flux) {
++        // Hydro has no transverse corner composition: only the face-normal
++        // reconstruction radius plus one, or the PLM/SED revision halo.
++        ng_need = std::max(ReconStencilRadius(recon_method) + 1, mood_max_revs + 3);
++      }
+       auto &indcs = pmy_pack->pmesh->mb_indcs;
+       if (indcs.ng < ng_need) {
+         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+@@ -481,6 +514,22 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
+       Kokkos::realloc(wl3d, nmb, (nhydro+nscalars), ncells3, ncells2, ncells1);
+       Kokkos::realloc(wr3d, nmb, (nhydro+nscalars), ncells3, ncells2, ncells1);
+ 
++      if (mood_frozen_flux) {
++        const int ndir = pmy_pack->pmesh->three_d ? 3 :
++                         (pmy_pack->pmesh->multi_d ? 2 : 1);
++        // NR/SR and Minkowski C2P use only the already-exchanged cell state.
++        // Curved metrics additionally depend on locally computed coordinates.
++        if (pmy_pack->pcoord->is_general_relativistic &&
++            !pmy_pack->pcoord->coord_data.is_minkowski) {
++          pbval_mood_prim = new MeshBoundaryValuesCC(ppack, pin, false);
++          pbval_mood_prim->InitializeBuffers(nhydro);
++          Kokkos::realloc(mood_prim, nmb, nhydro, ncells3, ncells2, ncells1);
++        }
++        pbval_mood_candidate = new MeshBoundaryValuesCC(ppack, pin, false);
++        pbval_mood_candidate->InitializeBuffers(ndir*nhydro);
++        Kokkos::realloc(mood_candidate, nmb, ndir*nhydro, ncells3, ncells2, ncells1);
++      }
++
+       // allocate arrays of flags/candidate state used with FOFC and MOOD
+       if (use_fofc || use_mood) {
+         // MOOD tests passive scalars too, so the candidate must carry them
+@@ -517,6 +566,8 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
+ // destructor
+ 
+ Hydro::~Hydro() {
++  delete pbval_mood_candidate;
++  delete pbval_mood_prim;
+   if (psbox_u != nullptr) {delete psbox_u;}
+   if (porb_u != nullptr) {delete porb_u;}
+   delete pbval_u;
+diff --git a/src/hydro/hydro.hpp b/src/hydro/hydro.hpp
+index 6a5cadc70..90ad324d4 100644
+--- a/src/hydro/hydro.hpp
++++ b/src/hydro/hydro.hpp
+@@ -134,6 +134,11 @@ class Hydro {
+   // fofc/utest arrays: fofc marks cells flagged (newly demoted) in the current
+   // revision iteration, utest holds the candidate update.
+   bool use_mood = false;    // flag to enable MOOD fallback
++  // Immutable owner flux exchange before the local fallback revisions (NR/SR/GR).
++  bool mood_frozen_flux = false;
++  MeshBoundaryValuesCC *pbval_mood_prim = nullptr;
++  MeshBoundaryValuesCC *pbval_mood_candidate = nullptr;
++  DvceArray5D<Real> mood_prim, mood_candidate, mood_coarse;
+   int mood_max_revs = 1;    // max revision iterations per RK stage
+   bool mood_nad_energy;     // include the energy variable in NAD (density always on)
+   bool mood_nad_scalars;    // include passive-scalar concentrations in NAD
+@@ -177,6 +182,11 @@ class Hydro {
+   // ...in "stagen_tl" list
+   TaskStatus CopyCons(Driver *d, int stage);
+   TaskStatus Fluxes(Driver *d, int stage);
++  TaskStatus SendMOODPrimitives(Driver *d, int stage);
++  TaskStatus RecvMOODPrimitives(Driver *d, int stage);
++  TaskStatus SendMOODCandidate(Driver *d, int stage);
++  TaskStatus RecvMOODCandidate(Driver *d, int stage);
++  TaskStatus ApplyFallback(Driver *d, int stage);
+   TaskStatus SendFlux(Driver *d, int stage);
+   TaskStatus RecvFlux(Driver *d, int stage);
+   TaskStatus RKUpdate(Driver *d, int stage);
+diff --git a/src/hydro/hydro_fluxes.cpp b/src/hydro/hydro_fluxes.cpp
+index 3ed329914..61ec3174a 100644
+--- a/src/hydro/hydro_fluxes.cpp
++++ b/src/hydro/hydro_fluxes.cpp
+@@ -60,11 +60,12 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
+   // reconstruction/solve ranges are extended on both sides: by one cell for FOFC, and
+   // by mood_max_revs cells for MOOD (each revision iteration shrinks the halo of ghost
+   // cells whose candidate is consistent with the neighbor block by one — the
+-  // parallel-MOOD "light cone").
++  // parallel-MOOD "light cone"). Frozen fluxes instead exchange the owned candidate
++  // once, so the initial high-order solve needs no revision extension.
+   int il1 = is, iu1 = ie+1, jl2 = js, ju2 = je+1, kl3 = ks, ku3 = ke+1;
+   int itl = is, itu = ie, jtl = js, jtu = je, ktl = ks, ktu = ke;
+   if (use_fofc || use_mood) {
+-    const int ext = (use_mood) ? mood_max_revs : 1;
++    const int ext = mood_frozen_flux ? 0 : (use_mood ? mood_max_revs : 1);
+     il1 = is-ext; iu1 = ie+1+ext;
+     jl2 = js-ext; ju2 = je+1+ext;
+     kl3 = ks-ext; ku3 = ke+1+ext;
+diff --git a/src/hydro/hydro_mood.cpp b/src/hydro/hydro_mood.cpp
+index 15ef6738b..d009d2a4e 100644
+--- a/src/hydro/hydro_mood.cpp
++++ b/src/hydro/hydro_mood.cpp
+@@ -22,7 +22,8 @@
+ //! solver as the base scheme.  The detect/demote/revise loop runs up to mood_max_revs
+ //! iterations, exiting early once no new cell is flagged.
+ //!
+-//! The loop runs inside the Fluxes task, before SendFlux/RecvFlux, so revised fluxes
++//! The loop runs before SendFlux/RecvFlux (after the immutable candidate exchange
++//! when mood_frozen_flux is enabled), so revised fluxes
+ //! are restricted at fine/coarse AMR boundaries like any other flux (conservative).
+ //! Detection is evaluated on the interior plus one ghost layer so neighboring
+ //! MeshBlocks make identical decisions about their shared faces (as FOFC does).
+@@ -187,8 +188,8 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
+   // iteration-r candidate depends on flux revisions one cell away in iteration r-1, so
+   // only cells at least one cell inside the previous halo stay consistent with the
+   // neighbor block.  The final iteration retains the one-cell halo needed for the
+-  // shared faces.  The base fluxes are computed over the full nrevs-wide halo
+-  // (hydro_fluxes.cpp).
++  // shared faces. The base fluxes over this halo are exchanged from owners when
++  // mood_frozen_flux is enabled, or computed locally on the legacy path.
+   const int hmax = nrevs;
+   int il = is-hmax, iu = ie+hmax, jl = js, ju = je, kl = ks, ku = ke;
+   if (multi_d) { jl = js-hmax, ju = je+hmax; }
+diff --git a/src/hydro/hydro_mood_comm.cpp b/src/hydro/hydro_mood_comm.cpp
+new file mode 100644
+index 000000000..f297bfea6
+--- /dev/null
++++ b/src/hydro/hydro_mood_comm.cpp
+@@ -0,0 +1,83 @@
++//========================================================================================
++// AthenaXXX astrophysical plasma code
++// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
++// Licensed under the 3-clause BSD License (the "LICENSE")
++//========================================================================================
++//! \file hydro_mood_comm.cpp
++//! \brief Exchange immutable stage primitives and high-order face fluxes for MOOD.
++//!
++//! A face belongs to the cell with the same indices (its positive-side owner).
++//! The existing CC neighbor exchange fills its shared and ghost copies. All
++//! subsequent revisions read stage primitives and replace only flagged faces.
++//! This is independent of the Newtonian/SR/GR Riemann-solver specialization.
++
++#include "athena.hpp"
++#include "mesh/mesh.hpp"
++#include "bvals/bvals.hpp"
++#include "hydro/hydro.hpp"
++
++namespace hydro {
++
++TaskStatus Hydro::SendMOODPrimitives(Driver *pdrive, int stage) {
++  const auto &q = pmy_pack->pmesh->mb_indcs;
++  const int nmb1 = pmy_pack->nmb_thispack-1, nv = nhydro;
++  auto data = mood_prim, w = w0;
++  pbval_mood_prim->InitRecv(nv);
++  par_for("hyd_mood_pack_primitives", DevExeSpace(), 0,nmb1,
++          q.ks,q.ke,q.js,q.je,q.is,q.ie,
++  KOKKOS_LAMBDA(int m, int k, int j, int i) {
++    for (int n=0; n<nv; ++n) data(m,n,k,j,i) = w(m,n,k,j,i);
++  });
++  return pbval_mood_prim->PackAndSendCC(mood_prim, mood_coarse);
++}
++
++TaskStatus Hydro::RecvMOODPrimitives(Driver *pdrive, int stage) {
++  auto status = pbval_mood_prim->RecvAndUnpackCC(mood_prim, mood_coarse);
++  if (status != TaskStatus::complete) return status;
++  pbval_mood_prim->ClearSend();
++  pbval_mood_prim->ClearRecv();
++  Kokkos::deep_copy(w0, mood_prim);
++  return TaskStatus::complete;
++}
++
++TaskStatus Hydro::SendMOODCandidate(Driver *pdrive, int stage) {
++  const auto &q = pmy_pack->pmesh->mb_indcs;
++  const bool md = pmy_pack->pmesh->multi_d, td = pmy_pack->pmesh->three_d;
++  const int nmb1 = pmy_pack->nmb_thispack-1, nv = nhydro;
++  pbval_mood_candidate->InitRecv((td ? 3 : (md ? 2 : 1))*nv);
++  auto data = mood_candidate;
++  auto f1 = uflx.x1f, f2 = uflx.x2f, f3 = uflx.x3f;
++  par_for("hyd_mood_pack_candidate", DevExeSpace(), 0,nmb1,
++          q.ks,q.ke,q.js,q.je,q.is,q.ie,
++  KOKKOS_LAMBDA(int m, int k, int j, int i) {
++    for (int n=0; n<nv; ++n) {
++      data(m,n,k,j,i) = f1(m,n,k,j,i);
++      if (md) data(m,nv+n,k,j,i) = f2(m,n,k,j,i);
++      if (td) data(m,2*nv+n,k,j,i) = f3(m,n,k,j,i);
++    }
++  });
++  return pbval_mood_candidate->PackAndSendCC(mood_candidate, mood_coarse);
++}
++
++TaskStatus Hydro::RecvMOODCandidate(Driver *pdrive, int stage) {
++  auto status = pbval_mood_candidate->RecvAndUnpackCC(mood_candidate, mood_coarse);
++  if (status != TaskStatus::complete) return status;
++  pbval_mood_candidate->ClearSend();
++  pbval_mood_candidate->ClearRecv();
++  const bool md = pmy_pack->pmesh->multi_d, td = pmy_pack->pmesh->three_d;
++  const int nmb1 = pmy_pack->nmb_thispack-1, nv = nhydro;
++  auto data = mood_candidate;
++  auto f1 = uflx.x1f, f2 = uflx.x2f, f3 = uflx.x3f;
++  par_for("hyd_mood_unpack_candidate", DevExeSpace(), 0,nmb1,
++          0,data.extent_int(2)-1,0,data.extent_int(3)-1,0,data.extent_int(4)-1,
++  KOKKOS_LAMBDA(int m, int k, int j, int i) {
++    for (int n=0; n<nv; ++n) {
++      f1(m,n,k,j,i) = data(m,n,k,j,i);
++      if (md) f2(m,n,k,j,i) = data(m,nv+n,k,j,i);
++      if (td) f3(m,n,k,j,i) = data(m,2*nv+n,k,j,i);
++    }
++  });
++  return TaskStatus::complete;
++}
++
++} // namespace hydro
+diff --git a/src/hydro/hydro_tasks.cpp b/src/hydro/hydro_tasks.cpp
+index 6e0228300..51e626599 100644
+--- a/src/hydro/hydro_tasks.cpp
++++ b/src/hydro/hydro_tasks.cpp
+@@ -53,7 +53,19 @@ void Hydro::AssembleHydroTasks(std::map<std::string, std::shared_ptr<TaskList>>
+ 
+   // assemble "stagen" task list
+   id.copyu     = tl["stagen"]->AddTask(&Hydro::CopyCons, this, none);
+-  id.flux      = tl["stagen"]->AddTask(&Hydro::Fluxes,this,id.copyu);
++  TaskID flux_input = id.copyu;
++  // Local C2P gives identical primitive ghosts from the existing conservative
++  // exchange in NR/SR and Minkowski GR. Only curved metrics need owner primitives.
++  if (mood_frozen_flux && pbval_mood_prim != nullptr) {
++    TaskID sendp = tl["stagen"]->AddTask(&Hydro::SendMOODPrimitives, this, flux_input);
++    flux_input = tl["stagen"]->AddTask(&Hydro::RecvMOODPrimitives, this, sendp);
++  }
++  id.flux = tl["stagen"]->AddTask(&Hydro::Fluxes, this, flux_input);
++  if (mood_frozen_flux) {
++    TaskID sendc = tl["stagen"]->AddTask(&Hydro::SendMOODCandidate, this, id.flux);
++    TaskID recvc = tl["stagen"]->AddTask(&Hydro::RecvMOODCandidate, this, sendc);
++    id.flux = tl["stagen"]->AddTask(&Hydro::ApplyFallback, this, recvc);
++  }
+   id.sendf     = tl["stagen"]->AddTask(&Hydro::SendFlux, this, id.flux);
+   id.recvf     = tl["stagen"]->AddTask(&Hydro::RecvFlux, this, id.sendf);
+   id.rkupdt    = tl["stagen"]->AddTask(&Hydro::RKUpdate, this, id.recvf);
+@@ -225,6 +237,11 @@ TaskStatus Hydro::Fluxes(Driver *pdrive, int stage) {
+   // Terms selected for STS are advanced only in the parabolic half-sweeps.
+   AddSelectedDiffusionFluxes(parabolic::DiffusionSelection::explicit_only);
+ 
++  if (!mood_frozen_flux) return ApplyFallback(pdrive, stage);
++  return TaskStatus::complete;
++}
++
++TaskStatus Hydro::ApplyFallback(Driver *pdrive, int stage) {
+   // call MOOD a-posteriori fallback if enabled (mutually exclusive with FOFC)
+   if (use_mood) {
+     if (rsolver_method == Hydro_RSolver::advect) {
+diff --git a/src/mhd/mhd.cpp b/src/mhd/mhd.cpp
+index 622c3a58d..eaf047303 100644
+--- a/src/mhd/mhd.cpp
++++ b/src/mhd/mhd.cpp
+@@ -594,17 +594,17 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
+         pvisc == nullptr && presist == nullptr && pcond == nullptr &&
+         !pin->DoesBlockExist("shearing_box") &&
+         !pin->GetOrAddBoolean("mhd", "well_balanced", false) &&
+-        !pmy_pack->pcoord->is_special_relativistic &&
+-        !pmy_pack->pcoord->is_general_relativistic &&
++        !(pmy_pack->pcoord->is_general_relativistic &&
++          pmy_pack->pcoord->coord_data.bh_excise) &&
+         (recon_method == ReconstructionMethod::fv4 ||
+          recon_method == ReconstructionMethod::fv6 ||
+          recon_method == ReconstructionMethod::fv8);
+     mood_frozen_emf = pin->GetOrAddBoolean("mhd", "mood_frozen_emf", frozen_supported);
+     if (mood_frozen_emf && !frozen_supported) {
+-      std::cerr << "Frozen EMF requires dynamic MOOD with periodic uniform Newtonian "
++      std::cerr << "Frozen EMF requires dynamic MOOD with periodic uniform "
+                 << "multidimensional UCT, FV4/FV6/FV8, ideal EOS, mood_nad_bcc=avg, "
+                 << "mood_edge=flag/auto, mood_touched_only=false, and no diffusion, "
+-                << "scalars, shear or well balance\n";
++                << "scalars, shear, excision or well balance\n";
+       std::exit(EXIT_FAILURE);
+     }
+     if (mood_frozen_emf) {
+diff --git a/src/mhd/mhd_mood.cpp b/src/mhd/mhd_mood.cpp
+index ee66bec43..c1fd87abe 100644
+--- a/src/mhd/mhd_mood.cpp
++++ b/src/mhd/mhd_mood.cpp
+@@ -26,7 +26,7 @@
+ //!
+ //! mood_frozen_emf exchanges the initial candidate and caches PLM/DC EMFs, then replaces
+ //! only edges adjacent to demoted cells. Untouched high-order edges are retained.
+-//! This is the default for supported uniform periodic Newtonian cases and has a
++//! This is the default for supported uniform periodic NR/SR/GR cases and has a
+ //! one-cell revision reach; see
+ //! validation/frozen_emf_halo/README.md for the measured bounds and limitations.
+ //!

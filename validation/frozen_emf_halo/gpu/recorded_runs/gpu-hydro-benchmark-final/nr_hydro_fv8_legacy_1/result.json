@@ -1,0 +1,26 @@
+{
+  "name": "nr_hydro_fv8_legacy_1",
+  "code": 0,
+  "mpi_ranks": 1,
+  "wall_seconds": 0.5663934480398893,
+  "solver_seconds": 0.1248205,
+  "case": "nr_hydro",
+  "order": 8,
+  "frozen": false,
+  "repeat": 1,
+  "warmup": false,
+  "demotions": 100744,
+  "density_floors": 0,
+  "energy_floors": 0,
+  "c2p_failures": 0,
+  "conservation_drift": {
+    "mass": 1.3158198810372225e-16,
+    "1-mom": 0.0,
+    "2-mom": 0.0,
+    "3-mom": 0.0,
+    "tot-E": 6.547298658838115e-16
+  },
+  "final_time": 0.06848832,
+  "cycles": 32,
+  "million_zonecycles_per_second": 16.801342728157636
+}

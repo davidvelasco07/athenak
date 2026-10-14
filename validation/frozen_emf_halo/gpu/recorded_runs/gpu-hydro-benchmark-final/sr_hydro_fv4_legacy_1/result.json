@@ -1,0 +1,26 @@
+{
+  "name": "sr_hydro_fv4_legacy_1",
+  "code": 0,
+  "mpi_ranks": 1,
+  "wall_seconds": 0.5164933800697327,
+  "solver_seconds": 0.1226554,
+  "case": "sr_hydro",
+  "order": 4,
+  "frozen": false,
+  "repeat": 1,
+  "warmup": false,
+  "demotions": 67856,
+  "density_floors": 0,
+  "energy_floors": 0,
+  "c2p_failures": 0,
+  "conservation_drift": {
+    "mass": 1.6653345369377348e-16,
+    "1-mom": 0.0,
+    "2-mom": 0.0,
+    "3-mom": 0.0,
+    "tot-E": 8.526169127021648e-16
+  },
+  "final_time": 0.4059255,
+  "cycles": 32,
+  "million_zonecycles_per_second": 17.097918232707244
+}

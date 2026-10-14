@@ -1,0 +1,66 @@
+--- a/src/hydro/hydro_mood.cpp
++++ b/src/hydro/hydro_mood.cpp
+@@ -30,6 +30,8 @@
+ //! Like FOFC, revised faces lose any viscous/conduction flux contribution.
+
+ #include <algorithm>
++#include <cstdlib>
++#include "coordinates/cell_locations.hpp"
+
+ #include "athena.hpp"
+ #include "mesh/mesh.hpp"
+@@ -131,6 +133,8 @@
+   const bool newtonian = !(pmy_pack->pcoord->is_special_relativistic ||
+                            pmy_pack->pcoord->is_general_relativistic);
+
++  // Validation-only forcing: descend the cell next to x=y=0 through both tiers.
++  const bool force_dc_test = std::getenv("ATHENA_MOOD_FORCE_DC") != nullptr;
+   auto &u0_ = u0;
+   auto &u1_ = u1;
+   auto &w0_ = w0;
+@@ -331,6 +335,12 @@
+         cell_rtol *= fmin(1.0, step_dt*speed/dx);
+       }
+
++      if (force_dc_test) {
++        const auto box = size_.d_view(m);
++        const Real x = CellCenterX(i-is, indcs_.nx1, box.x1min, box.x1max);
++        const Real y = CellCenterX(j-js, indcs_.nx2, box.x2min, box.x2max);
++        if (x > 0.0 && x < box.dx1 && y > 0.0 && y < box.dx2) danger = true;
++      }
+       bool trouble = danger;
+
+       // NAD: relaxed DMP of the candidate vs stage-input state over the neighborhood,
+--- a/src/mhd/mhd_mood.cpp
++++ b/src/mhd/mhd_mood.cpp
+@@ -37,6 +37,8 @@
+ //! the final-iteration halo equals the transverse reach of the edge composition.
+
+ #include <algorithm>
++#include <cstdlib>
++#include "coordinates/cell_locations.hpp"
+
+ #include "athena.hpp"
+ #include "mesh/mesh.hpp"
+@@ -166,6 +168,8 @@
+   const bool newtonian = !(pmy_pack->pcoord->is_special_relativistic ||
+                            pmy_pack->pcoord->is_general_relativistic);
+
++  // Validation-only forcing: descend the cell next to x=y=0 through both tiers.
++  const bool force_dc_test = std::getenv("ATHENA_MOOD_FORCE_DC") != nullptr;
+   auto &u0_ = u0;
+   auto &u1_ = u1;
+   auto &w0_ = w0;
+@@ -807,6 +811,12 @@
+         cell_rtol *= fmin(1.0, step_dt*speed/dx);
+       }
+
++      if (force_dc_test) {
++        const auto box = size_.d_view(m);
++        const Real x = CellCenterX(i-is, indcs_.nx1, box.x1min, box.x1max);
++        const Real y = CellCenterX(j-js, indcs_.nx2, box.x2min, box.x2max);
++        if (x > 0.0 && x < box.dx1 && y > 0.0 && y < box.dx2) danger = true;
++      }
+       bool trouble = danger;
+
+       // NAD passes: 0 = density, 1 = internal energy (ideal gas), then B (|B| in mag
