@@ -1,0 +1,19 @@
+{
+  "name": "chain_r1_short",
+  "code": 0,
+  "seconds": 0.14794558397261426,
+  "order": 4,
+  "ng": 14,
+  "revisions": 1,
+  "blocks": 2,
+  "dim": 2,
+  "steps": 1,
+  "frozen": true,
+  "halo": 0,
+  "seed": -2082,
+  "dump": true,
+  "mpi": 1,
+  "amp": 0.1,
+  "drat": 2,
+  "owner": true
+}

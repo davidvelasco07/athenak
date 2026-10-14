@@ -1,0 +1,16 @@
+{
+  "order": 4,
+  "ng": 5,
+  "revisions": 2,
+  "blocks": 2,
+  "dim": 2,
+  "steps": 1,
+  "frozen": true,
+  "halo": null,
+  "seed": -2081,
+  "dump": true,
+  "mpi": 1,
+  "amp": 0.1,
+  "drat": 2,
+  "owner": true
+}

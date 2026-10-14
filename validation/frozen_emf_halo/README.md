@@ -42,7 +42,8 @@ its tested configurations. One fewer input ghost changes outer-halo candidates,
 even when the final interior fields happen to agree. The revision halo itself
 must remain one cell per revision in the adversarial cascade tests.
 
-A proposed next bound is `max(FV_order, fallback_stencil + revisions)`. The
-current source still constructs the high-order initial candidate locally across
-the revision halo, which accounts for the additive bound. Separately supplying
-that candidate halo is the next experiment; no smaller bound is claimed here.
+The follow-up [maximum-bound audit](maximum_bound/README.md) tests
+`max(FV_order, revisions + 3)` using exchanges of immutable owner data before the
+revision loop. Its two-revision counts are 5/6/8. The audit patch and 50-run
+record are included; the normal source retains the conservative local N+revisions
+bound until scalable neighbor exchanges are implemented.

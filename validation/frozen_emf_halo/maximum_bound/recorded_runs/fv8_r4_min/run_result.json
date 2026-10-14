@@ -1,0 +1,19 @@
+{
+  "name": "fv8_r4_min",
+  "code": 0,
+  "seconds": 0.19220141594996676,
+  "order": 8,
+  "ng": 8,
+  "revisions": 4,
+  "blocks": 2,
+  "dim": 2,
+  "steps": 1,
+  "frozen": true,
+  "halo": null,
+  "seed": -1,
+  "dump": true,
+  "mpi": 1,
+  "amp": 0.1,
+  "drat": 2,
+  "owner": true
+}

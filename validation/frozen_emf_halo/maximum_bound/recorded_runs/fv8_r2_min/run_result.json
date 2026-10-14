@@ -1,0 +1,19 @@
+{
+  "name": "fv8_r2_min",
+  "code": 0,
+  "seconds": 0.14860812498955056,
+  "order": 8,
+  "ng": 8,
+  "revisions": 2,
+  "blocks": 2,
+  "dim": 2,
+  "steps": 1,
+  "frozen": true,
+  "halo": null,
+  "seed": -1,
+  "dump": true,
+  "mpi": 1,
+  "amp": 0.1,
+  "drat": 2,
+  "owner": true
+}

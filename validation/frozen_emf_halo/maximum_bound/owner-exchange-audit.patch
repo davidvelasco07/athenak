@@ -1,0 +1,175 @@
+--- a/src/mhd/mhd.hpp
++++ b/src/mhd/mhd.hpp
+@@ -192,6 +192,7 @@
+   int mood_halo0;
+   // Experimental frozen-EMF halo audit, opt-in; uniform Newtonian ideal MHD only.
+   bool mood_frozen_emf = false;
++  bool mood_owner_audit = false;
+   int mood_test_halo = -1;
+   int mood_test_seed = -1;
+   bool mood_test_dump = false;
+--- a/src/mhd/mhd.cpp
++++ b/src/mhd/mhd.cpp
+@@ -373,6 +373,7 @@
+         << "' not implemented (auto|blend|flag)" << std::endl;
+       std::exit(EXIT_FAILURE);
+     }
++    mood_owner_audit = pin->GetOrAddBoolean("mhd", "mood_owner_audit", false);
+     mood_frozen_emf = pin->GetOrAddBoolean("mhd", "mood_frozen_emf", false);
+     mood_test_halo = pin->GetOrAddInteger("mhd", "mood_test_halo", -1);
+     mood_test_dump = pin->GetOrAddBoolean("mhd", "mood_test_dump", false);
+@@ -609,6 +610,7 @@
+     // stencil of half-width `radius`, so the ghost layer has to cover both.
+     if (emf_method != MHD_EMF::ct_contact) {
+       int ng_need = ReconEdgeReach(recon_method) + ReconStencilRadius(recon_method);
++      if (mood_owner_audit) ng_need = 2*ReconStencilRadius(recon_method);
+       if (ng_need < 3) { ng_need = 3; }
+       if (pmy_pack->pmesh->mb_indcs.ng < ng_need) {
+         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+@@ -675,7 +677,8 @@
+       // Audit floor protects array accesses. Decomposition consistency may need
+       // more cells because face-to-center interpolation loses validity near ghosts.
+       if (mood_frozen_emf) {
+-        ng_need = mood_halo0 + std::max(3, ReconEdgeReach(recon_method));
++        ng_need = mood_owner_audit ? std::max(2*ReconStencilRadius(recon_method), mood_halo0+3)
++                                 : mood_halo0 + std::max(3, ReconEdgeReach(recon_method));
+       }
+       auto &indcs = pmy_pack->pmesh->mb_indcs;
+       if (indcs.ng < ng_need) {
+--- a/src/mhd/mhd_fluxes.cpp
++++ b/src/mhd/mhd_fluxes.cpp
+@@ -25,6 +25,7 @@
+ #include "mesh/mesh.hpp"
+ #include "coordinates/coordinates.hpp"
+ #include "mhd.hpp"
++#include "mhd/halo_owner_audit.hpp"
+ #include "eos/eos.hpp"
+ #include "reconstruct/recon.hpp"
+ #include "mhd/rsolvers/solve_face_mhd.hpp"
+@@ -99,8 +100,13 @@
+   int nmb1 = pmy_pack->nmb_thispack - 1;
+   const auto recon_method_ = recon_method;
+ 
++  if (mood_owner_audit) {
++    HaloOwnerAudit(pmy_pack, w0);
++    HaloOwnerAudit(pmy_pack, bcc0);
++  }
++
+   // Face-normal flux range. MOOD needs base fluxes over mood_halo0; FOFC over 1.
+-  const int mext = use_mood ? mood_halo0 : (use_fofc ? 1 : 0);
++  const int mext = mood_owner_audit ? 0 : use_mood ? mood_halo0 : (use_fofc ? 1 : 0);
+   int il1 = is-mext, iu1 = ie+1+mext;
+   int jl2 = js-mext, ju2 = je+1+mext;
+   int kl3 = ks-mext, ku3 = ke+1+mext;
+@@ -129,7 +135,7 @@
+     // Without this the halo candidate differed between MeshBlocks and the demotion
+     // pattern of fv4+MOOD under UCT depended on the block decomposition.
+     if (use_mood) {
+-      uct_ext += mood_halo0;
++      if (!mood_owner_audit) uct_ext += mood_halo0;
+     }
+   }
+   const int ext = std::max(uct_ext, mext);
+--- a/src/mhd/mhd_mood.cpp
++++ b/src/mhd/mhd_mood.cpp
+@@ -33,6 +33,7 @@
+ #include <limits>
+ #include <type_traits>
+ #include <fstream>
++#include "mhd/halo_owner_audit.hpp"
+ #include "globals.hpp"
+ 
+ #include "athena.hpp"
+@@ -253,13 +254,14 @@
+   // bcc0 of ConsToPrim stays in use for the fluid fluxes and PAD.
+   if (nad_avg) {
+     auto bn_ = bcc_nad;
++    const bool mood_owner_avg = mood_owner_audit;
+     const int n1m = ncells1-1, n2m = ncells2-1, n3m = ncells3-1;
+     const bool md = multi_d, td = three_d;
+     par_for("mood_bnad", DevExeSpace(), 0, nmb1, 0, n3m, 0, n2m, 0, n1m,
+     KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+-      const int ip = (i < n1m) ? i+1 : i;
+-      const int jp = (md && j < n2m) ? j+1 : j;
+-      const int kp = (td && k < n3m) ? k+1 : k;
++      const int ip = mood_owner_avg ? i+1 : ((i < n1m) ? i+1 : i);
++      const int jp = (md && (mood_owner_avg || j < n2m)) ? j+1 : j;
++      const int kp = (td && (mood_owner_avg || k < n3m)) ? k+1 : k;
+       bn_(m,IBX,k,j,i) = 0.5*(b0x1(m,k,j,i) + b0x1(m,k,j,ip));
+       bn_(m,IBY,k,j,i) = 0.5*(b0x2(m,k,j,i) + b0x2(m,k,jp,i));
+       bn_(m,IBZ,k,j,i) = 0.5*(b0x3(m,k,j,i) + b0x3(m,kp,j,i));
+@@ -738,7 +740,15 @@
+       ComposeCornerEMF(is-h,ie+h+1,js-h2,je+h2+1,ks-h3,
+                        three_d ? ke+h3+1 : ks, false);
+     };
+-    compose();
++    if (mood_owner_audit) {
++      ComposeCornerEMF(is,ie+1,js,je+1,ks,three_d ? ke+1 : ks,false);
++      HaloOwnerAudit(pmy_pack, flx1);
++      HaloOwnerAudit(pmy_pack, flx2);
++      if (three_d) HaloOwnerAudit(pmy_pack, flx3);
++      HaloOwnerAudit(pmy_pack, efld.x1e);
++      HaloOwnerAudit(pmy_pack, efld.x2e);
++      HaloOwnerAudit(pmy_pack, efld.x3e);
++    } else { compose(); }
+     copy_edges(ehigh, efld);
+     auto clone = [](const auto &v) {
+       using V = typename std::decay<decltype(v)>::type;
+--- /dev/null
++++ b/src/mhd/halo_owner_audit.hpp
+@@ -0,0 +1,55 @@
++// TEST ONLY: dense owner-value exchange for a uniform periodic grid.
++// One MeshBlockPack per rank, CPU reference implementation; not scalable.
++#ifndef MHD_HALO_OWNER_AUDIT_HPP_
++#define MHD_HALO_OWNER_AUDIT_HPP_
++#include <vector>
++#include "mesh/mesh.hpp"
++#if MPI_PARALLEL_ENABLED
++#include <mpi.h>
++#endif
++namespace mhd {
++template<class View>
++void HaloOwnerAudit(MeshBlockPack *pack, const View &view) {
++  auto *mesh=pack->pmesh;
++  if (pack->nmb_thispack != mesh->nmb_thisrank || mesh->multilevel) {
++    std::cerr << "Owner audit requires one uniform pack per rank\n"; std::exit(1);
++  }
++  const auto &q=mesh->mb_indcs;
++  const int nx=mesh->mesh_indcs.nx1, ny=mesh->mesh_indcs.nx2;
++  const int nz=mesh->mesh_indcs.nx3;
++  const int nv=(View::rank==5)?view.extent_int(1):1;
++  const int ni=view.extent_int(View::rank-1);
++  const int nj=view.extent_int(View::rank-2);
++  const int nk=view.extent_int(View::rank-3);
++  auto h=Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),view);
++  auto val=[&](int m,int v,int k,int j,int i)->Real& {
++    if constexpr (View::rank==5) return h(m,v,k,j,i);
++    else return h(m,k,j,i);
++  };
++  std::vector<Real> global(static_cast<size_t>(nx)*ny*nz*nv,0.0);
++  auto idx=[&](int v,int z,int y,int x) {
++    return ((static_cast<size_t>(v)*nz+z)*ny+y)*nx+x;
++  };
++  for (int m=0;m<pack->nmb_thispack;++m) {
++    auto l=mesh->lloc_eachmb[pack->pmb->mb_gid.h_view(m)];
++    for (int v=0;v<nv;++v) for (int k=q.ks;k<=q.ke;++k)
++    for (int j=q.js;j<=q.je;++j) for (int i=q.is;i<=q.ie;++i)
++      global[idx(v,l.lx3*q.nx3+k-q.ks,l.lx2*q.nx2+j-q.js,
++                   l.lx1*q.nx1+i-q.is)]=val(m,v,k,j,i);
++  }
++#if MPI_PARALLEL_ENABLED
++  MPI_Allreduce(MPI_IN_PLACE,global.data(),static_cast<int>(global.size()),
++                MPI_ATHENA_REAL,MPI_SUM,MPI_COMM_WORLD);
++#endif
++  auto wrap=[](int a,int n) {return (a%n+n)%n;};
++  for (int m=0;m<pack->nmb_thispack;++m) {
++    auto l=mesh->lloc_eachmb[pack->pmb->mb_gid.h_view(m)];
++    for (int v=0;v<nv;++v) for (int k=0;k<nk;++k)
++    for (int j=0;j<nj;++j) for (int i=0;i<ni;++i)
++      val(m,v,k,j,i)=global[idx(v,wrap(l.lx3*q.nx3+k-q.ks,nz),
++           wrap(l.lx2*q.nx2+j-q.js,ny),wrap(l.lx1*q.nx1+i-q.is,nx))];
++  }
++  Kokkos::deep_copy(view,h);
++}
++} // namespace mhd
++#endif

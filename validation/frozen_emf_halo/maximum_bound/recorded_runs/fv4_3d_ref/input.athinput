@@ -1,0 +1,68 @@
+<job>
+basename = halo
+<mesh>
+nghost = 14
+nx1 = 32
+nx2 = 32
+nx3 = 32
+x1min = -0.5
+x1max = 0.5
+x2min = -0.5
+x2max = 0.5
+x3min = -0.5
+x3max = 0.5
+ix1_bc = periodic
+ox1_bc = periodic
+ix2_bc = periodic
+ox2_bc = periodic
+ix3_bc = periodic
+ox3_bc = periodic
+<meshblock>
+nx1 = 32
+nx2 = 32
+nx3 = 32
+<time>
+evolution = dynamic
+integrator = rk3
+cfl_number = 0.25
+nlim = 1
+tlim = 0.0001
+ndiag = 1
+<mhd>
+eos = ideal
+reconstruct = fv4
+rsolver = hlld
+emf = uct_hlld
+gamma = 1.6666666666666667
+mood = true
+mood_owner_audit = true
+mood_edge = flag
+mood_frozen_emf = true
+mood_test_halo = -1
+mood_test_seed = -1
+mood_test_dump = true
+mood_max_revs = 2
+mood_nad_scale = rcfl
+mood_rtol = 1.e-5
+mood_sed = true
+mood_touched_only = false
+<problem>
+rad = 0.3
+amp = 0.1
+drat = 2
+iprob = 4
+<output1>
+file_type = bin
+variable = mhd_u_bcc
+dt = 100
+<output2>
+file_type = bin
+variable = mhd_fb_level
+dt = 100
+<output3>
+file_type = bin
+variable = mhd_divb
+dt = 100
+<output4>
+file_type = hst
+dt = 100
