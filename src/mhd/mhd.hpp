@@ -181,6 +181,8 @@ class MHD {
   int mood_nad_v;           // 0=off, 1=|v|, 2=components
   bool uct_diag;            // print max|d| (UCT dissipation) + EMF-NaN diagnostic
   int mood_edge_flag;       // 1: demote UCT edge recon at demoted cells; 0: blend only
+  bool mood_nad_bcc_avg = true; // NAD reference B = plain face average (mood_nad_bcc)
+  DvceArray5D<Real> bcc_nad;    // that reference field (allocated with use_mood)
   Real mood_rtol;
   Real mood_eps0;
   Real mood_eps0_eq;        // WB: round-off floor relative to the equilibrium (hydro.hpp)

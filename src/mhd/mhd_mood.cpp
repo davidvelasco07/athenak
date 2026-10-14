@@ -190,7 +190,8 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
   auto &weq_ = w_eq;
   auto &bcceq_ = bcc_eq;
   const DvceArray5D<Real> wnad_ = wb ? w_pert : w0;   // NAD reference primitives
-  const DvceArray5D<Real> bnad_ = wb ? bcc_pert : bcc0;
+  const bool nad_avg = mood_nad_bcc_avg && !wb;   // (WB keeps its perturbation field)
+  const DvceArray5D<Real> bnad_ = nad_avg ? bcc_nad : (wb ? bcc_pert : bcc0);
   auto beq1 = b_eq.x1f;  auto beq2 = b_eq.x2f;  auto beq3 = b_eq.x3f;
   auto weqf1 = w_eq_face.x1f;  auto weqf2 = w_eq_face.x2f;  auto weqf3 = w_eq_face.x3f;
   auto beqf1 = bcc_eq_face.x1f;  auto beqf2 = bcc_eq_face.x2f;
@@ -244,14 +245,33 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
   auto aL3 = aL_x3f;  auto dl3 = dL_x3f;  auto dr3 = dR_x3f;
   auto vt1_3 = vx_x3f;  auto vt2_3 = vy_x3f;
 
+  // NAD reference B as the plain face average (mood_nad_bcc=avg): the same averaging as
+  // the staggered candidate below, so the DMP compares like with like; the high-order
+  // bcc0 of ConsToPrim stays in use for the fluid fluxes and PAD.
+  if (nad_avg) {
+    auto bn_ = bcc_nad;
+    const int n1m = ncells1-1, n2m = ncells2-1, n3m = ncells3-1;
+    const bool md = multi_d, td = three_d;
+    par_for("mood_bnad", DevExeSpace(), 0, nmb1, 0, n3m, 0, n2m, 0, n1m,
+    KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      const int ip = (i < n1m) ? i+1 : i;
+      const int jp = (md && j < n2m) ? j+1 : j;
+      const int kp = (td && k < n3m) ? k+1 : k;
+      bn_(m,IBX,k,j,i) = 0.5*(b0x1(m,k,j,i) + b0x1(m,k,j,ip));
+      bn_(m,IBY,k,j,i) = 0.5*(b0x2(m,k,j,i) + b0x2(m,k,jp,i));
+      bn_(m,IBZ,k,j,i) = 0.5*(b0x3(m,k,j,i) + b0x3(m,kp,j,i));
+    });
+  }
+
   // |B| of the stage-input state, used for NAD bounds and SED in "mag" mode.  Filled
   // over the full array so the SED stencil is covered anywhere detection runs.
   if (nad_bmag) {
+    const auto bsrc_ = nad_avg ? bcc_nad : bcc0;
     par_for("mood_bmag", DevExeSpace(), 0, nmb1, 0, ncells3-1, 0, ncells2-1,
             0, ncells1-1,
     KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-      bmag_(m,k,j,i) = sqrt(SQR(bcc0_(m,IBX,k,j,i)) + SQR(bcc0_(m,IBY,k,j,i))
-                          + SQR(bcc0_(m,IBZ,k,j,i)));
+      bmag_(m,k,j,i) = sqrt(SQR(bsrc_(m,IBX,k,j,i)) + SQR(bsrc_(m,IBY,k,j,i))
+                          + SQR(bsrc_(m,IBZ,k,j,i)));
       if (wb) {   // signed delta|B| = |B| - |B_eq|: smooth, rotation-invariant
         bmag_(m,k,j,i) -= sqrt(SQR(bcceq_(m,IBX,k,j,i)) + SQR(bcceq_(m,IBY,k,j,i))
                              + SQR(bcceq_(m,IBZ,k,j,i)));

@@ -347,6 +347,18 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
       std::exit(EXIT_FAILURE);
     }
     uct_diag = pin->GetOrAddBoolean("mhd","uct_diag",false);
+    // NAD reference field for B.  Under UCT, ConsToPrim builds bcc0 with the unlimited
+    // high-order face->centre interpolant (ideal_mhd.cpp FaceToCenterInterp), which
+    // overshoots at a field discontinuity (the field loop's edge: +15-19% at t=0), while
+    // the staggered MOOD candidate is averaged to the centres with the plain face
+    // average.
+    // Testing that candidate against bounds built from the inflated interpolant hides
+    // violations (field loop, 2026-10-14: 20x fewer flags than ct_contact, where both
+    // sides are the plain average, and a ringing solution).  "avg" (default) takes the
+    // detector's reference B, and |B| in mag mode, from the same face average; "ho" keeps
+    // the former behaviour.  Identical under ct_contact, where bcc0 is that average.
+    mood_nad_bcc_avg =
+        (pin->GetOrAddString("mhd","mood_nad_bcc","avg").compare("avg") == 0);
     // "auto": flag for UCT, blend for ct_contact (resolved after emf is known)
     std::string medge = pin->GetOrAddString("mhd","mood_edge","auto");
     if (medge.compare("auto") == 0) {
@@ -787,6 +799,7 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
         Kokkos::realloc(fofc,    nmb, ncells3, ncells2, ncells1);
         Kokkos::realloc(utest,   nmb, nvars, ncells3, ncells2, ncells1);
         Kokkos::realloc(bcctest, nmb, 3,    ncells3, ncells2, ncells1);
+        Kokkos::realloc(bcc_nad, nmb, 3,    ncells3, ncells2, ncells1);
         Kokkos::deep_copy(fofc, false);
         if (nscalars > 0) {
           Kokkos::realloc(fofc_scal,    nmb, nscalars, ncells3, ncells2, ncells1);
