@@ -804,6 +804,22 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
     }
   }
 
+  // Cell-centred B as the plain average of the two faces (the control-volume field),
+  // independent of the high-order face->centre interpolant ConsToPrim uses under UCT
+  if (out_params.variable.compare("mhd_bavg") == 0) {
+    if (pm->pmb_pack->pmhd == nullptr) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Output variable 'mhd_bavg' requires <mhd>" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    const char *names[3] = {"bavg1", "bavg2", "bavg3"};
+    for (int n=0; n<3; ++n) {
+      out_params.contains_derived = true;
+      out_params.n_derived += 1;
+      outvars.emplace_back(names[n], out_params.n_derived - 1, &(derived_var));
+    }
+  }
+
   // Hydro/MHD MOOD fallback level: 0=base, 1=PLM, 2=DC. This is the level retained
   // after the final RK stage at the output time.
   if (out_params.variable.compare("hydro_fb_level") == 0) {

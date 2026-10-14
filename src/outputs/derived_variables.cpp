@@ -179,6 +179,30 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
     }
   }
 
+  // plain face average of the staggered field (see basetype_output.cpp "mhd_bavg")
+  if (name.compare("mhd_bavg") == 0) {
+    if (derived_var.extent(4) <= 1) {
+      Kokkos::realloc(derived_var, nmb_alloc, n_dv, n3, n2, n1);
+    }
+    auto dv = derived_var;
+    auto b = pm->pmb_pack->pmhd->b0;
+    const bool md = pm->multi_d, td = pm->three_d;
+    for (int n=0; n<3; ++n) {
+      const int idv = i_dv;
+      par_for("mhd_bavg", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
+      KOKKOS_LAMBDA(int m, int k, int j, int i) {
+        if (n == 0) {
+          dv(m,idv,k,j,i) = 0.5*(b.x1f(m,k,j,i) + b.x1f(m,k,j,i+1));
+        } else if (n == 1) {
+          dv(m,idv,k,j,i) = md ? 0.5*(b.x2f(m,k,j,i) + b.x2f(m,k,j+1,i)) : b.x2f(m,k,j,i);
+        } else {
+          dv(m,idv,k,j,i) = td ? 0.5*(b.x3f(m,k,j,i) + b.x3f(m,k+1,j,i)) : b.x3f(m,k,j,i);
+        }
+      });
+      i_dv += 1;
+    }
+  }
+
   // Per-cell MOOD cascade level retained after the final RK stage:
   // 0 = base reconstruction, 1 = PLM, 2 = DC.
   if (name.compare("hydro_fb_level") == 0) {
