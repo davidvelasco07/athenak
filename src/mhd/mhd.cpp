@@ -287,11 +287,12 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
     use_mood = pin->GetOrAddBoolean("mhd","mood",false);
     // NAD uses only each cell's neighboring bounds; no domain-wide scales.
     const std::string nadsc = pin->GetOrAddString("mhd","mood_nad_scale","relative");
-    if (nadsc != "relative") {
+    if (nadsc != "relative" && nadsc != "rcfl") {
       std::cerr << "<mhd> mood_nad_scale='" << nadsc
-                << "' has been removed; use relative with mood_rtol/mood_atol\n";
+                << "' is unsupported; use relative or rcfl with mood_rtol/mood_atol\n";
       std::exit(EXIT_FAILURE);
     }
+    mood_nad_rcfl = (nadsc == "rcfl");
     if (pin->DoesParameterExist("mhd", "mood_nad_theta")) {
       std::cerr << "<mhd> mood_nad_theta was removed with the global NAD scales\n";
       std::exit(EXIT_FAILURE);
@@ -299,7 +300,8 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
     mood_eps0  = pin->GetOrAddReal("mhd","mood_eps0",1.0e-12);
     // well-balanced round-off floor relative to the equilibrium (see hydro.cpp)
     mood_eps0_eq = pin->GetOrAddReal("mhd","mood_eps0_eq",0.0);
-    mood_rtol = pin->GetOrAddReal("mhd","mood_rtol",1.0e-5);
+    mood_rtol = pin->GetOrAddReal("mhd","mood_rtol",
+                                    mood_nad_rcfl ? 1.0e-4 : 1.0e-5);
     mood_atol = pin->GetOrAddReal("mhd","mood_atol",0.0);
     mood_nad_energy = pin->GetOrAddBoolean("mhd","mood_nad_energy",true);
     mood_nad_scalars = pin->GetOrAddBoolean("mhd","mood_nad_scalars",true);

@@ -1,4 +1,4 @@
-> Historical results: this report records the former global-scale detector. The current code uses local relative NAD and the validated frozen-EMF method where supported; see [current validation](../frozen_emf_halo/neighbor_exchange/README.md). Rerun this suite before treating its recorded results as current.
+> Historical results: this report records the former global-scale detector. The current code supports local relative/rcfl NAD and the validated frozen-EMF method where supported; see [current validation](../frozen_emf_halo/neighbor_exchange/README.md). Rerun this suite before treating its recorded results as current.
 
 # MOOD Fallback Validation Report
 

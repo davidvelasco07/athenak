@@ -40,10 +40,6 @@
 #include "hydro/well_balance.hpp"
 #include "hydro.hpp"
 
-#if MPI_PARALLEL_ENABLED
-#include <mpi.h>
-#endif
-
 namespace hydro {
 
 namespace {
@@ -150,7 +146,7 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
   // quantities.  Following the paper (sec. 2.4.4) the NAD/SED test acts on the
   // perturbation (rho', e' = e - e_eq), PAD on the full state, and revised faces go
   // through the face equilibrium exactly like the base fluxes.  The TOLERANCE of the
-  // relaxed DMP (relative band, global scales, round-off floor) is however taken from
+  // relaxed DMP (relative band, round-off floor) is however taken from
   // the FULL state w_eq + w', exactly as the same run without WB would set it: the band
   // expresses the discretization noise the scheme may add relative to the variable's
   // physical scale, and a band relative to |w'| alone is |w'|/|w| tighter, which demoted
@@ -166,6 +162,8 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
   const bool use_sed = mood_sed;
   const Real eps0  = mood_eps0;
   const Real rtol = mood_rtol;
+  const bool local_rcfl = mood_nad_rcfl;
+  const Real step_dt = pmy_pack->pmesh->dt;
   const Real atol = mood_atol;
   const bool nad_energy = mood_nad_energy;
   // Passive scalars carry their own discontinuities, so they are tested as well.  In
@@ -180,6 +178,7 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
   // only way to attribute a property to the detector rather than to the base scheme.
   const int nrevs = mood_detect ? mood_max_revs : 0;
   const bool is_ideal_ = eos_.is_ideal;
+  const Real gm_ = eos_.gamma, cs_iso_ = eos_.iso_cs;
 
   // Detection halo: candidate/detection are evaluated on the interior plus a halo of
   // ghost cells so that both MeshBlocks sharing a face flag and demote it identically
@@ -311,6 +310,26 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
         }
       }
 
+      // rcfl uses only this cell's immutable stage-input state and local spacing.
+      // Retain the max-component/min-spacing convention and full-step dt of rcfl;
+      // no pack/domain extrema or additional stencil are needed.  WB retains its
+      // signal-speed contribution so a static equilibrium has a nonzero band.
+      Real cell_rtol = rtol;
+      if (local_rcfl && !danger && lv < 1) {
+        Real speed = fmax(fabs(w0_(m,IVX,k,j,i)),
+                     fmax(fabs(w0_(m,IVY,k,j,i)), fabs(w0_(m,IVZ,k,j,i))));
+        if (wb) {
+          const Real d = w0_(m,IDN,k,j,i);
+          const Real cs2 = is_ideal_ ? gm_*(gm_-1.0)*w0_(m,IEN,k,j,i)/d
+                                     : SQR(cs_iso_);
+          speed += sqrt(fmax(cs2, 0.0));
+        }
+        Real dx = size_.d_view(m).dx1;
+        if (multi_d) dx = fmin(dx, size_.d_view(m).dx2);
+        if (three_d) dx = fmin(dx, size_.d_view(m).dx3);
+        cell_rtol *= fmin(1.0, step_dt*speed/dx);
+      }
+
       bool trouble = danger;
 
       // NAD: relaxed DMP of the candidate vs stage-input state over the neighborhood,
@@ -376,8 +395,8 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
           }}}
           if (!wb) { smn = qmn; smx = qmx; }
           // Local relative relaxation of the neighboring lower/upper bounds.
-          Real eps_m = fmax(rtol*fabs(smn), atol);
-          Real eps_p = fmax(rtol*fabs(smx), atol);
+          Real eps_m = fmax(cell_rtol*fabs(smn), atol);
+          Real eps_p = fmax(cell_rtol*fabs(smx), atol);
           eps_m = fmax(eps_m, eps0*fabs(smn));
           eps_p = fmax(eps_p, eps0*fabs(smx));
           if (wb) {
@@ -419,8 +438,8 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
             qmn = fmin(qmn, q);
             qmx = fmax(qmx, q);
           }}}
-          Real eps_m = fmax(rtol*fabs(qmn), atol);
-          Real eps_p = fmax(rtol*fabs(qmx), atol);
+          Real eps_m = fmax(cell_rtol*fabs(qmn), atol);
+          Real eps_p = fmax(cell_rtol*fabs(qmx), atol);
           eps_m = fmax(eps_m, eps0*fabs(qmn));
           eps_p = fmax(eps_p, eps0*fabs(qmx));
           bool nad = (q_new < qmn - eps_m) || (q_new > qmx + eps_p);

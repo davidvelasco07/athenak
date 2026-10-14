@@ -190,11 +190,12 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
     use_mood = pin->GetOrAddBoolean("hydro","mood",false);
     // NAD uses only each cell's neighboring bounds; no domain-wide scales.
     const std::string nadsc = pin->GetOrAddString("hydro","mood_nad_scale","relative");
-    if (nadsc != "relative") {
+    if (nadsc != "relative" && nadsc != "rcfl") {
       std::cerr << "<hydro> mood_nad_scale='" << nadsc
-                << "' has been removed; use relative with mood_rtol/mood_atol\n";
+                << "' is unsupported; use relative or rcfl with mood_rtol/mood_atol\n";
       std::exit(EXIT_FAILURE);
     }
+    mood_nad_rcfl = (nadsc == "rcfl");
     if (pin->DoesParameterExist("hydro", "mood_nad_theta")) {
       std::cerr << "<hydro> mood_nad_theta was removed with the global NAD scales\n";
       std::exit(EXIT_FAILURE);
@@ -205,7 +206,8 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
     // PPM ringing of an eta=1e-12 pulse), while 0 keeps the detector scale-invariant for
     // linear perturbations and was measured bitwise decomposition-invariant.
     mood_eps0_eq = pin->GetOrAddReal("hydro","mood_eps0_eq",0.0);
-    mood_rtol = pin->GetOrAddReal("hydro","mood_rtol",1.0e-5);
+    mood_rtol = pin->GetOrAddReal("hydro","mood_rtol",
+                                    mood_nad_rcfl ? 1.0e-4 : 1.0e-5);
     mood_atol = pin->GetOrAddReal("hydro","mood_atol",0.0);
     mood_nad_energy = pin->GetOrAddBoolean("hydro","mood_nad_energy",true);
     mood_nad_scalars = pin->GetOrAddBoolean("hydro","mood_nad_scalars",true);

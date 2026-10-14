@@ -8,8 +8,8 @@ immutable high-order data before the revision loop, retains untouched EMFs and
 uses cached PLM/DC values for revised edges. The two-revision ghost counts are
 **5/6/8**, with `nghost >= max(FV_order, revisions + 3)`.
 
-Hydro/MHD detection now uses local `relative` tolerances only. `gcfl`, `rcfl`,
-`grange`, `gdu` and the associated `mood_nad_theta` option were removed. The current
+Hydro/MHD detection supports `relative` (default) and cell-local `rcfl` tolerances.
+`gcfl`, `grange`, `gdu` and the associated `mood_nad_theta` option remain removed. The current
 [report and reproduction scripts](neighbor_exchange/README.md) describe scope,
 input migration, conservation, accuracy, MPI, restart and runtime checks.
 

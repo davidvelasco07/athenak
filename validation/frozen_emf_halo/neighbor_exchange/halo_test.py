@@ -10,11 +10,11 @@ EXE=W/'build/src/athena'
 RUNS=W/'runs'
 
 def run(name, order=8, ng=12, revisions=2, blocks=2, dim=2, steps=1,
-        frozen=True, halo=None, seed=-1, dump=True, mpi=1, amp=.1, drat=2, owner=True):
+        frozen=True, halo=None, seed=-1, dump=True, mpi=1, amp=.1, drat=2, owner=True, scale="relative", rtol=1.e-5):
     p=RUNS/name; p.mkdir(parents=True,exist_ok=True)
     nx=64 if dim==2 else 32; nz=1 if dim==2 else nx
     args=dict(order=order,ng=ng,revisions=revisions,blocks=blocks,dim=dim,
-              steps=steps,frozen=frozen,halo=halo,seed=seed,dump=dump,mpi=mpi,amp=amp,drat=drat,owner=owner)
+              steps=steps,frozen=frozen,halo=halo,seed=seed,dump=dump,mpi=mpi,amp=amp,drat=drat,owner=owner,scale=scale,rtol=rtol)
     (p/'parameters.json').write_text(json.dumps(args,indent=2))
     deck=f'''<job>
 basename = halo
@@ -59,8 +59,8 @@ mood_test_halo = {-1 if halo is None else halo}
 mood_test_seed = {seed}
 mood_test_dump = {str(dump).lower()}
 mood_max_revs = {revisions}
-mood_nad_scale = relative
-mood_rtol = 1.e-5
+mood_nad_scale = {scale}
+mood_rtol = {rtol}
 mood_sed = true
 mood_touched_only = false
 <problem>

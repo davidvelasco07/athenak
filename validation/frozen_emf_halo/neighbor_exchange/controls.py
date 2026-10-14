@@ -9,10 +9,10 @@ for case in (['ot','hydro'] if (W/'athena-pre-local').exists() else []):
     assert all(x['max_abs']==0 and x['time_equal'] for x in cs[case].values()),cs[case]
 # Removed options reject loudly for both physics modules.
 for mod,case in [('mhd','ot'),('hydro','hydro')]:
-    for mode in ('gcfl','rcfl','grange','gdu'):
+    for mode in ('gcfl','grange','gdu'):
         s=setparam(deck(case=case),mod,'mood_nad_scale',mode)
         r=execute(f'reject_{mod}_{mode}',s);rs.append(r)
-        assert r['code']!=0 and 'has been removed' in (RUNS/r['name']/'run.log').read_text()
+        assert r['code']!=0 and 'is unsupported' in (RUNS/r['name']/'run.log').read_text()
 # Explicit unsupported frozen method and too-small bounds reject.
 for name,s in [('small_ng',deck(order=8,ng=7)),('nonperiodic',setparam(deck(default=False),'mesh','ix1_bc','outflow'))]:
     r=execute('reject_'+name,s);rs.append(r);assert r['code']!=0

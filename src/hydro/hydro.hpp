@@ -141,6 +141,7 @@ class Hydro {
   bool ppm_bc_closure = true;  // one-sided fv4 closure at imposed-state boundaries
                             // (reconstruct/ppm_closure.hpp; false = centred stencil)
                             // (negative control for the cascade; see hydro.cpp)
+  bool mood_nad_rcfl;       // scale relative bounds by the cell-local Courant factor
   Real mood_rtol;           // NAD tolerance as a fraction of the selected scale
   Real mood_eps0;           // round-off floor (relative to the violated bound)
   Real mood_eps0_eq;        // well-balanced: round-off floor relative to the equilibrium

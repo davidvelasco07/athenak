@@ -1,6 +1,6 @@
 --- a/src/mhd/mhd.hpp
 +++ b/src/mhd/mhd.hpp
-@@ -190,6 +190,9 @@
+@@ -191,6 +191,9 @@
    int mood_halo0;
    // Frozen-EMF MOOD: immutable candidate exchange, then local PLM/DC revisions.
    bool mood_frozen_emf = false;
@@ -12,7 +12,7 @@
    DvceArray5D<Real> mood_prim, mood_candidate, mood_coarse;
 --- a/src/mhd/mhd.cpp
 +++ b/src/mhd/mhd.cpp
-@@ -597,6 +597,9 @@
+@@ -599,6 +599,9 @@
          (recon_method == ReconstructionMethod::fv4 ||
           recon_method == ReconstructionMethod::fv6 ||
           recon_method == ReconstructionMethod::fv8);
@@ -22,7 +22,7 @@
      mood_frozen_emf = pin->GetOrAddBoolean("mhd", "mood_frozen_emf", frozen_supported);
      if (mood_frozen_emf && !frozen_supported) {
        std::cerr << "Frozen EMF requires dynamic MOOD with periodic uniform Newtonian "
-@@ -664,7 +667,7 @@
+@@ -666,7 +669,7 @@
        // h_f + nrevs - 1; with UCT it is wider (fv4: 2 per revision).
        mood_halo0 = h_f*mood_max_revs;
        if (mood_frozen_emf) {
@@ -33,23 +33,7 @@
        // Otherwise the stencil is the reconstruction half-width.
 --- a/src/mhd/mhd_mood.cpp
 +++ b/src/mhd/mhd_mood.cpp
-@@ -24,19 +24,19 @@
- //!   mhd_corner_e.cpp additionally drops the edge reconstruction to plm/dc at any edge
- //!   whose adjacent cells are demoted).
- //!
--//! mood_frozen_emf exchanges the initial candidate and caches PLM/DC EMFs, then replaces
-+//! Opt-in mood_frozen_emf caches base/PLM/DC EMFs once per stage, then replaces
- //! only edges adjacent to demoted cells. Untouched high-order edges are retained.
--//! This is the default for supported uniform periodic Newtonian cases and has a
--//! one-cell revision reach; see
-+//! This experimental uniform Newtonian path has a one-cell revision reach; see
- //! validation/frozen_emf_halo/README.md for the measured bounds and limitations.
- //!
--//! Cross-block consistency (legacy recomposition path): shared-edge EMFs are
--//! synchronized between MeshBlocks by
-+//! Cross-block consistency (default recomposition path): shared-edge EMFs are synchronized between MeshBlocks by
- //! SendE/RecvE, so div(B) and conservation hold regardless; the light-cone halo is
- //! sized (mhd.cpp) so the COMPOSED edge values are also decomposition-invariant —
+@@ -37,6 +37,8 @@
  //! the final-iteration halo equals the transverse reach of the edge composition.
  
  #include <algorithm>
@@ -58,10 +42,27 @@
  
  #include "athena.hpp"
  #include "mesh/mesh.hpp"
-@@ -556,6 +556,47 @@
+@@ -220,6 +222,15 @@
+   const Real rtol = mood_rtol;
+   const bool local_rcfl = mood_nad_rcfl;
+   const Real step_dt = pmy_pack->pmesh->dt;
++  // Validation-only first-stage probe of the actual tolerance multiplier.
++  const bool probe_rcfl = local_rcfl && pmy_pack->pmesh->ncycle == 0 && stage == 1;
++  DvceArray4D<Real> rcfl_probe;
++  if (probe_rcfl) {
++    Kokkos::realloc(rcfl_probe, nmb, fb_level.extent(1), fb_level.extent(2),
++                    fb_level.extent(3));
++    Kokkos::deep_copy(rcfl_probe, -1.0);
++  }
++
+   const Real atol = mood_atol;
+   const bool nad_energy = mood_nad_energy;
+   // Passive scalars carry their own discontinuities, so they are tested as well.  In
+@@ -553,6 +564,47 @@
+         }
        }
      });
-   };
++  };
 +  const int audit_seed = mood_test_seed;
 +  // seed <= -3 enables an adversarial detector: after the first seed, every
 +  // cell whose candidate changed from the frozen base is rejected. This tests
@@ -102,11 +103,10 @@
 +        out.write(reinterpret_cast<const char*>(row),sizeof(row));
 +      }
 +    }
-+  };
+   };
    int ndemoted_total = 0;
    for (int rev=1; rev<=nrevs; ++rev) {
-     const bool masked = touched_only && (rev > 1);
-@@ -759,6 +800,10 @@
+@@ -757,6 +809,10 @@
      // (3) NaN + NAD detection; combine with PAD; demote survivors and count them.
      // Same tier-floor split as hydro: PAD/NaN may cascade to DC, NAD (density, energy,
      // magnetic field) demotes to the PLM tier only.
@@ -117,7 +117,18 @@
      int ndemoted = 0, ndemoted_int = 0;
      Kokkos::parallel_reduce("mmood_detect",
      Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
-@@ -1021,6 +1066,25 @@
+@@ -805,6 +861,10 @@
+         if (multi_d) dx = fmin(dx, size_.d_view(m).dx2);
+         if (three_d) dx = fmin(dx, size_.d_view(m).dx3);
+         cell_rtol *= fmin(1.0, step_dt*speed/dx);
++      }
++
++      if (probe_rcfl && rev == 1 && !danger && lv < 1) {
++        rcfl_probe(m,k,j,i) = cell_rtol;
+       }
+ 
+       bool trouble = danger;
+@@ -1041,6 +1101,25 @@
          }
        }
  
@@ -143,14 +154,102 @@
        fofc_(m,k,j,i) = trouble;
        if (trouble) {
          fb_level_(m,k,j,i) += 1;
-@@ -1031,6 +1095,7 @@
+@@ -1050,7 +1129,29 @@
+         }
        }
      }, Kokkos::Sum<int>(ndemoted), Kokkos::Sum<int>(ndemoted_int));
- 
+-
++    if (probe_rcfl && rev == 1) {
++      auto ph = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), rcfl_probe);
++      auto wh = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), w0_);
++      auto bh = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), bcc0_);
++
++      std::ofstream out("rcfl_probe_rank" + std::to_string(global_variable::my_rank)
++                        + ".dat", std::ios::binary);
++      for (int m=0; m<nmb; ++m) {
++        Real dx = size_.h_view(m).dx1;
++        if (multi_d) dx = fmin(dx, size_.h_view(m).dx2);
++        if (three_d) dx = fmin(dx, size_.h_view(m).dx3);
++        for (int k=ks; k<=ke; ++k) for (int j=js; j<=je; ++j)
++        for (int i=is; i<=ie; ++i) {
++          const double row[13] = {ph(m,k,j,i), wh(m,IVX,k,j,i), wh(m,IVY,k,j,i),
++              wh(m,IVZ,k,j,i), wh(m,IDN,k,j,i), wh(m,IEN,k,j,i),
++              SQR(bh(m,IBX,k,j,i))+SQR(bh(m,IBY,k,j,i))+SQR(bh(m,IBZ,k,j,i)), dx, step_dt, static_cast<double>(wb), gm_, cs_iso_, rtol};
++          out.write(reinterpret_cast<const char*>(row), sizeof(row));
++        }
++      }
++    }
++
++
 +    audit_dump(rev, dh);
      if (ndemoted == 0) break;
      ndemoted_total += ndemoted_int;
  
+--- a/src/hydro/hydro_mood.cpp
++++ b/src/hydro/hydro_mood.cpp
+@@ -29,6 +29,8 @@
+ //! Like FOFC, revised faces lose any viscous/conduction flux contribution.
+ 
+ #include <algorithm>
++#include <fstream>
++#include "globals.hpp"
+ 
+ #include "athena.hpp"
+ #include "mesh/mesh.hpp"
+@@ -164,6 +166,15 @@
+   const Real rtol = mood_rtol;
+   const bool local_rcfl = mood_nad_rcfl;
+   const Real step_dt = pmy_pack->pmesh->dt;
++  // Validation-only first-stage probe of the actual tolerance multiplier.
++  const bool probe_rcfl = local_rcfl && pmy_pack->pmesh->ncycle == 0 && stage == 1;
++  DvceArray4D<Real> rcfl_probe;
++  if (probe_rcfl) {
++    Kokkos::realloc(rcfl_probe, nmb, fb_level.extent(1), fb_level.extent(2),
++                    fb_level.extent(3));
++    Kokkos::deep_copy(rcfl_probe, -1.0);
++  }
++
+   const Real atol = mood_atol;
+   const bool nad_energy = mood_nad_energy;
+   // Passive scalars carry their own discontinuities, so they are tested as well.  In
+@@ -328,6 +339,10 @@
+         if (multi_d) dx = fmin(dx, size_.d_view(m).dx2);
+         if (three_d) dx = fmin(dx, size_.d_view(m).dx3);
+         cell_rtol *= fmin(1.0, step_dt*speed/dx);
++      }
++
++      if (probe_rcfl && rev == 1 && !danger && lv < 1) {
++        rcfl_probe(m,k,j,i) = cell_rtol;
+       }
+ 
+       bool trouble = danger;
+@@ -463,6 +478,26 @@
+         }
+       }
+     }, Kokkos::Sum<int>(ndemoted), Kokkos::Sum<int>(ndemoted_int));
++    if (probe_rcfl && rev == 1) {
++      auto ph = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), rcfl_probe);
++      auto wh = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), w0_);
++
++      std::ofstream out("rcfl_probe_rank" + std::to_string(global_variable::my_rank)
++                        + ".dat", std::ios::binary);
++      for (int m=0; m<nmb; ++m) {
++        Real dx = size_.h_view(m).dx1;
++        if (multi_d) dx = fmin(dx, size_.h_view(m).dx2);
++        if (three_d) dx = fmin(dx, size_.h_view(m).dx3);
++        for (int k=ks; k<=ke; ++k) for (int j=js; j<=je; ++j)
++        for (int i=is; i<=ie; ++i) {
++          const double row[13] = {ph(m,k,j,i), wh(m,IVX,k,j,i), wh(m,IVY,k,j,i),
++              wh(m,IVZ,k,j,i), wh(m,IDN,k,j,i), wh(m,IEN,k,j,i),
++              0.0, dx, step_dt, static_cast<double>(wb), gm_, cs_iso_, rtol};
++          out.write(reinterpret_cast<const char*>(row), sizeof(row));
++        }
++      }
++    }
++
+ 
+     if (ndemoted == 0) break;
+     ndemoted_total += ndemoted_int;
 --- a/src/outputs/binary.cpp
 +++ b/src/outputs/binary.cpp
 @@ -93,7 +93,7 @@
@@ -219,13 +318,3 @@
    if (restart) return;
    // Read initial conditions
    Real rad = pin->GetOrAddReal("problem","rad",0.0);
---- a/src/hydro/hydro_mood.cpp
-+++ b/src/hydro/hydro_mood.cpp
-@@ -180,6 +180,7 @@
-   // only way to attribute a property to the detector rather than to the base scheme.
-   const int nrevs = mood_detect ? mood_max_revs : 0;
-   const bool is_ideal_ = eos_.is_ideal;
-+
- 
-   // Detection halo: candidate/detection are evaluated on the interior plus a halo of
-   // ghost cells so that both MeshBlocks sharing a face flag and demote it identically

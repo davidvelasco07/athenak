@@ -48,10 +48,6 @@
 #include "mhd/mhd_wb.hpp"
 #include "mhd.hpp"
 
-#if MPI_PARALLEL_ENABLED
-#include <mpi.h>
-#endif
-
 namespace mhd {
 
 namespace {
@@ -222,6 +218,8 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
   const bool use_sed = mood_sed;
   const Real eps0  = mood_eps0;
   const Real rtol = mood_rtol;
+  const bool local_rcfl = mood_nad_rcfl;
+  const Real step_dt = pmy_pack->pmesh->dt;
   const Real atol = mood_atol;
   const bool nad_energy = mood_nad_energy;
   // Passive scalars carry their own discontinuities, so they are tested as well.  In
@@ -787,6 +785,28 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
             !isfinite(bcctest_(m,IBZ,k,j,i))) { danger = true; }
       }
 
+      // rcfl uses only this cell's immutable stage-input state and local spacing.
+      // Retain the max-component/min-spacing convention and full-step dt of rcfl;
+      // no pack/domain extrema or additional stencil are needed.  WB retains its
+      // signal-speed contribution so a static equilibrium has a nonzero band.
+      Real cell_rtol = rtol;
+      if (local_rcfl && !danger && lv < 1) {
+        Real speed = fmax(fabs(w0_(m,IVX,k,j,i)),
+                     fmax(fabs(w0_(m,IVY,k,j,i)), fabs(w0_(m,IVZ,k,j,i))));
+        if (wb) {
+          const Real d = w0_(m,IDN,k,j,i);
+          const Real cs2 = is_ideal_ ? gm_*(gm_-1.0)*w0_(m,IEN,k,j,i)/d
+                                     : SQR(cs_iso_);
+          const Real va2 = (SQR(bcc0_(m,IBX,k,j,i)) + SQR(bcc0_(m,IBY,k,j,i))
+                          + SQR(bcc0_(m,IBZ,k,j,i)))/d;
+          speed += sqrt(fmax(cs2 + va2, 0.0));
+        }
+        Real dx = size_.d_view(m).dx1;
+        if (multi_d) dx = fmin(dx, size_.d_view(m).dx2);
+        if (three_d) dx = fmin(dx, size_.d_view(m).dx3);
+        cell_rtol *= fmin(1.0, step_dt*speed/dx);
+      }
+
       bool trouble = danger;
 
       // NAD passes: 0 = density, 1 = internal energy (ideal gas), then B (|B| in mag
@@ -946,8 +966,8 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
             smn = fabs(qmn) + cf; smx = fabs(qmx) + cf;
           }
           // Local relative relaxation of the neighboring lower/upper bounds.
-          Real eps_m = fmax(rtol*fabs(smn), atol);
-          Real eps_p = fmax(rtol*fabs(smx), atol);
+          Real eps_m = fmax(cell_rtol*fabs(smn), atol);
+          Real eps_p = fmax(cell_rtol*fabs(smx), atol);
           eps_m = fmax(eps_m, eps0*fabs(smn));
           eps_p = fmax(eps_p, eps0*fabs(smx));
           if (wb && !vpass) {
@@ -1009,8 +1029,8 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
             qmn = fmin(qmn, q);
             qmx = fmax(qmx, q);
           }}}
-          Real eps_m = fmax(rtol*fabs(qmn), atol);
-          Real eps_p = fmax(rtol*fabs(qmx), atol);
+          Real eps_m = fmax(cell_rtol*fabs(qmn), atol);
+          Real eps_p = fmax(cell_rtol*fabs(qmx), atol);
           eps_m = fmax(eps_m, eps0*fabs(qmn));
           eps_p = fmax(eps_p, eps0*fabs(qmx));
           bool nad = (q_new < qmn - eps_m) || (q_new > qmx + eps_p);

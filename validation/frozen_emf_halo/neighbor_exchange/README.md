@@ -15,15 +15,28 @@ this conservative floor remains when SED is disabled. Each active block dimensio
 must be at least `nghost`, as required to obtain this payload from immediate
 neighbors. The revision halo still shrinks by one cell per revision.
 
-Both hydro and MHD now use local relative NAD tolerances only:
+Both hydro and MHD support local `relative` and `rcfl` NAD tolerances:
 
 ```
-mood_nad_scale = relative   # default and only supported scale
+mood_nad_scale = relative   # default; rcfl also supported
 mood_rtol = 1.e-5           # default
 mood_atol = 0.0             # default
 ```
 
-`gcfl`, `rcfl`, `grange`, `gdu`, and `mood_nad_theta` are removed. Old settings
+For `mood_nad_scale=rcfl`, `mood_rtol` defaults to `1.e-4`. The relative band is
+multiplied by `min(1, dt * speed(cell) / dx(cell))`, using the immutable stage-input
+state, full-step timestep, maximum absolute velocity component, and minimum
+active-direction spacing of that cell's block. Well-balanced runs retain the
+local sound-speed (hydro) or fast-speed upper-bound (MHD) contribution. The
+absolute and round-off floors are unchanged. The factor applies to every NAD
+variable, including scalar concentrations. It adds no stencil or reduction.
+Normal timestep selection still determines `dt`.
+
+`rcfl` previously used global velocity/spacing extrema; the restored option is
+cell-local, so old `rcfl` results are not expected to match. `relative` remains
+bitwise unchanged. See [local rcfl validation](local-rcfl-results.json).
+
+`gcfl`, `grange`, `gdu`, and `mood_nad_theta` remain removed. Old settings
 produce an explicit error and must be migrated. This includes saved restart
 parameters; the restart test below concerns checkpoints written by the new code.
 No global field range, update amplitude, speed, or mesh-size reduction is used
@@ -53,7 +66,24 @@ composition is repeated during revisions. The candidate payload also restores
 initial fluxes/EMFs after fallback-cache construction, removing the prototype's
 per-stage high-order and face-EMF copies.
 
-## Validation results
+## Cell-local rcfl validation
+
+`local_rcfl.py` checks actual first-stage tolerance multipliers against each
+cell's velocity and spacing. Variable-speed Orszag–Tang cells must differ from
+the former global multiplier; stationary hydro cells have zero advective factor.
+The executed checks matched every candidate/flag snapshot and final field bitwise
+for FV4/6/8 at
+5/6/8 ghosts (eight steps) and FV8 on four MPI ranks. FV8 in 3D after two steps
+had identical flags and maximum field difference 1.39e-17 (divB 4.17e-16); a
+`relative` control also showed field differences of 1.39e-17. Hydro and MHD
+physics runs compare one block against four blocks, and the remaining global
+options must reject. Before/after `relative` checks additionally require the
+previous executable saved as `athena-before-rcfl`.
+
+## Earlier relative-mode validation results
+
+The following results were recorded before restoring local `rcfl` and used
+`mood_nad_scale=relative` throughout.
 
 All builds used CPU execution, double-precision arithmetic and Kokkos bounds
 checking. Audit output is double precision; normal binary output is unchanged.
@@ -77,7 +107,8 @@ checking. Audit output is double precision; normal binary output is unchanged.
   the previous `relative` arithmetic is unchanged by removing the other scales.
 - **Restart:** resume at cycle 4 and continue to cycle 8; final binary fields
   match the uninterrupted run bitwise.
-- **Input guards:** all four removed modes reject for hydro and MHD; insufficient
+- **Input guards at the original validation commit:** all four then-removed modes
+  rejected for hydro and MHD (`rcfl` is restored and tested below); insufficient
   ghosts and explicit frozen mode with a nonperiodic boundary reject.
 - **Normal build:** default selection at 5/6/8 ghosts matches the audited results
   at the normal output format's float precision.

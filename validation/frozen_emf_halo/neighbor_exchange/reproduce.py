@@ -17,7 +17,7 @@ def main():
     with tarfile.open(dst/'source.tar') as tf:tf.extractall(src,filter='data')
     (src/'kokkos').rmdir();(src/'kokkos').symlink_to(a.kokkos.resolve(),target_is_directory=True)
     subprocess.run(['git','apply',str(here/'audit.patch')],cwd=src,check=True)
-    for name in ['halo_test.py','run_max_sweep.py','physics_suite.py','accuracy_comparison.py','controls.py','benchmark.py']:
+    for name in ['halo_test.py','run_max_sweep.py','physics_suite.py','accuracy_comparison.py','controls.py','benchmark.py','local_rcfl.py']:
         shutil.copy2(here/name,dst/name)
     with (dst/'configure.log').open('w') as log:
         subprocess.run(['cmake','-S',str(src),'-B',str(dst/'build'),'-DCMAKE_BUILD_TYPE=Release','-DAthena_ENABLE_MPI=ON','-DPROBLEM=fluids/field_loop','-DKokkos_ENABLE_DEBUG_BOUNDS_CHECK=ON'],stdout=log,stderr=subprocess.STDOUT,check=True)
@@ -33,7 +33,7 @@ def main():
         c=h.compare(ref,name);assert c['fields_exact'] and c['audits_exact'],c
         result['runs'].append(r);result['comparisons'].append(c)
     (dst/'local-halo-results.json').write_text(json.dumps(result,indent=2))
-    py('physics_suite.py');py('accuracy_comparison.py');py('controls.py');py('benchmark.py')
+    py('physics_suite.py');py('accuracy_comparison.py');py('controls.py');py('benchmark.py');py('local_rcfl.py')
     import physics_suite as p
     r=p.execute('ot_fv8_mpi4',p.deck(order=8,ng=8),mpi=4);assert r['code']==0
     c=p.compare('ot_fv8_ref','ot_fv8_mpi4');assert all(v['max_abs']==0 and v['time_equal'] for v in c.values()),c
