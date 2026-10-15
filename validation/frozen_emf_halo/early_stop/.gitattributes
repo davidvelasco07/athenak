@@ -1,0 +1,4 @@
+# Preserve generated evidence and unified-diff context verbatim.
+cpu/** -whitespace
+gpu/** -whitespace
+*.patch -whitespace
