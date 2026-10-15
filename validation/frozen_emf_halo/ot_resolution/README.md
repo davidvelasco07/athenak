@@ -1,16 +1,15 @@
 # Orszag–Tang resolution robustness study
 
-The [PAD correction](pad_correction/README.md) now passes the FV4 512² GPU
-regression to t = 1. The historical sweep in this document used the uncorrected
-executable. Use `--pre-pad-fix-halo` with its pinned numerical source when
-reproducing its old ghost counts; current NR ghost requirements are larger.
+The [current early-exit study](early_exit/README.md) reruns FV4/FV6/FV8 from
+64² through 4096² with four revisions maximum, `rcfl` tolerance `1e-8`, magnetic
+volume-average detection, and 3/4/5 ghosts. It records actual revision counts and
+allows EOS repairs while continuing to t = 1 so their maps can be inspected.
 
-The [new four-revision report](four_revision_rtol1e8/README.md) records the ongoing
-`1e-8` sweep through 4096², including a detector consistency audit. Floor counters
-in this historical study include ghost cells; their physical-cell classification
-has not been established. The audit also identifies different magnetic-field
-interpolants in PAD and production primitive conversion. Interpret the floor-based
-outcomes below with these qualifications.
+The results below and the [earlier four-revision report](four_revision_rtol1e8/README.md)
+are historical. They predate the magnetic-volume-average correction, integer
+cascade exchange, and early exit. Their floor-based outcomes do not describe the
+current implementation. See the [PAD audit](four_revision_rtol1e8/pad_audit/README.md)
+and [correction](pad_correction/README.md) for the original inconsistency.
 
 ## Configuration
 

@@ -30,19 +30,18 @@ input migration, conservation, accuracy, MPI, restart and runtime checks.
 
 ## Orszag–Tang robustness
 
-The [four-revision report](ot_resolution/four_revision_rtol1e8/README.md) tracks
-the new `1e-8` sweep through 4096². An ongoing audit found that PAD and production
-primitive conversion use different magnetic-field interpolants, and EOS floor
-counters include ghost cells. The [correction and focused GPU checks](ot_resolution/pad_correction/README.md)
-fix the magnetic-energy mismatch. The sweep below retains its original executable;
-its floor-based outcomes need that qualification.
+The [current OT resolution study](ot_resolution/early_exit/README.md) reruns FV4/FV6/FV8
+from 64² through 4096² on Apollo with four revisions maximum, `rcfl` tolerance
+`1e-8`, magnetic volume averages, 3/4/5 ghosts, and early termination. It records
+actual revision counts, unresolved final checks, EOS repairs, conservation, and
+t = 1 maps. Larger resolutions remain pending until their recorded runs complete.
 
-The [OT resolution study](ot_resolution/README.md) tests FV4/6/8 from 64² to 1024²
-on Apollo with two revisions and the new frozen path. Only six of fifteen cases
-remain floor-free to t = 1; all three orders require energy floors at 1024².
-A wider halo does not remove the FV8 128² failure. A third revision fixes that
-case but still requires floors at 256². These are current positivity limitations
-under the documented HLLD/UCT-HLLD and cell-local rcfl settings.
+The [earlier two-revision](ot_resolution/README.md) and
+[four-revision](ot_resolution/four_revision_rtol1e8/README.md) sweeps retain their
+original executables and are historical. Their magnetic-energy inconsistency was
+identified by the [PAD audit](ot_resolution/four_revision_rtol1e8/pad_audit/README.md),
+then addressed by the [correction and focused GPU checks](ot_resolution/pad_correction/README.md).
+Those old positivity failures do not describe the corrected implementation.
 
 ## Historical experiments
 
