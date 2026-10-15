@@ -16,6 +16,15 @@ Hydro/MHD detection supports `relative` (default) and cell-local `rcfl` toleranc
 [report and reproduction scripts](neighbor_exchange/README.md) describe scope,
 input migration, conservation, accuracy, MPI, restart and runtime checks.
 
+## Orszag–Tang robustness
+
+The [OT resolution study](ot_resolution/README.md) tests FV4/6/8 from 64² to 1024²
+on Apollo with two revisions and the new frozen path. Only six of fifteen cases
+remain floor-free to t = 1; all three orders require energy floors at 1024².
+A wider halo does not remove the FV8 128² failure. A third revision fixes that
+case but still requires floors at 256². These are current positivity limitations
+under the documented HLLD/UCT-HLLD and cell-local rcfl settings.
+
 ## Historical experiments
 
 These records remain reproducible against their pinned baseline commit

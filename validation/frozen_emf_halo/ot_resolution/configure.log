@@ -1,0 +1,21 @@
+-- Including user-specified problem generator file: ../../validation/frozen_emf_halo/ot_resolution/ot_pgen
+-- Setting default Kokkos CXX standard to 17
+-- Kokkos version: 4.4.0
+-- The project name is: Kokkos
+-- Using internal gtest for testing
+-- Compiler Version: 12.4.131
+-- Using -std=c++17 for C++17 standard as feature
+-- Built-in Execution Spaces:
+--     Device Parallel: Kokkos::Cuda
+--     Host Parallel: NoTypeDefined
+--       Host Serial: SERIAL
+-- 
+-- Architectures:
+--  AMPERE80
+-- Using internal desul_atomics copy
+-- Experimental mdspan support is enabled
+-- Using internal mdspan directory /home/velasco/codex-validation/local-rcfl-gpu-20261014/source/kokkos/core/src/../../tpls/mdspan/include
+-- Kokkos Backends: SERIAL;CUDA
+-- Configuring done (2.0s)
+-- Generating done (1.0s)
+-- Build files have been written to: /home/velasco/codex-validation/local-rcfl-gpu-20261014/build_gpu
