@@ -140,6 +140,7 @@ class Hydro {
   int mood_max_revs = 1;    // max revision iterations per RK stage
   bool mood_nad_energy;     // include the energy variable in NAD (density always on)
   bool mood_nad_scalars;    // include passive-scalar concentrations in NAD
+  int mood_nad_v = 0;       // velocity in NAD: 0=off (default), 1=|v|, 2=components
   bool mood_detect;         // false = run the unlimited base with NO detection
   bool ppm_bc_closure = true;  // one-sided fv4 closure at imposed-state boundaries
                             // (reconstruct/ppm_closure.hpp; false = centred stencil)

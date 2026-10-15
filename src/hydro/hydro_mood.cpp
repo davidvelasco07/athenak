@@ -149,6 +149,8 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
   const Real step_dt = pmy_pack->pmesh->dt;
   const Real atol = mood_atol;
   const bool nad_energy = mood_nad_energy;
+  const bool nad_von = (mood_nad_v > 0);      // velocity in NAD (Newtonian only)
+  const bool nad_vmag = (mood_nad_v == 1);    // |v| (else components)
   // Passive scalars carry their own discontinuities, so they are tested as well.  In
   // kinematic/uniform-background advection they are the ONLY variable that varies, and
   // without them the detector sees a constant state and never fires.
@@ -331,6 +333,54 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
           // exempt smooth extrema of this variable from NAD (never from PAD/NaN)
           if (nad && use_sed) {
             nad = (SEDAlpha(qref, m, n, k, j, i, multi_d, three_d) < 1.0);
+          }
+          if (nad) { trouble = true; }
+        }
+      }
+
+      // NAD on the velocity (opt-in mood_nad_v), as in the MHD detector: the candidate
+      // velocity mom/rho of the trial state against the stage-input velocities over the
+      // neighbourhood, with the same tolerance as density.  Components exempt smooth
+      // extrema (SED); |v| has no precomputed array, so it is never exempted.
+      if (!trouble && lv < 1 && nad_von) {
+        const Real dtst = utest_(m,IDN,k,j,i);
+        const int nvpass = nad_vmag ? 1 : 3;
+        for (int vidx=0; vidx<nvpass && !trouble; ++vidx) {
+          Real q_new, qmn, qmx;
+          if (nad_vmag) {
+            q_new = sqrt(SQR(utest_(m,IM1,k,j,i)) + SQR(utest_(m,IM2,k,j,i))
+                       + SQR(utest_(m,IM3,k,j,i))) / dtst;
+            qmn = sqrt(SQR(w0_(m,IVX,k,j,i)) + SQR(w0_(m,IVY,k,j,i))
+                     + SQR(w0_(m,IVZ,k,j,i)));
+            qmx = qmn;
+            for (int dk=-ndk; dk<=ndk; ++dk) {
+            for (int dj=-ndj; dj<=ndj; ++dj) {
+            for (int di=-ndi; di<=ndi; ++di) {
+              Real q = sqrt(SQR(w0_(m,IVX,k+dk,j+dj,i+di))
+                          + SQR(w0_(m,IVY,k+dk,j+dj,i+di))
+                          + SQR(w0_(m,IVZ,k+dk,j+dj,i+di)));
+              qmn = fmin(qmn, q);
+              qmx = fmax(qmx, q);
+            }}}
+          } else {
+            const int n = IVX + vidx;
+            q_new = utest_(m,IM1+vidx,k,j,i) / dtst;
+            qmn = w0_(m,n,k,j,i); qmx = qmn;
+            for (int dk=-ndk; dk<=ndk; ++dk) {
+            for (int dj=-ndj; dj<=ndj; ++dj) {
+            for (int di=-ndi; di<=ndi; ++di) {
+              Real q = w0_(m,n,k+dk,j+dj,i+di);
+              qmn = fmin(qmn, q);
+              qmx = fmax(qmx, q);
+            }}}
+          }
+          Real eps_m = fmax(cell_rtol*fabs(qmn), atol);
+          Real eps_p = fmax(cell_rtol*fabs(qmx), atol);
+          eps_m = fmax(eps_m, eps0*fabs(qmn));
+          eps_p = fmax(eps_p, eps0*fabs(qmx));
+          bool nad = (q_new < qmn - eps_m) || (q_new > qmx + eps_p);
+          if (nad && use_sed && !nad_vmag) {
+            nad = (SEDAlpha(w0_, m, IVX+vidx, k, j, i, multi_d, three_d) < 1.0);
           }
           if (nad) { trouble = true; }
         }

@@ -201,6 +201,29 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
     mood_atol = pin->GetOrAddReal("hydro","mood_atol",0.0);
     mood_nad_energy = pin->GetOrAddBoolean("hydro","mood_nad_energy",true);
     mood_nad_scalars = pin->GetOrAddBoolean("hydro","mood_nad_scalars",true);
+    // Velocity NAD, opt-in: the rule of the MHD detector (mhd_mood.cpp) -- neighbour
+    // bounds on the candidate velocity with the same tolerance as density.  Off by
+    // default; isothermal hydro otherwise tests density only, which cannot see a
+    // one-cell velocity overshoot whose density stays inside its neighbours' range.
+    const std::string nadv = pin->GetOrAddString("hydro","mood_nad_v","off");
+    if (nadv.compare("off") == 0) {
+      mood_nad_v = 0;
+    } else if (nadv.compare("mag") == 0) {
+      mood_nad_v = 1;
+    } else if (nadv.compare("comps") == 0) {
+      mood_nad_v = 2;
+    } else {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+        << std::endl << "<hydro> mood_nad_v = '" << nadv
+        << "' not implemented (off|mag|comps)" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (use_mood && mood_nad_v > 0 && (pmy_pack->pcoord->is_special_relativistic ||
+                                       pmy_pack->pcoord->is_general_relativistic)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+        << std::endl << "<hydro> mood_nad_v requires Newtonian hydro" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
     // DETECTION OFF -- the negative control for the whole cascade.  reconstruct=fv4/fv6/fv8
     // is unlimited and requires mood=true, so before this flag existed there was no way to
     // run the base scheme on its own and ask which of its properties the detector is
