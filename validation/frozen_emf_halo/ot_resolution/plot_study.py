@@ -20,7 +20,9 @@ def main():
     a=ap.parse_args();a.output.mkdir(parents=True,exist_ok=True)
     sys.path.insert(0,str(a.source.resolve()/'vis/python'));import bin_convert as reader
     d=json.loads((a.runs/'results.json').read_text());runs=d['runs']
-    orders=sorted({r['order'] for r in runs});res=sorted({r['nx'] for r in runs})
+    orders=sorted(map(int,d.get('config',{}).get('orders',','.join(str(r['order']) for r in runs)).split(',')))
+    res=sorted(map(int,d.get('config',{}).get('resolutions',','.join(str(r['nx']) for r in runs)).split(',')))
+    orders=sorted(set(orders));res=sorted(set(res))
     colors={4:'#2466a8',6:'#e58724',8:'#218a61'}
     fig,axes=plt.subplots(2,3,figsize=(12,7.3),constrained_layout=True)
     for order in orders:
@@ -60,7 +62,12 @@ def main():
             r=next((r for r in runs if r['order']==order and r['nx']==nx),None)
             ax,fx=axes[row,col],flagsaxes[row,col]
             if r is None:
-                ax.axis('off');fx.axis('off');continue
+                for b in (ax,fx):
+                    b.set_facecolor('#edf0f2');b.set_aspect('equal')
+                    b.set_title(f'FV{order}, {nx}²',fontsize=9)
+                    b.text(.5,.5,'Pending',ha='center',va='center',transform=b.transAxes,color='#666666')
+                    b.set_xticks([]);b.set_yticks([])
+                continue
             run=a.runs/r['name']
             files=sorted((run/'bin').glob('*.mhd_w.*.bin'))
             index=int(round(a.snapshot_time/.25))

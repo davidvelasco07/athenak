@@ -1,0 +1,93 @@
+
+Root grid = 1 x 1 x 1 MeshBlocks
+Total number of MeshBlocks = 1
+Number of logical  levels of refinement = 0 (1 levels total)
+Number of physical levels of refinement = 0 (1 levels total)
+Number of parallel ranks = 1
+### WARNING in /home/velasco/codex-validation/local-rcfl-gpu-20261014/source/src/parameter_input.cpp: input parameter <mesh>/ix3_bc = periodic was not used by the code (check for a typo)
+### WARNING in /home/velasco/codex-validation/local-rcfl-gpu-20261014/source/src/parameter_input.cpp: input parameter <mesh>/ox3_bc = periodic was not used by the code (check for a typo)
+### WARNING in /home/velasco/codex-validation/local-rcfl-gpu-20261014/source/src/parameter_input.cpp: input parameter <meshblock>/nx3 = 1 was not used by the code (check for a typo)
+### WARNING in /home/velasco/codex-validation/local-rcfl-gpu-20261014/source/src/parameter_input.cpp: input parameter <mhd>/mood_detect = true was not used by the code (check for a typo)
+### WARNING in /home/velasco/codex-validation/local-rcfl-gpu-20261014/source/src/parameter_input.cpp: input parameter <problem>/pgen_name = orszag_tang was not used by the code (check for a typo)
+
+Setup complete, executing task list(s)...
+
+elapsed=3.071265e-02 cycle=0 time=0.000000e+00 dt=1.766499e-03
+elapsed=1.264270e-01 cycle=10 time=1.756740e-02 dt=1.741531e-03
+elapsed=1.914963e-01 cycle=20 time=3.472165e-02 dt=1.685716e-03
+elapsed=2.502313e-01 cycle=30 time=5.135527e-02 dt=1.639172e-03
+elapsed=3.082653e-01 cycle=40 time=6.756734e-02 dt=1.603459e-03
+elapsed=3.663239e-01 cycle=50 time=8.347684e-02 dt=1.580630e-03
+elapsed=4.237975e-01 cycle=60 time=9.921741e-02 dt=1.571573e-03
+elapsed=4.821416e-01 cycle=70 time=1.149285e-01 dt=1.575429e-03
+elapsed=5.409226e-01 cycle=80 time=1.307402e-01 dt=1.590208e-03
+elapsed=5.987841e-01 cycle=90 time=1.467568e-01 dt=1.615460e-03
+elapsed=6.618196e-01 cycle=100 time=1.627564e-01 dt=1.575715e-03
+elapsed=7.228149e-01 cycle=110 time=1.783414e-01 dt=1.543538e-03
+elapsed=7.853047e-01 cycle=120 time=1.936800e-01 dt=1.523647e-03
+elapsed=8.468077e-01 cycle=130 time=2.088556e-01 dt=1.510537e-03
+elapsed=9.090742e-01 cycle=140 time=2.239169e-01 dt=1.501442e-03
+elapsed=9.745808e-01 cycle=150 time=2.389132e-01 dt=1.498519e-03
+elapsed=1.049419e+00 cycle=160 time=2.538931e-01 dt=1.499083e-03
+elapsed=1.118139e+00 cycle=170 time=2.688922e-01 dt=1.502103e-03
+elapsed=1.185375e+00 cycle=180 time=2.839448e-01 dt=1.508875e-03
+elapsed=1.250357e+00 cycle=190 time=2.990312e-01 dt=1.515250e-03
+elapsed=1.314889e+00 cycle=200 time=3.142700e-01 dt=1.526224e-03
+elapsed=1.381537e+00 cycle=210 time=3.296191e-01 dt=1.541069e-03
+elapsed=1.449381e+00 cycle=220 time=3.451410e-01 dt=1.551491e-03
+elapsed=1.514812e+00 cycle=230 time=3.608650e-01 dt=1.593287e-03
+elapsed=1.580940e+00 cycle=240 time=3.769108e-01 dt=1.622003e-03
+elapsed=1.646785e+00 cycle=250 time=3.930715e-01 dt=1.613708e-03
+elapsed=1.711429e+00 cycle=260 time=4.090134e-01 dt=1.550006e-03
+elapsed=1.777344e+00 cycle=270 time=4.242215e-01 dt=1.525102e-03
+elapsed=1.844274e+00 cycle=280 time=4.392265e-01 dt=1.478317e-03
+elapsed=1.910075e+00 cycle=290 time=4.538948e-01 dt=1.455239e-03
+elapsed=1.975937e+00 cycle=300 time=4.685846e-01 dt=1.490963e-03
+elapsed=2.043187e+00 cycle=310 time=4.836781e-01 dt=1.546538e-03
+elapsed=2.108164e+00 cycle=320 time=4.989740e-01 dt=1.499454e-03
+elapsed=2.182462e+00 cycle=330 time=5.137539e-01 dt=1.456559e-03
+elapsed=2.250087e+00 cycle=340 time=5.282182e-01 dt=1.440925e-03
+elapsed=2.317006e+00 cycle=350 time=5.425617e-01 dt=1.425850e-03
+elapsed=2.382344e+00 cycle=360 time=5.568437e-01 dt=1.435210e-03
+elapsed=2.449154e+00 cycle=370 time=5.711912e-01 dt=1.435181e-03
+elapsed=2.515336e+00 cycle=380 time=5.855981e-01 dt=1.435873e-03
+elapsed=2.580903e+00 cycle=390 time=5.998605e-01 dt=1.425854e-03
+elapsed=2.648505e+00 cycle=400 time=6.141110e-01 dt=1.416466e-03
+elapsed=2.729009e+00 cycle=410 time=6.282145e-01 dt=1.402731e-03
+elapsed=2.800693e+00 cycle=420 time=6.419943e-01 dt=1.366415e-03
+elapsed=2.869391e+00 cycle=430 time=6.556520e-01 dt=1.351794e-03
+elapsed=2.936170e+00 cycle=440 time=6.690880e-01 dt=1.322004e-03
+elapsed=3.003350e+00 cycle=450 time=6.818912e-01 dt=1.277742e-03
+elapsed=3.069966e+00 cycle=460 time=6.946469e-01 dt=1.256854e-03
+elapsed=3.137244e+00 cycle=470 time=7.072712e-01 dt=1.256375e-03
+elapsed=3.204894e+00 cycle=480 time=7.199781e-01 dt=1.284007e-03
+elapsed=3.274598e+00 cycle=490 time=7.328597e-01 dt=1.285347e-03
+elapsed=3.341568e+00 cycle=500 time=7.456474e-01 dt=1.270488e-03
+elapsed=3.418091e+00 cycle=510 time=7.582995e-01 dt=1.247544e-03
+elapsed=3.486436e+00 cycle=520 time=7.705930e-01 dt=1.231373e-03
+elapsed=3.551929e+00 cycle=530 time=7.830354e-01 dt=1.250660e-03
+elapsed=3.617528e+00 cycle=540 time=7.957753e-01 dt=1.293997e-03
+elapsed=3.684829e+00 cycle=550 time=8.087987e-01 dt=1.298449e-03
+elapsed=3.751601e+00 cycle=560 time=8.217118e-01 dt=1.284668e-03
+elapsed=3.816910e+00 cycle=570 time=8.345784e-01 dt=1.288500e-03
+elapsed=3.882906e+00 cycle=580 time=8.474529e-01 dt=1.315698e-03
+elapsed=3.951263e+00 cycle=590 time=8.605691e-01 dt=1.299296e-03
+elapsed=4.016312e+00 cycle=600 time=8.736805e-01 dt=1.314649e-03
+elapsed=4.085435e+00 cycle=610 time=8.867933e-01 dt=1.298859e-03
+elapsed=4.156546e+00 cycle=620 time=8.998255e-01 dt=1.318637e-03
+elapsed=4.225205e+00 cycle=630 time=9.131262e-01 dt=1.323877e-03
+elapsed=4.291889e+00 cycle=640 time=9.262919e-01 dt=1.314149e-03
+elapsed=4.358717e+00 cycle=650 time=9.394039e-01 dt=1.297248e-03
+elapsed=4.429228e+00 cycle=660 time=9.524996e-01 dt=1.308725e-03
+elapsed=4.497707e+00 cycle=670 time=9.655885e-01 dt=1.318858e-03
+elapsed=4.564137e+00 cycle=680 time=9.789192e-01 dt=1.341280e-03
+elapsed=4.631299e+00 cycle=690 time=9.923615e-01 dt=1.361224e-03
+
+Terminating on time limit
+time=1.000000e+00 cycle=696
+tlim=1.000000e+00 nlim=-1
+
+MeshBlock-cycles = 696
+cpu time used  = 4.653560e+00
+zone-cycles/cpu_second = 6.126098e+05
+particle-updates/cpu_second = 0.000000e+00

@@ -1,5 +1,12 @@
 # Orszag–Tang resolution robustness study
 
+The [new four-revision report](four_revision_rtol1e8/README.md) records the ongoing
+`1e-8` sweep through 4096², including a detector consistency audit. Floor counters
+in this historical study include ghost cells; their physical-cell classification
+has not been established. The audit also identifies different magnetic-field
+interpolants in PAD and production primitive conversion. Interpret the floor-based
+outcomes below with these qualifications.
+
 ## Configuration
 
 Apollo GPU 1, NVIDIA A100-PCIE-40GB; numerical implementation from

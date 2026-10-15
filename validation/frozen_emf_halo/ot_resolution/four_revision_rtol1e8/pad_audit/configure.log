@@ -1,0 +1,44 @@
+-- The C compiler identification is NVHPC 24.5.0
+-- The CXX compiler identification is GNU 8.5.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /opt/nvidia/hpc_sdk/Linux_x86_64/24.5/compilers/bin/nvc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /home/velasco/athenak/kokkos/bin/nvcc_wrapper - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Including user-specified problem generator file: ../../validation/frozen_emf_halo/ot_resolution/ot_pgen
+-- Setting default Kokkos CXX standard to 17
+-- Kokkos version: 4.4.0
+-- The project name is: Kokkos
+-- Using internal gtest for testing
+-- Configured git information in /home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/build/generated/Kokkos_Version_Info.cpp
+-- Compiler Version: 12.4.131
+-- SERIAL backend is being turned on to ensure there is at least one Host space. To change this, you must enable another host execution space and configure with -DKokkos_ENABLE_SERIAL=OFF or change CMakeCache.txt
+-- Using -std=c++17 for C++17 standard as feature
+-- Built-in Execution Spaces:
+--     Device Parallel: Kokkos::Cuda
+--     Host Parallel: NoTypeDefined
+--       Host Serial: SERIAL
+-- 
+-- Architectures:
+--  AMPERE80
+-- Found CUDAToolkit: /usr/local/cuda-12.4/include (found version "12.4.131") 
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+-- Found Threads: TRUE  
+-- Found TPLLIBDL: /usr/include  
+-- Using internal desul_atomics copy
+-- Experimental mdspan support is enabled
+-- Looking for C++ include experimental/mdspan
+-- Looking for C++ include experimental/mdspan - not found
+-- Looking for C++ include mdspan
+-- Looking for C++ include mdspan - not found
+-- Using internal mdspan directory /home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/kokkos/core/src/../../tpls/mdspan/include
+-- Kokkos Backends: SERIAL;CUDA
+-- Configuring done (5.1s)
+-- Generating done (0.9s)
+-- Build files have been written to: /home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/build

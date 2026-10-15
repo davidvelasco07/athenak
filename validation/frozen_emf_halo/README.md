@@ -18,6 +18,11 @@ input migration, conservation, accuracy, MPI, restart and runtime checks.
 
 ## Orszag–Tang robustness
 
+The [four-revision report](ot_resolution/four_revision_rtol1e8/README.md) tracks
+the new `1e-8` sweep through 4096². An ongoing audit found that PAD and production
+primitive conversion use different magnetic-field interpolants, and EOS floor
+counters include ghost cells. The floor-based outcomes below need that qualification.
+
 The [OT resolution study](ot_resolution/README.md) tests FV4/6/8 from 64² to 1024²
 on Apollo with two revisions and the new frozen path. Only six of fifteen cases
 remain floor-free to t = 1; all three orders require energy floors at 1024².
