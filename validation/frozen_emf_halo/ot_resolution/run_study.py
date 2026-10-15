@@ -14,7 +14,7 @@ import time
 import numpy as np
 
 
-def input_deck(order, nx, block, tlim, solver='hlld', frozen=True, nghost=None, revisions=2):
+def input_deck(order, nx, block, tlim, solver='hlld', frozen=True, nghost=None, revisions=2, rtol=1.e-4):
     ng=max(order,revisions+3) if frozen else (order//2+1)*(revisions+1)
     if nghost is not None:ng=nghost
     sections={
@@ -25,7 +25,7 @@ def input_deck(order, nx, block, tlim, solver='hlld', frozen=True, nghost=None, 
       'mhd':{'eos':'ideal','reconstruct':f'fv{order}','rsolver':solver,
              'emf':'uct_hlld' if solver=='hlld' else 'uct_hll','gamma':5/3,
              'mood':'true','mood_detect':'true','mood_frozen_emf':str(frozen).lower(),
-             'mood_max_revs':revisions,'mood_nad_scale':'rcfl','mood_rtol':1.e-4,
+             'mood_max_revs':revisions,'mood_nad_scale':'rcfl','mood_rtol':rtol,
              'mood_atol':0.,'mood_eps0':1.e-12,'mood_sed':'true',
              'mood_nad_energy':'true','mood_nad_v':'comps','mood_nad_b':'comps',
              'mood_nad_bcc':'avg','mood_edge':'flag','mood_touched_only':'false',
@@ -171,6 +171,7 @@ def main():
     ap.add_argument('--output',type=Path,required=True);ap.add_argument('--resolutions',default='64,128,256,512,1024')
     ap.add_argument('--orders',default='4,6,8');ap.add_argument('--block',type=int,default=64)
     ap.add_argument('--revisions',type=int,default=2)
+    ap.add_argument('--rtol',type=float,default=1.e-4)
     ap.add_argument('--nghost',type=int,help='Override ghost count for a halo control')
     ap.add_argument('--tlim',type=float,default=1.);ap.add_argument('--timeout',type=float,default=7200.)
     ap.add_argument('--solver',choices=['hlld','hlle'],default='hlld')
@@ -181,14 +182,14 @@ def main():
     report={'host':platform.node(),'cuda_visible_devices':os.environ.get('CUDA_VISIBLE_DEVICES'),
        'executable_sha256':hashlib.sha256(a.exe.read_bytes()).hexdigest(),
        'config':{'resolutions':a.resolutions,'orders':a.orders,'block':a.block,'nghost_override':a.nghost,'tlim':a.tlim,
-                 'solver':a.solver,'frozen':not a.legacy,'cfl':.25,'nad':'rcfl','rtol':1.e-4,'max_revisions':a.revisions,'continue_after_floor':a.continue_after_floor},'runs':[]}
+                 'solver':a.solver,'frozen':not a.legacy,'cfl':.25,'nad':'rcfl','rtol':a.rtol,'max_revisions':a.revisions,'continue_after_floor':a.continue_after_floor},'runs':[]}
     for nx in map(int,a.resolutions.split(',')):
         for order in map(int,a.orders.split(',')):
             name=f'ot_fv{order}_n{nx}';d=a.output/name;d.mkdir(exist_ok=True)
             resultfile=d/'result.json'
             if a.resume and resultfile.exists():r=json.loads(resultfile.read_text())
             else:
-                (d/'input.athinput').write_text(input_deck(order,nx,a.block,a.tlim,a.solver,not a.legacy,a.nghost,a.revisions))
+                (d/'input.athinput').write_text(input_deck(order,nx,a.block,a.tlim,a.solver,not a.legacy,a.nghost,a.revisions,a.rtol))
                 start=time.monotonic()
                 code,reason=execute(a.exe,d,a.timeout,a.continue_after_floor)
                 r={'name':name,'order':order,'nx':nx,'code':code,'stop_reason':reason,

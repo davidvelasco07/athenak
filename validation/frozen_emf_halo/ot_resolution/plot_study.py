@@ -63,13 +63,23 @@ def main():
                 ax.axis('off');fx.axis('off');continue
             run=a.runs/r['name']
             files=sorted((run/'bin').glob('*.mhd_w.*.bin'))
-            if not files:
-                ax.text(.5,.5,'No output',ha='center');continue
-            meta,fields=assemble(files[min(int(round(a.snapshot_time/.25)),len(files)-1)],reader);rho=fields['dens'][0]
+            index=int(round(a.snapshot_time/.25))
+            if len(files)<=index:
+                for b in (ax,fx):
+                    b.set_facecolor('#edf0f2')
+                    b.set_title(f'FV{order}, {nx}²',fontsize=9)
+                    b.text(.5,.5,f'No t = {a.snapshot_time:g} output\nStopped after energy-floor detection',ha='center',va='center',transform=b.transAxes,fontsize=8,color='#853237')
+                    b.set_xticks([]);b.set_yticks([]);b.set_aspect('equal')
+                continue
+            meta,fields=assemble(files[index],reader);rho=fields['dens'][0]
+            if a.snapshot_time==1. and not np.isclose(meta['time'],1.,rtol=0,atol=1.e-10):
+                raise ValueError(f"Expected t=1 output: {files[index]} has t={meta['time']}")
             fieldlist.append((ax,rho))
             fs=sorted((run/'bin').glob('*.mhd_fb_level.*.bin'))
             if fs:
-                fm,levels=assemble(fs[min(int(round(a.snapshot_time/.25)),len(fs)-1)],reader)
+                fm,levels=assemble(fs[index],reader)
+                if not np.isclose(fm['time'],meta['time'],rtol=0,atol=1.e-10):
+                    raise ValueError(f'Fallback and density times differ in {run}')
                 fim=fx.imshow(next(iter(levels.values()))[0],origin='lower',extent=[-.5,.5,-.5,.5],cmap=cmap,norm=norm,interpolation='nearest')
             title=f"FV{order}, {nx}², t={meta['time']:.3f}"
             ax.set_title(title,fontsize=9,color='black' if r.get('clean') else '#b3262b');fx.set_title(title,fontsize=9,color='black' if r.get('clean') else '#b3262b')
@@ -79,8 +89,10 @@ def main():
         im=ax.imshow(rho,origin='lower',extent=[-.5,.5,-.5,.5],cmap='magma',vmin=vmin,vmax=vmax,interpolation='nearest')
     if fieldlist:fig.colorbar(im,ax=axes,label='Density',shrink=.8)
     flagsfig.colorbar(fim,ax=flagsaxes,ticks=[0,1,2],label='Last RK stage: 0 = base, 1 = PLM, 2 = DC',shrink=.8)
-    fig.suptitle(f'Density near t = {a.snapshot_time:g}; red titles mark runs that required floors before t = 1')
-    flagsfig.suptitle(f'Fallback levels near t = {a.snapshot_time:g}; red titles mark runs that required floors before t = 1')
+    caption=('at t = 1; grey panels have no final output' if a.snapshot_time==1.
+             else f'near t = {a.snapshot_time:g}; red titles mark runs that required floors before t = 1')
+    fig.suptitle(f'Density {caption}')
+    flagsfig.suptitle(f'Fallback levels {caption}')
     fig.savefig(a.output/'density.png',dpi=160);flagsfig.savefig(a.output/'fallback.png',dpi=160)
     plt.close(fig);plt.close(flagsfig)
     rows=[]

@@ -120,6 +120,14 @@ actual times appear in each panel. Red titles identify runs that later required
 floors. These are common-time morphology and fallback comparisons, not final
 states of the stopped runs.
 
+![Density at t = 1](t1/density.png)
+
+![Fallback levels at t = 1](t1/fallback.png)
+
+Only six primary cases have t = 1 output: FV4 at 64²–512², FV6 at 128²,
+and FV8 at 64². Grey panels mark the nine cases stopped after floor detection;
+their earlier snapshots are not substituted for final states.
+
 - `summary.csv`: compact metrics, including PLM/DC fractions near t = 0.5.
 - `results.json`: complete histories, floor/demotion counts, time brackets,
   snapshot metrics, controls, halo comparison and executable hashes.
@@ -160,3 +168,24 @@ Full raw binary outputs, logs, histories and the standalone `athena-ot` executab
 remain on Apollo under
 `/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution`.
 The earlier blast validation build and executable were restored after this study.
+
+## Requested extension (in progress)
+
+The next sweep uses four revisions and `mood_rtol = 1e-8`, with FV4/FV6/FV8
+at 64², 128², 256², 512², 1024², 2048² and 4096². Other physical and detector
+settings and the executable are unchanged. The required ghost counts are 7/7/8.
+Runs remain sequential on Apollo GPU 1, with floor detection stopping each case.
+The per-case timeout is increased to 172800 seconds for the larger grids.
+
+```sh
+python3 validation/frozen_emf_halo/ot_resolution/run_study.py --source . \
+  --exe ot-resolution/athena-ot --output ot-resolution/four-revision-rtol1e-8 \
+  --resolutions 64,128,256,512,1024,2048,4096 --orders 4,6,8 \
+  --revisions 4 --rtol 1e-8 --timeout 172800 --resume
+```
+
+Raw outputs and incremental `results.json` are in
+`/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/four-revision-rtol1e-8`.
+The preliminary four-revision `1e-4` sweep was interrupted at the user's request;
+its completed cases remain separately under `four-revision`. These extensions
+are not included in the completed two-revision tables or figures above.
