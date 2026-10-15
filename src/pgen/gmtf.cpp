@@ -32,6 +32,7 @@
 #include "driver/driver.hpp"
 #include "particles/particles.hpp"
 #include "outputs/outputs.hpp"
+#include "utils/radial_profile.hpp"
 #include "pgen.hpp"
 
 namespace {
@@ -45,6 +46,7 @@ void GMTFHistory(HistoryData *pdata, Mesh *pm);
 DvceArray5D<Real> &GasU0(MeshBlockPack *pmbp);
 EquationOfState *GasEOS(MeshBlockPack *pmbp);
 void SeedSinks(ParameterInput *pin, MeshBlockPack *pmbp);
+DvceArray1D<RadialProfileCenter> FindPotentialMinima(Mesh *pm);
 }  // namespace
 
 #if MPI_PARALLEL_ENABLED
@@ -102,6 +104,8 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     }
     if (pmy_mesh_->adaptive) user_ref_func = GMTFRefinement;
   }
+  // radial profiles (file_type = rprof) are centred on the local minima of the potential
+  rprof_center_func = FindPotentialMinima;
   if (restart) {
     // Restart files hold no particles, so a sink run must rebuild its sinks from the trk
     // output. Restarting without it would silently delete every sink and its mass.
@@ -455,6 +459,118 @@ DvceArray5D<Real> &GasU0(MeshBlockPack *pmbp) {
 EquationOfState *GasEOS(MeshBlockPack *pmbp) {
   if (pmbp->phydro != nullptr) return pmbp->phydro->peos;
   return (pmbp->pmhd != nullptr) ? pmbp->pmhd->peos : nullptr;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn FindPotentialMinima()
+//! \brief centres for the radial-profile output (file_type = rprof): every active cell whose
+//! potential is strictly below all 26 neighbours, with that cell's centre and gas velocity,
+//! gathered on every rank and ordered by global cell index. After Sanghyuk Moon's provider on
+//! sanghyukmoon/gmtf (15a241678); empty without self-gravity and at cycle 0, where the uniform
+//! initial density leaves only roundoff in the potential.
+
+DvceArray1D<RadialProfileCenter> FindPotentialMinima(Mesh *pm) {
+  auto *pack = pm->pmb_pack;
+  if (pm->ncycle == 0 || pack->pgrav == nullptr) {
+    return DvceArray1D<RadialProfileCenter>("potential_minima", 0);
+  }
+  const auto phi = pack->pgrav->phi;
+  const auto &indcs = pm->mb_indcs;
+  const int nx1 = indcs.nx1, nx2 = indcs.nx2, nx3 = indcs.nx3;
+  const int is = indcs.is, js = indcs.js, ks = indcs.ks;
+  const int ie = indcs.ie, je = indcs.je, ke = indcs.ke;
+  const int cells_per_block = pm->NumberOfMeshBlockCells();
+  const int ncells_thispack = cells_per_block*pack->nmb_thispack;
+  DvceArray1D<std::uint8_t> is_minimum("minimum_flags", ncells_thispack);
+  int ncenters_thisrank = 0;
+  // flag minima and count them in one pass
+  Kokkos::parallel_reduce("find_potential_minima",
+      Kokkos::RangePolicy<DevExeSpace>(0, ncells_thispack),
+      KOKKOS_LAMBDA(const int cell, int &count) {
+    const int m = cell/cells_per_block;
+    const int active = cell%cells_per_block;
+    const int i = is + active%nx1;
+    const int j = js + (active/nx1)%nx2;
+    const int k = ks + active/(nx1*nx2);
+    const Real phi_c = phi(m, 0, k, j, i);
+    for (int dk = -1; dk <= 1; ++dk) {
+      for (int dj = -1; dj <= 1; ++dj) {
+        for (int di = -1; di <= 1; ++di) {
+          if (di == 0 && dj == 0 && dk == 0) continue;
+          if (!(phi_c < phi(m, 0, k+dk, j+dj, i+di))) return;
+        }
+      }
+    }
+    is_minimum(cell) = 1;
+    ++count;
+  }, ncenters_thisrank);
+
+  // positions, global ids and gas velocities of the flagged cells
+  DvceArray1D<LogicalLocation> lloc("minimum_block_locations", pack->nmb_thispack);
+  auto lloc_host = Kokkos::create_mirror_view(lloc);
+  for (int m = 0; m < pack->nmb_thispack; ++m) {
+    lloc_host(m) = pm->lloc_eachmb[pack->gids + m];
+  }
+  Kokkos::deep_copy(lloc, lloc_host);
+  const std::uint64_t gnx1 = pm->mesh_indcs.nx1;
+  const std::uint64_t gnx2 = pm->mesh_indcs.nx2;
+  const auto w0 = (pack->phydro != nullptr) ? pack->phydro->w0 : pack->pmhd->w0;
+  const auto mb_size = pack->pmb->mb_size.d_view;
+  DvceArray1D<RadialProfileCenter> local_centers("local_potential_minima", ncenters_thisrank);
+  Kokkos::View<int, DevMemSpace> center_count("minimum_center_count");
+  par_for("compact_potential_minima", DevExeSpace(),
+      0, pack->nmb_thispack-1, ks, ke, js, je, is, ie,
+      KOKKOS_LAMBDA(int m, int k, int j, int i) {
+    const int cell = m*cells_per_block + ((k-ks)*nx2 + (j-js))*nx1 + (i-is);
+    if (is_minimum(cell) == 0) return;
+    const auto &size = mb_size(m);
+    const std::uint64_t gi = static_cast<std::uint64_t>(lloc(m).lx1)*nx1 + (i-is);
+    const std::uint64_t gj = static_cast<std::uint64_t>(lloc(m).lx2)*nx2 + (j-js);
+    const std::uint64_t gk = static_cast<std::uint64_t>(lloc(m).lx3)*nx3 + (k-ks);
+    const int idx = Kokkos::atomic_fetch_add(&center_count(), 1);
+    local_centers(idx) = {
+      gi + gnx1*(gj + gnx2*gk),
+      CellCenterX(i-is, nx1, size.x1min, size.x1max),
+      CellCenterX(j-js, nx2, size.x2min, size.x2max),
+      CellCenterX(k-ks, nx3, size.x3min, size.x3max),
+      w0(m, IVX, k, j, i), w0(m, IVY, k, j, i), w0(m, IVZ, k, j, i)};
+  });
+
+  // every rank needs the same ordered list
+  const auto local_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), local_centers);
+  int ncenters = 0;
+#if MPI_PARALLEL_ENABLED
+  std::vector<int> count_eachrank(global_variable::nranks);
+  std::vector<int> offsets(global_variable::nranks);
+  MPI_Allgather(&ncenters_thisrank, 1, MPI_INT, count_eachrank.data(), 1, MPI_INT,
+                MPI_COMM_WORLD);
+  for (int rank = 0; rank < global_variable::nranks; ++rank) {
+    offsets[rank] = ncenters;
+    ncenters += count_eachrank[rank];
+  }
+#else
+  ncenters = ncenters_thisrank;
+#endif
+  DvceArray1D<RadialProfileCenter> centers("potential_minima", ncenters);
+  auto centers_host = Kokkos::create_mirror_view(centers);
+#if MPI_PARALLEL_ENABLED
+  MPI_Datatype center_type;
+  MPI_Type_contiguous(sizeof(RadialProfileCenter), MPI_BYTE, &center_type);
+  MPI_Type_commit(&center_type);
+  MPI_Allgatherv(local_host.data(), ncenters_thisrank, center_type, centers_host.data(),
+                 count_eachrank.data(), offsets.data(), center_type, MPI_COMM_WORLD);
+  MPI_Type_free(&center_type);
+#else
+  Kokkos::deep_copy(centers_host, local_host);
+#endif
+  if (ncenters > 0) {
+    std::sort(centers_host.data(), centers_host.data() + ncenters,
+              [](const RadialProfileCenter &a, const RadialProfileCenter &b) {
+                return a.id < b.id;
+              });
+  }
+  Kokkos::deep_copy(centers, centers_host);
+  return centers;
 }
 
 //----------------------------------------------------------------------------------------
