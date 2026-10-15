@@ -128,22 +128,29 @@ class Hydro {
   bool use_fofc = false;   // flag to enable FOFC
   DvceArray5D<Real> utest;  // scratch array for FOFC
 
-  // MOOD a-posteriori fallback.  Shares fofc/utest: fofc marks newly demoted
-  // cells in the current revision, utest holds the candidate update.
-  bool use_mood = false;
-  int mood_max_revs = 1;
-  int mood_nad_scale = 3;       // 0=relative, 1=grange, 2=gdu, 3=gcfl
-  Real mood_nad_theta = 1.0;
-  int mood_nad_v = 0;           // 0=off, 1=|v|, 2=components (Newtonian, opt-in)
-  bool mood_nad_energy = true;
-  bool mood_nad_scalars = true;
-  bool mood_detect = true;      // false = unlimited base, no detect/revise
-  Real mood_rtol = 1.0e-5;
-  Real mood_eps0 = 1.0e-12;
-  Real mood_atol = 0.0;
-  bool mood_sed = true;
-  int n_fb_tiers = 2;           // fallback tiers below base (2, or 1 if base=plm)
-  DvceArray4D<int> fb_level;    // 0=base, 1=plm, 2=dc
+  // following used for the MOOD a-posteriori fallback ("FB") scheme.  Shares the
+  // fofc/utest arrays: fofc marks cells flagged (newly demoted) in the current
+  // revision iteration, utest holds the candidate update.
+  bool use_mood = false;    // flag to enable MOOD fallback
+  // Immutable owner flux exchange before the local fallback revisions (NR/SR/GR).
+  bool mood_frozen_flux = false;
+  MeshBoundaryValuesCC *pbval_mood_prim = nullptr;
+  MeshBoundaryValuesCC *pbval_mood_candidate = nullptr;
+  DvceArray5D<Real> mood_prim, mood_coarse;
+  int mood_max_revs = 1;    // max revision iterations per RK stage
+  bool mood_nad_energy;     // include the energy variable in NAD (density always on)
+  bool mood_nad_scalars;    // include passive-scalar concentrations in NAD
+  bool mood_detect;         // false = run the unlimited base with NO detection
+  bool ppm_bc_closure = true;  // one-sided fv4 closure at imposed-state boundaries
+                            // (reconstruct/ppm_closure.hpp; false = centred stencil)
+                            // (negative control for the cascade; see hydro.cpp)
+  bool mood_nad_rcfl;       // scale relative bounds by the cell-local Courant factor
+  Real mood_rtol;           // NAD tolerance as a fraction of the selected scale
+  Real mood_eps0;           // round-off floor (relative to the violated bound)
+  Real mood_atol;           // absolute floor of the NAD tolerance
+  bool mood_sed;            // exempt smooth extrema from NAD detection
+  int n_fb_tiers;           // # of fallback tiers below base scheme (2, or 1 if base=plm)
+  DvceArray4D<int> fb_level;    // per-cell cascade level (0=base, 1=plm, 2=dc)
 
   // container to hold names of TaskIDs
   HydroTaskIDs id;
@@ -156,6 +163,11 @@ class Hydro {
   // ...in "stagen_tl" list
   TaskStatus CopyCons(Driver *d, int stage);
   TaskStatus Fluxes(Driver *d, int stage);
+  TaskStatus SendMOODPrimitives(Driver *d, int stage);
+  TaskStatus RecvMOODPrimitives(Driver *d, int stage);
+  TaskStatus SendMOODCandidate(Driver *d, int stage);
+  TaskStatus RecvMOODCandidate(Driver *d, int stage);
+  TaskStatus ApplyFallback(Driver *d, int stage);
   TaskStatus SendFlux(Driver *d, int stage);
   TaskStatus RecvFlux(Driver *d, int stage);
   TaskStatus RKUpdate(Driver *d, int stage);
@@ -186,8 +198,8 @@ class Hydro {
   // first-order flux correction
   void FOFC(Driver *d, int stage);
 
-  // MOOD a-posteriori fallback; templated so revised faces use the same Riemann
-  // solver as the base scheme (Newtonian HLLE/LLF; SR/GR revision uses LLF)
+  // MOOD a-posteriori fallback, templated over Riemann solver (fallback tiers re-solve
+  // flagged faces with the same solver as the base scheme)
   template <Hydro_RSolver T>
   void MOODLoop(Driver *d, int stage);
 

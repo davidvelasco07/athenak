@@ -445,3 +445,135 @@ TaskStatus MeshBoundaryValuesCC::RecvAndUnpackCC(DvceArray5D<Real> &a,
 
   return TaskStatus::complete;
 }
+
+//----------------------------------------------------------------------------------------
+//! Exchange immutable face fluxes using their positive-side cell owner. This is a
+//! uniform-grid CC halo exchange with virtual variable index direction*nfluid + v.
+//! Pack directly from the face arrays and unpack only imported ghost/shared faces;
+//! interior owner faces are never overwritten. Keep send and receive kernels separate
+//! so periodic self-neighbors cannot overwrite values that are still being packed.
+
+TaskStatus MeshBoundaryValuesCC::PackAndSendOwnedFluxCC(DvceFaceFld5D<Real> &flx) {
+  if (pmy_pack->pmesh->multilevel || is_z4c_) {
+    std::cerr << "Owner flux halo exchange requires uniform non-Z4c boundaries\n";
+    std::exit(EXIT_FAILURE);
+  }
+  const int nmb = pmy_pack->nmb_thispack;
+  const int nnghbr = pmy_pack->pmb->nnghbr;
+  const int nf = flx.x1f.extent_int(1);
+  const int ndir = pmy_pack->pmesh->three_d ? 3 : (pmy_pack->pmesh->multi_d ? 2 : 1);
+  const int nvar = ndir*nf;
+  const int my_rank = global_variable::my_rank;
+  auto &nghbr = pmy_pack->pmb->nghbr;
+  auto &mbgid = pmy_pack->pmb->mb_gid;
+  auto &sbuf = sendbuf;
+  auto &rbuf = recvbuf;
+  auto f1 = flx.x1f, f2 = flx.x2f, f3 = flx.x3f;
+#if MPI_PARALLEL_ENABLED
+  if (rank_packed_bvals_nvars_ != nvar ||
+      rank_packed_mesh_seq_ != pmy_pack->pmesh->GetAMRLoadBalanceUpdateSeq()) {
+    BuildRankPackedVarMetadata(nvar);
+  }
+  auto aggsbuf = rank_sendbuf_vars_;
+  auto sendoff = send_agg_offset_;
+#endif
+  Kokkos::TeamPolicy<> policy(DevExeSpace(), nmb*nnghbr*nvar, Kokkos::AUTO);
+  Kokkos::parallel_for("SendOwnedFlux", policy, KOKKOS_LAMBDA(TeamMember_t team) {
+    const int m = team.league_rank()/(nnghbr*nvar);
+    const int n = (team.league_rank()/nvar)%nnghbr;
+    const int v = team.league_rank()%nvar;
+    if (nghbr.d_view(m,n).gid >= 0) {
+      const auto idx = sbuf[n].isame[0];
+      const int ni = idx.bie-idx.bis+1, nj = idx.bje-idx.bjs+1;
+      const int nk = idx.bke-idx.bks+1;
+      const int dm = nghbr.d_view(m,n).gid-mbgid.d_view(0);
+      const int dn = nghbr.d_view(m,n).dest;
+      const auto f = (v/nf == 0) ? f1 : ((v/nf == 1) ? f2 : f3);
+      Kokkos::parallel_for(Kokkos::TeamThreadRange<>(team,nk*nj), [&](const int kj) {
+        const int k = idx.bks+kj/nj, j = idx.bjs+kj%nj;
+        Kokkos::parallel_for(Kokkos::ThreadVectorRange(team,idx.bis,idx.bie+1),
+        [&](const int i) {
+          const int bi = i-idx.bis+ni*(j-idx.bjs+nj*(k-idx.bks+nk*v));
+          const Real value = f(m,v%nf,k,j,i);
+          if (nghbr.d_view(m,n).rank == my_rank) {
+            rbuf[dn].vars(dm,bi) = value;
+          } else {
+#if MPI_PARALLEL_ENABLED
+            aggsbuf(sendoff(m*nnghbr+n)+bi) = value;
+#else
+            sbuf[n].vars(m,bi) = value;
+#endif
+          }
+        });
+      });
+    }
+  });
+#if MPI_PARALLEL_ENABLED
+  Kokkos::fence();
+  std::fill(send_var_reqs_.begin(), send_var_reqs_.end(), MPI_REQUEST_NULL);
+  for (std::size_t i=0; i<send_var_msgs_.size(); ++i) {
+    const auto &msg = send_var_msgs_[i];
+    const int ierr = MPI_Isend(rank_sendbuf_vars_.data()+msg.offset, msg.data_size,
+                              MPI_ATHENA_REAL, msg.rank, 1, comm_vars, &send_var_reqs_[i]);
+    if (ierr != MPI_SUCCESS) {
+      std::cerr << "MPI error posting owner flux halo send\n";
+      std::exit(EXIT_FAILURE);
+    }
+  }
+#endif
+  return TaskStatus::complete;
+}
+
+TaskStatus MeshBoundaryValuesCC::RecvAndUnpackOwnedFluxCC(DvceFaceFld5D<Real> &flx) {
+#if MPI_PARALLEL_ENABLED
+  bool pending = false;
+  for (auto &req : recv_var_reqs_) {
+    int complete;
+    const int ierr = MPI_Test(&req, &complete, MPI_STATUS_IGNORE);
+    if (ierr != MPI_SUCCESS) {
+      std::cerr << "MPI error testing owner flux halo receive\n";
+      std::exit(EXIT_FAILURE);
+    }
+    pending = pending || !complete;
+  }
+  if (pending) return TaskStatus::incomplete;
+  auto aggrbuf = rank_recvbuf_vars_;
+  auto recvoff = recv_agg_offset_;
+#endif
+  const int nmb = pmy_pack->nmb_thispack;
+  const int nnghbr = pmy_pack->pmb->nnghbr;
+  const int nf = flx.x1f.extent_int(1);
+  const int ndir = pmy_pack->pmesh->three_d ? 3 : (pmy_pack->pmesh->multi_d ? 2 : 1);
+  const int nvar = ndir*nf;
+  auto &nghbr = pmy_pack->pmb->nghbr;
+  auto &rbuf = recvbuf;
+  auto f1 = flx.x1f, f2 = flx.x2f, f3 = flx.x3f;
+  Kokkos::TeamPolicy<> policy(DevExeSpace(), nmb*nnghbr*nvar, Kokkos::AUTO);
+  Kokkos::parallel_for("RecvOwnedFlux", policy, KOKKOS_LAMBDA(TeamMember_t team) {
+    const int m = team.league_rank()/(nnghbr*nvar);
+    const int n = (team.league_rank()/nvar)%nnghbr;
+    const int v = team.league_rank()%nvar;
+    if (nghbr.d_view(m,n).gid >= 0) {
+      const auto idx = rbuf[n].isame[0];
+      const int ni = idx.bie-idx.bis+1, nj = idx.bje-idx.bjs+1;
+      const int nk = idx.bke-idx.bks+1;
+      const auto f = (v/nf == 0) ? f1 : ((v/nf == 1) ? f2 : f3);
+#if MPI_PARALLEL_ENABLED
+      const int base = recvoff(m*nnghbr+n);
+#endif
+      Kokkos::parallel_for(Kokkos::TeamThreadRange<>(team,nk*nj), [&](const int kj) {
+        const int k = idx.bks+kj/nj, j = idx.bjs+kj%nj;
+        Kokkos::parallel_for(Kokkos::ThreadVectorRange(team,idx.bis,idx.bie+1),
+        [&](const int i) {
+          const int bi = i-idx.bis+ni*(j-idx.bjs+nj*(k-idx.bks+nk*v));
+#if MPI_PARALLEL_ENABLED
+          f(m,v%nf,k,j,i) = (base >= 0) ? aggrbuf(base+bi) : rbuf[n].vars(m,bi);
+#else
+          f(m,v%nf,k,j,i) = rbuf[n].vars(m,bi);
+#endif
+        });
+      });
+    }
+  });
+  return TaskStatus::complete;
+}

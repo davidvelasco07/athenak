@@ -20,54 +20,10 @@
 #include "hydro.hpp"
 #include "eos/eos.hpp"
 #include "reconstruct/recon.hpp"
-#include "hydro/rsolvers/advect_hyd.hpp"
-#include "hydro/rsolvers/llf_hyd.hpp"
-#include "hydro/rsolvers/hlle_hyd.hpp"
-#include "hydro/rsolvers/hllc_hyd.hpp"
-#include "hydro/rsolvers/roe_hyd.hpp"
-#include "hydro/rsolvers/llf_srhyd.hpp"
-#include "hydro/rsolvers/hlle_srhyd.hpp"
-#include "hydro/rsolvers/hllc_srhyd.hpp"
-#include "hydro/rsolvers/llf_grhyd.hpp"
-#include "hydro/rsolvers/hlle_grhyd.hpp"
+#include "reconstruct/ppm_closure.hpp"
+#include "hydro/rsolvers/solve_face_hyd.hpp"
 
 namespace hydro {
-
-//----------------------------------------------------------------------------------------
-//! \fn SolveFace<ivx>()
-//! \brief Dispatch the (compile-time) Riemann solver for a single face.  Capturing the
-//! solver inputs into locals before the constexpr-if is required for CUDA 11.6+.
-template <Hydro_RSolver rsolver_method_, int ivx>
-KOKKOS_INLINE_FUNCTION
-void SolveFace(const EOS_Data &eos, const RegionIndcs &indcs,
-               const DualArray1D<RegionSize> &size, const CoordData &coord,
-               const int m, const int k, const int j, const int i,
-               const int is, const int js, const int ks,
-               const DvceArray5D<Real> &wl,
-               const DvceArray5D<Real> &wr,
-               const DvceArray5D<Real> &flx) {
-  if constexpr (rsolver_method_ == Hydro_RSolver::advect) {
-    Advect<ivx>(eos, m, k, j, i, is, js, ks, wl, wr, flx);
-  } else if constexpr (rsolver_method_ == Hydro_RSolver::llf) {
-    LLF<ivx>(eos, m, k, j, i, is, js, ks, wl, wr, flx);
-  } else if constexpr (rsolver_method_ == Hydro_RSolver::hlle) {
-    HLLE<ivx>(eos, m, k, j, i, is, js, ks, wl, wr, flx);
-  } else if constexpr (rsolver_method_ == Hydro_RSolver::hllc) {
-    HLLC<ivx>(eos, m, k, j, i, is, js, ks, wl, wr, flx);
-  } else if constexpr (rsolver_method_ == Hydro_RSolver::roe) {
-    Roe<ivx>(eos, m, k, j, i, is, js, ks, wl, wr, flx);
-  } else if constexpr (rsolver_method_ == Hydro_RSolver::llf_sr) {
-    LLF_SR<ivx>(eos, m, k, j, i, is, js, ks, wl, wr, flx);
-  } else if constexpr (rsolver_method_ == Hydro_RSolver::hlle_sr) {
-    HLLE_SR<ivx>(eos, m, k, j, i, is, js, ks, wl, wr, flx);
-  } else if constexpr (rsolver_method_ == Hydro_RSolver::hllc_sr) {
-    HLLC_SR<ivx>(eos, m, k, j, i, is, js, ks, wl, wr, flx);
-  } else if constexpr (rsolver_method_ == Hydro_RSolver::llf_gr) {
-    LLF_GR<ivx>(eos, indcs, size, coord, m, k, j, i, is, js, ks, wl, wr, flx);
-  } else if constexpr (rsolver_method_ == Hydro_RSolver::hlle_gr) {
-    HLLE_GR<ivx>(eos, indcs, size, coord, m, k, j, i, is, js, ks, wl, wr, flx);
-  }
-}
 
 //----------------------------------------------------------------------------------------
 //! \fn void Hydro::CalculateFluxes
@@ -86,14 +42,18 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
   int nmb1 = pmy_pack->nmb_thispack - 1;
   const auto recon_method_ = recon_method;
 
-  // Face-normal and transverse flux ranges.  The a-posteriori schemes read the main
-  // fluxes beyond the active domain in every dimension: FOFC one cell, MOOD one cell per
-  // allowed revision (its light cone).  The reconstruction/solve ranges are extended by
-  // that halo on both sides.
-  const int ext = use_mood ? mood_max_revs : (use_fofc ? 1 : 0);
+  // Face-normal and transverse flux ranges.  With FOFC/MOOD the correction algorithms
+  // read the main fluxes beyond the active domain in every dimension (to build the
+  // candidate update in a ghost halo for cross-block detection consistency), so the
+  // reconstruction/solve ranges are extended on both sides: by one cell for FOFC, and
+  // by mood_max_revs cells for MOOD (each revision iteration shrinks the halo of ghost
+  // cells whose candidate is consistent with the neighbor block by one — the
+  // parallel-MOOD "light cone"). Frozen fluxes instead exchange the owned candidate
+  // once, so the initial high-order solve needs no revision extension.
   int il1 = is, iu1 = ie+1, jl2 = js, ju2 = je+1, kl3 = ks, ku3 = ke+1;
   int itl = is, itu = ie, jtl = js, jtu = je, ktl = ks, ktu = ke;
-  if (ext > 0) {
+  if (use_fofc || use_mood) {
+    const int ext = mood_frozen_flux ? 0 : (use_mood ? mood_max_revs : 1);
     il1 = is-ext; iu1 = ie+1+ext;
     jl2 = js-ext; ju2 = je+1+ext;
     kl3 = ks-ext; ku3 = ke+1+ext;
@@ -116,6 +76,10 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
     // Reconstruction over cells i in [il1-1, iu1], j in [jtl, jtu], k in [ktl, ktu]
     ReconDispatch<IVX>(recon_method_, "hflux_x1_recon", nmb1,
         ktl, ktu, jtl, jtu, il1-1, iu1, eos_, true, nvars, w0_, wl_, wr_);
+    if (recon_method_ == ReconstructionMethod::fv4 && ppm_bc_closure) {
+      PPMBoundaryClosure<IVX>("hflux_x1_ppm_closure", nmb1, ktl, ktu, jtl, jtu, indcs_,
+          pmy_pack->pmb->mb_bcs, eos_, true, nvars, w0_, wl_, wr_);
+    }
 
     // Riemann solve over faces i in [il1, iu1]
     par_for("hflux_x1_rsolve", DevExeSpace(),
@@ -156,6 +120,10 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
     // Reconstruction over cells j in [jl2-1, ju2], i in [itl, itu], k in [ktl, ktu]
     ReconDispatch<IVY>(recon_method_, "hflux_x2_recon", nmb1,
         ktl, ktu, jl2-1, ju2, itl, itu, eos_, true, nvars, w0_, wl_, wr_);
+    if (recon_method_ == ReconstructionMethod::fv4 && ppm_bc_closure) {
+      PPMBoundaryClosure<IVY>("hflux_x2_ppm_closure", nmb1, ktl, ktu, itl, itu, indcs_,
+          pmy_pack->pmb->mb_bcs, eos_, true, nvars, w0_, wl_, wr_);
+    }
 
     // Riemann solve over faces j in [jl2, ju2]
     par_for("hflux_x2_rsolve", DevExeSpace(),
@@ -195,6 +163,10 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
     // Reconstruction over cells k in [kl3-1, ku3], j in [jtl, jtu], i in [itl, itu]
     ReconDispatch<IVZ>(recon_method_, "hflux_x3_recon", nmb1,
         kl3-1, ku3, jtl, jtu, itl, itu, eos_, true, nvars, w0_, wl_, wr_);
+    if (recon_method_ == ReconstructionMethod::fv4 && ppm_bc_closure) {
+      PPMBoundaryClosure<IVZ>("hflux_x3_ppm_closure", nmb1, jtl, jtu, itl, itu, indcs_,
+          pmy_pack->pmb->mb_bcs, eos_, true, nvars, w0_, wl_, wr_);
+    }
 
     // Riemann solve over faces k in [kl3, ku3]
     par_for("hflux_x3_rsolve", DevExeSpace(),

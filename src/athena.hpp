@@ -96,7 +96,20 @@ enum ParticlesIndex {PGID=0, PTAG=1,
 
 // integer constants to specify spatial reconstruction methods
 // ppm = unlimited 4th-order parabolic (the MOOD candidate scheme, hydro only)
-enum ReconstructionMethod {dc, plm, ppm4, ppmx, wenoz, teno, ppm};
+enum ReconstructionMethod {dc, plm, ppm4, ppmx, wenoz, teno, fv4, fv6, fv8};
+
+// Half-width (cells on each side of the cell being reconstructed) of the stencil read
+// by ReconCellT for each method.  Used by the Hydro/MHD constructors to size the ghost
+// zone requirements; keep in sync with reconstruct/recon.hpp.
+inline constexpr int ReconStencilRadius(ReconstructionMethod r) {
+  switch (r) {
+    case ReconstructionMethod::dc:   return 0;
+    case ReconstructionMethod::plm:  return 1;
+    case ReconstructionMethod::fv6:  return 3;
+    case ReconstructionMethod::fv8:  return 4;
+    default:                         return 2;  // ppm4, ppmx, wenoz, teno, fv4
+  }
+}
 
 // constants that enumerate time evolution options
 enum TimeEvolution {tstatic, kinematic, dynamic};

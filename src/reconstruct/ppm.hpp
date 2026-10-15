@@ -181,20 +181,4 @@ void PPMX(const Real &q_im2, const Real &q_im1, const Real &q_i, const Real &q_i
   qr_i   = qlv;
   return;
 }
-
-//----------------------------------------------------------------------------------------
-//! \fn UnlimitedPPM()
-//! \brief Unlimited 4th-order interface interpolation.  Both cells sharing a face get
-//! the same interpolated value (wl = wr there), so the Riemann solver returns the
-//! pure physical flux.  Stability relies entirely on the MOOD a-posteriori fallback.
-
-KOKKOS_INLINE_FUNCTION
-void UnlimitedPPM(const Real &q_im2, const Real &q_im1, const Real &q_i,
-                  const Real &q_ip1, const Real &q_ip2,
-                  Real &ql_ip1, Real &qr_i) {
-  ql_ip1 = (7.0*(q_i + q_ip1) - (q_im1 + q_ip2))/12.0;
-  qr_i   = (7.0*(q_im1 + q_i) - (q_im2 + q_ip1))/12.0;
-  return;
-}
-
 #endif // RECONSTRUCT_PPM_HPP_

@@ -41,7 +41,7 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
     wr3d("wr3d",1,1,1,1,1),
     fofc("fofc",1,1,1,1),
     utest("utest",1,1,1,1,1),
-    fb_level("fblev",1,1,1,1),
+    fb_level("fb_level",1,1,1,1),
     pmy_pack(ppack) {
   // Total number of MeshBlocks on this rank to be used in array dimensioning
   int nmb = std::max((ppack->nmb_thispack), (ppack->pmesh->nmb_maxperrank));
@@ -180,55 +180,40 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
     // (hydro_fofc.cpp) has the fluxes it needs over the [is-1,ie+2] etc. range.
     use_fofc = pin->GetOrAddBoolean("hydro","fofc",false);
 
-    // MOOD a-posteriori fallback (hydro_mood.cpp).  Requires a flux-range
-    // extension of mood_max_revs cells.  Mutually exclusive with FOFC.
+    // MOOD a-posteriori fallback (hydro_mood.cpp).  Requires a flux-range extension of
+    // mood_max_revs cells (see hydro_fluxes.cpp).  Mutually exclusive with FOFC.
     use_mood = pin->GetOrAddBoolean("hydro","mood",false);
-    std::string nadsc = pin->GetOrAddString("hydro","mood_nad_scale","gcfl");
-    if (nadsc.compare("relative") == 0) {
-      mood_nad_scale = 0;
-    } else if (nadsc.compare("grange") == 0) {
-      mood_nad_scale = 1;
-    } else if (nadsc.compare("gdu") == 0) {
-      mood_nad_scale = 2;
-    } else if (nadsc.compare("gcfl") == 0) {
-      mood_nad_scale = 3;
-    } else {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-        << std::endl << "<hydro> mood_nad_scale = '" << nadsc
-        << "' not implemented (relative|grange|gdu|gcfl)" << std::endl;
+    // NAD uses only each cell's neighboring bounds; no domain-wide scales.
+    const std::string nadsc = pin->GetOrAddString("hydro","mood_nad_scale","relative");
+    if (nadsc != "relative" && nadsc != "rcfl") {
+      std::cerr << "<hydro> mood_nad_scale='" << nadsc
+                << "' is unsupported; use relative or rcfl with mood_rtol/mood_atol\n";
+      std::exit(EXIT_FAILURE);
+    }
+    mood_nad_rcfl = (nadsc == "rcfl");
+    if (pin->DoesParameterExist("hydro", "mood_nad_theta")) {
+      std::cerr << "<hydro> mood_nad_theta was removed with the global NAD scales\n";
       std::exit(EXIT_FAILURE);
     }
     mood_eps0  = pin->GetOrAddReal("hydro","mood_eps0",1.0e-12);
-    mood_rtol = pin->GetOrAddReal("hydro","mood_rtol",1.0e-5);
+    mood_rtol = pin->GetOrAddReal("hydro","mood_rtol",
+                                    mood_nad_rcfl ? 1.0e-4 : 1.0e-5);
     mood_atol = pin->GetOrAddReal("hydro","mood_atol",0.0);
-    mood_nad_theta = pin->GetOrAddReal("hydro","mood_nad_theta",1.0);
-    std::string nadv = pin->GetOrAddString("hydro","mood_nad_v","off");
-    if (nadv.compare("off") == 0) {
-      mood_nad_v = 0;
-    } else if (nadv.compare("mag") == 0) {
-      mood_nad_v = 1;
-    } else if (nadv.compare("comps") == 0) {
-      mood_nad_v = 2;
-    } else {
-      std::cout << "### FATAL ERROR: hydro/mood_nad_v must be off, mag, or comps"
-                << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
     mood_nad_energy = pin->GetOrAddBoolean("hydro","mood_nad_energy",true);
     mood_nad_scalars = pin->GetOrAddBoolean("hydro","mood_nad_scalars",true);
+    // DETECTION OFF -- the negative control for the whole cascade.  reconstruct=fv4/fv6/fv8
+    // is unlimited and requires mood=true, so before this flag existed there was no way to
+    // run the base scheme on its own and ask which of its properties the detector is
+    // actually responsible for.  mood_detect=false keeps mood=true (so the guard above
+    // is satisfied and the halos are sized as usual) but skips the detect/revise loop
+    // entirely, leaving the pure unlimited scheme.  Expect it to be unstable on hard
+    // problems: that is the point of the control, not a defect to work around.
     mood_detect = pin->GetOrAddBoolean("hydro","mood_detect",true);
-    if (mood_nad_theta < 0.0 || mood_nad_theta > 1.0) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-        << std::endl << "<hydro> mood_nad_theta must be in [0,1]" << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    if (use_mood && mood_nad_v > 0 &&
-        (pmy_pack->pcoord->is_special_relativistic ||
-         pmy_pack->pcoord->is_general_relativistic)) {
-      std::cout << "### FATAL ERROR: hydro/mood_nad_v requires Newtonian hydro"
-                << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
+    // One-sided closure of the unlimited fv4 at inflow/user (imposed-state) boundaries
+    // (reconstruct/ppm_closure.hpp); false = the old centred stencil across the imposed
+    // ghost state (the negative control).  fv4 only: the closure is 4th order.
+    ppm_bc_closure = pin->GetOrAddBoolean("hydro","ppm_boundary_closure",true);
+
     mood_sed = pin->GetOrAddBoolean("hydro","mood_sed",true);
     if (use_mood && use_fofc) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -260,8 +245,7 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
     } else if (xorder.compare("ppm4") == 0 ||
                xorder.compare("ppmx") == 0 ||
                xorder.compare("teno") == 0 ||
-               xorder.compare("wenoz") == 0 ||
-               xorder.compare("ppm") == 0) {
+               xorder.compare("wenoz") == 0) {
       // check that nghost > 2 (the +/-2 stencil requires at least 3 ghost zones)
       auto &indcs = pmy_pack->pmesh->mb_indcs;
       if (indcs.ng < 3) {
@@ -285,20 +269,78 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
         recon_method = ReconstructionMethod::wenoz;
       } else if (xorder.compare("teno") == 0) {
         recon_method = ReconstructionMethod::teno;
-      } else if (xorder.compare("ppm") == 0) {
-        recon_method = ReconstructionMethod::ppm;
-        if (!use_mood) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-            << std::endl << "<hydro> reconstruct=ppm (unlimited) requires "
-            << "mood=true" << std::endl;
-          std::exit(EXIT_FAILURE);
-        }
       }
+    } else if (xorder.compare("fv4") == 0 ||
+               xorder.compare("fv6") == 0 ||
+               xorder.compare("fv8") == 0) {
+      // Unlimited central face interpolation.  No upwind dissipation of its own, so it
+      // is only stable behind the MOOD fallback.  Stencil half-width is 2/3/4.
+      if (xorder.compare("fv4") == 0) {
+        recon_method = ReconstructionMethod::fv4;
+      } else if (xorder.compare("fv6") == 0) {
+        recon_method = ReconstructionMethod::fv6;
+      } else {
+        recon_method = ReconstructionMethod::fv8;
+      }
+      if (!use_mood) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+          << std::endl << "<hydro> reconstruct=" << xorder
+          << " (unlimited) requires mood=true" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      auto &indcs = pmy_pack->pmesh->mb_indcs;
+      int ng_base = ReconStencilRadius(recon_method) + 1;
+      if (indcs.ng < ng_base) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+          << std::endl << xorder << " reconstruction requires at least " << ng_base
+          << " ghost zones, but <mesh>/nghost=" << indcs.ng << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      // the boundary closure extrapolates from four ghost cells
+      if (recon_method == ReconstructionMethod::fv4 && ppm_bc_closure && indcs.ng < 4) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+          << std::endl << "<hydro> reconstruct=fv4 with ppm_boundary_closure=true needs "
+          << "nghost >= 4" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+    } else if (xorder.compare("ppm") == 0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+        << std::endl << "<hydro> reconstruct=ppm was renamed to fv4 "
+        << "(unlimited 4th-order; also available: fv6, fv8)" << std::endl;
+      std::exit(EXIT_FAILURE);
     } else {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "<hydro> reconstruct = '" << xorder << "' not implemented"
                 << std::endl;
       std::exit(EXIT_FAILURE);
+    }
+
+    // Owner exchange freezes the high-order candidate before revisions. The flux
+    // solver and the local detector retain their NR/SR/GR specializations.
+    const bool frozen_supported = use_mood && evolution_t == "dynamic" &&
+        !pmy_pack->pmesh->multilevel && pmy_pack->pmesh->strictly_periodic &&
+        peos->eos_data.is_ideal && nscalars == 0 &&
+        pvisc == nullptr && pcond == nullptr &&
+        !pin->DoesBlockExist("shearing_box") &&
+        !(pmy_pack->pcoord->is_general_relativistic &&
+          pmy_pack->pcoord->coord_data.bh_excise) &&
+        (recon_method == ReconstructionMethod::fv4 ||
+         recon_method == ReconstructionMethod::fv6 ||
+         recon_method == ReconstructionMethod::fv8);
+    mood_frozen_flux = pin->GetOrAddBoolean("hydro", "mood_frozen_flux", frozen_supported);
+    if (mood_frozen_flux && !frozen_supported) {
+      std::cerr << "Frozen hydro fluxes require dynamic MOOD with periodic uniform "
+                << "FV4/FV6/FV8, ideal EOS, and no diffusion, scalars, shear, "
+                << "or excision\n";
+      std::exit(EXIT_FAILURE);
+    }
+    if (mood_frozen_flux) {
+      const auto &q = pmy_pack->pmesh->mb_indcs;
+      if (q.ng > q.nx1 || (pmy_pack->pmesh->multi_d && q.ng > q.nx2) ||
+          (pmy_pack->pmesh->three_d && q.ng > q.nx3)) {
+        std::cerr << "Frozen flux neighbor exchange requires block dimensions >= nghost\n";
+        std::exit(EXIT_FAILURE);
+      }
     }
 
     // MOOD cascade: base -> plm -> dc, or plm -> dc if the base scheme is already PLM.
@@ -310,8 +352,14 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
           << std::endl << "<hydro> mood_max_revs must be >= 1" << std::endl;
         std::exit(EXIT_FAILURE);
       }
-      int ng_need = ((recon_method == ReconstructionMethod::plm) ? 2 : 3)
-                    + mood_max_revs;
+      // radius+1 covers the reconstruction stencil; each revision consumes one more
+      // ghost layer of the light-cone halo.
+      int ng_need = ReconStencilRadius(recon_method) + 1 + mood_max_revs;
+      if (mood_frozen_flux) {
+        // Hydro has no transverse corner composition: only the face-normal
+        // reconstruction radius plus one, or the PLM/SED revision halo.
+        ng_need = std::max(ReconStencilRadius(recon_method) + 1, mood_max_revs + 3);
+      }
       auto &indcs = pmy_pack->pmesh->mb_indcs;
       if (indcs.ng < ng_need) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -400,25 +448,6 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
       }
     }
 
-    // The fallback must use the selected solver, as in fallback-validation.
-    // This compact port has single-state adapters for these solvers only.
-    if (use_mood && rsolver_method != Hydro_RSolver::hlle &&
-        rsolver_method != Hydro_RSolver::llf &&
-        rsolver_method != Hydro_RSolver::advect &&
-        rsolver_method != Hydro_RSolver::llf_sr &&
-        rsolver_method != Hydro_RSolver::llf_gr) {
-      std::cout << "### FATAL ERROR: MOOD has no matching fallback adapter for "
-                << rsolver << "; use a supported solver or port its adapter"
-                << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    if (use_mood && pmy_pack->pcoord->is_general_relativistic &&
-        pmy_pack->pcoord->coord_data.bh_excise) {
-      std::cout << "### FATAL ERROR: MOOD with BH excision is unsupported"
-                << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-
     // Final memory allocations
     {
       // allocate second registers, fluxes
@@ -437,8 +466,30 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
       Kokkos::realloc(uflx.x2f, nmb, (nhydro+nscalars), ncells3, ncells2, ncells1);
       Kokkos::realloc(uflx.x3f, nmb, (nhydro+nscalars), ncells3, ncells2, ncells1);
 
-      // allocate flags/candidate state used with FOFC and MOOD
+      // allocate global per-face L/R buffers for the split-kernel flux path.
+      // Indexed by the GLOBAL cell/face index (m,n,k,j,i), so sized to the full
+      // cell range (including ghost zones) in every dimension.
+      Kokkos::realloc(wl3d, nmb, (nhydro+nscalars), ncells3, ncells2, ncells1);
+      Kokkos::realloc(wr3d, nmb, (nhydro+nscalars), ncells3, ncells2, ncells1);
+
+      if (mood_frozen_flux) {
+        const int ndir = pmy_pack->pmesh->three_d ? 3 :
+                         (pmy_pack->pmesh->multi_d ? 2 : 1);
+        // NR/SR and Minkowski C2P use only the already-exchanged cell state.
+        // Curved metrics additionally depend on locally computed coordinates.
+        if (pmy_pack->pcoord->is_general_relativistic &&
+            !pmy_pack->pcoord->coord_data.is_minkowski) {
+          pbval_mood_prim = new MeshBoundaryValuesCC(ppack, pin, false);
+          pbval_mood_prim->InitializeBuffers(nhydro);
+          Kokkos::realloc(mood_prim, nmb, nhydro, ncells3, ncells2, ncells1);
+        }
+        pbval_mood_candidate = new MeshBoundaryValuesCC(ppack, pin, false);
+        pbval_mood_candidate->InitializeBuffers(ndir*nhydro);
+      }
+
+      // allocate arrays of flags/candidate state used with FOFC and MOOD
       if (use_fofc || use_mood) {
+        // MOOD tests passive scalars too, so the candidate must carry them
         int ntest = (use_mood && mood_nad_scalars) ? (nhydro + nscalars) : nhydro;
         Kokkos::realloc(fofc,  nmb, ncells3, ncells2, ncells1);
         Kokkos::realloc(utest, nmb, ntest, ncells3, ncells2, ncells1);
@@ -447,12 +498,6 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
       if (use_mood) {
         Kokkos::realloc(fb_level, nmb, ncells3, ncells2, ncells1);
       }
-
-      // allocate global per-face L/R buffers for the split-kernel flux path.
-      // Indexed by the GLOBAL cell/face index (m,n,k,j,i), so sized to the full
-      // cell range (including ghost zones) in every dimension.
-      Kokkos::realloc(wl3d, nmb, (nhydro+nscalars), ncells3, ncells2, ncells1);
-      Kokkos::realloc(wr3d, nmb, (nhydro+nscalars), ncells3, ncells2, ncells1);
     }
   }
 }
@@ -461,6 +506,8 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
 // destructor
 
 Hydro::~Hydro() {
+  delete pbval_mood_candidate;
+  delete pbval_mood_prim;
   if (psbox_u != nullptr) {delete psbox_u;}
   if (porb_u != nullptr) {delete porb_u;}
   delete pbval_u;

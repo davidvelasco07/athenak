@@ -53,7 +53,19 @@ void Hydro::AssembleHydroTasks(std::map<std::string, std::shared_ptr<TaskList>> 
 
   // assemble "stagen" task list
   id.copyu     = tl["stagen"]->AddTask(&Hydro::CopyCons, this, none);
-  id.flux      = tl["stagen"]->AddTask(&Hydro::Fluxes,this,id.copyu);
+  TaskID flux_input = id.copyu;
+  // Local C2P gives identical primitive ghosts from the existing conservative
+  // exchange in NR/SR and Minkowski GR. Only curved metrics need owner primitives.
+  if (mood_frozen_flux && pbval_mood_prim != nullptr) {
+    TaskID sendp = tl["stagen"]->AddTask(&Hydro::SendMOODPrimitives, this, flux_input);
+    flux_input = tl["stagen"]->AddTask(&Hydro::RecvMOODPrimitives, this, sendp);
+  }
+  id.flux = tl["stagen"]->AddTask(&Hydro::Fluxes, this, flux_input);
+  if (mood_frozen_flux) {
+    TaskID sendc = tl["stagen"]->AddTask(&Hydro::SendMOODCandidate, this, id.flux);
+    TaskID recvc = tl["stagen"]->AddTask(&Hydro::RecvMOODCandidate, this, sendc);
+    id.flux = tl["stagen"]->AddTask(&Hydro::ApplyFallback, this, recvc);
+  }
   id.sendf     = tl["stagen"]->AddTask(&Hydro::SendFlux, this, id.flux);
   id.recvf     = tl["stagen"]->AddTask(&Hydro::RecvFlux, this, id.sendf);
   id.rkupdt    = tl["stagen"]->AddTask(&Hydro::RKUpdate, this, id.recvf);
@@ -219,6 +231,11 @@ TaskStatus Hydro::Fluxes(Driver *pdrive, int stage) {
   // Terms selected for STS are advanced only in the parabolic half-sweeps.
   AddSelectedDiffusionFluxes(parabolic::DiffusionSelection::explicit_only);
 
+  if (!mood_frozen_flux) return ApplyFallback(pdrive, stage);
+  return TaskStatus::complete;
+}
+
+TaskStatus Hydro::ApplyFallback(Driver *pdrive, int stage) {
   // call MOOD a-posteriori fallback if enabled (mutually exclusive with FOFC)
   if (use_mood) {
     if (rsolver_method == Hydro_RSolver::advect) {
