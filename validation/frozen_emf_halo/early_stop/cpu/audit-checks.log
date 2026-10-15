@@ -1,0 +1,7 @@
+AUDIT_PASS 1 1 (2, 3, 'converged')
+AUDIT_PASS 1 4 (2, 3, 'converged')
+AUDIT_PASS 2 1 (8, 9, 'revision_limit')
+AUDIT_PASS 2 4 (8, 9, 'revision_limit')
+AUDIT_PASS 3 1 (8, 9, 'revision_limit')
+AUDIT_PASS 3 4 (8, 9, 'revision_limit')
+DETECTOR_AUDIT_PASS

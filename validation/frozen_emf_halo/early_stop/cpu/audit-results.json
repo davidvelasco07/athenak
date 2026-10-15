@@ -1,0 +1,128 @@
+[
+  {
+    "mode": 1,
+    "mpi": 1,
+    "rounds": [
+      [
+        2,
+        3,
+        "converged"
+      ],
+      [
+        2,
+        3,
+        "converged"
+      ],
+      [
+        2,
+        3,
+        "converged"
+      ]
+    ]
+  },
+  {
+    "mode": 1,
+    "mpi": 4,
+    "rounds": [
+      [
+        2,
+        3,
+        "converged"
+      ],
+      [
+        2,
+        3,
+        "converged"
+      ],
+      [
+        2,
+        3,
+        "converged"
+      ]
+    ]
+  },
+  {
+    "mode": 2,
+    "mpi": 1,
+    "rounds": [
+      [
+        8,
+        9,
+        "revision_limit"
+      ],
+      [
+        8,
+        9,
+        "revision_limit"
+      ],
+      [
+        8,
+        9,
+        "revision_limit"
+      ]
+    ]
+  },
+  {
+    "mode": 2,
+    "mpi": 4,
+    "rounds": [
+      [
+        8,
+        9,
+        "revision_limit"
+      ],
+      [
+        8,
+        9,
+        "revision_limit"
+      ],
+      [
+        8,
+        9,
+        "revision_limit"
+      ]
+    ]
+  },
+  {
+    "mode": 3,
+    "mpi": 1,
+    "rounds": [
+      [
+        8,
+        9,
+        "revision_limit"
+      ],
+      [
+        8,
+        9,
+        "revision_limit"
+      ],
+      [
+        8,
+        9,
+        "revision_limit"
+      ]
+    ]
+  },
+  {
+    "mode": 3,
+    "mpi": 4,
+    "rounds": [
+      [
+        8,
+        9,
+        "revision_limit"
+      ],
+      [
+        8,
+        9,
+        "revision_limit"
+      ],
+      [
+        8,
+        9,
+        "revision_limit"
+      ]
+    ]
+  }
+]

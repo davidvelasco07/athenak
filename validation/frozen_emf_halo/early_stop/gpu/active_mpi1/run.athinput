@@ -1,0 +1,116 @@
+# Athena++ (Kokkos version) input file for strongly magnetized blast problem
+
+<comment>
+problem   = spherical blast wave
+reference = Gardiner. T.A. & Stone, J.M., JCP, 205, 509 (2005) (for MHD version of test)
+
+
+
+<job>
+basename = blast_mhd_lowbeta_fv8_fb_smoke  # problem ID: basename of output filenames
+
+
+
+<mesh>
+nghost = 5  # Number of ghost cells
+nx1 = 64  # Number of zones in X1-direction
+x1min = -0.5  # minimum value of X1
+x1max = 0.5  # maximum value of X1
+ix1_bc    = periodic   # inner-X1 boundary flag
+ox1_bc    = periodic   # outer-X1 boundary flag
+
+nx2 = 64  # Number of zones in X2-direction
+x2min = -0.75  # minimum value of X2
+x2max = 0.75  # maximum value of X2
+ix2_bc    = periodic   # inner-X2 boundary flag
+ox2_bc    = periodic   # outer-X2 boundary flag
+
+nx3 = 1  # Number of zones in X3-direction
+x3min     = -0.5       # minimum value of X3
+x3max     = 0.5        # maximum value of X3
+ix3_bc    = periodic   # inner-X3 boundary flag
+ox3_bc    = periodic   # outer-X3 boundary flag
+
+
+
+<meshblock>
+nx1 = 16  # Number of cells in each MeshBlock, X1-dir
+nx2 = 16  # Number of cells in each MeshBlock, X2-dir
+nx3 = 1  # Number of cells in each MeshBlock, X3-dir
+
+
+
+<time>
+evolution  = dynamic    # dynamic/kinematic/static
+integrator = rk3  # time integration algorithm
+cfl_number = 0.3  # The Courant, Friedrichs, & Lewy (CFL) Number
+nlim = 200000  # cycle limit
+tlim = 0.001  # time limit
+ndiag = 100  # cycles between diagostic output
+
+
+
+<mhd>
+eos         = ideal     # EOS type
+reconstruct = fv8  # spatial reconstruction method
+rsolver = hlld  # Riemann-solver to be used
+gamma       = 1.6666667 # gamma = C_p/C_v
+
+fofc = false
+mood = true
+emf = uct_hlld
+mood_nad_scale = rcfl
+mood_rtol = 1.e-8
+mood_sed = true
+mood_nad_b = comps
+mood_max_revs = 8
+mood_atol = 0
+mood_nad_energy = true
+mood_nad_v = comps
+mood_frozen_emf = true
+
+mood_diagnostics = true
+
+<problem>
+pi_amb      = 0.1    # neutral ambient pressure
+b_amb = 10.0
+prat        = 100.   # Pressure ratio initially
+inner_radius  = 0.1  # Radius of the inner sphere
+outer_radius  = 0.1  # Radius of the outer sphere
+
+b_angle = 45.0
+
+
+<output1>
+file_type = vtk  # History data dump
+dt = 0.05  # time increment between outputs
+
+variable = mhd_w_bcc
+id = state
+
+
+<output2>
+file_type = log  # VTK data dump
+variable   = mhd_w_bcc  # variables to be output
+dt         = 0.01       # time increment between outputs
+dcycle = 1
+
+
+<mesh_refinement>
+refinement = none
+
+
+<output3>
+file_type = vtk
+variable = mhd_fb_level
+id = levels
+dt = 0.05
+
+
+<output4>
+file_type = vtk
+variable = mhd_divb
+id = divb
+dt = 0.05
+
+

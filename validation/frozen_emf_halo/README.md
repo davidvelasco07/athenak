@@ -14,6 +14,12 @@ one level per halo cell after each owned-cell detection pass. MHD ghost counts
 are **3/4/5** for FV4/FV6/FV8 with HLLD/HLLE/LLF, and **4/5/6** for L-HLLD's
 extra sensor cell, independently of revision count. SR/GR use their supported
 LLF/HLLE solvers with **3/4/5**. The preceding wider-halo results are historical.
+The [early-termination correction](early_stop/README.md) makes `mood_max_revs`
+a maximum for frozen MHD: all ranks stop as soon as their owned detector checks
+are clear. It uses one nonblocking integer consensus per check, retains DC PAD
+failures as unresolved, and checks the final corrected candidate without changing
+its accepted levels. Enable `mood_diagnostics` for actual per-stage counts.
+
 Hydro is unchanged: it needs **5** for all three orders at two revisions,
 `max(reconstruction_radius + 1, revisions + 3)`.
 

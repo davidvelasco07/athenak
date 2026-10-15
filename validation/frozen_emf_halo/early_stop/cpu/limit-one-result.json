@@ -1,0 +1,23 @@
+{
+  "mpi": 4,
+  "max_revisions": 1,
+  "rounds": [
+    [
+      "1",
+      "2",
+      "revision_limit"
+    ],
+    [
+      "1",
+      "2",
+      "revision_limit"
+    ],
+    [
+      "1",
+      "2",
+      "revision_limit"
+    ]
+  ],
+  "plm_cells": 1,
+  "terminal_check_does_not_demote": true
+}

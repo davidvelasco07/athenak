@@ -1,0 +1,32 @@
+--- src/mhd/mhd_mood.cpp
++++ audit/mhd_mood.cpp
+@@ -38,6 +38,8 @@
+ //! the final-iteration halo equals the transverse reach of the edge composition.
+ 
+ #include <algorithm>
++#include <cstdlib>
++#include "globals.hpp"
+ 
+ #include "athena.hpp"
+ #include "mesh/mesh.hpp"
+@@ -575,6 +577,8 @@
+   const int first_rev = mood_frozen_emf ? mood_revision+1 : 1;
+   const int last_rev = mood_frozen_emf ? first_rev : nrevs;
+   const bool frozen = mood_frozen_emf;
++  const int audit_mode = std::getenv("MOOD_STOP_AUDIT") ? std::atoi(std::getenv("MOOD_STOP_AUDIT")) : 0;
++  const bool audit_rank = global_variable::my_rank == global_variable::nranks-1;
+   const bool may_demote = !frozen || mood_revision < nrevs;
+   for (int rev=first_rev; rev<=last_rev; ++rev) {
+     const bool masked = touched_only && (rev > 1);
+@@ -824,6 +828,11 @@
+         if (!isfinite(bcctest_(m,IBX,k,j,i)) || !isfinite(bcctest_(m,IBY,k,j,i)) ||
+             !isfinite(bcctest_(m,IBZ,k,j,i))) { danger = true; }
+       }
++      // Synthetic PAD failures on only the last rank. No evolved state is changed.
++      const bool audit_cell = audit_rank && m == 0 && j == js && k == ks;
++      if (audit_cell && audit_mode == 1 && i == is && rev <= 2) danger = true;
++      if (audit_cell && audit_mode == 2 && i == is) danger = true;
++      if (audit_cell && audit_mode == 3 && i == is+rev-1) danger = true;
+       // DC cannot descend further, but a failed PAD/finite test still prevents
+       // convergence. Preserve it in the consensus without revising its tier.
+       if (lv >= n_fb) {

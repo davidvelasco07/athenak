@@ -828,6 +828,10 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
         pbval_mood_prim->InitializeBuffers(nmhd+3);
         pbval_mood_candidate = new MeshBoundaryValuesCC(ppack, pin, false);
         pbval_mood_flags = new MeshBoundaryValuesCCInt(ppack, pin, mood_emf_halo+1);
+        mood_diagnostics = pin->GetOrAddBoolean("mhd", "mood_diagnostics", false);
+#if MPI_PARALLEL_ENABLED
+        MPI_Comm_dup(MPI_COMM_WORLD, &mood_convergence_comm);
+#endif
         const int ndir = pmy_pack->pmesh->three_d ? 3 : 2;
         pbval_mood_candidate->InitializeBuffers(ndir*nmhd+3);
         Kokkos::realloc(mood_prim, nmb, nmhd+3, ncells3, ncells2, ncells1);
@@ -905,6 +909,9 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
 // destructor
 
 MHD::~MHD() {
+#if MPI_PARALLEL_ENABLED
+  if (mood_convergence_comm != MPI_COMM_NULL) MPI_Comm_free(&mood_convergence_comm);
+#endif
   if (psbox_b != nullptr) {delete psbox_b;}
   if (psbox_u != nullptr) {delete psbox_u;}
   if (porb_b != nullptr) {delete porb_b;}

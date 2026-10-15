@@ -1,0 +1,25 @@
+-- Setting default Kokkos CXX standard to 17
+-- Kokkos version: 4.4.0
+-- The project name is: Kokkos
+-- Using internal gtest for testing
+-- Configured git information in /Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/early-stop-validation/fixed-build/generated/Kokkos_Version_Info.cpp
+-- SERIAL backend is being turned on to ensure there is at least one Host space. To change this, you must enable another host execution space and configure with -DKokkos_ENABLE_SERIAL=OFF or change CMakeCache.txt
+-- Using -std=c++17 for C++17 standard as feature
+-- Built-in Execution Spaces:
+--     Device Parallel: NoTypeDefined
+--     Host Parallel: NoTypeDefined
+--       Host Serial: SERIAL
+-- 
+-- Architectures:
+-- Found TPLLIBDL: /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include
+-- Using internal desul_atomics copy
+-- Experimental mdspan support is enabled
+-- Looking for C++ include experimental/mdspan
+-- Looking for C++ include experimental/mdspan - not found
+-- Looking for C++ include mdspan
+-- Looking for C++ include mdspan - found
+-- Using internal mdspan directory /Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/early-stop-validation/fixed-source/kokkos/core/src/../../tpls/mdspan/include
+-- Kokkos Backends: SERIAL
+-- Configuring done (2.0s)
+-- Generating done (0.3s)
+-- Build files have been written to: /Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/early-stop-validation/fixed-build

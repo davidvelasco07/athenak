@@ -43,8 +43,10 @@ width one for SR/GR's existing two-face magnetic average. Initial primitive and
 high-order flux/EMF exchanges still occur once per RK stage. Inside revisions,
 the new payload is **MPI_INT: one four-byte integer per communicated cell**.
 Face, edge and corner neighbors are included. The existing aggregation by peer
-rank and one-time neighbor layout exchange are reused; no global detector
-reduction is added.
+rank and one-time neighbor layout exchange are reused. The original fixed-count
+validation below used no convergence collective; the current early-exit loop adds
+one nonblocking integer consensus per detector check. See
+[early termination](../early_stop/README.md).
 
 ## Revision sequence
 
@@ -57,14 +59,19 @@ For each RK stage:
    inputs and current mixed fluxes/EMFs; form its magnetic volume averages.
 4. Detect owned cells. Exchange their cascade levels and identify which imported
    ghost levels increased.
-5. Revise adjacent physical face fluxes and select fallback EMFs throughout the
-   averaging support. Repeat steps 3–5 for the configured revision count.
+5. Reduce one integer indicating whether any owned detector violations remain.
+   Stop when all ranks are clear. Otherwise, exchange levels and revise adjacent
+   physical faces and cached fallback EMFs, up to the configured correction cap.
+6. Check the candidate again after the final allowed correction, without changing
+   accepted cascade levels. Report unresolved limits separately from convergence.
 
-`ApplyFallback` yields while the integer receive is pending. All ranks participate
-in every configured revision, including ranks with no local demotions, so remote
-repairs can propagate. `mood_halo0=0` for this path; no ghost cell performs NAD or
+`ApplyFallback` yields while the convergence collective or integer receive is
+pending. Ranks with no local violations keep participating while another rank
+needs repairs. The cap is a maximum; a clear initial candidate uses zero corrections. `mood_halo0=0` for this path; no ghost cell performs NAD or
 SED. No candidate U/B or floating-point flux/EMF payload is sent inside revisions.
-The final-revision admissibility/failure policy is unchanged by this work.
+The existing EOS repair policy is retained when the correction cap is exhausted.
+The CPU/GPU numbers below describe the earlier fixed-count implementation; the
+early-exit equivalence controls are recorded separately.
 
 ## CPU validation
 

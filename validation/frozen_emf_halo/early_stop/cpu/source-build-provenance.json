@@ -1,0 +1,13 @@
+{
+  "parent_commit": "abea4ac2fdf6e0b62ea655734c9c85fd51bb0a93",
+  "source_sha256": {
+    "src/mhd/mhd.cpp": "18452aae780bb5fc05737a308c3f513b95c09f9cf5fd4a22c1c2c8df77e6d2fa",
+    "src/mhd/mhd.hpp": "52e0f9f0dd5819cf52b3e29e2df56ecb210cf2c462b20a56793b3eb78d20f8cd",
+    "src/mhd/mhd_mood.cpp": "c132999fc68dc9ab1fb27e69b6bbdd4f80d7d32f574fd1c823844a4939b13490",
+    "src/mhd/mhd_mood_comm.cpp": "9068c0675cf1b746fba008aa658b2d4915d958ad1f2418c79b14c753642e90df",
+    "src/mhd/mhd_tasks.cpp": "cbdd7d4dab50afdd3f152c107416b155befb77529f1c645b4df9630a9247b926"
+  },
+  "cpu_binary_sha256": "5a732eaf2be3a18b9c537e1a54052c37ef3c68bd820d97c1257c4a77f9bffc17",
+  "fixed_reference_binary_sha256": "0b367119981a3f330c5d4624ced163edd984b080c10696f93610d074e1ca4241",
+  "fixed_source_archive_sha256": "0860f60ae6d32db18de4e2928ad17eb51ae8f4e4c28aedf5d81e0ada017ed40a"
+}

@@ -283,12 +283,41 @@ TaskStatus MHD::Fluxes(Driver *pdrive, int stage) {
 TaskStatus MHD::ApplyFallback(Driver *pdrive, int stage) {
   if (!mood_frozen_emf) return RunFallback(pdrive, stage);
 
-  // Yield this task while neighbors exchange scalar integer cascade levels.
-  // Every rank executes the same revision count; local early exit would omit
-  // remote demotions and could leave a peer waiting for a message.
+  // Check the current candidate before every correction, including after the
+  // final allowed correction. Quiet ranks must still join remote repairs until
+  // the detector is clear everywhere. The nonblocking consensus has its own
+  // communicator so it cannot match a different stage/diagnostic collective.
   if (!mood_wait_flags) {
-    mood_revise = false;
-    RunFallback(pdrive, stage);  // detect owned cells, one revision only
+    if (!mood_wait_convergence) {
+      mood_revise = false;
+      RunFallback(pdrive, stage);  // detect owned cells, without applying floors
+      mood_local_active = (mood_nviolations != 0);
+      mood_global_active = mood_local_active;
+#if MPI_PARALLEL_ENABLED
+      if (global_variable::nranks > 1) {
+        MPI_Iallreduce(&mood_local_active, &mood_global_active, 1, MPI_INT, MPI_MAX,
+                      mood_convergence_comm, &mood_convergence_req);
+      }
+#endif
+      mood_wait_convergence = true;
+    }
+    int ready = 1;
+#if MPI_PARALLEL_ENABLED
+    if (mood_convergence_req != MPI_REQUEST_NULL) {
+      MPI_Test(&mood_convergence_req, &ready, MPI_STATUS_IGNORE);
+    }
+#endif
+    if (!ready) return TaskStatus::incomplete;
+    mood_wait_convergence = false;
+    if (!mood_global_active || mood_revision == mood_max_revs) {
+      if (mood_diagnostics && global_variable::my_rank == 0) {
+        std::cout << "MOOD cycle=" << pmy_pack->pmesh->ncycle << " stage=" << stage
+                  << " revisions=" << mood_revision << " checks=" << mood_revision+1
+                  << " status=" << (mood_global_active ? "revision_limit" : "converged")
+                  << '\n';
+      }
+      return TaskStatus::complete;
+    }
     pbval_mood_flags->InitRecvIntCC();
     pbval_mood_flags->PackAndSendIntCC(fb_level);
     mood_wait_flags = true;
@@ -302,7 +331,7 @@ TaskStatus MHD::ApplyFallback(Driver *pdrive, int stage) {
   mood_revise = false;
   mood_wait_flags = false;
   ++mood_revision;
-  return mood_revision == mood_max_revs ? TaskStatus::complete : TaskStatus::incomplete;
+  return TaskStatus::incomplete;
 }
 
 TaskStatus MHD::RunFallback(Driver *pdrive, int stage) {

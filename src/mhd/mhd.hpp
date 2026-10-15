@@ -197,7 +197,15 @@ class MHD {
   int mood_emf_halo = 0;
   int mood_revision = 0;
   bool mood_wait_flags = false;
+  bool mood_wait_convergence = false;
   bool mood_revise = false;
+  int mood_nviolations = 0;
+  int mood_local_active = 0, mood_global_active = 0;
+  bool mood_diagnostics = false;
+#if MPI_PARALLEL_ENABLED
+  MPI_Comm mood_convergence_comm = MPI_COMM_NULL;
+  MPI_Request mood_convergence_req = MPI_REQUEST_NULL;
+#endif
   DvceArray5D<Real> mood_prim, mood_candidate, mood_coarse;
   DvceEdgeFld4D<Real> mood_eplm{"mood_eplm",1,1,1,1};
   DvceEdgeFld4D<Real> mood_edc{"mood_edc",1,1,1,1};

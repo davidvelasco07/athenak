@@ -14,9 +14,9 @@
 //! neighbor and with the existing rank-packed MPI boundary path.
 //!
 //! Separate boundary objects keep these messages independent of the stage U/B
-//! exchanges. All storage is on the device. No global-sized arrays or global
-//! collectives are introduced. Physical and refinement boundaries need their own
-//! owner/extension rules and are rejected for this method in the constructor.
+//! exchanges. Field storage is on the device. A separate scalar consensus decides
+//! when all ranks have finished the detector loop. Physical/refinement boundaries need
+//! their own owner/extension rules and are rejected for this method in the constructor.
 
 #include "athena.hpp"
 #include "mesh/mesh.hpp"
@@ -65,6 +65,7 @@ TaskStatus MHD::SendMOODCandidate(Driver *pdrive, int stage) {
   Kokkos::deep_copy(fb_level, 0);
   mood_revision = 0;
   mood_wait_flags = false;
+  mood_wait_convergence = false;
   mood_revise = false;
   ComposeCornerEMF(q.is,q.ie+1,q.js,q.je+1,q.ks,td ? q.ke+1 : q.ks,false);
   pbval_mood_candidate->InitRecv(off+3);

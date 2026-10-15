@@ -1,0 +1,15 @@
+GPU_PASS uniform_mpi1 {0: 3} {'converged': 3}
+GPU_PASS uniform_mpi4 {0: 3} {'converged': 3}
+GPU_IDENTICAL uniform_mpi4 20
+GPU_PASS blast_mhd_lowbeta_r4 {2: 5, 3: 189, 4: 7933} {'converged': 488, 'revision_limit': 7639}
+GPU_IDENTICAL blast_mhd_lowbeta_r4 50
+GPU_PASS blast_srmhd_uct_r4 {2: 241, 3: 31, 4: 61} {'converged': 279, 'revision_limit': 54}
+GPU_IDENTICAL blast_srmhd_uct_r4 50
+GPU_PASS blast_grmhd_uct_r4 {2: 511, 3: 136, 4: 208} {'converged': 661, 'revision_limit': 194}
+GPU_IDENTICAL blast_grmhd_uct_r4 50
+GPU_PASS grmhd_r8 {2: 493, 3: 156, 4: 18, 5: 14, 6: 21, 7: 22, 8: 131} {'converged': 766, 'revision_limit': 89}
+GPU_IDENTICAL grmhd_r8 50
+GPU_PASS active_mpi1 {1: 1, 2: 6, 3: 1, 5: 1} {'converged': 9}
+GPU_PASS active_mpi4 {1: 1, 2: 6, 3: 1, 5: 1} {'converged': 9}
+GPU_IDENTICAL active_mpi4 20
+GPU_EARLY_STOP_VALIDATION_FINISHED

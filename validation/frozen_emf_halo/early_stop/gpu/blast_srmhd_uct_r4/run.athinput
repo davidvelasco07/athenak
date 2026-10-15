@@ -1,0 +1,145 @@
+# Relativistic magnetized blast wave, 2D, special relativity.
+#
+# Komissarov; Mignone & Bodo.  Derived from inputs/srmhd/blast_srmhd.athinput, with the
+# output section rewritten and `fofc` dropped.  Both changes are required, and neither is
+# cosmetic:
+#
+#   - THE STOCK DECK CARRIES FOUR OUTPUT BLOCKS (hst, vtk, vtk, log).  The validation
+#     harness overrides output1 -> vtk and output2 -> log by index, which on a four-block
+#     deck leaves the deck's own log block in place as well; AthenaK then aborts with
+#     "More than one history, event log, or restart output block found in input file"
+#     before taking a step.  Two blocks, in the order the harness expects.
+#   - the stock deck presets `fofc = true`, which is mutually exclusive with mood=true.
+#     The harness now always emits an explicit value, so this is belt and braces.
+#
+# rsolver is hlle: hlld and hllc are Newtonian-only.  emf is left to the case, so that
+# blast_srmhd (ct_contact) and blast_srmhd_uct (uct_hll) are the same deck twice.
+#
+# WHY IT IS HERE.  This is the special-relativistic half of the EMF comparison.  Under
+# PPM+MOOD uct_hll takes 903 EOS floor events against ct_contact's 1,754 -- the reverse
+# of the GR blast, where protected ct_contact is comfortably the cleaner of the two.
+
+# Athena++ (Kokkos version) input file for strongly magnetized blast problem
+
+<comment>
+problem   = spherical blast wave
+reference = Kommisarov, Mignone & Bodo
+
+
+
+<job>
+basename = blast_srmhd_uct_fv8_fb_smoke  # problem ID: basename of output filenames
+
+
+
+<mesh>
+nghost = 5  # Number of ghost cells
+nx1 = 200  # Number of zones in X1-direction
+x1min     = -6.0       # minimum value of X1
+x1max     = 6.0        # maximum value of X1
+ix1_bc    = periodic   # inner-X1 boundary flag
+ox1_bc    = periodic   # outer-X1 boundary flag
+
+nx2 = 200  # Number of zones in X2-direction
+x2min     = -6.0       # minimum value of X2
+x2max     = 6.0        # maximum value of X2
+ix2_bc    = periodic   # inner-X2 boundary flag
+ox2_bc    = periodic   # outer-X2 boundary flag
+
+nx3 = 1  # Number of zones in X3-direction
+x3min     = -0.5       # minimum value of X3
+x3max     = 0.5        # maximum value of X3
+ix3_bc    = periodic   # inner-X3 boundary flag
+ox3_bc    = periodic   # outer-X3 boundary flag
+
+
+
+<meshblock>
+nx1 = 50  # Number of cells in each MeshBlock, X1-dir
+nx2 = 50  # Number of cells in each MeshBlock, X2-dir
+nx3 = 1  # Number of cells in each MeshBlock, X3-dir
+
+
+
+<time>
+evolution  = dynamic    # dynamic/kinematic/static
+integrator = rk3  # time integration algorithm
+cfl_number = 0.3  # The Courant, Friedrichs, & Lewy (CFL) Number
+nlim = 200000  # cycle limit
+tlim = 2.0  # time limit
+ndiag = 100  # cycles between diagostic output
+
+
+
+<coord>
+special_rel = true
+
+
+
+<mhd>
+eos         = ideal     # EOS type
+reconstruct = fv8  # spatial reconstruction method
+rsolver = hlle  # Riemann-solver to be used
+gamma       = 1.3333333 # gamma = C_p/C_v
+dfloor      = 1.0e-10
+pfloor      = 1.0e-10
+
+fofc = false
+mood = true
+emf = uct_hll
+mood_nad_scale = rcfl
+mood_rtol = 1.e-8
+mood_sed = true
+mood_nad_b = comps
+mood_max_revs = 4
+mood_atol = 0
+mood_nad_energy = true
+mood_nad_v = comps
+mood_frozen_emf = true
+
+mood_diagnostics = true
+
+<problem>
+di_amb      = 1.0e-4    # ambient density
+pi_amb      = 3.0e-5    # ambient pressure
+bamb        = 0.1       # ambient B-field
+prat        = 33333.333 # Pressure ratio initially
+drat        = 100.      # density ratio initially
+inner_radius  = 0.8     # Radius of the inner sphere
+outer_radius  = 1.0     # Radius of the outer sphere
+
+
+
+<output1>
+file_type = vtk
+variable = mhd_w_bcc
+data_format = %12.5e
+dt = 0.5
+
+id = state
+
+
+<output2>
+file_type = log
+data_format = %12.5e
+dcycle = 1
+
+
+<mesh_refinement>
+refinement = none
+
+
+<output3>
+file_type = vtk
+variable = mhd_fb_level
+id = levels
+dt = 0.5
+
+
+<output4>
+file_type = vtk
+variable = mhd_divb
+id = divb
+dt = 0.5
+
+

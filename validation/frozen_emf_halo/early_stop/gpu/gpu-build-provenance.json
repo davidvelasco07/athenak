@@ -1,0 +1,48 @@
+{
+  "source_parent_commit": "abea4ac2fdf6e0b62ea655734c9c85fd51bb0a93",
+  "source_sha256": {
+    "src/mhd/mhd.cpp": "18452aae780bb5fc05737a308c3f513b95c09f9cf5fd4a22c1c2c8df77e6d2fa",
+    "src/mhd/mhd.hpp": "52e0f9f0dd5819cf52b3e29e2df56ecb210cf2c462b20a56793b3eb78d20f8cd",
+    "src/mhd/mhd_mood.cpp": "c132999fc68dc9ab1fb27e69b6bbdd4f80d7d32f574fd1c823844a4939b13490",
+    "src/mhd/mhd_mood_comm.cpp": "9068c0675cf1b746fba008aa658b2d4915d958ad1f2418c79b14c753642e90df",
+    "src/mhd/mhd_tasks.cpp": "cbdd7d4dab50afdd3f152c107416b155befb77529f1c645b4df9630a9247b926"
+  },
+  "binary_sha256": "5e659ff9f3bd1d5c79c0868944c1f17d8b3c71963601b77d9d39fcaab3d05520",
+  "build_type": "Release double precision CUDA A100, MPI",
+  "selected_build": "build-prod",
+  "EOS_compatibility": [
+    {
+      "case": "blast_mhd_lowbeta",
+      "all_cell_EOS_counters_unchanged": true,
+      "counters": {
+        "eos_dfloor": 0,
+        "eos_efloor": 15159,
+        "eos_tfloor": 13157,
+        "eos_vceil": 0,
+        "eos_fail": 0
+      }
+    },
+    {
+      "case": "blast_srmhd_uct",
+      "all_cell_EOS_counters_unchanged": true,
+      "counters": {
+        "eos_dfloor": 0,
+        "eos_efloor": 1336,
+        "eos_tfloor": 0,
+        "eos_vceil": 0,
+        "eos_fail": 0
+      }
+    },
+    {
+      "case": "blast_grmhd_uct",
+      "all_cell_EOS_counters_unchanged": true,
+      "counters": {
+        "eos_dfloor": 0,
+        "eos_efloor": 3556,
+        "eos_tfloor": 0,
+        "eos_vceil": 0,
+        "eos_fail": 0
+      }
+    }
+  ]
+}

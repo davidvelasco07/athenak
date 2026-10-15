@@ -1,0 +1,12 @@
+[
+  {
+    "case": "uniform_mpi1",
+    "non_mpi_matches_mpi_single_rank": true,
+    "arrays": 30
+  },
+  {
+    "case": "ot_fv8_mpi1",
+    "non_mpi_matches_mpi_single_rank": true,
+    "arrays": 30
+  }
+]

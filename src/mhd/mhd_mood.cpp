@@ -574,6 +574,8 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
   int ndemoted_total = 0;
   const int first_rev = mood_frozen_emf ? mood_revision+1 : 1;
   const int last_rev = mood_frozen_emf ? first_rev : nrevs;
+  const bool frozen = mood_frozen_emf;
+  const bool may_demote = !frozen || mood_revision < nrevs;
   for (int rev=first_rev; rev<=last_rev; ++rev) {
     const bool masked = touched_only && (rev > 1);
     const int dh = mood_frozen_emf ? 0 : h_f*(nrevs-rev+1);
@@ -793,10 +795,10 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
     // (3) NaN + NAD detection; combine with PAD; demote survivors and count them.
     // Same tier-floor split as hydro: PAD/NaN may cascade to DC, NAD (density, energy,
     // magnetic field) demotes to the PLM tier only.
-    int ndemoted = 0, ndemoted_int = 0;
+    int ndemoted = 0, ndemoted_int = 0, nviolations = 0;
     Kokkos::parallel_reduce("mmood_detect",
     Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
-    KOKKOS_LAMBDA(const int &idx, int &sum, int &sum_int) {
+    KOKKOS_LAMBDA(const int &idx, int &sum, int &sum_int, int &sum_bad) {
       int m = (idx)/nkji;
       int k = (idx - m*nkji)/nji;
       int j = (idx - m*nkji - k*nji)/ni;
@@ -806,7 +808,9 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
       if (masked && !touched_(m,k,j,i)) return;
 
       const int lv = fb_level_(m,k,j,i);
-      if (lv >= n_fb) {
+      const bool owned = (i >= is && i <= ie && j >= js && j <= je &&
+                          k >= ks && k <= ke);
+      if (lv >= n_fb && !frozen) {
         fofc_(m,k,j,i) = false;
         return;
       }
@@ -819,6 +823,13 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
         }
         if (!isfinite(bcctest_(m,IBX,k,j,i)) || !isfinite(bcctest_(m,IBY,k,j,i)) ||
             !isfinite(bcctest_(m,IBZ,k,j,i))) { danger = true; }
+      }
+      // DC cannot descend further, but a failed PAD/finite test still prevents
+      // convergence. Preserve it in the consensus without revising its tier.
+      if (lv >= n_fb) {
+        if (danger && owned) sum_bad++;
+        fofc_(m,k,j,i) = false;
+        return;
       }
 
       // rcfl uses only this cell's immutable stage-input state and local spacing.
@@ -1093,17 +1104,22 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
         }
       }
 
-      fofc_(m,k,j,i) = trouble;
-      if (trouble) {
+      // The check after the last allowed correction must not change the levels:
+      // those levels describe the fluxes/EMFs that will actually be committed.
+      if (trouble && owned) sum_bad++;
+      fofc_(m,k,j,i) = trouble && may_demote;
+      if (trouble && may_demote) {
         fb_level_(m,k,j,i) += 1;
         sum++;
         if (i >= is && i <= ie && j >= js && j <= je && k >= ks && k <= ke) {
           sum_int++;
         }
       }
-    }, Kokkos::Sum<int>(ndemoted), Kokkos::Sum<int>(ndemoted_int));
+    }, Kokkos::Sum<int>(ndemoted), Kokkos::Sum<int>(ndemoted_int),
+       Kokkos::Sum<int>(nviolations));
 
     if (mood_frozen_emf) {
+      mood_nviolations = nviolations;
       ndemoted_total += ndemoted_int;
       break;  // exchange owner levels before revising shared faces and halo edges
     }

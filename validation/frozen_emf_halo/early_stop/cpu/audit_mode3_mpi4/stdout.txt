@@ -1,0 +1,32 @@
+
+Root grid = 2 x 2 x 1 MeshBlocks
+Total number of MeshBlocks = 4
+Number of logical  levels of refinement = 1 (2 levels total)
+Number of physical levels of refinement = 0 (1 levels total)
+Number of parallel ranks = 4
+  Rank = 0: 1 MeshBlocks, cost = 1
+  Rank = 1: 1 MeshBlocks, cost = 1
+  Rank = 2: 1 MeshBlocks, cost = 1
+  Rank = 3: 1 MeshBlocks, cost = 1
+Load Balancing:
+  Maximum normalized cost = 1, Average = 1
+### WARNING in /Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/publish/src/parameter_input.cpp: input parameter <mesh>/ix3_bc = periodic was not used by the code (check for a typo)
+### WARNING in /Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/publish/src/parameter_input.cpp: input parameter <mesh>/ox3_bc = periodic was not used by the code (check for a typo)
+### WARNING in /Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/publish/src/parameter_input.cpp: input parameter <meshblock>/nx3 = 1 was not used by the code (check for a typo)
+### WARNING in /Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/publish/src/parameter_input.cpp: input parameter <mhd>/mood_detect = true was not used by the code (check for a typo)
+
+Setup complete, executing task list(s)...
+
+elapsed=1.653696e-02 cycle=0 time=0.000000e+00 dt=1.000000e-03
+MOOD cycle=0 stage=1 revisions=8 checks=9 status=revision_limit
+MOOD cycle=0 stage=2 revisions=8 checks=9 status=revision_limit
+MOOD cycle=0 stage=3 revisions=8 checks=9 status=revision_limit
+
+Terminating on time limit
+time=1.000000e-03 cycle=1
+tlim=1.000000e-03 nlim=-1
+
+MeshBlock-cycles = 4
+cpu time used  = 2.095537e-02
+zone-cycles/cpu_second = 4.886575e+04
+particle-updates/cpu_second = 0.000000e+00

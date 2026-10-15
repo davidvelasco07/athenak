@@ -1,0 +1,39 @@
+
+Root grid = 4 x 4 x 1 MeshBlocks
+Total number of MeshBlocks = 16
+Number of logical  levels of refinement = 2 (3 levels total)
+Number of physical levels of refinement = 0 (1 levels total)
+Number of parallel ranks = 4
+  Rank = 0: 4 MeshBlocks, cost = 4
+  Rank = 1: 4 MeshBlocks, cost = 4
+  Rank = 2: 4 MeshBlocks, cost = 4
+  Rank = 3: 4 MeshBlocks, cost = 4
+Load Balancing:
+  Maximum normalized cost = 1, Average = 1
+### WARNING in /scratch/lustre/velasco/codex-validation/early-stop-20261015/source/src/parameter_input.cpp: input parameter <mesh>/ix3_bc = periodic was not used by the code (check for a typo)
+### WARNING in /scratch/lustre/velasco/codex-validation/early-stop-20261015/source/src/parameter_input.cpp: input parameter <mesh>/ox3_bc = periodic was not used by the code (check for a typo)
+### WARNING in /scratch/lustre/velasco/codex-validation/early-stop-20261015/source/src/parameter_input.cpp: input parameter <meshblock>/nx3 = 1 was not used by the code (check for a typo)
+### WARNING in /scratch/lustre/velasco/codex-validation/early-stop-20261015/source/src/parameter_input.cpp: input parameter <output2>/variable = mhd_w_bcc was not used by the code (check for a typo)
+### WARNING in /scratch/lustre/velasco/codex-validation/early-stop-20261015/source/src/parameter_input.cpp: input parameter <output2>/dt = 0.01 was not used by the code (check for a typo)
+
+Setup complete, executing task list(s)...
+
+elapsed=5.520131e-01 cycle=0 time=0.000000e+00 dt=4.584456e-04
+MOOD cycle=0 stage=1 revisions=1 checks=2 status=converged
+MOOD cycle=0 stage=2 revisions=2 checks=3 status=converged
+MOOD cycle=0 stage=3 revisions=5 checks=6 status=converged
+MOOD cycle=1 stage=1 revisions=2 checks=3 status=converged
+MOOD cycle=1 stage=2 revisions=2 checks=3 status=converged
+MOOD cycle=1 stage=3 revisions=2 checks=3 status=converged
+MOOD cycle=2 stage=1 revisions=2 checks=3 status=converged
+MOOD cycle=2 stage=2 revisions=3 checks=4 status=converged
+MOOD cycle=2 stage=3 revisions=2 checks=3 status=converged
+
+Terminating on time limit
+time=1.000000e-03 cycle=3
+tlim=1.000000e-03 nlim=200000
+
+MeshBlock-cycles = 48
+cpu time used  = 8.028402e-01
+zone-cycles/cpu_second = 1.530566e+04
+particle-updates/cpu_second = 0.000000e+00
