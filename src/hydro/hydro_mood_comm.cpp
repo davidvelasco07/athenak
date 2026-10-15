@@ -42,6 +42,13 @@ TaskStatus Hydro::RecvMOODPrimitives(Driver *pdrive, int stage) {
 
 TaskStatus Hydro::SendMOODCandidate(Driver *pdrive, int stage) {
   const int ndir = pmy_pack->pmesh->three_d ? 3 : (pmy_pack->pmesh->multi_d ? 2 : 1);
+  // each stage starts from the base scheme everywhere, independent of the previous
+  // stage's cascade levels
+  Kokkos::deep_copy(fb_level, 0);
+  mood_revision = 0;
+  mood_wait_flags = false;
+  mood_wait_convergence = false;
+  mood_revise = false;
   auto status = pbval_mood_candidate->InitRecv(ndir*nhydro);
   if (status != TaskStatus::complete) return status;
   return pbval_mood_candidate->PackAndSendOwnedFluxCC(uflx);

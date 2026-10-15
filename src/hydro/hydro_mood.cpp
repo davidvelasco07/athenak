@@ -183,189 +183,243 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
   const int ndj = (multi_d) ? 1 : 0;
   const int ndk = (three_d) ? 1 : 0;
 
-  Kokkos::deep_copy(fb_level_, 0);
+  // Frozen fluxes: ApplyFallback calls this once per detection and once per revision.
+  // fb_level is reset when the candidate is sent (hydro_mood_comm.cpp), detection runs
+  // on owned cells only, and the neighbours' cascade levels are exchanged in between.
+  const bool frozen = mood_frozen_flux;
+  if (!frozen) Kokkos::deep_copy(fb_level_, 0);
+  // the check after the last allowed revision must not change the levels: they describe
+  // the fluxes that will actually be committed
+  const bool may_demote = !frozen || mood_revision < nrevs;
 
   // detect / demote / revise loop
   int ndemoted_total = 0;
-  for (int rev=1; rev<=nrevs; ++rev) {
-    // detection halo for this iteration (shrinks toward 1 at the final iteration)
-    const int dh = 1 + (nrevs - rev);
+  const int first_rev = frozen ? mood_revision + 1 : 1;
+  const int last_rev = frozen ? first_rev : nrevs;
+  for (int rev=first_rev; rev<=last_rev; ++rev) {
+    // detection halo for this iteration (shrinks toward 1 at the final iteration);
+    // none with frozen fluxes, whose ghost levels come from their owners
+    const int dh = frozen ? 0 : 1 + (nrevs - rev);
     il = is-dh; iu = ie+dh;
     if (multi_d) { jl = js-dh; ju = je+dh; }
     if (three_d) { kl = ks-dh; ku = ke+dh; }
 
-    // flattened-index helpers for the detection parallel_reduce
-    const int ni   = (iu - il + 1);
-    const int nji  = (ju - jl + 1)*ni;
-    const int nkji = (ku - kl + 1)*nji;
-    const int nmkji = nmb*nkji;
+    if (!(frozen && mood_revise)) {
 
-    //------------------------------------------------------------------------------------
-    // (1) candidate update with the exact RK stage combination, over this iteration's
-    // detection halo.
-    Kokkos::deep_copy(fofc_, false);
-    par_for("mood_newu", DevExeSpace(), 0, nmb1, kl, ku, jl, ju, il, iu,
-    KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-      Real dtodx1 = beta_dt/size_.d_view(m).dx1;
-      Real dtodx2 = beta_dt/size_.d_view(m).dx2;
-      Real dtodx3 = beta_dt/size_.d_view(m).dx3;
-      for (int n=0; n<ntest; ++n) {
-        Real divf = dtodx1*(flx1(m,n,k,j,i+1) - flx1(m,n,k,j,i));
-        if (multi_d) {
-          divf += dtodx2*(flx2(m,n,k,j+1,i) - flx2(m,n,k,j,i));
-        }
-        if (three_d) {
-          divf += dtodx3*(flx3(m,n,k+1,j,i) - flx3(m,n,k,j,i));
-        }
-        utest_(m,n,k,j,i) = gam0*u0_(m,n,k,j,i) + gam1*u1_(m,n,k,j,i) - divf;
-      }
-    });
+      // flattened-index helpers for the detection parallel_reduce
+      const int ni   = (iu - il + 1);
+      const int nji  = (ju - jl + 1)*ni;
+      const int nkji = (ku - kl + 1)*nji;
+      const int nmkji = nmb*nkji;
 
-    //------------------------------------------------------------------------------------
-    // (2) PAD: flag cells where conversion to primitives would require floors
-    // (sets fofc; b0/w0 passed but not used/changed)
-    peos->ConsToPrim(utest_, w0_, true, il, iu, jl, ju, kl, ku);
-
-    //------------------------------------------------------------------------------------
-    // (3) NaN + NAD detection; combine with PAD; filter out cells that cannot descend
-    // further; demote survivors and count them
-    int ndemoted = 0, ndemoted_int = 0;
-    Kokkos::parallel_reduce("mood_detect",
-    Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
-    KOKKOS_LAMBDA(const int &idx, int &sum, int &sum_int) {
-      int m = (idx)/nkji;
-      int k = (idx - m*nkji)/nji;
-      int j = (idx - m*nkji - k*nji)/ni;
-      int i = (idx - m*nkji - k*nji - j*ni) + il;
-      j += jl;
-      k += kl;
-
-      // cells already at the bottom tier cannot be revised further
-      const int lv = fb_level_(m,k,j,i);
-      if (lv >= n_fb) {
-        fofc_(m,k,j,i) = false;
-        return;
-      }
-
-      // TIER-FLOOR SPLIT: PAD/NaN flags (imminent physical failure — floors would
-      // fire, or non-finite data) may descend the full cascade to first-order DC,
-      // where maximum dissipation is genuinely wanted.  NAD flags (accuracy trouble:
-      // relaxed-DMP violations) demote only to the PLM tier, so no matter how
-      // stringent the NAD tolerance is, the scheme is never less accurate than PLM
-      // in NAD-flagged regions.
-      bool danger = fofc_(m,k,j,i);  // PAD
-
-      // NaN/Inf anywhere in the candidate
-      if (!danger) {
+      //------------------------------------------------------------------------------------
+      // (1) candidate update with the exact RK stage combination, over this iteration's
+      // detection halo.
+      Kokkos::deep_copy(fofc_, false);
+      par_for("mood_newu", DevExeSpace(), 0, nmb1, kl, ku, jl, ju, il, iu,
+      KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+        Real dtodx1 = beta_dt/size_.d_view(m).dx1;
+        Real dtodx2 = beta_dt/size_.d_view(m).dx2;
+        Real dtodx3 = beta_dt/size_.d_view(m).dx3;
         for (int n=0; n<ntest; ++n) {
-          if (!isfinite(utest_(m,n,k,j,i))) { danger = true; }
-        }
-      }
-
-      // rcfl uses only this cell's immutable stage-input state and local spacing.
-      // Retain the max-component/min-spacing convention and full-step dt of rcfl;
-      // no pack/domain extrema or additional stencil are needed.
-      Real cell_rtol = rtol;
-      if (local_rcfl && !danger && lv < 1) {
-        Real speed = fmax(fabs(w0_(m,IVX,k,j,i)),
-                     fmax(fabs(w0_(m,IVY,k,j,i)), fabs(w0_(m,IVZ,k,j,i))));
-        Real dx = size_.d_view(m).dx1;
-        if (multi_d) dx = fmin(dx, size_.d_view(m).dx2);
-        if (three_d) dx = fmin(dx, size_.d_view(m).dx3);
-        cell_rtol *= fmin(1.0, step_dt*speed/dx);
-      }
-
-      bool trouble = danger;
-
-      // NAD: relaxed DMP of the candidate vs stage-input state over the neighborhood,
-      // with a per-variable smooth-extrema exemption (computed lazily, only for a
-      // variable whose DMP check fails — the spd shortcut).
-      //
-      // Variables checked: mass density and, for an ideal gas, the internal-energy
-      // density (Newtonian) / conserved energy (SR/GR).  These two Galilean-invariant
-      // scalars are DECOMPOSITION-INVARIANT: the trouble set is bit-identical regardless
-      // of how the domain is split into MeshBlocks, because the light-cone halo makes
-      // the candidate scalars bit-identical across block boundaries.  Adding the
-      // individual velocity components (as spd optionally can via limiting_variables)
-      // breaks that: the per-component switch amplifies layout-dependent round-off in
-      // the momenta, which the zero-dissipation ppm base then grows, and results
-      // stop being bit-reproducible across decompositions.  Density+energy detects both
-      // shocks (density jumps) and thermal/contact troubles (energy) while preserving
-      // reproducibility.  spd's own default is density only (limiting_variables=[0]);
-      // pressure is additionally guarded by the PAD floor check above.
-      //
-      // NOTE: spd evaluates SED on the candidate field; in block-parallel AthenaK that
-      // would require the candidate 3 cells beyond every detection cell (much larger
-      // ghost halo or a mid-loop utest exchange), so the stage-input state — whose
-      // ghosts are already valid from the regular comms — is used here.
-      // NAD is only evaluated for cells still above its PLM floor (level 0).
-      if (!trouble && lv < 1) {
-        const Real dtst = utest_(m,IDN,k,j,i);
-        const int npass = (is_ideal_ && nad_energy) ? 2 : 1;
-        for (int pass=0; pass<npass && !trouble; ++pass) {
-          const int n = (pass == 0) ? IDN : IEN;
-          // candidate value of the checked variable
-          Real q_new;
-          if (!newtonian) {
-            q_new = utest_(m,n,k,j,i);            // conserved density / energy
-          } else if (n == IDN) {
-            q_new = dtst;                         // density
-          } else {                                // internal energy density
-            q_new = utest_(m,IEN,k,j,i) - 0.5*(SQR(utest_(m,IM1,k,j,i))
-                  + SQR(utest_(m,IM2,k,j,i)) + SQR(utest_(m,IM3,k,j,i)))/dtst;
+          Real divf = dtodx1*(flx1(m,n,k,j,i+1) - flx1(m,n,k,j,i));
+          if (multi_d) {
+            divf += dtodx2*(flx2(m,n,k,j+1,i) - flx2(m,n,k,j,i));
           }
-          // DMP bounds from the stage-input state over the neighborhood
-          const DvceArray5D<Real> &qref = (newtonian) ? w0_ : u0_;
-          Real qmn = qref(m,n,k,j,i), qmx = qmn;
-          for (int dk=-ndk; dk<=ndk; ++dk) {
-          for (int dj=-ndj; dj<=ndj; ++dj) {
-          for (int di=-ndi; di<=ndi; ++di) {
-            Real q = qref(m,n,k+dk,j+dj,i+di);
-            qmn = fmin(qmn, q);
-            qmx = fmax(qmx, q);
-          }}}
-          // Local relative relaxation of the neighboring lower/upper bounds.
-          Real eps_m = fmax(cell_rtol*fabs(qmn), atol);
-          Real eps_p = fmax(cell_rtol*fabs(qmx), atol);
-          eps_m = fmax(eps_m, eps0*fabs(qmn));
-          eps_p = fmax(eps_p, eps0*fabs(qmx));
-          bool nad = (q_new < qmn - eps_m) || (q_new > qmx + eps_p);
-          // exempt smooth extrema of this variable from NAD (never from PAD/NaN)
-          if (nad && use_sed) {
-            nad = (SEDAlpha(qref, m, n, k, j, i, multi_d, three_d) < 1.0);
+          if (three_d) {
+            divf += dtodx3*(flx3(m,n,k+1,j,i) - flx3(m,n,k,j,i));
           }
-          if (nad) { trouble = true; }
+          utest_(m,n,k,j,i) = gam0*u0_(m,n,k,j,i) + gam1*u1_(m,n,k,j,i) - divf;
         }
-      }
+      });
 
-      // NAD on the velocity (opt-in mood_nad_v), as in the MHD detector: the candidate
-      // velocity mom/rho of the trial state against the stage-input velocities over the
-      // neighbourhood, with the same tolerance as density.  Components exempt smooth
-      // extrema (SED); |v| has no precomputed array, so it is never exempted.
-      if (!trouble && lv < 1 && nad_von) {
-        const Real dtst = utest_(m,IDN,k,j,i);
-        const int nvpass = nad_vmag ? 1 : 3;
-        for (int vidx=0; vidx<nvpass && !trouble; ++vidx) {
-          Real q_new, qmn, qmx;
-          if (nad_vmag) {
-            q_new = sqrt(SQR(utest_(m,IM1,k,j,i)) + SQR(utest_(m,IM2,k,j,i))
-                       + SQR(utest_(m,IM3,k,j,i))) / dtst;
-            qmn = sqrt(SQR(w0_(m,IVX,k,j,i)) + SQR(w0_(m,IVY,k,j,i))
-                     + SQR(w0_(m,IVZ,k,j,i)));
-            qmx = qmn;
+      //------------------------------------------------------------------------------------
+      // (2) PAD: flag cells where conversion to primitives would require floors
+      // (sets fofc; b0/w0 passed but not used/changed)
+      peos->ConsToPrim(utest_, w0_, true, il, iu, jl, ju, kl, ku);
+
+      //------------------------------------------------------------------------------------
+      // (3) NaN + NAD detection; combine with PAD; filter out cells that cannot descend
+      // further; demote survivors and count them
+      int ndemoted = 0, ndemoted_int = 0, nviolations = 0;
+      Kokkos::parallel_reduce("mood_detect",
+      Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+      KOKKOS_LAMBDA(const int &idx, int &sum, int &sum_int, int &sum_bad) {
+        int m = (idx)/nkji;
+        int k = (idx - m*nkji)/nji;
+        int j = (idx - m*nkji - k*nji)/ni;
+        int i = (idx - m*nkji - k*nji - j*ni) + il;
+        j += jl;
+        k += kl;
+
+        // cells already at the bottom tier cannot be revised further
+        const int lv = fb_level_(m,k,j,i);
+        const bool owned = (i >= is && i <= ie && j >= js && j <= je &&
+                            k >= ks && k <= ke);
+        if (lv >= n_fb && !frozen) {
+          fofc_(m,k,j,i) = false;
+          return;
+        }
+
+        // TIER-FLOOR SPLIT: PAD/NaN flags (imminent physical failure — floors would
+        // fire, or non-finite data) may descend the full cascade to first-order DC,
+        // where maximum dissipation is genuinely wanted.  NAD flags (accuracy trouble:
+        // relaxed-DMP violations) demote only to the PLM tier, so no matter how
+        // stringent the NAD tolerance is, the scheme is never less accurate than PLM
+        // in NAD-flagged regions.
+        bool danger = fofc_(m,k,j,i);  // PAD
+
+        // NaN/Inf anywhere in the candidate
+        if (!danger) {
+          for (int n=0; n<ntest; ++n) {
+            if (!isfinite(utest_(m,n,k,j,i))) { danger = true; }
+          }
+        }
+        // DC cannot descend further, but a failed PAD/finite test still prevents
+        // convergence (frozen fluxes): keep it in the consensus without a new tier
+        if (lv >= n_fb) {
+          if (danger && owned) sum_bad++;
+          fofc_(m,k,j,i) = false;
+          return;
+        }
+
+        // rcfl uses only this cell's immutable stage-input state and local spacing.
+        // Retain the max-component/min-spacing convention and full-step dt of rcfl;
+        // no pack/domain extrema or additional stencil are needed.
+        Real cell_rtol = rtol;
+        if (local_rcfl && !danger && lv < 1) {
+          Real speed = fmax(fabs(w0_(m,IVX,k,j,i)),
+                       fmax(fabs(w0_(m,IVY,k,j,i)), fabs(w0_(m,IVZ,k,j,i))));
+          Real dx = size_.d_view(m).dx1;
+          if (multi_d) dx = fmin(dx, size_.d_view(m).dx2);
+          if (three_d) dx = fmin(dx, size_.d_view(m).dx3);
+          cell_rtol *= fmin(1.0, step_dt*speed/dx);
+        }
+
+        bool trouble = danger;
+
+        // NAD: relaxed DMP of the candidate vs stage-input state over the neighborhood,
+        // with a per-variable smooth-extrema exemption (computed lazily, only for a
+        // variable whose DMP check fails — the spd shortcut).
+        //
+        // Variables checked: mass density and, for an ideal gas, the internal-energy
+        // density (Newtonian) / conserved energy (SR/GR).  These two Galilean-invariant
+        // scalars are DECOMPOSITION-INVARIANT: the trouble set is bit-identical regardless
+        // of how the domain is split into MeshBlocks, because the light-cone halo makes
+        // the candidate scalars bit-identical across block boundaries.  Adding the
+        // individual velocity components (as spd optionally can via limiting_variables)
+        // breaks that: the per-component switch amplifies layout-dependent round-off in
+        // the momenta, which the zero-dissipation ppm base then grows, and results
+        // stop being bit-reproducible across decompositions.  Density+energy detects both
+        // shocks (density jumps) and thermal/contact troubles (energy) while preserving
+        // reproducibility.  spd's own default is density only (limiting_variables=[0]);
+        // pressure is additionally guarded by the PAD floor check above.
+        //
+        // NOTE: spd evaluates SED on the candidate field; in block-parallel AthenaK that
+        // would require the candidate 3 cells beyond every detection cell (much larger
+        // ghost halo or a mid-loop utest exchange), so the stage-input state — whose
+        // ghosts are already valid from the regular comms — is used here.
+        // NAD is only evaluated for cells still above its PLM floor (level 0).
+        if (!trouble && lv < 1) {
+          const Real dtst = utest_(m,IDN,k,j,i);
+          const int npass = (is_ideal_ && nad_energy) ? 2 : 1;
+          for (int pass=0; pass<npass && !trouble; ++pass) {
+            const int n = (pass == 0) ? IDN : IEN;
+            // candidate value of the checked variable
+            Real q_new;
+            if (!newtonian) {
+              q_new = utest_(m,n,k,j,i);            // conserved density / energy
+            } else if (n == IDN) {
+              q_new = dtst;                         // density
+            } else {                                // internal energy density
+              q_new = utest_(m,IEN,k,j,i) - 0.5*(SQR(utest_(m,IM1,k,j,i))
+                    + SQR(utest_(m,IM2,k,j,i)) + SQR(utest_(m,IM3,k,j,i)))/dtst;
+            }
+            // DMP bounds from the stage-input state over the neighborhood
+            const DvceArray5D<Real> &qref = (newtonian) ? w0_ : u0_;
+            Real qmn = qref(m,n,k,j,i), qmx = qmn;
             for (int dk=-ndk; dk<=ndk; ++dk) {
             for (int dj=-ndj; dj<=ndj; ++dj) {
             for (int di=-ndi; di<=ndi; ++di) {
-              Real q = sqrt(SQR(w0_(m,IVX,k+dk,j+dj,i+di))
-                          + SQR(w0_(m,IVY,k+dk,j+dj,i+di))
-                          + SQR(w0_(m,IVZ,k+dk,j+dj,i+di)));
+              Real q = qref(m,n,k+dk,j+dj,i+di);
               qmn = fmin(qmn, q);
               qmx = fmax(qmx, q);
             }}}
-          } else {
-            const int n = IVX + vidx;
-            q_new = utest_(m,IM1+vidx,k,j,i) / dtst;
-            qmn = w0_(m,n,k,j,i); qmx = qmn;
+            // Local relative relaxation of the neighboring lower/upper bounds.
+            Real eps_m = fmax(cell_rtol*fabs(qmn), atol);
+            Real eps_p = fmax(cell_rtol*fabs(qmx), atol);
+            eps_m = fmax(eps_m, eps0*fabs(qmn));
+            eps_p = fmax(eps_p, eps0*fabs(qmx));
+            bool nad = (q_new < qmn - eps_m) || (q_new > qmx + eps_p);
+            // exempt smooth extrema of this variable from NAD (never from PAD/NaN)
+            if (nad && use_sed) {
+              nad = (SEDAlpha(qref, m, n, k, j, i, multi_d, three_d) < 1.0);
+            }
+            if (nad) { trouble = true; }
+          }
+        }
+
+        // NAD on the velocity (opt-in mood_nad_v), as in the MHD detector: the candidate
+        // velocity mom/rho of the trial state against the stage-input velocities over the
+        // neighbourhood, with the same tolerance as density.  Components exempt smooth
+        // extrema (SED); |v| has no precomputed array, so it is never exempted.
+        if (!trouble && lv < 1 && nad_von) {
+          const Real dtst = utest_(m,IDN,k,j,i);
+          const int nvpass = nad_vmag ? 1 : 3;
+          for (int vidx=0; vidx<nvpass && !trouble; ++vidx) {
+            Real q_new, qmn, qmx;
+            if (nad_vmag) {
+              q_new = sqrt(SQR(utest_(m,IM1,k,j,i)) + SQR(utest_(m,IM2,k,j,i))
+                         + SQR(utest_(m,IM3,k,j,i))) / dtst;
+              qmn = sqrt(SQR(w0_(m,IVX,k,j,i)) + SQR(w0_(m,IVY,k,j,i))
+                       + SQR(w0_(m,IVZ,k,j,i)));
+              qmx = qmn;
+              for (int dk=-ndk; dk<=ndk; ++dk) {
+              for (int dj=-ndj; dj<=ndj; ++dj) {
+              for (int di=-ndi; di<=ndi; ++di) {
+                Real q = sqrt(SQR(w0_(m,IVX,k+dk,j+dj,i+di))
+                            + SQR(w0_(m,IVY,k+dk,j+dj,i+di))
+                            + SQR(w0_(m,IVZ,k+dk,j+dj,i+di)));
+                qmn = fmin(qmn, q);
+                qmx = fmax(qmx, q);
+              }}}
+            } else {
+              const int n = IVX + vidx;
+              q_new = utest_(m,IM1+vidx,k,j,i) / dtst;
+              qmn = w0_(m,n,k,j,i); qmx = qmn;
+              for (int dk=-ndk; dk<=ndk; ++dk) {
+              for (int dj=-ndj; dj<=ndj; ++dj) {
+              for (int di=-ndi; di<=ndi; ++di) {
+                Real q = w0_(m,n,k+dk,j+dj,i+di);
+                qmn = fmin(qmn, q);
+                qmx = fmax(qmx, q);
+              }}}
+            }
+            Real eps_m = fmax(cell_rtol*fabs(qmn), atol);
+            Real eps_p = fmax(cell_rtol*fabs(qmx), atol);
+            eps_m = fmax(eps_m, eps0*fabs(qmn));
+            eps_p = fmax(eps_p, eps0*fabs(qmx));
+            bool nad = (q_new < qmn - eps_m) || (q_new > qmx + eps_p);
+            if (nad && use_sed && !nad_vmag) {
+              nad = (SEDAlpha(w0_, m, IVX+vidx, k, j, i, multi_d, three_d) < 1.0);
+            }
+            if (nad) { trouble = true; }
+          }
+        }
+
+        // NAD for passive scalars.  The advected CONCENTRATION r = (d*r)/d is the bounded
+        // quantity — a tracer cannot leave the range it is advected from — and it is also
+        // what the revise pass reconstructs, so the DMP is applied to r rather than to the
+        // conserved scalar density (whose bounds would move with the density even where
+        // the tracer itself is perfectly smooth).  r is a passively advected scalar, so it
+        // is Galilean-invariant and decomposition-invariant on the same grounds as density.
+        if (!trouble && lv < 1 && nad_scalars) {
+          const Real dtst = utest_(m,IDN,k,j,i);
+          for (int n=nhyd_; n<nvars && !trouble; ++n) {
+            // a non-positive candidate density is already PAD's business; skip the ratio
+            if (!(dtst > 0.0)) break;
+            const Real q_new = utest_(m,n,k,j,i)/dtst;
+            Real qmn = w0_(m,n,k,j,i), qmx = qmn;
             for (int dk=-ndk; dk<=ndk; ++dk) {
             for (int dj=-ndj; dj<=ndj; ++dj) {
             for (int di=-ndi; di<=ndi; ++di) {
@@ -373,67 +427,42 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
               qmn = fmin(qmn, q);
               qmx = fmax(qmx, q);
             }}}
+            Real eps_m = fmax(cell_rtol*fabs(qmn), atol);
+            Real eps_p = fmax(cell_rtol*fabs(qmx), atol);
+            eps_m = fmax(eps_m, eps0*fabs(qmn));
+            eps_p = fmax(eps_p, eps0*fabs(qmx));
+            bool nad = (q_new < qmn - eps_m) || (q_new > qmx + eps_p);
+            if (nad && use_sed) {
+              nad = (SEDAlpha(w0_, m, n, k, j, i, multi_d, three_d) < 1.0);
+            }
+            if (nad) { trouble = true; }
           }
-          Real eps_m = fmax(cell_rtol*fabs(qmn), atol);
-          Real eps_p = fmax(cell_rtol*fabs(qmx), atol);
-          eps_m = fmax(eps_m, eps0*fabs(qmn));
-          eps_p = fmax(eps_p, eps0*fabs(qmx));
-          bool nad = (q_new < qmn - eps_m) || (q_new > qmx + eps_p);
-          if (nad && use_sed && !nad_vmag) {
-            nad = (SEDAlpha(w0_, m, IVX+vidx, k, j, i, multi_d, three_d) < 1.0);
+        }
+
+        // demote flagged cells one tier; fofc marks "newly demoted" for the revise pass.
+        // sum (incl. the ghost halo) controls the loop exit and must be consistent with
+        // the neighbor blocks' decisions; sum_int (interior only) is the diagnostic
+        // counter, so it is decomposition-invariant.
+        if (trouble && owned) sum_bad++;
+        fofc_(m,k,j,i) = trouble && may_demote;
+        if (trouble && may_demote) {
+          fb_level_(m,k,j,i) += 1;
+          sum++;
+          if (owned) {
+            sum_int++;
           }
-          if (nad) { trouble = true; }
         }
-      }
+      }, Kokkos::Sum<int>(ndemoted), Kokkos::Sum<int>(ndemoted_int),
+         Kokkos::Sum<int>(nviolations));
 
-      // NAD for passive scalars.  The advected CONCENTRATION r = (d*r)/d is the bounded
-      // quantity — a tracer cannot leave the range it is advected from — and it is also
-      // what the revise pass reconstructs, so the DMP is applied to r rather than to the
-      // conserved scalar density (whose bounds would move with the density even where
-      // the tracer itself is perfectly smooth).  r is a passively advected scalar, so it
-      // is Galilean-invariant and decomposition-invariant on the same grounds as density.
-      if (!trouble && lv < 1 && nad_scalars) {
-        const Real dtst = utest_(m,IDN,k,j,i);
-        for (int n=nhyd_; n<nvars && !trouble; ++n) {
-          // a non-positive candidate density is already PAD's business; skip the ratio
-          if (!(dtst > 0.0)) break;
-          const Real q_new = utest_(m,n,k,j,i)/dtst;
-          Real qmn = w0_(m,n,k,j,i), qmx = qmn;
-          for (int dk=-ndk; dk<=ndk; ++dk) {
-          for (int dj=-ndj; dj<=ndj; ++dj) {
-          for (int di=-ndi; di<=ndi; ++di) {
-            Real q = w0_(m,n,k+dk,j+dj,i+di);
-            qmn = fmin(qmn, q);
-            qmx = fmax(qmx, q);
-          }}}
-          Real eps_m = fmax(cell_rtol*fabs(qmn), atol);
-          Real eps_p = fmax(cell_rtol*fabs(qmx), atol);
-          eps_m = fmax(eps_m, eps0*fabs(qmn));
-          eps_p = fmax(eps_p, eps0*fabs(qmx));
-          bool nad = (q_new < qmn - eps_m) || (q_new > qmx + eps_p);
-          if (nad && use_sed) {
-            nad = (SEDAlpha(w0_, m, n, k, j, i, multi_d, three_d) < 1.0);
-          }
-          if (nad) { trouble = true; }
-        }
+      if (frozen) {
+        mood_nviolations = nviolations;
+        ndemoted_total += ndemoted_int;
+        break;  // exchange the owners' levels before revising shared faces
       }
-
-      // demote flagged cells one tier; fofc marks "newly demoted" for the revise pass.
-      // sum (incl. the ghost halo) controls the loop exit and must be consistent with
-      // the neighbor blocks' decisions; sum_int (interior only) is the diagnostic
-      // counter, so it is decomposition-invariant.
-      fofc_(m,k,j,i) = trouble;
-      if (trouble) {
-        fb_level_(m,k,j,i) += 1;
-        sum++;
-        if (i >= is && i <= ie && j >= js && j <= je && k >= ks && k <= ke) {
-          sum_int++;
-        }
-      }
-    }, Kokkos::Sum<int>(ndemoted), Kokkos::Sum<int>(ndemoted_int));
-
-    if (ndemoted == 0) break;
-    ndemoted_total += ndemoted_int;
+      if (ndemoted == 0) break;
+      ndemoted_total += ndemoted_int;
+    }  // detection
 
     //------------------------------------------------------------------------------------
     // (4) revise fluxes on every face touching a newly-demoted cell, at the tier given

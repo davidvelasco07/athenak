@@ -132,10 +132,24 @@ class Hydro {
   // fofc/utest arrays: fofc marks cells flagged (newly demoted) in the current
   // revision iteration, utest holds the candidate update.
   bool use_mood = false;    // flag to enable MOOD fallback
-  // Immutable owner flux exchange before the local fallback revisions (NR/SR/GR).
+  // Immutable owner flux exchange, then one revision per ApplyFallback call with the
+  // neighbours' integer cascade levels exchanged in between (as in mhd_mood.cpp), so
+  // detection runs on owned cells only and the halo does not grow with mood_max_revs.
   bool mood_frozen_flux = false;
   MeshBoundaryValuesCC *pbval_mood_prim = nullptr;
   MeshBoundaryValuesCC *pbval_mood_candidate = nullptr;
+  MeshBoundaryValuesCCInt *pbval_mood_flags = nullptr;
+  int mood_revision = 0;
+  bool mood_wait_flags = false;
+  bool mood_wait_convergence = false;
+  bool mood_revise = false;
+  int mood_nviolations = 0;
+  int mood_local_active = 0, mood_global_active = 0;
+  bool mood_diagnostics = false;
+#if MPI_PARALLEL_ENABLED
+  MPI_Comm mood_convergence_comm = MPI_COMM_NULL;
+  MPI_Request mood_convergence_req = MPI_REQUEST_NULL;
+#endif
   DvceArray5D<Real> mood_prim, mood_coarse;
   int mood_max_revs = 1;    // max revision iterations per RK stage
   bool mood_nad_energy;     // include the energy variable in NAD (density always on)
@@ -169,6 +183,7 @@ class Hydro {
   TaskStatus SendMOODCandidate(Driver *d, int stage);
   TaskStatus RecvMOODCandidate(Driver *d, int stage);
   TaskStatus ApplyFallback(Driver *d, int stage);
+  TaskStatus RunFallback(Driver *d, int stage);
   TaskStatus SendFlux(Driver *d, int stage);
   TaskStatus RecvFlux(Driver *d, int stage);
   TaskStatus RKUpdate(Driver *d, int stage);

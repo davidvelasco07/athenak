@@ -342,7 +342,7 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
     // solver and the local detector retain their NR/SR/GR specializations.
     const bool frozen_supported = use_mood && evolution_t == "dynamic" &&
         !pmy_pack->pmesh->multilevel && pmy_pack->pmesh->strictly_periodic &&
-        peos->eos_data.is_ideal && nscalars == 0 &&
+        nscalars == 0 &&
         pvisc == nullptr && pcond == nullptr &&
         !pin->DoesBlockExist("shearing_box") &&
         !(pmy_pack->pcoord->is_general_relativistic &&
@@ -353,8 +353,7 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
     mood_frozen_flux = pin->GetOrAddBoolean("hydro", "mood_frozen_flux", frozen_supported);
     if (mood_frozen_flux && !frozen_supported) {
       std::cerr << "Frozen hydro fluxes require dynamic MOOD with periodic uniform "
-                << "FV4/FV6/FV8, ideal EOS, and no diffusion, scalars, shear, "
-                << "or excision\n";
+                << "FV4/FV6/FV8, and no diffusion, scalars, shear, or excision\n";
       std::exit(EXIT_FAILURE);
     }
     if (mood_frozen_flux) {
@@ -379,9 +378,10 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
       // ghost layer of the light-cone halo.
       int ng_need = ReconStencilRadius(recon_method) + 1 + mood_max_revs;
       if (mood_frozen_flux) {
-        // Hydro has no transverse corner composition: only the face-normal
-        // reconstruction radius plus one, or the PLM/SED revision halo.
-        ng_need = std::max(ReconStencilRadius(recon_method) + 1, mood_max_revs + 3);
+        // Detection is owned-cell only and the neighbours' cascade levels arrive by
+        // exchange before each revision, so the halo is fixed: the base stencil radius
+        // plus one, PLM revisions of the outer faces (two cells), SED's +/-3.
+        ng_need = std::max(ReconStencilRadius(recon_method) + 1, 3);
       }
       auto &indcs = pmy_pack->pmesh->mb_indcs;
       if (indcs.ng < ng_need) {
@@ -508,6 +508,12 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
         }
         pbval_mood_candidate = new MeshBoundaryValuesCC(ppack, pin, false);
         pbval_mood_candidate->InitializeBuffers(ndir*nhydro);
+        // revisions of owned faces read the cascade level of one ghost layer
+        pbval_mood_flags = new MeshBoundaryValuesCCInt(ppack, pin, 1);
+        mood_diagnostics = pin->GetOrAddBoolean("hydro", "mood_diagnostics", false);
+#if MPI_PARALLEL_ENABLED
+        MPI_Comm_dup(MPI_COMM_WORLD, &mood_convergence_comm);
+#endif
       }
 
       // allocate arrays of flags/candidate state used with FOFC and MOOD
@@ -529,6 +535,10 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
 // destructor
 
 Hydro::~Hydro() {
+#if MPI_PARALLEL_ENABLED
+  if (mood_convergence_comm != MPI_COMM_NULL) MPI_Comm_free(&mood_convergence_comm);
+#endif
+  delete pbval_mood_flags;
   delete pbval_mood_candidate;
   delete pbval_mood_prim;
   if (psbox_u != nullptr) {delete psbox_u;}

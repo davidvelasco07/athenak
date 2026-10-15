@@ -236,6 +236,66 @@ TaskStatus Hydro::Fluxes(Driver *pdrive, int stage) {
 }
 
 TaskStatus Hydro::ApplyFallback(Driver *pdrive, int stage) {
+  if (!mood_frozen_flux) return RunFallback(pdrive, stage);
+
+  // Frozen fluxes (as MHD::ApplyFallback): check the current candidate on owned cells
+  // before every revision, including after the last allowed one. Quiet ranks join the
+  // remote repairs until the detector is clear everywhere; the nonblocking consensus
+  // has its own communicator. Between detection and revision the neighbours' integer
+  // cascade levels are exchanged, so shared faces are revised identically on both sides.
+  if (!mood_wait_flags) {
+    if (!mood_wait_convergence) {
+      mood_revise = false;
+      RunFallback(pdrive, stage);  // detect owned cells, one revision
+      mood_local_active = (mood_nviolations != 0);
+      mood_global_active = mood_local_active;
+#if MPI_PARALLEL_ENABLED
+      if (global_variable::nranks > 1) {
+        MPI_Iallreduce(&mood_local_active, &mood_global_active, 1, MPI_INT, MPI_MAX,
+                       mood_convergence_comm, &mood_convergence_req);
+      }
+#endif
+      mood_wait_convergence = true;
+    }
+    int ready = 1;
+#if MPI_PARALLEL_ENABLED
+    if (mood_convergence_req != MPI_REQUEST_NULL) {
+      MPI_Test(&mood_convergence_req, &ready, MPI_STATUS_IGNORE);
+    }
+#endif
+    if (!ready) return TaskStatus::incomplete;
+    mood_wait_convergence = false;
+    if (!mood_global_active || mood_revision == mood_max_revs) {
+      if (mood_global_active && mood_nviolations != 0) {
+        std::cout << "MOOD hydro: " << mood_nviolations << " cell(s) still inadmissible "
+                  << "after " << mood_revision << " revisions, cycle="
+                  << pmy_pack->pmesh->ncycle << " stage=" << stage << " rank="
+                  << global_variable::my_rank << std::endl;
+      }
+      if (mood_diagnostics && global_variable::my_rank == 0) {
+        std::cout << "MOOD hydro cycle=" << pmy_pack->pmesh->ncycle << " stage=" << stage
+                  << " revisions=" << mood_revision << " status="
+                  << (mood_global_active ? "revision_limit" : "converged") << std::endl;
+      }
+      return TaskStatus::complete;
+    }
+    pbval_mood_flags->InitRecvIntCC();
+    pbval_mood_flags->PackAndSendIntCC(fb_level);
+    mood_wait_flags = true;
+  }
+  auto status = pbval_mood_flags->RecvAndUnpackIntCC(fb_level, fofc);
+  if (status != TaskStatus::complete) return status;
+  pbval_mood_flags->ClearSend();
+  pbval_mood_flags->ClearRecv();
+  mood_revise = true;
+  RunFallback(pdrive, stage);  // revise owned faces from the exchanged levels
+  mood_revise = false;
+  mood_wait_flags = false;
+  ++mood_revision;
+  return TaskStatus::incomplete;
+}
+
+TaskStatus Hydro::RunFallback(Driver *pdrive, int stage) {
   // call MOOD a-posteriori fallback if enabled (mutually exclusive with FOFC)
   if (use_mood) {
     if (rsolver_method == Hydro_RSolver::advect) {
