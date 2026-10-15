@@ -15,6 +15,7 @@
 
 #include "athena.hpp"
 #include "io_wrapper.hpp"
+#include "utils/radial_profile.hpp"
 
 #define NHISTORY_VARIABLES 20
 #if NHISTORY_VARIABLES > NREDUCTION_VARIABLES
@@ -372,6 +373,22 @@ class MeshBinaryOutput : public BaseTypeOutput {
  public:
   MeshBinaryOutput(ParameterInput *pin, Mesh *pm, OutputParameters oparams);
   void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
+};
+
+//----------------------------------------------------------------------------------------
+//! \class RadialProfileOutput
+//  \brief descriptor-based binary output of complete radial profiles
+class RadialProfileOutput : public BaseTypeOutput {
+ public:
+  RadialProfileOutput(ParameterInput *pin, Mesh *pm, OutputParameters op);
+  ~RadialProfileOutput() override;
+  void LoadOutputData(Mesh *pm) override;
+  void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
+
+ private:
+  RadialProfile *prp;
+  DvceArray1D<RadialProfileCenter>::HostMirror centers;
+  DvceArray3D<Real>::HostMirror rprof;
 };
 
 //----------------------------------------------------------------------------------------

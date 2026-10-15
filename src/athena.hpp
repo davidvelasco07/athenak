@@ -350,24 +350,26 @@ inline void par_for(const std::string &name, ExeSpace exec_space,
 
 //------------------------------
 // 5D loop using Kokkos 1D Range
-template <typename ExeSpace, typename Function>
+// par_for(...) retains int indexing; par_for<std::int64_t>(...) supports larger
+// combined iteration counts.
+template <typename IndexType = int, typename ExeSpace, typename Function>
 inline void par_for(const std::string &name, ExeSpace exec_space,
                     const int &ml, const int &mu,
                     const int &nl, const int &nu, const int &kl, const int &ku,
                     const int &jl, const int &ju, const int &il, const int &iu,
                     const Function &function) {
   // compute total number of elements and call Kokkos::parallel_for()
-  const int nm = mu - ml + 1;
-  const int nn = nu - nl + 1;
-  const int nk = ku - kl + 1;
-  const int nj = ju - jl + 1;
-  const int ni = iu - il + 1;
-  const int nmnkji = nm * nn * nk * nj * ni;
-  const int nnkji  = nn * nk * nj * ni;
-  const int nkji   = nk * nj * ni;
-  const int nji    = nj * ni;
-  Kokkos::parallel_for(name, Kokkos::RangePolicy<ExeSpace>(exec_space, 0, nmnkji),
-  KOKKOS_LAMBDA(const int &idx) {
+  const IndexType nm = static_cast<IndexType>(mu) - ml + 1;
+  const IndexType nn = static_cast<IndexType>(nu) - nl + 1;
+  const IndexType nk = static_cast<IndexType>(ku) - kl + 1;
+  const IndexType nj = static_cast<IndexType>(ju) - jl + 1;
+  const IndexType ni = static_cast<IndexType>(iu) - il + 1;
+  const IndexType nmnkji = nm * nn * nk * nj * ni;
+  const IndexType nnkji  = nn * nk * nj * ni;
+  const IndexType nkji   = nk * nj * ni;
+  const IndexType nji    = nj * ni;
+  Kokkos::parallel_for(name, Kokkos::RangePolicy<ExeSpace, Kokkos::IndexType<IndexType>>(exec_space, 0, nmnkji),
+  KOKKOS_LAMBDA(const IndexType &idx) {
     // compute m,n,k,j,i indices of thread and call function
     int m = (idx)/nnkji;
     int n = (idx - m*nnkji)/nkji;

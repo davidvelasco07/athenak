@@ -119,6 +119,7 @@ add_executable(
         outputs/basetype_output.cpp
         outputs/cartgrid.cpp
         outputs/derived_variables.cpp
+        outputs/radial_profile.cpp
         outputs/binary.cpp
         outputs/eventlog.cpp
         outputs/formatted_table.cpp
@@ -189,6 +190,7 @@ add_executable(
         tasklist/numerical_relativity.cpp
 
         units/units.cpp
+        utils/radial_profile.cpp
         utils/change_rundir.cpp
         utils/derived_vars.cpp
         utils/show_config.cpp

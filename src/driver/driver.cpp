@@ -699,12 +699,14 @@ void Driver::Finalize(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
     out->WriteOutputFile(pmesh, pin);
   }
 
+  //TODO(SMOON) Temporarily moved this above pgen_final_func call to exclude final func
+  //cost from the performance diagnostics
+  float exe_time = run_time_.seconds();
+
   // call any problem specific functions to do work after main loop
   if (pmesh->pgen->pgen_final_func != nullptr) {
     (pmesh->pgen->pgen_final_func)(pin, pmesh);
   }
-
-  float exe_time = run_time_.seconds();
 
   if (time_evolution != TimeEvolution::tstatic) {
 #if MPI_PARALLEL_ENABLED
