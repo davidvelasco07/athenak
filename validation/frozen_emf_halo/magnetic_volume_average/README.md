@@ -1,5 +1,11 @@
 # Magnetic volume averages for the MHD candidate
 
+**Averaging validation at `bcc400b3d`:** the averaging weights remain current.
+The larger halos and local revision protocol described below are superseded by
+[integer cascade exchange](../cascade_exchange/README.md), now validated at
+3/4/5 ghosts for FV4/FV6/FV8 with HLLD. The measurements on this page retain their
+original test settings.
+
 This implements the averaging part of the agreed candidate/revision sequence for
 Newtonian ideal MHD with FV4/FV6/FV8 and UCT. Face fields remain the fields evolved
 by CT. `utest` and `bcctest` together hold the eight-component cell-average
@@ -129,7 +135,8 @@ these source changes:
 ```sh
 python validation/frozen_emf_halo/ot_resolution/run_study.py \
   --source /path/to/athenak --exe /path/to/athena --output /path/to/new-runs \
-  --resolutions 128 --orders 4,6,8 --block 64 --revisions 4 --rtol 1e-8
+  --resolutions 128 --orders 4,6,8 --block 64 --revisions 4 --rtol 1e-8 \
+  --pre-cascade-exchange-halo
 ```
 
 The runner's default halos remain conservative. The counts in the table are

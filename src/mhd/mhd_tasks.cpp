@@ -281,6 +281,31 @@ TaskStatus MHD::Fluxes(Driver *pdrive, int stage) {
 }
 
 TaskStatus MHD::ApplyFallback(Driver *pdrive, int stage) {
+  if (!mood_frozen_emf) return RunFallback(pdrive, stage);
+
+  // Yield this task while neighbors exchange scalar integer cascade levels.
+  // Every rank executes the same revision count; local early exit would omit
+  // remote demotions and could leave a peer waiting for a message.
+  if (!mood_wait_flags) {
+    mood_revise = false;
+    RunFallback(pdrive, stage);  // detect owned cells, one revision only
+    pbval_mood_flags->InitRecvIntCC();
+    pbval_mood_flags->PackAndSendIntCC(fb_level);
+    mood_wait_flags = true;
+  }
+  auto status = pbval_mood_flags->RecvAndUnpackIntCC(fb_level, fofc);
+  if (status != TaskStatus::complete) return status;
+  pbval_mood_flags->ClearSend();
+  pbval_mood_flags->ClearRecv();
+  mood_revise = true;
+  RunFallback(pdrive, stage);  // revise owned faces and the needed edge halo
+  mood_revise = false;
+  mood_wait_flags = false;
+  ++mood_revision;
+  return mood_revision == mood_max_revs ? TaskStatus::complete : TaskStatus::incomplete;
+}
+
+TaskStatus MHD::RunFallback(Driver *pdrive, int stage) {
   // call the MOOD fallback or FOFC if necessary
   if (use_mood) {
     if (rsolver_method == MHD_RSolver::advect) {

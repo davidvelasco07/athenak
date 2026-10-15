@@ -189,10 +189,15 @@ class MHD {
   bool mood_sed;
   int n_fb_tiers;
   int mood_halo0;
-  // Frozen-EMF MOOD: immutable candidate exchange, then local PLM/DC revisions.
+  // Frozen EMFs: immutable candidate exchange, integer cascade exchange per revision.
   bool mood_frozen_emf = false;
   MeshBoundaryValuesCC *pbval_mood_prim = nullptr;
   MeshBoundaryValuesCC *pbval_mood_candidate = nullptr;
+  MeshBoundaryValuesCCInt *pbval_mood_flags = nullptr;
+  int mood_emf_halo = 0;
+  int mood_revision = 0;
+  bool mood_wait_flags = false;
+  bool mood_revise = false;
   DvceArray5D<Real> mood_prim, mood_candidate, mood_coarse;
   DvceEdgeFld4D<Real> mood_eplm{"mood_eplm",1,1,1,1};
   DvceEdgeFld4D<Real> mood_edc{"mood_edc",1,1,1,1};
@@ -266,6 +271,7 @@ class MHD {
   TaskStatus CopyCons(Driver *d, int stage);
   TaskStatus Fluxes(Driver *d, int stage);
   TaskStatus ApplyFallback(Driver *d, int stage);
+  TaskStatus RunFallback(Driver *d, int stage);
   TaskStatus SendMOODPrimitives(Driver *d, int stage);
   TaskStatus RecvMOODPrimitives(Driver *d, int stage);
   TaskStatus SendMOODCandidate(Driver *d, int stage);

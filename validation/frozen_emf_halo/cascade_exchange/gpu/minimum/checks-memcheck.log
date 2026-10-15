@@ -1,0 +1,5 @@
+{'dim': 2, 'solver': 'hlld', 'nghost': 5, 'code': 0, 'zero_errors': True, 'mpi_cuda_support': False, 'mpi_ranks': 1, 'target_processes': 'application-only'}
+{'dim': 2, 'solver': 'lhlld', 'nghost': 6, 'code': 0, 'zero_errors': True, 'mpi_cuda_support': False, 'mpi_ranks': 1, 'target_processes': 'application-only'}
+{'dim': 3, 'solver': 'hlld', 'nghost': 5, 'code': 0, 'zero_errors': True, 'mpi_cuda_support': False, 'mpi_ranks': 1, 'target_processes': 'application-only'}
+{'dim': 3, 'solver': 'lhlld', 'nghost': 6, 'code': 0, 'zero_errors': True, 'mpi_cuda_support': False, 'mpi_ranks': 1, 'target_processes': 'application-only'}
+MINIMUM_MEMCHECKS_PASS

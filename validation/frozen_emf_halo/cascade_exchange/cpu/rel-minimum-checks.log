@@ -1,0 +1,13 @@
+sr_fv4_old clean
+sr_fv4_flags clean
+sr_fv6_old clean
+sr_fv6_flags clean
+sr_fv8_old clean
+sr_fv8_flags clean
+gr_fv4_old clean
+gr_fv4_flags clean
+gr_fv6_old clean
+gr_fv6_flags clean
+gr_fv8_old clean
+gr_fv8_flags clean
+RELATIVISTIC_HALO_CHECKS_PASS

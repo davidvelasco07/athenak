@@ -1,0 +1,10 @@
+{
+  "src/CMakeLists.txt": "073d6183c453677f9efaa0fcf37e559cb170f7e9c4806d3c6ae139bccb106e39",
+  "src/bvals/bvals.hpp": "ed4ba15e122dd79dbdb7d565cddf634f0ce384b28ae3ea6400b2fc7b56af0387",
+  "src/bvals/bvals_int.cpp": "5980c7eb5a183d7931fbe9bf5d9bc4baf60913f8e763be52363d1f0c44a0386d",
+  "src/mhd/mhd.cpp": "8d8a9ec354f6e2e254ae3c6cac021dad36c50869a1e5c82e363f24e81cf62c68",
+  "src/mhd/mhd.hpp": "cf564d576925a11ed1df5c8040c404572c6d49c1f717db933e4187370f27123f",
+  "src/mhd/mhd_mood.cpp": "b8b25646f7e8b684a3652d4ea088d4abd01de8d7de5d73fa0f9a19418551704d",
+  "src/mhd/mhd_mood_comm.cpp": "ad827f9d2476255f746ff7cbcc0ac83628b385fb689c8b4e1e724539ad434d64",
+  "src/mhd/mhd_tasks.cpp": "b4a7eaa6dfb7ff9153a1d8bd1554807ca42d7cb3ac2fec357dacd8ca59cf01ac"
+}

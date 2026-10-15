@@ -1,0 +1,284 @@
+[
+  {
+    "regime": "sr",
+    "order": 4,
+    "files": [
+      {
+        "file": "ot.mhd_divb.00000.bin",
+        "identical": true,
+        "max_abs": 0.0
+      },
+      {
+        "file": "ot.mhd_divb.00001.bin",
+        "identical": true,
+        "max_abs": 0.0
+      },
+      {
+        "file": "ot.mhd_fb_level.00000.bin",
+        "identical": true,
+        "max_abs": 0.0
+      },
+      {
+        "file": "ot.mhd_fb_level.00001.bin",
+        "identical": true,
+        "max_abs": 0.0
+      },
+      {
+        "file": "ot.mhd_u_bcc.00000.bin",
+        "identical": true,
+        "max_abs": 0.0
+      },
+      {
+        "file": "ot.mhd_u_bcc.00001.bin",
+        "identical": true,
+        "max_abs": 0.0
+      },
+      {
+        "file": "ot.mhd_w.00000.bin",
+        "identical": true,
+        "max_abs": 0.0
+      },
+      {
+        "file": "ot.mhd_w.00001.bin",
+        "identical": true,
+        "max_abs": 0.0
+      }
+    ],
+    "all_identical": true
+  },
+  {
+    "regime": "sr",
+    "order": 6,
+    "files": [
+      {
+        "file": "ot.mhd_divb.00000.bin",
+        "identical": true,
+        "max_abs": 0.0
+      },
+      {
+        "file": "ot.mhd_divb.00001.bin",
+        "identical": true,
+        "max_abs": 0.0
+      },
+      {
+        "file": "ot.mhd_fb_level.00000.bin",
+        "identical": true,
+        "max_abs": 0.0
+      },
+      {
+        "file": "ot.mhd_fb_level.00001.bin",
+        "identical": true,
+        "max_abs": 0.0
+      },
+      {
+        "file": "ot.mhd_u_bcc.00000.bin",
+        "identical": true,
+        "max_abs": 0.0
+      },
+      {
+        "file": "ot.mhd_u_bcc.00001.bin",
+        "identical": true,
+        "max_abs": 0.0
+      },
+      {
+        "file": "ot.mhd_w.00000.bin",
+        "identical": true,
+        "max_abs": 0.0
+      },
+      {
+        "file": "ot.mhd_w.00001.bin",
+        "identical": true,
+        "max_abs": 0.0
+      }
+    ],
+    "all_identical": true
+  },
+  {
+    "regime": "sr",
+    "order": 8,
+    "files": [
+      {
+        "file": "ot.mhd_divb.00000.bin",
+        "identical": true,
+        "max_abs": 0.0
+      },
+      {
+        "file": "ot.mhd_divb.00001.bin",
+        "identical": true,
+        "max_abs": 0.0
+      },
+      {
+        "file": "ot.mhd_fb_level.00000.bin",
+        "identical": true,
+        "max_abs": 0.0
+      },
+      {
+        "file": "ot.mhd_fb_level.00001.bin",
+        "identical": true,
+        "max_abs": 0.0
+      },
+      {
+        "file": "ot.mhd_u_bcc.00000.bin",
+        "identical": true,
+        "max_abs": 0.0
+      },
+      {
+        "file": "ot.mhd_u_bcc.00001.bin",
+        "identical": true,
+        "max_abs": 0.0
+      },
+      {
+        "file": "ot.mhd_w.00000.bin",
+        "identical": true,
+        "max_abs": 0.0
+      },
+      {
+        "file": "ot.mhd_w.00001.bin",
+        "identical": true,
+        "max_abs": 0.0
+      }
+    ],
+    "all_identical": true
+  },
+  {
+    "regime": "gr",
+    "order": 4,
+    "files": [
+      {
+        "file": "ot.mhd_divb.00000.bin",
+        "identical": true,
+        "max_abs": 0.0
+      },
+      {
+        "file": "ot.mhd_divb.00001.bin",
+        "identical": true,
+        "max_abs": 0.0
+      },
+      {
+        "file": "ot.mhd_fb_level.00000.bin",
+        "identical": true,
+        "max_abs": 0.0
+      },
+      {
+        "file": "ot.mhd_fb_level.00001.bin",
+        "identical": true,
+        "max_abs": 0.0
+      },
+      {
+        "file": "ot.mhd_u_bcc.00000.bin",
+        "identical": true,
+        "max_abs": 0.0
+      },
+      {
+        "file": "ot.mhd_u_bcc.00001.bin",
+        "identical": true,
+        "max_abs": 0.0
+      },
+      {
+        "file": "ot.mhd_w.00000.bin",
+        "identical": true,
+        "max_abs": 0.0
+      },
+      {
+        "file": "ot.mhd_w.00001.bin",
+        "identical": true,
+        "max_abs": 0.0
+      }
+    ],
+    "all_identical": true
+  },
+  {
+    "regime": "gr",
+    "order": 6,
+    "files": [
+      {
+        "file": "ot.mhd_divb.00000.bin",
+        "identical": true,
+        "max_abs": 0.0
+      },
+      {
+        "file": "ot.mhd_divb.00001.bin",
+        "identical": true,
+        "max_abs": 0.0
+      },
+      {
+        "file": "ot.mhd_fb_level.00000.bin",
+        "identical": true,
+        "max_abs": 0.0
+      },
+      {
+        "file": "ot.mhd_fb_level.00001.bin",
+        "identical": true,
+        "max_abs": 0.0
+      },
+      {
+        "file": "ot.mhd_u_bcc.00000.bin",
+        "identical": true,
+        "max_abs": 0.0
+      },
+      {
+        "file": "ot.mhd_u_bcc.00001.bin",
+        "identical": true,
+        "max_abs": 0.0
+      },
+      {
+        "file": "ot.mhd_w.00000.bin",
+        "identical": true,
+        "max_abs": 0.0
+      },
+      {
+        "file": "ot.mhd_w.00001.bin",
+        "identical": true,
+        "max_abs": 0.0
+      }
+    ],
+    "all_identical": true
+  },
+  {
+    "regime": "gr",
+    "order": 8,
+    "files": [
+      {
+        "file": "ot.mhd_divb.00000.bin",
+        "identical": true,
+        "max_abs": 0.0
+      },
+      {
+        "file": "ot.mhd_divb.00001.bin",
+        "identical": true,
+        "max_abs": 0.0
+      },
+      {
+        "file": "ot.mhd_fb_level.00000.bin",
+        "identical": true,
+        "max_abs": 0.0
+      },
+      {
+        "file": "ot.mhd_fb_level.00001.bin",
+        "identical": true,
+        "max_abs": 0.0
+      },
+      {
+        "file": "ot.mhd_u_bcc.00000.bin",
+        "identical": true,
+        "max_abs": 0.0
+      },
+      {
+        "file": "ot.mhd_u_bcc.00001.bin",
+        "identical": true,
+        "max_abs": 0.0
+      },
+      {
+        "file": "ot.mhd_w.00000.bin",
+        "identical": true,
+        "max_abs": 0.0
+      },
+      {
+        "file": "ot.mhd_w.00001.bin",
+        "identical": true,
+        "max_abs": 0.0
+      }
+    ],
+    "all_identical": true
+  }
+]

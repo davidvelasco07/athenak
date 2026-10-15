@@ -14,9 +14,11 @@ import time
 import numpy as np
 
 
-def input_deck(order, nx, block, tlim, solver='hlld', frozen=True, nghost=None, revisions=2, rtol=1.e-4, pre_pad_fix_halo=False):
+def input_deck(order, nx, block, tlim, solver='hlld', frozen=True, nghost=None, revisions=2, rtol=1.e-4, pre_pad_fix_halo=False, pre_cascade_exchange_halo=False):
     reach=order//2
-    ng=max(order,reach*revisions+max(3,reach)) if frozen else order*(revisions+1)
+    ng=max(3,reach+1) if frozen else order*(revisions+1)
+    if pre_cascade_exchange_halo:
+        ng=max(order,reach*revisions+max(3,reach)) if frozen else order*(revisions+1)
     if pre_pad_fix_halo:
         ng=max(order,revisions+3) if frozen else (reach+1)*(revisions+1)
     if nghost is not None:ng=nghost
@@ -187,24 +189,28 @@ def main():
     ap.add_argument('--revisions',type=int,default=2)
     ap.add_argument('--rtol',type=float,default=1.e-4)
     ap.add_argument('--pre-pad-fix-halo',action='store_true',help='Historical halo policy for pre-correction executables only')
+    ap.add_argument('--pre-cascade-exchange-halo',action='store_true',help='Historical NR halo policy before integer cascade exchange')
     ap.add_argument('--nghost',type=int,help='Override ghost count for a halo control')
     ap.add_argument('--tlim',type=float,default=1.);ap.add_argument('--timeout',type=float,default=7200.)
     ap.add_argument('--solver',choices=['hlld','hlle'],default='hlld')
     ap.add_argument('--continue-after-floor',action='store_true')
     ap.add_argument('--legacy',action='store_true');ap.add_argument('--resume',action='store_true')
-    a=ap.parse_args();a.source=a.source.resolve();a.exe=a.exe.resolve();a.output=a.output.resolve();a.output.mkdir(parents=True,exist_ok=True)
+    a=ap.parse_args()
+    if a.pre_pad_fix_halo and a.pre_cascade_exchange_halo:
+        ap.error('Choose one historical halo policy')
+    a.source=a.source.resolve();a.exe=a.exe.resolve();a.output=a.output.resolve();a.output.mkdir(parents=True,exist_ok=True)
     sys.path.insert(0,str(a.source/'vis/python'));import bin_convert as reader
     report={'host':platform.node(),'cuda_visible_devices':os.environ.get('CUDA_VISIBLE_DEVICES'),
        'executable_sha256':hashlib.sha256(a.exe.read_bytes()).hexdigest(),
        'config':{'resolutions':a.resolutions,'orders':a.orders,'block':a.block,'nghost_override':a.nghost,'tlim':a.tlim,
-                 'solver':a.solver,'frozen':not a.legacy,'cfl':.25,'nad':'rcfl','rtol':a.rtol,'max_revisions':a.revisions,'continue_after_floor':a.continue_after_floor,'pre_pad_fix_halo':a.pre_pad_fix_halo},'runs':[]}
+                 'solver':a.solver,'frozen':not a.legacy,'cfl':.25,'nad':'rcfl','rtol':a.rtol,'max_revisions':a.revisions,'continue_after_floor':a.continue_after_floor,'pre_pad_fix_halo':a.pre_pad_fix_halo,'pre_cascade_exchange_halo':a.pre_cascade_exchange_halo},'runs':[]}
     for nx in map(int,a.resolutions.split(',')):
         for order in map(int,a.orders.split(',')):
             name=f'ot_fv{order}_n{nx}';d=a.output/name;d.mkdir(exist_ok=True)
             resultfile=d/'result.json'
             if a.resume and resultfile.exists():r=json.loads(resultfile.read_text())
             else:
-                (d/'input.athinput').write_text(input_deck(order,nx,a.block,a.tlim,a.solver,not a.legacy,a.nghost,a.revisions,a.rtol,a.pre_pad_fix_halo))
+                (d/'input.athinput').write_text(input_deck(order,nx,a.block,a.tlim,a.solver,not a.legacy,a.nghost,a.revisions,a.rtol,a.pre_pad_fix_halo,a.pre_cascade_exchange_halo))
                 start=time.monotonic()
                 code,reason=execute(a.exe,d,a.timeout,a.continue_after_floor)
                 r={'name':name,'order':order,'nx':nx,'code':code,'stop_reason':reason,

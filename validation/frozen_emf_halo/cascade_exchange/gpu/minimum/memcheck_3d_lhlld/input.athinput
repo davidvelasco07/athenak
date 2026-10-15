@@ -1,0 +1,90 @@
+<job>
+basename = ot
+
+<mesh>
+nghost = 6
+nx1 = 32
+x1min = -0.5
+x1max = 0.5
+ix1_bc = periodic
+ox1_bc = periodic
+nx2 = 32
+x2min = -0.5
+x2max = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 32
+x3min = -0.5
+x3max = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 32
+nx2 = 32
+nx3 = 32
+
+<time>
+evolution = dynamic
+integrator = rk3
+cfl_number = 0.25
+nlim = -1
+tlim = 0.002
+ndiag = 10
+
+<mhd>
+eos = ideal
+reconstruct = fv8
+rsolver = lhlld
+emf = uct_hlld
+gamma = 1.6666666666666667
+mood = true
+mood_detect = true
+mood_frozen_emf = true
+mood_max_revs = 4
+mood_nad_scale = rcfl
+mood_rtol = 1e-08
+mood_atol = 0.0
+mood_eps0 = 1e-12
+mood_sed = true
+mood_nad_energy = true
+mood_nad_v = comps
+mood_nad_b = comps
+mood_nad_bcc = avg
+mood_edge = flag
+mood_touched_only = false
+dfloor = 1e-12
+pfloor = 1e-12
+
+<problem>
+pgen_name = orszag_tang
+
+<output1>
+file_type = log
+dcycle = 1
+
+<output2>
+file_type = hst
+dt = 0.01
+data_format = %.17e
+
+<output3>
+file_type = bin
+variable = mhd_u_bcc
+dt = 0.25
+
+<output4>
+file_type = bin
+variable = mhd_w
+dt = 0.25
+
+<output5>
+file_type = bin
+variable = mhd_fb_level
+dt = 0.25
+
+<output6>
+file_type = bin
+variable = mhd_divb
+dt = 0.25
+

@@ -244,6 +244,22 @@ class MeshBoundaryValuesCC : public MeshBoundaryValues {
                            DvceArray5D<Real> &cons);
 };
 
+// Uniform-grid scalar integer exchange. Uses the existing CC neighbor topology
+// and rank aggregation, with a caller-selected halo width and MPI_INT payloads.
+class MeshBoundaryValuesCCInt : public MeshBoundaryValuesCC {
+ public:
+  MeshBoundaryValuesCCInt(MeshBlockPack *pp, ParameterInput *pin, int width) :
+      MeshBoundaryValuesCC(pp, pin, false), width_(width) {}
+  TaskStatus InitRecvIntCC();
+  TaskStatus PackAndSendIntCC(DvceArray4D<int> &a);
+  TaskStatus RecvAndUnpackIntCC(DvceArray4D<int> &a, DvceArray4D<bool> &changed);
+
+ private:
+  int width_;
+  bool initialized_ = false;
+  DvceArray1D<int> local_recv_, local_offset_, int_send_, int_recv_;
+};
+
 //----------------------------------------------------------------------------------------
 //! \class BoundaryValuesFC
 //  \brief Derived class implementing boundary values for face-centered vector fields

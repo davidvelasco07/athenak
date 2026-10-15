@@ -9,11 +9,13 @@ passive scalars and refinement are excluded. Unsupported configurations keep the
 legacy method; explicitly requesting frozen EMFs for them produces an error.
 Set `mood_frozen_emf=false` to compare against legacy recomposition.
 
-The bound is `nghost >= max(FV_order, mood_max_revs + 3)`. Two revisions require
-**5/6/8 ghost cells** for FV4/FV6/FV8. The +3 covers the smooth-extrema detector;
-this conservative floor remains when SED is disabled. Each active block dimension
-must be at least `nghost`, as required to obtain this payload from immediate
-neighbors. The revision halo still shrinks by one cell per revision.
+The current implementation exchanges integer cascade levels after every owned-cell
+detection pass. FV4/FV6/FV8 require **3/4/5 ghost cells** for HLLD/HLLE/LLF, and
+**4/5/6** for L-HLLD's extra sensor cell, independently of revision count.
+Each active block dimension must be at least `nghost`. See the
+[cascade exchange validation](../cascade_exchange/README.md) for the derivation,
+forced interface controls, GPU/MPI results and current reproduction commands.
+The older local-loop measurements below are historical.
 
 Both hydro and MHD support local `relative` and `rcfl` NAD tolerances:
 
@@ -55,9 +57,11 @@ Each face/edge is assigned to the cell with the same integer indices. Packing
 these values into a CC payload lets the existing neighbor routines fill face,
 edge and corner ghosts, including periodic self-neighbors. Dedicated boundary
 objects and task dependencies isolate these messages from normal U/B exchanges.
-The existing MPI aggregation by destination rank is reused. There are no new
-halo exchanges inside the revision loop, no global-sized arrays, and no new
-MPI collectives. All payload packing is in device kernels.
+The existing MPI aggregation by destination rank is reused. Within revisions,
+one scalar integer cascade level per halo cell is exchanged with neighbors.
+Ghost levels determine local face and cached edge replacement; detection and SED
+run on owned cells. There are no global-sized arrays or new detector collectives.
+All payload packing is in device kernels.
 
 PLM/DC EMFs are cached in persistent device arrays. Revisions replace adjacent
 face fluxes and adjacent edge EMFs; other edges retain the initial high-order
@@ -154,6 +158,10 @@ The local NAD change applies to hydro/MHD generally; the previous studies using
 global scales are historical results and must be rerun to assess those regimes.
 
 ## Reproduction
+
+The script below reproduces the historical local-loop experiment against its
+recorded source version. Use the [current controls](../cascade_exchange/README.md)
+for the present integer-exchange implementation.
 
 ```
 python3 validation/frozen_emf_halo/neighbor_exchange/reproduce.py \

@@ -63,6 +63,9 @@ TaskStatus MHD::SendMOODCandidate(Driver *pdrive, int stage) {
   // Start each stage with the base-order edge stencil, independently of the
   // previous stage's detector flags. This is the only base corner composition.
   Kokkos::deep_copy(fb_level, 0);
+  mood_revision = 0;
+  mood_wait_flags = false;
+  mood_revise = false;
   ComposeCornerEMF(q.is,q.ie+1,q.js,q.je+1,q.ks,td ? q.ke+1 : q.ks,false);
   pbval_mood_candidate->InitRecv(off+3);
   auto data = mood_candidate;

@@ -1,0 +1,9 @@
+[  1%] Built target kokkossimd
+[ 10%] Built target kokkoscore
+[ 11%] Built target kokkoscontainers
+[ 11%] Built target AlwaysCheckGit
+[ 12%] Built target impl_git_version
+[ 12%] Building CXX object src/CMakeFiles/athena.dir/mhd/mhd.cpp.o
+[ 12%] Building CXX object src/CMakeFiles/athena.dir/mhd/mhd_mood.cpp.o
+[ 13%] Linking CXX executable athena
+[100%] Built target athena

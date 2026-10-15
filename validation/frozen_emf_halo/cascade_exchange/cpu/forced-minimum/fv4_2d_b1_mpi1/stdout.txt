@@ -1,0 +1,23 @@
+
+Root grid = 1 x 1 x 1 MeshBlocks
+Total number of MeshBlocks = 1
+Number of logical  levels of refinement = 0 (1 levels total)
+Number of physical levels of refinement = 0 (1 levels total)
+Number of parallel ranks = 1
+### WARNING in /Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/cascade-halo-validation/audit-source/src/parameter_input.cpp: input parameter <mesh>/ix3_bc = periodic was not used by the code (check for a typo)
+### WARNING in /Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/cascade-halo-validation/audit-source/src/parameter_input.cpp: input parameter <mesh>/ox3_bc = periodic was not used by the code (check for a typo)
+### WARNING in /Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/cascade-halo-validation/audit-source/src/parameter_input.cpp: input parameter <meshblock>/nx3 = 1 was not used by the code (check for a typo)
+### WARNING in /Users/velasco/Documents/Codex/2026-10-14/why-the-two-sided-stencil-raises/work/cascade-halo-validation/audit-source/src/parameter_input.cpp: input parameter <mhd>/mood_detect = true was not used by the code (check for a typo)
+
+Setup complete, executing task list(s)...
+
+elapsed=3.653925e-02 cycle=0 time=0.000000e+00 dt=3.550449e-03
+
+Terminating on cycle limit
+time=3.550449e-03 cycle=1
+tlim=1.000000e+00 nlim=1
+
+MeshBlock-cycles = 1
+cpu time used  = 5.115783e-02
+zone-cycles/cpu_second = 2.001649e+04
+particle-updates/cpu_second = 0.000000e+00

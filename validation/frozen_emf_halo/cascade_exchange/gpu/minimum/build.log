@@ -1,0 +1,36 @@
+[  1%] Built target kokkossimd
+[  1%] Built target AlwaysCheckGit
+[  2%] Built target impl_git_version
+[ 13%] Built target kokkoscore
+[ 14%] Built target kokkoscontainers
+[ 15%] Building CXX object src/CMakeFiles/athena.dir/mhd/mhd.cpp.o
+/scratch/lustre/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/scratch/lustre/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/scratch/lustre/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/scratch/lustre/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/scratch/lustre/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/scratch/lustre/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+[ 15%] Linking CXX executable athena
+[100%] Built target athena

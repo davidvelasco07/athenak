@@ -1,0 +1,50 @@
+[
+  {
+    "order": 4,
+    "solver": "hlld",
+    "nghost": 2,
+    "code": 1,
+    "required": 3,
+    "rejects": true
+  },
+  {
+    "order": 4,
+    "solver": "lhlld",
+    "nghost": 3,
+    "code": 1,
+    "required": 4,
+    "rejects": true
+  },
+  {
+    "order": 6,
+    "solver": "hlld",
+    "nghost": 3,
+    "code": 1,
+    "required": 4,
+    "rejects": true
+  },
+  {
+    "order": 6,
+    "solver": "lhlld",
+    "nghost": 4,
+    "code": 1,
+    "required": 5,
+    "rejects": true
+  },
+  {
+    "order": 8,
+    "solver": "hlld",
+    "nghost": 4,
+    "code": 1,
+    "required": 5,
+    "rejects": true
+  },
+  {
+    "order": 8,
+    "solver": "lhlld",
+    "nghost": 5,
+    "code": 1,
+    "required": 6,
+    "rejects": true
+  }
+]

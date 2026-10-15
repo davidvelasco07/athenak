@@ -241,6 +241,7 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
   const bool nad_vmag = (mood_nad_v == 1);    // |v| (else components)
   const int n_fb = n_fb_tiers;
   const int nrevs = mood_max_revs;
+  const bool initialize = !mood_frozen_emf || (mood_revision == 0 && !mood_revise);
   const bool is_ideal_ = eos_.is_ideal;
   const Real gm_ = eos_.gamma, cs_iso_ = eos_.iso_cs;   // WB velocity band scale
 
@@ -259,9 +260,9 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
   // In the frozen path its ghosts have been exchanged from their owners: copying
   // them also avoids order reductions at the outer edge of a local face array.
   // The candidate below uses the same averaging for both PAD and magnetic NAD.
-  if (nad_avg && fv_bavg) {
+  if (initialize && nad_avg && fv_bavg) {
     Kokkos::deep_copy(bcc_nad, bcc0);
-  } else if (nad_avg) {
+  } else if (initialize && nad_avg) {
     auto bn_ = bcc_nad;
     const int n1m = ncells1-1, n2m = ncells2-1, n3m = ncells3-1;
     const bool md = multi_d, td = three_d;
@@ -279,7 +280,7 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
 
   // |B| of the stage-input state, used for NAD bounds and SED in "mag" mode.  Filled
   // over the full array so the SED stencil is covered anywhere detection runs.
-  if (nad_bmag) {
+  if (initialize && nad_bmag) {
     const auto bsrc_ = nad_avg ? bcc_nad : bcc0;
     par_for("mood_bmag", DevExeSpace(), 0, nmb1, 0, ncells3-1, 0, ncells2-1,
             0, ncells1-1,
@@ -310,7 +311,7 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
   // always takes the most robust flux.  Seeding fb_level to n_fb_tiers reproduces that
   // exactly -- the revise pass maps t >= n_fb_tiers to donor-cell reconstruction -- and
   // is what allows mood=true to run with BH excision at all.
-  {
+  if (initialize) {
     auto &excision_flux_ = pmy_pack->pcoord->excision_flux;
     const bool excising = (pmy_pack->pcoord->is_general_relativistic &&
                            pmy_pack->pcoord->coord_data.bh_excise);
@@ -507,8 +508,8 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
     Kokkos::deep_copy(dst.x2e, src.x2e);
     Kokkos::deep_copy(dst.x3e, src.x3e);
   };
-  if (mood_frozen_emf) {
-    const int h = mood_halo0, h2 = multi_d ? h : 0, h3 = three_d ? h : 0;
+  if (mood_frozen_emf && initialize) {
+    const int h = mood_emf_halo, h2 = multi_d ? h : 0, h3 = three_d ? h : 0;
     auto compose = [&]() {
       ComposeCornerEMF(is-h,ie+h+1,js-h2,je+h2+1,ks-h3,
                        three_d ? ke+h3+1 : ks, false);
@@ -565,10 +566,17 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
       }
     });
   };
+  if (mood_frozen_emf && mood_revise) {
+    revise_faces(0, 0);
+    select_frozen_edges(mood_emf_halo);
+    return;
+  }
   int ndemoted_total = 0;
-  for (int rev=1; rev<=nrevs; ++rev) {
+  const int first_rev = mood_frozen_emf ? mood_revision+1 : 1;
+  const int last_rev = mood_frozen_emf ? first_rev : nrevs;
+  for (int rev=first_rev; rev<=last_rev; ++rev) {
     const bool masked = touched_only && (rev > 1);
-    const int dh = h_f*(nrevs-rev+1);
+    const int dh = mood_frozen_emf ? 0 : h_f*(nrevs-rev+1);
     int il = is-dh, iu = ie+dh, jl = js, ju = je, kl = ks, ku = ke;
     if (multi_d) { jl = js-dh; ju = je+dh; }
     if (three_d) { kl = ks-dh; ku = ke+dh; }
@@ -1095,6 +1103,10 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
       }
     }, Kokkos::Sum<int>(ndemoted), Kokkos::Sum<int>(ndemoted_int));
 
+    if (mood_frozen_emf) {
+      ndemoted_total += ndemoted_int;
+      break;  // exchange owner levels before revising shared faces and halo edges
+    }
     if (ndemoted == 0) break;
     ndemoted_total += ndemoted_int;
 

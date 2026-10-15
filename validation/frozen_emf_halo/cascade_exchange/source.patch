@@ -1,0 +1,507 @@
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index 7a0ce792b..e84377b40 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -15,6 +15,7 @@ add_executable(
+         bvals/buffs_cc.cpp
+         bvals/buffs_fc.cpp
+         bvals/bvals_cc.cpp
++        bvals/bvals_int.cpp
+         bvals/bvals_fc.cpp
+         bvals/bvals_part.cpp
+         bvals/bvals_tasks.cpp
+diff --git a/src/bvals/bvals.hpp b/src/bvals/bvals.hpp
+index 7de941f04..e17087a2a 100644
+--- a/src/bvals/bvals.hpp
++++ b/src/bvals/bvals.hpp
+@@ -244,6 +244,22 @@ class MeshBoundaryValuesCC : public MeshBoundaryValues {
+                            DvceArray5D<Real> &cons);
+ };
+ 
++// Uniform-grid scalar integer exchange. Uses the existing CC neighbor topology
++// and rank aggregation, with a caller-selected halo width and MPI_INT payloads.
++class MeshBoundaryValuesCCInt : public MeshBoundaryValuesCC {
++ public:
++  MeshBoundaryValuesCCInt(MeshBlockPack *pp, ParameterInput *pin, int width) :
++      MeshBoundaryValuesCC(pp, pin, false), width_(width) {}
++  TaskStatus InitRecvIntCC();
++  TaskStatus PackAndSendIntCC(DvceArray4D<int> &a);
++  TaskStatus RecvAndUnpackIntCC(DvceArray4D<int> &a, DvceArray4D<bool> &changed);
++
++ private:
++  int width_;
++  bool initialized_ = false;
++  DvceArray1D<int> local_recv_, local_offset_, int_send_, int_recv_;
++};
++
+ //----------------------------------------------------------------------------------------
+ //! \class BoundaryValuesFC
+ //  \brief Derived class implementing boundary values for face-centered vector fields
+diff --git a/src/bvals/bvals_int.cpp b/src/bvals/bvals_int.cpp
+new file mode 100644
+index 000000000..a1e66de07
+--- /dev/null
++++ b/src/bvals/bvals_int.cpp
+@@ -0,0 +1,178 @@
++//========================================================================================
++// AthenaXXX astrophysical plasma code
++// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
++// Licensed under the 3-clause BSD License (the "LICENSE")
++//========================================================================================
++//! \file bvals_int.cpp
++//! \brief Uniform-grid integer cell halos, packed by destination rank.
++
++#include <algorithm>
++#include <cstdlib>
++#include <iostream>
++
++#include "athena.hpp"
++#include "globals.hpp"
++#include "mesh/mesh.hpp"
++#include "bvals.hpp"
++
++TaskStatus MeshBoundaryValuesCCInt::InitRecvIntCC() {
++  if (pmy_pack->pmesh->multilevel || !pmy_pack->pmesh->strictly_periodic) {
++    std::cerr << "Integer CC halos require a uniform periodic mesh\n";
++    std::exit(EXIT_FAILURE);
++  }
++  const auto q = pmy_pack->pmesh->mb_indcs;
++  if (width_ < 1 || width_ > q.ng) {
++    std::cerr << "Integer CC halo width must be between 1 and nghost\n";
++    std::exit(EXIT_FAILURE);
++  }
++#if MPI_PARALLEL_ENABLED
++  if (rank_packed_mesh_seq_ != pmy_pack->pmesh->GetAMRLoadBalanceUpdateSeq()) {
++    initialized_ = false;
++  }
++#endif
++  if (!initialized_) {
++    InitializeBuffers(1);
++    const int nmb = pmy_pack->nmb_thispack, nn = pmy_pack->pmb->nnghbr;
++    auto trim = [&](int &sl, int &su, int &rl, int &ru, int lo, int hi) {
++      if (ru < lo) { sl = lo; su = lo+width_-1; rl = lo-width_; ru = lo-1; }
++      if (rl > hi) { sl = hi-width_+1; su = hi; rl = hi+1; ru = hi+width_; }
++    };
++    for (int n=0; n<nn; ++n) {
++      if (recvbuf[n].isame_ndat == 0) continue;
++      auto &s = sendbuf[n].isame[0];
++      auto &r = recvbuf[n].isame[0];
++      trim(s.bis,s.bie,r.bis,r.bie,q.is,q.ie);
++      trim(s.bjs,s.bje,r.bjs,r.bje,q.js,q.je);
++      trim(s.bks,s.bke,r.bks,r.bke,q.ks,q.ke);
++      sendbuf[n].isame_ndat = (s.bie-s.bis+1)*(s.bje-s.bjs+1)*(s.bke-s.bks+1);
++      recvbuf[n].isame_ndat = (r.bie-r.bis+1)*(r.bje-r.bjs+1)*(r.bke-r.bks+1);
++      // This object uses only integer storage; drop the generic Real buffers.
++      sendbuf[n].vars = DvceArray2D<Real>();
++      recvbuf[n].vars = DvceArray2D<Real>();
++    }
++    Kokkos::realloc(local_offset_,nmb*nn);
++    auto offsets = Kokkos::create_mirror_view(local_offset_);
++    int total = 0;
++    for (int m=0; m<nmb; ++m) for (int n=0; n<nn; ++n) {
++      offsets(m*nn+n) = -1;
++      const auto nb = pmy_pack->pmb->nghbr.h_view(m,n);
++      if (nb.gid >= 0 && nb.rank == global_variable::my_rank) {
++        offsets(m*nn+n) = total;
++        total += recvbuf[n].isame_ndat;
++      }
++    }
++    Kokkos::deep_copy(local_offset_,offsets);
++    Kokkos::realloc(local_recv_,std::max(1,total));
++#if MPI_PARALLEL_ENABLED
++    BuildRankPackedVarMetadata(1);
++    Kokkos::realloc(int_send_,rank_sendbuf_vars_.extent_int(0));
++    Kokkos::realloc(int_recv_,rank_recvbuf_vars_.extent_int(0));
++    rank_sendbuf_vars_ = DvceArray1D<Real>();
++    rank_recvbuf_vars_ = DvceArray1D<Real>();
++#endif
++    initialized_ = true;
++  }
++#if MPI_PARALLEL_ENABLED
++  std::fill(recv_var_reqs_.begin(),recv_var_reqs_.end(),MPI_REQUEST_NULL);
++  for (std::size_t i=0; i<recv_var_msgs_.size(); ++i) {
++    const auto &msg = recv_var_msgs_[i];
++    if (MPI_Irecv(int_recv_.data()+msg.offset,msg.data_size,MPI_INT,msg.rank,1,
++                  comm_vars,&recv_var_reqs_[i]) != MPI_SUCCESS) {
++      std::cerr << "MPI error posting integer CC receives\n";
++      std::exit(EXIT_FAILURE);
++    }
++  }
++#endif
++  return TaskStatus::complete;
++}
++
++TaskStatus MeshBoundaryValuesCCInt::PackAndSendIntCC(DvceArray4D<int> &a) {
++  const int nmb = pmy_pack->nmb_thispack, nn = pmy_pack->pmb->nnghbr;
++  const int rank = global_variable::my_rank;
++  auto nb = pmy_pack->pmb->nghbr.d_view;
++  auto gids = pmy_pack->pmb->mb_gid.d_view;
++  auto &sbuf = sendbuf;
++  auto local = local_recv_, offsets = local_offset_;
++#if MPI_PARALLEL_ENABLED
++  auto send = int_send_, sendoff = send_agg_offset_;
++#endif
++  Kokkos::parallel_for("SendIntCC",Kokkos::TeamPolicy<>(nmb*nn,Kokkos::AUTO),
++  KOKKOS_LAMBDA(TeamMember_t team) {
++    const int m = team.league_rank()/nn, n = team.league_rank()%nn;
++    if (nb(m,n).gid < 0) return;
++    const auto idx = sbuf[n].isame[0];
++    const int ni = idx.bie-idx.bis+1, nj = idx.bje-idx.bjs+1;
++    const int nk = idx.bke-idx.bks+1;
++    const int dm = nb(m,n).gid-gids(0), dn = nb(m,n).dest;
++    Kokkos::parallel_for(Kokkos::TeamThreadRange<>(team,nk*nj),[&](int kj) {
++      const int k = idx.bks+kj/nj, j = idx.bjs+kj%nj;
++      Kokkos::parallel_for(Kokkos::ThreadVectorRange(team,idx.bis,idx.bie+1),[&](int i) {
++        const int bi = i-idx.bis+ni*kj;
++        if (nb(m,n).rank == rank) {
++          local(offsets(dm*nn+dn)+bi) = a(m,k,j,i);
++        } else {
++#if MPI_PARALLEL_ENABLED
++          send(sendoff(m*nn+n)+bi) = a(m,k,j,i);
++#endif
++        }
++      });
++    });
++  });
++#if MPI_PARALLEL_ENABLED
++  Kokkos::fence();
++  std::fill(send_var_reqs_.begin(),send_var_reqs_.end(),MPI_REQUEST_NULL);
++  for (std::size_t i=0; i<send_var_msgs_.size(); ++i) {
++    const auto &msg = send_var_msgs_[i];
++    if (MPI_Isend(int_send_.data()+msg.offset,msg.data_size,MPI_INT,msg.rank,1,
++                  comm_vars,&send_var_reqs_[i]) != MPI_SUCCESS) {
++      std::cerr << "MPI error posting integer CC sends\n";
++      std::exit(EXIT_FAILURE);
++    }
++  }
++#endif
++  return TaskStatus::complete;
++}
++
++TaskStatus MeshBoundaryValuesCCInt::RecvAndUnpackIntCC(
++    DvceArray4D<int> &a, DvceArray4D<bool> &changed) {
++#if MPI_PARALLEL_ENABLED
++  bool pending = false;
++  for (auto &req : recv_var_reqs_) {
++    int complete;
++    if (MPI_Test(&req,&complete,MPI_STATUS_IGNORE) != MPI_SUCCESS) {
++      std::cerr << "MPI error testing integer CC receives\n";
++      std::exit(EXIT_FAILURE);
++    }
++    pending = pending || !complete;
++  }
++  if (pending) return TaskStatus::incomplete;
++  auto recv = int_recv_, recvoff = recv_agg_offset_;
++#endif
++  const int nmb = pmy_pack->nmb_thispack, nn = pmy_pack->pmb->nnghbr;
++  const int rank = global_variable::my_rank;
++  auto nb = pmy_pack->pmb->nghbr.d_view;
++  auto &rbuf = recvbuf;
++  auto local = local_recv_, offsets = local_offset_;
++  Kokkos::parallel_for("RecvIntCC",Kokkos::TeamPolicy<>(nmb*nn,Kokkos::AUTO),
++  KOKKOS_LAMBDA(TeamMember_t team) {
++    const int m = team.league_rank()/nn, n = team.league_rank()%nn;
++    if (nb(m,n).gid < 0) return;
++    const auto idx = rbuf[n].isame[0];
++    const int ni = idx.bie-idx.bis+1, nj = idx.bje-idx.bjs+1;
++    const int nk = idx.bke-idx.bks+1;
++    Kokkos::parallel_for(Kokkos::TeamThreadRange<>(team,nk*nj),[&](int kj) {
++      const int k = idx.bks+kj/nj, j = idx.bjs+kj%nj;
++      Kokkos::parallel_for(Kokkos::ThreadVectorRange(team,idx.bis,idx.bie+1),[&](int i) {
++        const int bi = i-idx.bis+ni*kj;
++        int tier = 0;
++        if (nb(m,n).rank == rank) tier = local(offsets(m*nn+n)+bi);
++#if MPI_PARALLEL_ENABLED
++        else tier = recv(recvoff(m*nn+n)+bi);
++#endif
++        changed(m,k,j,i) = tier > a(m,k,j,i);
++        a(m,k,j,i) = tier;
++      });
++    });
++  });
++  return TaskStatus::complete;
++}
+diff --git a/src/mhd/mhd.cpp b/src/mhd/mhd.cpp
+index a9d0cf3a4..52e774881 100644
+--- a/src/mhd/mhd.cpp
++++ b/src/mhd/mhd.cpp
+@@ -611,12 +611,14 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
+       }
+     }
+ 
+-    // Ghost-zone requirements for UCT.  The corner composition at an edge reads
+-    // `reach` faces to either side, and each of those faces was reconstructed from a
+-    // stencil of half-width `radius`, so the ghost layer has to cover both.
++    // Frozen base faces are reconstructed normally; edge composition samples them
++    // transversely. These supports lie on different axes, so take their maximum.
++    // L-HLLD also needs transverse velocity neighbors for its shock sensor.
++    const int frozen_ng_need = std::max(3, ReconEdgeReach(recon_method) +
++        (rsolver_method == MHD_RSolver::lhlld ? 1 : 0));
+     if (emf_method != MHD_EMF::ct_contact) {
+       int ng_need = ReconEdgeReach(recon_method) + ReconStencilRadius(recon_method);
+-      if (mood_frozen_emf) ng_need = 2*ReconStencilRadius(recon_method);
++      if (mood_frozen_emf) ng_need = frozen_ng_need;
+       if (ng_need < 3) { ng_need = 3; }
+       if (pmy_pack->pmesh->mb_indcs.ng < ng_need) {
+         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+@@ -666,9 +668,12 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
+       // halo grows by h_f per revision and the final one keeps h_f for the production
+       // CornerE: halo0 = h_f*nrevs.  With ct_contact (h_f = 1) this is the former
+       // h_f + nrevs - 1; UCT and production B interpolation have wider reach.
+-      mood_halo0 = h_f*mood_max_revs;
++      mood_halo0 = mood_frozen_emf ? 0 : h_f*mood_max_revs;
+       if (mood_frozen_emf) {
+-        mood_halo0 = pad_reach*mood_max_revs;
++        // Detection is owned-cell only. Ghost cascade levels come from their
++        // owners each revision; only the fixed magnetic averaging support remains.
++        mood_halo0 = 0;
++        mood_emf_halo = pad_reach-1;
+       }
+       // SED reads +/-3; the extra cell in ng_need covers the outer offset.
+       // Otherwise the stencil is the reconstruction half-width.
+@@ -679,12 +684,11 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
+       if (mood_halo0 + h_f > ng_need) {
+         ng_need = mood_halo0 + h_f;
+       }
+-      // The immutable high-order candidate is exchanged once before revisions.
+-      // PLM needs two cells; SED samples +/-3. Keep the SED-safe floor even if
+-      // SED is disabled. PAD also needs candidate CT faces for its B interpolant.
++      // Cached PLM EMFs extend r-1 for averaging and read two more input cells;
++      // L-HLLD's sensor reads one further cell. The frozen base bound covers both.
++      // SED is evaluated on owned cells and reads immutable inputs at +/-3.
+       if (mood_frozen_emf) {
+-        ng_need = std::max(2*ReconStencilRadius(recon_method),
+-                           mood_halo0 + std::max(3, pad_reach));
++        ng_need = frozen_ng_need;
+       }
+       auto &indcs = pmy_pack->pmesh->mb_indcs;
+       if (indcs.ng < ng_need) {
+@@ -823,6 +827,7 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
+         pbval_mood_prim = new MeshBoundaryValuesCC(ppack, pin, false);
+         pbval_mood_prim->InitializeBuffers(nmhd+3);
+         pbval_mood_candidate = new MeshBoundaryValuesCC(ppack, pin, false);
++        pbval_mood_flags = new MeshBoundaryValuesCCInt(ppack, pin, mood_emf_halo+1);
+         const int ndir = pmy_pack->pmesh->three_d ? 3 : 2;
+         pbval_mood_candidate->InitializeBuffers(ndir*nmhd+3);
+         Kokkos::realloc(mood_prim, nmb, nmhd+3, ncells3, ncells2, ncells1);
+@@ -905,6 +910,7 @@ MHD::~MHD() {
+   if (porb_b != nullptr) {delete porb_b;}
+   if (porb_u != nullptr) {delete porb_u;}
+   delete pbval_mood_candidate;
++  delete pbval_mood_flags;
+   delete pbval_mood_prim;
+   delete pbval_b;
+   delete pbval_u;
+diff --git a/src/mhd/mhd.hpp b/src/mhd/mhd.hpp
+index f9aae68fa..e73b357b4 100644
+--- a/src/mhd/mhd.hpp
++++ b/src/mhd/mhd.hpp
+@@ -189,10 +189,15 @@ class MHD {
+   bool mood_sed;
+   int n_fb_tiers;
+   int mood_halo0;
+-  // Frozen-EMF MOOD: immutable candidate exchange, then local PLM/DC revisions.
++  // Frozen EMFs: immutable candidate exchange, integer cascade exchange per revision.
+   bool mood_frozen_emf = false;
+   MeshBoundaryValuesCC *pbval_mood_prim = nullptr;
+   MeshBoundaryValuesCC *pbval_mood_candidate = nullptr;
++  MeshBoundaryValuesCCInt *pbval_mood_flags = nullptr;
++  int mood_emf_halo = 0;
++  int mood_revision = 0;
++  bool mood_wait_flags = false;
++  bool mood_revise = false;
+   DvceArray5D<Real> mood_prim, mood_candidate, mood_coarse;
+   DvceEdgeFld4D<Real> mood_eplm{"mood_eplm",1,1,1,1};
+   DvceEdgeFld4D<Real> mood_edc{"mood_edc",1,1,1,1};
+@@ -266,6 +271,7 @@ class MHD {
+   TaskStatus CopyCons(Driver *d, int stage);
+   TaskStatus Fluxes(Driver *d, int stage);
+   TaskStatus ApplyFallback(Driver *d, int stage);
++  TaskStatus RunFallback(Driver *d, int stage);
+   TaskStatus SendMOODPrimitives(Driver *d, int stage);
+   TaskStatus RecvMOODPrimitives(Driver *d, int stage);
+   TaskStatus SendMOODCandidate(Driver *d, int stage);
+diff --git a/src/mhd/mhd_mood.cpp b/src/mhd/mhd_mood.cpp
+index 05bb10474..4bf1a36ba 100644
+--- a/src/mhd/mhd_mood.cpp
++++ b/src/mhd/mhd_mood.cpp
+@@ -241,6 +241,7 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
+   const bool nad_vmag = (mood_nad_v == 1);    // |v| (else components)
+   const int n_fb = n_fb_tiers;
+   const int nrevs = mood_max_revs;
++  const bool initialize = !mood_frozen_emf || (mood_revision == 0 && !mood_revise);
+   const bool is_ideal_ = eos_.is_ideal;
+   const Real gm_ = eos_.gamma, cs_iso_ = eos_.iso_cs;   // WB velocity band scale
+ 
+@@ -259,9 +260,9 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
+   // In the frozen path its ghosts have been exchanged from their owners: copying
+   // them also avoids order reductions at the outer edge of a local face array.
+   // The candidate below uses the same averaging for both PAD and magnetic NAD.
+-  if (nad_avg && fv_bavg) {
++  if (initialize && nad_avg && fv_bavg) {
+     Kokkos::deep_copy(bcc_nad, bcc0);
+-  } else if (nad_avg) {
++  } else if (initialize && nad_avg) {
+     auto bn_ = bcc_nad;
+     const int n1m = ncells1-1, n2m = ncells2-1, n3m = ncells3-1;
+     const bool md = multi_d, td = three_d;
+@@ -279,7 +280,7 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
+ 
+   // |B| of the stage-input state, used for NAD bounds and SED in "mag" mode.  Filled
+   // over the full array so the SED stencil is covered anywhere detection runs.
+-  if (nad_bmag) {
++  if (initialize && nad_bmag) {
+     const auto bsrc_ = nad_avg ? bcc_nad : bcc0;
+     par_for("mood_bmag", DevExeSpace(), 0, nmb1, 0, ncells3-1, 0, ncells2-1,
+             0, ncells1-1,
+@@ -310,7 +311,7 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
+   // always takes the most robust flux.  Seeding fb_level to n_fb_tiers reproduces that
+   // exactly -- the revise pass maps t >= n_fb_tiers to donor-cell reconstruction -- and
+   // is what allows mood=true to run with BH excision at all.
+-  {
++  if (initialize) {
+     auto &excision_flux_ = pmy_pack->pcoord->excision_flux;
+     const bool excising = (pmy_pack->pcoord->is_general_relativistic &&
+                            pmy_pack->pcoord->coord_data.bh_excise);
+@@ -507,8 +508,8 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
+     Kokkos::deep_copy(dst.x2e, src.x2e);
+     Kokkos::deep_copy(dst.x3e, src.x3e);
+   };
+-  if (mood_frozen_emf) {
+-    const int h = mood_halo0, h2 = multi_d ? h : 0, h3 = three_d ? h : 0;
++  if (mood_frozen_emf && initialize) {
++    const int h = mood_emf_halo, h2 = multi_d ? h : 0, h3 = three_d ? h : 0;
+     auto compose = [&]() {
+       ComposeCornerEMF(is-h,ie+h+1,js-h2,je+h2+1,ks-h3,
+                        three_d ? ke+h3+1 : ks, false);
+@@ -565,10 +566,17 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
+       }
+     });
+   };
++  if (mood_frozen_emf && mood_revise) {
++    revise_faces(0, 0);
++    select_frozen_edges(mood_emf_halo);
++    return;
++  }
+   int ndemoted_total = 0;
+-  for (int rev=1; rev<=nrevs; ++rev) {
++  const int first_rev = mood_frozen_emf ? mood_revision+1 : 1;
++  const int last_rev = mood_frozen_emf ? first_rev : nrevs;
++  for (int rev=first_rev; rev<=last_rev; ++rev) {
+     const bool masked = touched_only && (rev > 1);
+-    const int dh = h_f*(nrevs-rev+1);
++    const int dh = mood_frozen_emf ? 0 : h_f*(nrevs-rev+1);
+     int il = is-dh, iu = ie+dh, jl = js, ju = je, kl = ks, ku = ke;
+     if (multi_d) { jl = js-dh; ju = je+dh; }
+     if (three_d) { kl = ks-dh; ku = ke+dh; }
+@@ -1095,6 +1103,10 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
+       }
+     }, Kokkos::Sum<int>(ndemoted), Kokkos::Sum<int>(ndemoted_int));
+ 
++    if (mood_frozen_emf) {
++      ndemoted_total += ndemoted_int;
++      break;  // exchange owner levels before revising shared faces and halo edges
++    }
+     if (ndemoted == 0) break;
+     ndemoted_total += ndemoted_int;
+ 
+diff --git a/src/mhd/mhd_mood_comm.cpp b/src/mhd/mhd_mood_comm.cpp
+index cc55c90b4..0dad8a4d8 100644
+--- a/src/mhd/mhd_mood_comm.cpp
++++ b/src/mhd/mhd_mood_comm.cpp
+@@ -63,6 +63,9 @@ TaskStatus MHD::SendMOODCandidate(Driver *pdrive, int stage) {
+   // Start each stage with the base-order edge stencil, independently of the
+   // previous stage's detector flags. This is the only base corner composition.
+   Kokkos::deep_copy(fb_level, 0);
++  mood_revision = 0;
++  mood_wait_flags = false;
++  mood_revise = false;
+   ComposeCornerEMF(q.is,q.ie+1,q.js,q.je+1,q.ks,td ? q.ke+1 : q.ks,false);
+   pbval_mood_candidate->InitRecv(off+3);
+   auto data = mood_candidate;
+diff --git a/src/mhd/mhd_tasks.cpp b/src/mhd/mhd_tasks.cpp
+index cfe12a0a9..f4a05023b 100644
+--- a/src/mhd/mhd_tasks.cpp
++++ b/src/mhd/mhd_tasks.cpp
+@@ -281,6 +281,31 @@ TaskStatus MHD::Fluxes(Driver *pdrive, int stage) {
+ }
+ 
+ TaskStatus MHD::ApplyFallback(Driver *pdrive, int stage) {
++  if (!mood_frozen_emf) return RunFallback(pdrive, stage);
++
++  // Yield this task while neighbors exchange scalar integer cascade levels.
++  // Every rank executes the same revision count; local early exit would omit
++  // remote demotions and could leave a peer waiting for a message.
++  if (!mood_wait_flags) {
++    mood_revise = false;
++    RunFallback(pdrive, stage);  // detect owned cells, one revision only
++    pbval_mood_flags->InitRecvIntCC();
++    pbval_mood_flags->PackAndSendIntCC(fb_level);
++    mood_wait_flags = true;
++  }
++  auto status = pbval_mood_flags->RecvAndUnpackIntCC(fb_level, fofc);
++  if (status != TaskStatus::complete) return status;
++  pbval_mood_flags->ClearSend();
++  pbval_mood_flags->ClearRecv();
++  mood_revise = true;
++  RunFallback(pdrive, stage);  // revise owned faces and the needed edge halo
++  mood_revise = false;
++  mood_wait_flags = false;
++  ++mood_revision;
++  return mood_revision == mood_max_revs ? TaskStatus::complete : TaskStatus::incomplete;
++}
++
++TaskStatus MHD::RunFallback(Driver *pdrive, int stage) {
+   // call the MOOD fallback or FOFC if necessary
+   if (use_mood) {
+     if (rsolver_method == MHD_RSolver::advect) {
+diff --git a/validation/frozen_emf_halo/ot_resolution/run_study.py b/validation/frozen_emf_halo/ot_resolution/run_study.py
+index 7972cacca..e3057cd1f 100644
+--- a/validation/frozen_emf_halo/ot_resolution/run_study.py
++++ b/validation/frozen_emf_halo/ot_resolution/run_study.py
+@@ -14,9 +14,11 @@ import time
+ import numpy as np
+ 
+ 
+-def input_deck(order, nx, block, tlim, solver='hlld', frozen=True, nghost=None, revisions=2, rtol=1.e-4, pre_pad_fix_halo=False):
++def input_deck(order, nx, block, tlim, solver='hlld', frozen=True, nghost=None, revisions=2, rtol=1.e-4, pre_pad_fix_halo=False, pre_cascade_exchange_halo=False):
+     reach=order//2
+-    ng=max(order,reach*revisions+max(3,reach)) if frozen else order*(revisions+1)
++    ng=max(3,reach+1) if frozen else order*(revisions+1)
++    if pre_cascade_exchange_halo:
++        ng=max(order,reach*revisions+max(3,reach)) if frozen else order*(revisions+1)
+     if pre_pad_fix_halo:
+         ng=max(order,revisions+3) if frozen else (reach+1)*(revisions+1)
+     if nghost is not None:ng=nghost
+@@ -187,24 +189,28 @@ def main():
+     ap.add_argument('--revisions',type=int,default=2)
+     ap.add_argument('--rtol',type=float,default=1.e-4)
+     ap.add_argument('--pre-pad-fix-halo',action='store_true',help='Historical halo policy for pre-correction executables only')
++    ap.add_argument('--pre-cascade-exchange-halo',action='store_true',help='Historical NR halo policy before integer cascade exchange')
+     ap.add_argument('--nghost',type=int,help='Override ghost count for a halo control')
+     ap.add_argument('--tlim',type=float,default=1.);ap.add_argument('--timeout',type=float,default=7200.)
+     ap.add_argument('--solver',choices=['hlld','hlle'],default='hlld')
+     ap.add_argument('--continue-after-floor',action='store_true')
+     ap.add_argument('--legacy',action='store_true');ap.add_argument('--resume',action='store_true')
+-    a=ap.parse_args();a.source=a.source.resolve();a.exe=a.exe.resolve();a.output=a.output.resolve();a.output.mkdir(parents=True,exist_ok=True)
++    a=ap.parse_args()
++    if a.pre_pad_fix_halo and a.pre_cascade_exchange_halo:
++        ap.error('Choose one historical halo policy')
++    a.source=a.source.resolve();a.exe=a.exe.resolve();a.output=a.output.resolve();a.output.mkdir(parents=True,exist_ok=True)
+     sys.path.insert(0,str(a.source/'vis/python'));import bin_convert as reader
+     report={'host':platform.node(),'cuda_visible_devices':os.environ.get('CUDA_VISIBLE_DEVICES'),
+        'executable_sha256':hashlib.sha256(a.exe.read_bytes()).hexdigest(),
+        'config':{'resolutions':a.resolutions,'orders':a.orders,'block':a.block,'nghost_override':a.nghost,'tlim':a.tlim,
+-                 'solver':a.solver,'frozen':not a.legacy,'cfl':.25,'nad':'rcfl','rtol':a.rtol,'max_revisions':a.revisions,'continue_after_floor':a.continue_after_floor,'pre_pad_fix_halo':a.pre_pad_fix_halo},'runs':[]}
++                 'solver':a.solver,'frozen':not a.legacy,'cfl':.25,'nad':'rcfl','rtol':a.rtol,'max_revisions':a.revisions,'continue_after_floor':a.continue_after_floor,'pre_pad_fix_halo':a.pre_pad_fix_halo,'pre_cascade_exchange_halo':a.pre_cascade_exchange_halo},'runs':[]}
+     for nx in map(int,a.resolutions.split(',')):
+         for order in map(int,a.orders.split(',')):
+             name=f'ot_fv{order}_n{nx}';d=a.output/name;d.mkdir(exist_ok=True)
+             resultfile=d/'result.json'
+             if a.resume and resultfile.exists():r=json.loads(resultfile.read_text())
+             else:
+-                (d/'input.athinput').write_text(input_deck(order,nx,a.block,a.tlim,a.solver,not a.legacy,a.nghost,a.revisions,a.rtol,a.pre_pad_fix_halo))
++                (d/'input.athinput').write_text(input_deck(order,nx,a.block,a.tlim,a.solver,not a.legacy,a.nghost,a.revisions,a.rtol,a.pre_pad_fix_halo,a.pre_cascade_exchange_halo))
+                 start=time.monotonic()
+                 code,reason=execute(a.exe,d,a.timeout,a.continue_after_floor)
+                 r={'name':name,'order':order,'nx':nx,'code':code,'stop_reason':reason,

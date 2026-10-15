@@ -611,12 +611,14 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
       }
     }
 
-    // Ghost-zone requirements for UCT.  The corner composition at an edge reads
-    // `reach` faces to either side, and each of those faces was reconstructed from a
-    // stencil of half-width `radius`, so the ghost layer has to cover both.
+    // Frozen base faces are reconstructed normally; edge composition samples them
+    // transversely. These supports lie on different axes, so take their maximum.
+    // L-HLLD also needs transverse velocity neighbors for its shock sensor.
+    const int frozen_ng_need = std::max(3, ReconEdgeReach(recon_method) +
+        (rsolver_method == MHD_RSolver::lhlld ? 1 : 0));
     if (emf_method != MHD_EMF::ct_contact) {
       int ng_need = ReconEdgeReach(recon_method) + ReconStencilRadius(recon_method);
-      if (mood_frozen_emf) ng_need = 2*ReconStencilRadius(recon_method);
+      if (mood_frozen_emf) ng_need = frozen_ng_need;
       if (ng_need < 3) { ng_need = 3; }
       if (pmy_pack->pmesh->mb_indcs.ng < ng_need) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -666,9 +668,12 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
       // halo grows by h_f per revision and the final one keeps h_f for the production
       // CornerE: halo0 = h_f*nrevs.  With ct_contact (h_f = 1) this is the former
       // h_f + nrevs - 1; UCT and production B interpolation have wider reach.
-      mood_halo0 = h_f*mood_max_revs;
+      mood_halo0 = mood_frozen_emf ? 0 : h_f*mood_max_revs;
       if (mood_frozen_emf) {
-        mood_halo0 = pad_reach*mood_max_revs;
+        // Detection is owned-cell only. Ghost cascade levels come from their
+        // owners each revision; only the fixed magnetic averaging support remains.
+        mood_halo0 = 0;
+        mood_emf_halo = pad_reach-1;
       }
       // SED reads +/-3; the extra cell in ng_need covers the outer offset.
       // Otherwise the stencil is the reconstruction half-width.
@@ -679,12 +684,11 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
       if (mood_halo0 + h_f > ng_need) {
         ng_need = mood_halo0 + h_f;
       }
-      // The immutable high-order candidate is exchanged once before revisions.
-      // PLM needs two cells; SED samples +/-3. Keep the SED-safe floor even if
-      // SED is disabled. PAD also needs candidate CT faces for its B interpolant.
+      // Cached PLM EMFs extend r-1 for averaging and read two more input cells;
+      // L-HLLD's sensor reads one further cell. The frozen base bound covers both.
+      // SED is evaluated on owned cells and reads immutable inputs at +/-3.
       if (mood_frozen_emf) {
-        ng_need = std::max(2*ReconStencilRadius(recon_method),
-                           mood_halo0 + std::max(3, pad_reach));
+        ng_need = frozen_ng_need;
       }
       auto &indcs = pmy_pack->pmesh->mb_indcs;
       if (indcs.ng < ng_need) {
@@ -823,6 +827,7 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
         pbval_mood_prim = new MeshBoundaryValuesCC(ppack, pin, false);
         pbval_mood_prim->InitializeBuffers(nmhd+3);
         pbval_mood_candidate = new MeshBoundaryValuesCC(ppack, pin, false);
+        pbval_mood_flags = new MeshBoundaryValuesCCInt(ppack, pin, mood_emf_halo+1);
         const int ndir = pmy_pack->pmesh->three_d ? 3 : 2;
         pbval_mood_candidate->InitializeBuffers(ndir*nmhd+3);
         Kokkos::realloc(mood_prim, nmb, nmhd+3, ncells3, ncells2, ncells1);
@@ -905,6 +910,7 @@ MHD::~MHD() {
   if (porb_b != nullptr) {delete porb_b;}
   if (porb_u != nullptr) {delete porb_u;}
   delete pbval_mood_candidate;
+  delete pbval_mood_flags;
   delete pbval_mood_prim;
   delete pbval_b;
   delete pbval_u;

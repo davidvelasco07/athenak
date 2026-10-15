@@ -1,0 +1,26 @@
+========= COMPUTE-SANITIZER
+
+Root grid = 1 x 1 x 1 MeshBlocks
+Total number of MeshBlocks = 1
+Number of logical  levels of refinement = 0 (1 levels total)
+Number of physical levels of refinement = 0 (1 levels total)
+Number of parallel ranks = 1
+### WARNING in /scratch/lustre/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/parameter_input.cpp: input parameter <mesh>/ix3_bc = periodic was not used by the code (check for a typo)
+### WARNING in /scratch/lustre/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/parameter_input.cpp: input parameter <mesh>/ox3_bc = periodic was not used by the code (check for a typo)
+### WARNING in /scratch/lustre/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/parameter_input.cpp: input parameter <meshblock>/nx3 = 1 was not used by the code (check for a typo)
+### WARNING in /scratch/lustre/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/parameter_input.cpp: input parameter <mhd>/mood_detect = true was not used by the code (check for a typo)
+### WARNING in /scratch/lustre/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/parameter_input.cpp: input parameter <problem>/pgen_name = orszag_tang was not used by the code (check for a typo)
+
+Setup complete, executing task list(s)...
+
+elapsed=7.090604e-02 cycle=0 time=0.000000e+00 dt=2.000000e-03
+
+Terminating on time limit
+time=2.000000e-03 cycle=1
+tlim=2.000000e-03 nlim=-1
+
+MeshBlock-cycles = 1
+cpu time used  = 2.579023e-01
+zone-cycles/cpu_second = 3.970496e+03
+particle-updates/cpu_second = 0.000000e+00
+========= ERROR SUMMARY: 0 errors

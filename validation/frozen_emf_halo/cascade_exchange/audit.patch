@@ -1,0 +1,89 @@
+--- a/src/mhd/mhd_mood.cpp
++++ b/src/mhd/mhd_mood.cpp
+@@ -38,6 +38,8 @@
+ //! the final-iteration halo equals the transverse reach of the edge composition.
+ 
+ #include <algorithm>
++#include <fstream>
++#include "globals.hpp"
+ 
+ #include "athena.hpp"
+ #include "mesh/mesh.hpp"
+@@ -241,6 +243,13 @@
+   const bool nad_vmag = (mood_nad_v == 1);    // |v| (else components)
+   const int n_fb = n_fb_tiers;
+   const int nrevs = mood_max_revs;
++  const int axn = pmy_pack->pmesh->mesh_indcs.nx1;
++  const int ayn = pmy_pack->pmesh->mesh_indcs.nx2;
++  const int azn = pmy_pack->pmesh->mesh_indcs.nx3;
++  const Real axmin = pmy_pack->pmesh->mesh_size.x1min;
++  const Real aymin = pmy_pack->pmesh->mesh_size.x2min;
++  const Real azmin = pmy_pack->pmesh->mesh_size.x3min;
++  const int ar = mhd_bcc::Reach(recon_method);
+   const bool initialize = !mood_frozen_emf || (mood_revision == 0 && !mood_revise);
+   const bool is_ideal_ = eos_.is_ideal;
+   const Real gm_ = eos_.gamma, cs_iso_ = eos_.iso_cs;   // WB velocity band scale
+@@ -571,6 +580,27 @@
+     select_frozen_edges(mood_emf_halo);
+     return;
+   }
++  auto dump_candidate = [&](int rev) {
++    auto U = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),utest_);
++    auto B = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),bcctest_);
++    auto L = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),fb_level_);
++    auto S = size_.h_view;
++    std::string name = "audit_s"+std::to_string(stage)+"_r"+std::to_string(rev)
++        +"_rank"+std::to_string(global_variable::my_rank)+".dat";
++    std::ofstream out(name,std::ios::binary);
++    for (int m=0; m<nmb; ++m) {
++      const int ox = static_cast<int>(std::round((S(m).x1min-axmin)/S(m).dx1));
++      const int oy = static_cast<int>(std::round((S(m).x2min-aymin)/S(m).dx2));
++      const int oz = three_d ? static_cast<int>(std::round((S(m).x3min-azmin)/S(m).dx3)) : 0;
++      for (int k=ks; k<=ke; ++k) for (int j=js; j<=je; ++j) for (int i=is; i<=ie; ++i) {
++        double row[12];row[0]=ox+i-is;row[1]=oy+j-js;row[2]=oz+k-ks;
++        for (int n=0; n<5; ++n) row[3+n]=U(m,n,k,j,i);
++        for (int n=0; n<3; ++n) row[8+n]=B(m,n,k,j,i);
++        row[11]=L(m,k,j,i);
++        out.write(reinterpret_cast<const char*>(row),sizeof(row));
++      }
++    }
++  };
+   int ndemoted_total = 0;
+   const int first_rev = mood_frozen_emf ? mood_revision+1 : 1;
+   const int last_rev = mood_frozen_emf ? first_rev : nrevs;
+@@ -1093,6 +1123,16 @@
+         }
+       }
+ 
++      int gx = static_cast<int>(round((size_.d_view(m).x1min-axmin)/size_.d_view(m).dx1))+i-is;
++      int gy = static_cast<int>(round((size_.d_view(m).x2min-aymin)/size_.d_view(m).dx2))+j-js;
++      int gz = three_d ? static_cast<int>(round((size_.d_view(m).x3min-azmin)/size_.d_view(m).dx3))+k-ks : 0;
++      gx=(gx%axn+axn)%axn;gy=(gy%ayn+ayn)%ayn;gz=(gz%azn+azn)%azn;
++      // Force PLM then DC at cells r beyond a block's last owned cell. A second
++      // pair of revisions moves the repair across the next interface. Also force
++      // the periodic corner, including the z corner in 3D.
++      const int target = (7+ar+(rev>=3 ? 8 : 0))%axn;
++      trouble = (gx==target && gy==7 && (!three_d || gz==7)) ||
++          (rev<=2 && gx==axn-1 && gy==ayn-1 && (!three_d || gz==azn-1));
+       fofc_(m,k,j,i) = trouble;
+       if (trouble) {
+         fb_level_(m,k,j,i) += 1;
+@@ -1103,6 +1143,7 @@
+       }
+     }, Kokkos::Sum<int>(ndemoted), Kokkos::Sum<int>(ndemoted_int));
+ 
++    dump_candidate(rev);
+     if (mood_frozen_emf) {
+       ndemoted_total += ndemoted_int;
+       break;  // exchange owner levels before revising shared faces and halo edges
+--- a/src/mhd/mhd.cpp
++++ b/src/mhd/mhd.cpp
+@@ -827,7 +827,7 @@
+         pbval_mood_prim = new MeshBoundaryValuesCC(ppack, pin, false);
+         pbval_mood_prim->InitializeBuffers(nmhd+3);
+         pbval_mood_candidate = new MeshBoundaryValuesCC(ppack, pin, false);
+-        pbval_mood_flags = new MeshBoundaryValuesCCInt(ppack, pin, mood_emf_halo+1);
++        pbval_mood_flags = new MeshBoundaryValuesCCInt(ppack, pin, std::getenv("MOOD_AUDIT_SHORT_FLAGS") ? 1 : mood_emf_halo+1);
+         const int ndir = pmy_pack->pmesh->three_d ? 3 : 2;
+         pbval_mood_candidate->InitializeBuffers(ndir*nmhd+3);
+         Kokkos::realloc(mood_prim, nmb, nmhd+3, ncells3, ncells2, ncells1);
