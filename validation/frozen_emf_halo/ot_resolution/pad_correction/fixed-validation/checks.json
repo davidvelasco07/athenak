@@ -1,0 +1,42 @@
+[
+  {
+    "case": "fv4_n512",
+    "nghost": 11,
+    "clean": true,
+    "code": 0,
+    "energy_floors": 0,
+    "pad_rejections": 4
+  },
+  {
+    "case": "fv4_n128_b64",
+    "nghost": 11,
+    "clean": true,
+    "code": 0,
+    "energy_floors": 0,
+    "pad_rejections": 8
+  },
+  {
+    "case": "fv4_n128_b32",
+    "nghost": 11,
+    "clean": true,
+    "code": 0,
+    "energy_floors": 0,
+    "pad_rejections": 16
+  },
+  {
+    "case": "fv6_n128",
+    "nghost": 15,
+    "clean": true,
+    "code": 0,
+    "energy_floors": 0,
+    "pad_rejections": 2
+  },
+  {
+    "case": "fv8_n128",
+    "nghost": 20,
+    "clean": true,
+    "code": 0,
+    "energy_floors": 0,
+    "pad_rejections": 168
+  }
+]

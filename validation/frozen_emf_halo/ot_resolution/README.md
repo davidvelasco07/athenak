@@ -1,5 +1,10 @@
 # Orszag–Tang resolution robustness study
 
+The [PAD correction](pad_correction/README.md) now passes the FV4 512² GPU
+regression to t = 1. The historical sweep in this document used the uncorrected
+executable. Use `--pre-pad-fix-halo` with its pinned numerical source when
+reproducing its old ghost counts; current NR ghost requirements are larger.
+
 The [new four-revision report](four_revision_rtol1e8/README.md) records the ongoing
 `1e-8` sweep through 4096², including a detector consistency audit. Floor counters
 in this historical study include ghost cells; their physical-cell classification

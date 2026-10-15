@@ -1,0 +1,132 @@
+{
+  "production_initial_state": {
+    "all_identical": true,
+    "files": [
+      {
+        "file": "ot.mhd_divb.00000.bin",
+        "time": 0.0,
+        "identical": true
+      },
+      {
+        "file": "ot.mhd_fb_level.00000.bin",
+        "time": 0.0,
+        "identical": true
+      },
+      {
+        "file": "ot.mhd_u_bcc.00000.bin",
+        "time": 0.0,
+        "identical": true
+      },
+      {
+        "file": "ot.mhd_w.00000.bin",
+        "time": 0.0,
+        "identical": true
+      }
+    ]
+  },
+  "blocks32_vs64": {
+    "all_identical": true,
+    "files": [
+      {
+        "file": "ot.mhd_divb.00000.bin",
+        "time": 0.0,
+        "identical": true
+      },
+      {
+        "file": "ot.mhd_divb.00001.bin",
+        "time": 0.2506325013400715,
+        "identical": true
+      },
+      {
+        "file": "ot.mhd_divb.00002.bin",
+        "time": 0.5004000065044614,
+        "identical": true
+      },
+      {
+        "file": "ot.mhd_divb.00003.bin",
+        "time": 0.7503601012453092,
+        "identical": true
+      },
+      {
+        "file": "ot.mhd_divb.00004.bin",
+        "time": 1.0,
+        "identical": true
+      },
+      {
+        "file": "ot.mhd_fb_level.00000.bin",
+        "time": 0.0,
+        "identical": true
+      },
+      {
+        "file": "ot.mhd_fb_level.00001.bin",
+        "time": 0.2506325013400715,
+        "identical": true
+      },
+      {
+        "file": "ot.mhd_fb_level.00002.bin",
+        "time": 0.5004000065044614,
+        "identical": true
+      },
+      {
+        "file": "ot.mhd_fb_level.00003.bin",
+        "time": 0.7503601012453092,
+        "identical": true
+      },
+      {
+        "file": "ot.mhd_fb_level.00004.bin",
+        "time": 1.0,
+        "identical": true
+      },
+      {
+        "file": "ot.mhd_u_bcc.00000.bin",
+        "time": 0.0,
+        "identical": true
+      },
+      {
+        "file": "ot.mhd_u_bcc.00001.bin",
+        "time": 0.2506325013400715,
+        "identical": true
+      },
+      {
+        "file": "ot.mhd_u_bcc.00002.bin",
+        "time": 0.5004000065044614,
+        "identical": true
+      },
+      {
+        "file": "ot.mhd_u_bcc.00003.bin",
+        "time": 0.7503601012453092,
+        "identical": true
+      },
+      {
+        "file": "ot.mhd_u_bcc.00004.bin",
+        "time": 1.0,
+        "identical": true
+      },
+      {
+        "file": "ot.mhd_w.00000.bin",
+        "time": 0.0,
+        "identical": true
+      },
+      {
+        "file": "ot.mhd_w.00001.bin",
+        "time": 0.2506325013400715,
+        "identical": true
+      },
+      {
+        "file": "ot.mhd_w.00002.bin",
+        "time": 0.5004000065044614,
+        "identical": true
+      },
+      {
+        "file": "ot.mhd_w.00003.bin",
+        "time": 0.7503601012453092,
+        "identical": true
+      },
+      {
+        "file": "ot.mhd_w.00004.bin",
+        "time": 1.0,
+        "identical": true
+      }
+    ]
+  }
+}

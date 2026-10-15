@@ -72,10 +72,13 @@ def main():
             files=sorted((run/'bin').glob('*.mhd_w.*.bin'))
             index=int(round(a.snapshot_time/.25))
             if len(files)<=index:
+                reason=('Final PAD rejected the candidate' if r.get('final_pad_rejection') else
+                        'Stopped after energy-floor detection' if r.get('energy_floors',0) else
+                        'Run ended before the requested output')
                 for b in (ax,fx):
                     b.set_facecolor('#edf0f2')
                     b.set_title(f'FV{order}, {nx}²',fontsize=9)
-                    b.text(.5,.5,f'No t = {a.snapshot_time:g} output\nStopped after energy-floor detection',ha='center',va='center',transform=b.transAxes,fontsize=8,color='#853237')
+                    b.text(.5,.5,f'No t = {a.snapshot_time:g} output\n{reason}',ha='center',va='center',transform=b.transAxes,fontsize=8,color='#853237')
                     b.set_xticks([]);b.set_yticks([]);b.set_aspect('equal')
                 continue
             meta,fields=assemble(files[index],reader);rho=fields['dens'][0]
@@ -119,7 +122,7 @@ def main():
           'common_plm_fraction':common.get('tier_fractions',{}).get('1'),
           'common_dc_fraction':common.get('tier_fractions',{}).get('2')})
     with (a.output/'summary.csv').open('w') as f:
-        w=csv.DictWriter(f,fieldnames=list(rows[0]));w.writeheader();w.writerows(rows)
+        w=csv.DictWriter(f,fieldnames=list(rows[0]),lineterminator='\n');w.writeheader();w.writerows(rows)
     print('PLOTS_COMPLETE',flush=True)
 
 if __name__=='__main__':main()

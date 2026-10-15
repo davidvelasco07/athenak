@@ -1,0 +1,13 @@
+{
+  "numerical_base": "903b6b9606a440ab2476aa49c17775e74e9ba7d9",
+  "files": {
+    "src/eos/ideal_mhd.cpp": "446a6de25068b3f1a03815ef51b70e15b3f321255e30cdbc5bdd487aed2d01d4",
+    "src/eos/mhd_bcc.hpp": "f20f27ea96eb2ff816bb969c474b25d916e0a5a9b5583e86628bc5174fa92279",
+    "src/mhd/mhd.cpp": "888a5acde5789d5426c8b72d2035fc83952ef5aa63f773ea3098da98498c673a",
+    "src/mhd/mhd.hpp": "ccfc0f50a6183ac9ff724d9bbf9f9b26e1771af094e54cc7b18903b4d0f34d19",
+    "src/mhd/mhd_fluxes.cpp": "c5416128bd995ab20de22ad9c96865820721f6fe066978dc80ace21996d6548d",
+    "src/mhd/mhd_mood.cpp": "e246641b02eff2633ca98b636f24049fcf0469133c032f9eb8df8b04d88fb8f4",
+    "src/mhd/mhd_tasks.cpp": "599a8ffd0d5a7d78f16971c4fa7060e9a1439464dc848f1d8be2a598a7870a5e"
+  },
+  "patch_sha256": "b12804820b4b40ec18580236b03d7c461e7a7df80cdf1dc8ad87029afe9f0a29"
+}

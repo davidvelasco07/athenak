@@ -88,10 +88,21 @@ to the earlier five-ghost run: conserved fields, primitive fields, fallback leve
 and div B at all five saved times. This rules out the change from five to seven
 ghosts as the source of this FV4 512² regression at these settings.
 
-The input, result and field comparison are under `controls/`.
-Separate two-revision 1e-8 and four-revision 1e-4 controls remain in progress on
-Apollo under `ot-resolution/factor-controls`; they are not needed to establish
-the magnetic-energy mismatch, but separate the two parameter changes.
+All fixed-halo parameter controls have now completed:
+
+| Revisions | Local rcfl tolerance | Ghosts | Outcome at FV4 512² |
+|---:|---:|---:|---|
+| 2 | 1e-4 | 7 | Clean to t = 1 |
+| 4 | 1e-4 | 7 | Clean to t = 1 |
+| 2 | 1e-8 | 7 | Energy floor, first cycle 4860, t = 0.8400127–0.8411955 |
+| 4 | 1e-8 | 7 | Energy floor, first cycle 5263, t = 0.8834502–0.8844739 |
+
+At this resolution, tightening tolerance changes both revision counts from clean
+to counted floors; four revisions delay the first floor at 1e-8. The four-revision
+event is confirmed to be in physical cells by the instrumentation above. The
+two-revision event still lacks a dedicated physical/ghost classification.
+Exact control inputs and results are under `controls/`; the four-revision 1e-8
+record is the primary run and its instrumented reproduction.
 
 ## Additional relativistic velocity check
 

@@ -26,8 +26,9 @@
 //!
 //! mood_frozen_emf exchanges the initial candidate and caches PLM/DC EMFs, then replaces
 //! only edges adjacent to demoted cells. Untouched high-order edges are retained.
-//! This is the default for supported uniform periodic NR/SR/GR cases and has a
-//! one-cell revision reach; see
+//! This is the default for supported uniform periodic NR/SR/GR cases. Edge selection
+//! has one-cell reach; Newtonian PAD additionally needs the production B interpolant.
+//! See
 //! validation/frozen_emf_halo/README.md for the measured bounds and limitations.
 //!
 //! Cross-block consistency (legacy recomposition path): shared-edge EMFs are
@@ -37,12 +38,15 @@
 //! the final-iteration halo equals the transverse reach of the edge composition.
 
 #include <algorithm>
+#include <cstdlib>
+#include <iostream>
 
 #include "athena.hpp"
 #include "mesh/mesh.hpp"
 #include "driver/driver.hpp"
 #include "coordinates/coordinates.hpp"
 #include "eos/eos.hpp"
+#include "eos/mhd_bcc.hpp"
 #include "reconstruct/recon.hpp"
 #include "mhd/rsolvers/solve_face_mhd.hpp"
 #include "mhd/mhd_wb.hpp"
@@ -134,6 +138,56 @@ Real SEDAlpha4(const DvceArray4D<Real> &q, const int m,
 
 } // namespace
 
+// Check owned cells after the final revision, CT, and both U/B boundary phases.
+// This uses the actual accepted faces and the production C2P interpolant, including
+// cells already at the bottom tier. A revision limit must not silently accept an
+// inadmissible state or rely on a subsequent EOS floor to repair it.
+TaskStatus MHD::CheckMOODAcceptedState(Driver *pdriver, int stage) {
+  const auto q = pmy_pack->pmesh->mb_indcs;
+  const int nmb1 = pmy_pack->nmb_thispack-1;
+  const int n1 = bcc0.extent_int(4), n2 = bcc0.extent_int(3);
+  const int n3 = bcc0.extent_int(2), nv = nmhd+nscalars;
+  const bool ho = peos->eos_data.is_ideal &&
+      !pmy_pack->pcoord->is_special_relativistic &&
+      !pmy_pack->pcoord->is_general_relativistic && emf_method != MHD_EMF::ct_contact;
+  const auto recon = recon_method;
+  auto bx = b0.x1f, by = b0.x2f, bz = b0.x3f;
+  auto bc = bcctest;
+  par_for("mood_accepted_bcc", DevExeSpace(), 0,nmb1,q.ks,q.ke,q.js,q.je,q.is,q.ie,
+  KOKKOS_LAMBDA(const int m,const int k,const int j,const int i) {
+    bc(m,IBX,k,j,i) = ho ? mhd_bcc::CellCenteredComponent(
+        recon,bx,m,k,j,i,0,0,1,0,n1-1) : 0.5*(bx(m,k,j,i)+bx(m,k,j,i+1));
+    bc(m,IBY,k,j,i) = ho ? mhd_bcc::CellCenteredComponent(
+        recon,by,m,k,j,i,0,1,0,0,n2-1) : 0.5*(by(m,k,j,i)+by(m,k,j+1,i));
+    bc(m,IBZ,k,j,i) = ho ? mhd_bcc::CellCenteredComponent(
+        recon,bz,m,k,j,i,1,0,0,0,n3-1) : 0.5*(bz(m,k,j,i)+bz(m,k+1,j,i));
+  });
+  Kokkos::deep_copy(fofc,false);
+  peos->use_c2p_mask = false;
+  peos->ConsToPrim(u0,b0,w0,bcctest,true,q.is,q.ie,q.js,q.je,q.ks,q.ke);
+  auto flags = fofc;
+  auto u = u0;
+  int bad = 0;
+  const int ni = q.ie-q.is+1, nj = q.je-q.js+1, nk = q.ke-q.ks+1;
+  Kokkos::parallel_reduce("mood_accepted_pad",
+      Kokkos::RangePolicy<>(DevExeSpace(),0,(nmb1+1)*nk*nj*ni),
+  KOKKOS_LAMBDA(const int idx,int &sum) {
+    const int i = idx%ni+q.is, j = (idx/ni)%nj+q.js;
+    const int k = (idx/(ni*nj))%nk+q.ks, m = idx/(ni*nj*nk);
+    bool danger = flags(m,k,j,i);
+    for (int n=0; n<nv; ++n) danger = danger || !isfinite(u(m,n,k,j,i));
+    for (int n=0; n<3; ++n) danger = danger || !isfinite(bc(m,n,k,j,i));
+    if (danger) ++sum;
+  }, Kokkos::Sum<int>(bad));
+  if (bad != 0) {
+    std::cerr << "MOOD final PAD rejected " << bad << " owned cells after CT and "
+              << "boundary synchronization at cycle " << pmy_pack->pmesh->ncycle
+              << ", stage " << stage << "; no EOS floor repair is accepted.\n";
+    std::exit(EXIT_FAILURE);
+  }
+  return TaskStatus::complete;
+}
+
 //----------------------------------------------------------------------------------------
 //! \fn void MHD::MOODLoop
 //! \brief detect/demote/revise loop described in the file header.
@@ -165,6 +219,10 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
   auto &coord_ = pmy_pack->pcoord->coord_data;
   const bool newtonian = !(pmy_pack->pcoord->is_special_relativistic ||
                            pmy_pack->pcoord->is_general_relativistic);
+  const bool ho_pad = newtonian && peos->eos_data.is_ideal && multi_d &&
+      emf_method != MHD_EMF::ct_contact;
+  const int pad_extra = ho_pad ? mhd_bcc::Reach(recon_method)-1 : 0;
+  const auto pad_recon = recon_method;
 
   auto &u0_ = u0;
   auto &u1_ = u1;
@@ -205,6 +263,7 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
   auto b0x1 = b0.x1f;
   auto b0x2 = b0.x2f;
   auto b0x3 = b0.x3f;
+  auto btpad1 = b0_test.x1f, btpad2 = b0_test.x2f, btpad3 = b0_test.x3f;
   auto flx1 = uflx.x1f;
   auto flx2 = uflx.x2f;
   auto flx3 = uflx.x3f;
@@ -282,9 +341,8 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
     });
   }
 
-  // Light-cone halo: the final iteration retains h_f = mood_halo0 - nrevs + 1 cells,
-  // the transverse reach of the corner-EMF composition (see mhd.cpp).
-  const int h_f = mood_frozen_emf ? 1 : mood_halo0/nrevs;   // composition reach per revision (mhd.cpp)
+  // The shrinking halo covers edge composition and the production B interpolant.
+  const int h_f = mood_halo0/nrevs;
 
   const int ndi = 1;
   const int ndj = (multi_d) ? 1 : 0;
@@ -327,7 +385,8 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
   // edge EMF reads faces i-reach..i+reach-1 (cells within reach+1), and the CT update
   // plus the cell average add one more cell.  Every other cell keeps its accepted
   // candidate and flags from the previous pass, so the result is bitwise identical.
-  const bool touched_only = mood_touched_only;
+  // The wider candidate face field must be initialized throughout PAD's stencil.
+  const bool touched_only = mood_touched_only && !ho_pad;
   auto touched_ = mood_touched;
   auto tmp_ = mood_tmp;
   const int r_touch = (uct_fl > 0 && multi_d) ? ReconEdgeReach(recon_method) + 2 : 1;
@@ -557,7 +616,7 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
   int ndemoted_total = 0;
   for (int rev=1; rev<=nrevs; ++rev) {
     const bool masked = touched_only && (rev > 1);
-    const int dh = mood_frozen_emf ? std::max(0, mood_halo0-rev+1) : h_f*(nrevs-rev+1);   // light-cone halo of this revision
+    const int dh = h_f*(nrevs-rev+1);
     int il = is-dh, iu = ie+dh, jl = js, ju = je, kl = ks, ku = ke;
     if (multi_d) { jl = js-dh; ju = je+dh; }
     if (three_d) { kl = ks-dh; ku = ke+dh; }
@@ -664,7 +723,8 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
     // (1a-UCT) Overwrite the INTERIOR candidate cell-averaged B with the GENUINE staggered
     // CT update: compose the candidate corner EMFs (identical code to CornerE, honouring
     // the current fb_level demotion), CT-update the candidate face-B (mhd_ct.cpp), and
-    // average to cell centers.  The detector then sees the real evolved field -- including
+    // interpolate to cell centers with the production C2P operator. The detector sees
+    // the real evolved field -- including
     // the corner-EMF composition where the UCT dissipation coefficient can run away -- not
     // the FOFC face-E proxy above.  Composed over the full light-cone halo (the flux
     // kernels extend the UCT face data by mood_halo0 for this), so it is identical on
@@ -675,12 +735,18 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
       // out to this reach (mhd_fluxes.cpp), so every halo cell sees the same composed
       // candidate as the neighbouring block's interior and the demotion pattern is
       // block-decomposition invariant.
-      if (!mood_frozen_emf) ComposeCornerEMF(il, iu+1, jl, ju+1, kl, (three_d ? ku+1 : ks), masked);
+      const int px = pad_extra, py = multi_d ? pad_extra : 0;
+      const int pz = three_d ? pad_extra : 0;
+      if (!mood_frozen_emf) {
+        ComposeCornerEMF(il-px, iu+1+px, jl-py, ju+1+py, kl-pz,
+                         (three_d ? ku+1+pz : ks), masked);
+      }
       auto bt1 = b0_test.x1f;  auto bt2 = b0_test.x2f;  auto bt3 = b0_test.x3f;
       auto e1c = efld.x1e;  auto e2c = efld.x2e;  auto e3c = efld.x3e;
       const bool td = three_d;
       // CT update of candidate face-B (mirrors mhd_ct.cpp)
-      par_for("mmood_ctB1", DevExeSpace(), 0, nmb1, kl, ku, jl, ju, il, iu+1,
+      par_for("mmood_ctB1", DevExeSpace(), 0, nmb1, kl-pz, ku+pz,
+              jl-py, ju+py, il-px, iu+1+px,
       KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
         if (masked && !touched_(m,k,j,i)) return;
         Real b = gam0*b0x1(m,k,j,i) + gam1*b1_.x1f(m,k,j,i);
@@ -692,7 +758,8 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
         if (td) b += beta_dt*(e2c(m,k+1,j,i) - e2c(m,k,j,i))/size_.d_view(m).dx3;
         bt1(m,k,j,i) = b;
       });
-      par_for("mmood_ctB2", DevExeSpace(), 0, nmb1, kl, ku, jl, ju+1, il, iu,
+      par_for("mmood_ctB2", DevExeSpace(), 0, nmb1, kl-pz, ku+pz,
+              jl-py, ju+1+py, il-px, iu+px,
       KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
         if (masked && !touched_(m,k,j,i)) return;
         Real b = gam0*b0x2(m,k,j,i) + gam1*b1_.x2f(m,k,j,i);
@@ -704,7 +771,8 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
         if (td) b -= beta_dt*(e1c(m,k+1,j,i) - e1c(m,k,j,i))/size_.d_view(m).dx3;
         bt2(m,k,j,i) = b;
       });
-      par_for("mmood_ctB3", DevExeSpace(), 0, nmb1, kl, ku+td, jl, ju, il, iu,
+      par_for("mmood_ctB3", DevExeSpace(), 0, nmb1, kl-pz, ku+1+pz,
+              jl-py, ju+py, il-px, iu+px,
       KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
         if (masked && !touched_(m,k,j,i)) return;
         Real b = gam0*b0x3(m,k,j,i) + gam1*b1_.x3f(m,k,j,i);
@@ -738,6 +806,14 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
           bcctest_(m,IBY,k,j,i) = 0.5*(bt2(m,k,j,i) + bt2(m,k,j+1,i));
           bcctest_(m,IBZ,k,j,i) = (td) ? 0.5*(bt3(m,k,j,i) + bt3(m,k+1,j,i))
                                        : bt3(m,k,j,i);
+        }
+        if (ho_pad) {
+          bcctest_(m,IBX,k,j,i) = mhd_bcc::CellCenteredComponent(
+              pad_recon, bt1, m,k,j,i, 0,0,1, 0,ncells1-1);
+          bcctest_(m,IBY,k,j,i) = mhd_bcc::CellCenteredComponent(
+              pad_recon, bt2, m,k,j,i, 0,1,0, 0,ncells2-1);
+          bcctest_(m,IBZ,k,j,i) = mhd_bcc::CellCenteredComponent(
+              pad_recon, bt3, m,k,j,i, 1,0,0, 0,ncells3-1);
         }
       });
     }
@@ -812,6 +888,22 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
       // NAD passes: 0 = density, 1 = internal energy (ideal gas), then B (|B| in mag
       // mode, three components in comps mode).  Bounds from the stage-input state.
       if (!trouble && lv < 1) {
+        // Magnetic NAD compares the face-average candidate with its face-average
+        // reference. Energy/PAD above instead use the production C2P interpolant.
+        Real bn1 = bcctest_(m,IBX,k,j,i), bn2 = bcctest_(m,IBY,k,j,i);
+        Real bn3 = bcctest_(m,IBZ,k,j,i);
+        if (ho_pad) {
+          bn1 = 0.5*(btpad1(m,k,j,i) + btpad1(m,k,j,i+1));
+          bn2 = 0.5*(btpad2(m,k,j,i) + btpad2(m,k,j+1,i));
+          bn3 = three_d ? 0.5*(btpad3(m,k,j,i) + btpad3(m,k+1,j,i))
+                        : btpad3(m,k,j,i);
+          if (wb) {
+            bn1 += bcceq_(m,IBX,k,j,i) - 0.5*(beq1(m,k,j,i)+beq1(m,k,j,i+1));
+            bn2 += bcceq_(m,IBY,k,j,i) - 0.5*(beq2(m,k,j,i)+beq2(m,k,j+1,i));
+            bn3 += bcceq_(m,IBZ,k,j,i) - (three_d ?
+                0.5*(beq3(m,k,j,i)+beq3(m,k+1,j,i)) : beq3(m,k,j,i));
+          }
+        }
         // full candidate density (WB: U' + U_eq) for the velocity/energy divisions
         const Real dtst = utest_(m,IDN,k,j,i) + (wb ? ueq_(m,IDN,k,j,i) : 0.0);
         const int npass_he = (is_ideal_ && nad_energy) ? 2 : 1;
@@ -848,14 +940,14 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
                     - (wb ? weq_(m,IEN,k,j,i) : 0.0);
             }
           } else if (nad_bmag) {
-            q_new = sqrt(SQR(bcctest_(m,IBX,k,j,i)) + SQR(bcctest_(m,IBY,k,j,i))
-                       + SQR(bcctest_(m,IBZ,k,j,i)));
+            q_new = sqrt(SQR(bn1) + SQR(bn2) + SQR(bn3));
             if (wb) {   // signed delta|B|
               q_new -= sqrt(SQR(bcceq_(m,IBX,k,j,i)) + SQR(bcceq_(m,IBY,k,j,i))
                           + SQR(bcceq_(m,IBZ,k,j,i)));
             }
           } else {
-            q_new = bcctest_(m,IBX+bidx,k,j,i) - (wb ? bcceq_(m,IBX+bidx,k,j,i) : 0.0);
+            q_new = ((bidx == 0) ? bn1 : (bidx == 1) ? bn2 : bn3)
+                  - (wb ? bcceq_(m,IBX+bidx,k,j,i) : 0.0);
           }
           // DMP bounds from the stage-input state over the neighborhood; with WB the
           // bounds are on the perturbation and the tolerance scale smn/smx on the full

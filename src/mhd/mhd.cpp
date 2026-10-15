@@ -14,6 +14,7 @@
 #include "parameter_input.hpp"
 #include "mesh/mesh.hpp"
 #include "eos/eos.hpp"
+#include "eos/mhd_bcc.hpp"
 #include "diffusion/viscosity.hpp"
 #include "diffusion/resistivity.hpp"
 #include "diffusion/conduction.hpp"
@@ -658,15 +659,22 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
       if (emf_method != MHD_EMF::ct_contact) {
         h_f = ReconEdgeReach(recon_method);
       }
+      const bool ho_pad = is_uct && pmy_pack->pmesh->multi_d &&
+          peos->eos_data.is_ideal && !pmy_pack->pcoord->is_special_relativistic &&
+          !pmy_pack->pcoord->is_general_relativistic;
+      const int pad_reach = ho_pad ? mhd_bcc::Reach(recon_method) : 1;
+      // An edge revision affects the cell-centred field tested by PAD out to the
+      // production face-to-cell interpolation reach, even when base EMFs are frozen.
+      h_f += pad_reach - 1;
       // Light cone of the revisions.  Each revision's candidate over its halo needs
       // the faces revised by the previous one out to the composition reach h_f beyond
       // that halo (the staggered candidate composes corner EMFs over the halo), so the
       // halo grows by h_f per revision and the final one keeps h_f for the production
       // CornerE: halo0 = h_f*nrevs.  With ct_contact (h_f = 1) this is the former
-      // h_f + nrevs - 1; with UCT it is wider (fv4: 2 per revision).
+      // h_f + nrevs - 1; UCT and production B interpolation have wider reach.
       mood_halo0 = h_f*mood_max_revs;
       if (mood_frozen_emf) {
-        mood_halo0 = mood_max_revs;
+        mood_halo0 = pad_reach*mood_max_revs;
       }
       // SED reads +/-3; the extra cell in ng_need covers the outer offset.
       // Otherwise the stencil is the reconstruction half-width.
@@ -679,9 +687,10 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
       }
       // The immutable high-order candidate is exchanged once before revisions.
       // PLM needs two cells; SED samples +/-3. Keep the SED-safe floor even if
-      // SED is disabled. Frozen edge replacement propagates one cell per revision.
+      // SED is disabled. PAD also needs candidate CT faces for its B interpolant.
       if (mood_frozen_emf) {
-        ng_need = std::max(2*ReconStencilRadius(recon_method), mood_halo0 + 3);
+        ng_need = std::max(2*ReconStencilRadius(recon_method),
+                           mood_halo0 + std::max(3, pad_reach));
       }
       auto &indcs = pmy_pack->pmesh->mb_indcs;
       if (indcs.ng < ng_need) {

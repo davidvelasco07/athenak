@@ -1,9 +1,9 @@
 {
-  "captured_at_utc": "2026-10-15T04:00:13.552701+00:00",
-  "study_path": "/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/four-revision-rtol1e-8",
+  "captured_at_utc": "2026-10-15T13:33:14.375911+00:00",
+  "study_path": "/scratch/lustre/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/four-revision-rtol1e-8",
   "active_cases": [
-    "ot_fv6_n1024"
+    "ot_fv6_n2048"
   ],
-  "completed_cases": 13,
+  "completed_cases": 16,
   "expected_cases": 21
 }

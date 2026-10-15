@@ -26,6 +26,7 @@
 #include "coordinates/coordinates.hpp"
 #include "mhd.hpp"
 #include "eos/eos.hpp"
+#include "eos/mhd_bcc.hpp"
 #include "reconstruct/recon.hpp"
 #include "mhd/rsolvers/solve_face_mhd.hpp"
 
@@ -100,7 +101,12 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
   const auto recon_method_ = recon_method;
 
   // Face-normal flux range. MOOD needs base fluxes over mood_halo0; FOFC over 1.
-  const int mext = mood_frozen_emf ? 0 : use_mood ? mood_halo0 : (use_fofc ? 1 : 0);
+  const bool ho_pad = use_mood && peos->eos_data.is_ideal &&
+      pmy_pack->pmesh->multi_d && emf_method != MHD_EMF::ct_contact &&
+      !pmy_pack->pcoord->is_special_relativistic &&
+      !pmy_pack->pcoord->is_general_relativistic;
+  const int pad_extra = ho_pad ? mhd_bcc::Reach(recon_method)-1 : 0;
+  const int mext = mood_frozen_emf ? 0 : use_mood ? mood_halo0+pad_extra : (use_fofc ? 1 : 0);
   int il1 = is-mext, iu1 = ie+1+mext;
   int jl2 = js-mext, ju2 = je+1+mext;
   int kl3 = ks-mext, ku3 = ke+1+mext;
@@ -129,7 +135,7 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
     // Without this the halo candidate differed between MeshBlocks and the demotion
     // pattern of fv4+MOOD under UCT depended on the block decomposition.
     if (use_mood) {
-      if (!mood_frozen_emf) uct_ext += mood_halo0;
+      if (!mood_frozen_emf) uct_ext += mood_halo0 + pad_extra;
     }
   }
   const int ext = std::max(uct_ext, mext);

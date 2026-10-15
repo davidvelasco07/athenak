@@ -1,0 +1,557 @@
+--- a/src/eos/ideal_mhd.cpp
++++ b/src/eos/ideal_mhd.cpp
+@@ -10,57 +10,7 @@
+ #include "mhd/mhd.hpp"
+ #include "eos.hpp"
+ #include "eos/ideal_c2p_mhd.hpp"
+-#include "reconstruct/plm.hpp"
+-#include "reconstruct/ppm.hpp"
+-#include "reconstruct/wenoz.hpp"
+-#include "reconstruct/teno.hpp"
+-#include "reconstruct/fv.hpp"
+-
+-//----------------------------------------------------------------------------------------
+-//! \fn FaceToCenterInterp()
+-//! \brief Interpolate face-centered B to cell center using high-order reconstruction.
+-//! Treats face values as "cell averages" in a dual grid, then reconstructs to the
+-//! midpoint (cell center of the primal grid).  This ensures consistency with the
+-//! finite-volume reconstruction used elsewhere in the code.
+-
+-KOKKOS_INLINE_FUNCTION
+-Real FaceToCenterInterp(const ReconstructionMethod recon,
+-                        const Real &bf_im3, const Real &bf_im2, const Real &bf_im1,
+-                        const Real &bf_i, const Real &bf_ip1, const Real &bf_ip2,
+-                        const Real &bf_ip3, const Real &bf_ip4) {
+-  // bf values are face-centered; cell center i is the midpoint between faces i and i+1.
+-  // Limited methods reconstruct L/R dual-grid states and average them; unlimited fvN
+-  // methods use the matching central interpolant of the dual-grid face averages.
+-  Real qL, qR, dum;
+-  switch (recon) {
+-    case ReconstructionMethod::dc:
+-      return 0.5*(bf_i + bf_ip1);
+-    case ReconstructionMethod::plm:
+-      PLM(bf_im1, bf_i, bf_ip1, qL, dum);    // center face i → qL at cell center
+-      PLM(bf_i, bf_ip1, bf_ip2, dum, qR);    // center face i+1 → qR at cell center
+-      return 0.5*(qL + qR);
+-    case ReconstructionMethod::ppm4:
+-    case ReconstructionMethod::ppmx:
+-      PPM4(bf_im2, bf_im1, bf_i, bf_ip1, bf_ip2, qL, dum);  // center face i → qL at cc
+-      PPM4(bf_im1, bf_i, bf_ip1, bf_ip2, bf_ip3, dum, qR);  // center face i+1 → qR at cc
+-      return 0.5*(qL + qR);
+-    case ReconstructionMethod::wenoz:
+-      WENOZ(bf_im2, bf_im1, bf_i, bf_ip1, bf_ip2, qL, dum);  // center face i → qL at cc
+-      WENOZ(bf_im1, bf_i, bf_ip1, bf_ip2, bf_ip3, dum, qR);  // center face i+1 → qR at cc
+-      return 0.5*(qL + qR);
+-    case ReconstructionMethod::teno:
+-      TENO(bf_im2, bf_im1, bf_i, bf_ip1, bf_ip2, qL, dum);   // center face i → qL at cc
+-      TENO(bf_im1, bf_i, bf_ip1, bf_ip2, bf_ip3, dum, qR);   // center face i+1 → qR at cc
+-      return 0.5*(qL + qR);
+-    case ReconstructionMethod::fv4:
+-      return FV4Face(bf_im1, bf_i, bf_ip1, bf_ip2);
+-    case ReconstructionMethod::fv6:
+-      return FV6Face(bf_im2, bf_im1, bf_i, bf_ip1, bf_ip2, bf_ip3);
+-    case ReconstructionMethod::fv8:
+-      return FV8Face(bf_im3, bf_im2, bf_im1, bf_i, bf_ip1, bf_ip2, bf_ip3, bf_ip4);
+-  }
+-  return 0.5*(bf_i + bf_ip1);  // fallback
+-}
++#include "eos/mhd_bcc.hpp"
+ 
+ //----------------------------------------------------------------------------------------
+ // ctor: also calls EOS base class constructor
+@@ -166,58 +116,9 @@
+       u.by = 0.5*(b.x2f(m,k,j,i) + b.x2f(m,k,j+1,i));
+       u.bz = 0.5*(b.x3f(m,k,j,i) + b.x3f(m,k+1,j,i));
+     } else {
+-      // High-order face-to-center interpolation using the same reconstruction
+-      // method as the flux computation (UCT EMF path).  Treats face-averaged B
+-      // values as "cell averages" in a dual grid, consistent with the FV framework.
+-      // Falls back to a smaller unlimited stencil (then 2nd-order) near the loop
+-      // edges where the full window does not fit.  Limited methods only need a
+-      // 6-point window, so they stay on `recon` until the 4-point fallback.
+-      {
+-        ReconstructionMethod r6 = (recon == ReconstructionMethod::fv8)
+-                                ? ReconstructionMethod::fv6 : recon;
+-        if (i > il+2 && i < iu-2) {
+-          u.bx = FaceToCenterInterp(recon,
+-            b.x1f(m,k,j,i-3), b.x1f(m,k,j,i-2), b.x1f(m,k,j,i-1), b.x1f(m,k,j,i),
+-            b.x1f(m,k,j,i+1), b.x1f(m,k,j,i+2), b.x1f(m,k,j,i+3), b.x1f(m,k,j,i+4));
+-        } else if (i > il+1 && i < iu-1) {
+-          u.bx = FaceToCenterInterp(r6,
+-            b.x1f(m,k,j,i-2), b.x1f(m,k,j,i-2), b.x1f(m,k,j,i-1), b.x1f(m,k,j,i),
+-            b.x1f(m,k,j,i+1), b.x1f(m,k,j,i+2), b.x1f(m,k,j,i+3), b.x1f(m,k,j,i+3));
+-        } else if (i > il && i < iu) {
+-          u.bx = FV4Face(b.x1f(m,k,j,i-1), b.x1f(m,k,j,i),
+-                         b.x1f(m,k,j,i+1), b.x1f(m,k,j,i+2));
+-        } else {
+-          u.bx = 0.5*(b.x1f(m,k,j,i) + b.x1f(m,k,j,i+1));
+-        }
+-        if (j > jl+2 && j < ju-2) {
+-          u.by = FaceToCenterInterp(recon,
+-            b.x2f(m,k,j-3,i), b.x2f(m,k,j-2,i), b.x2f(m,k,j-1,i), b.x2f(m,k,j,i),
+-            b.x2f(m,k,j+1,i), b.x2f(m,k,j+2,i), b.x2f(m,k,j+3,i), b.x2f(m,k,j+4,i));
+-        } else if (j > jl+1 && j < ju-1) {
+-          u.by = FaceToCenterInterp(r6,
+-            b.x2f(m,k,j-2,i), b.x2f(m,k,j-2,i), b.x2f(m,k,j-1,i), b.x2f(m,k,j,i),
+-            b.x2f(m,k,j+1,i), b.x2f(m,k,j+2,i), b.x2f(m,k,j+3,i), b.x2f(m,k,j+3,i));
+-        } else if (j > jl && j < ju) {
+-          u.by = FV4Face(b.x2f(m,k,j-1,i), b.x2f(m,k,j,i),
+-                         b.x2f(m,k,j+1,i), b.x2f(m,k,j+2,i));
+-        } else {
+-          u.by = 0.5*(b.x2f(m,k,j,i) + b.x2f(m,k,j+1,i));
+-        }
+-        if (k > kl+2 && k < ku-2) {
+-          u.bz = FaceToCenterInterp(recon,
+-            b.x3f(m,k-3,j,i), b.x3f(m,k-2,j,i), b.x3f(m,k-1,j,i), b.x3f(m,k,j,i),
+-            b.x3f(m,k+1,j,i), b.x3f(m,k+2,j,i), b.x3f(m,k+3,j,i), b.x3f(m,k+4,j,i));
+-        } else if (k > kl+1 && k < ku-1) {
+-          u.bz = FaceToCenterInterp(r6,
+-            b.x3f(m,k-2,j,i), b.x3f(m,k-2,j,i), b.x3f(m,k-1,j,i), b.x3f(m,k,j,i),
+-            b.x3f(m,k+1,j,i), b.x3f(m,k+2,j,i), b.x3f(m,k+3,j,i), b.x3f(m,k+3,j,i));
+-        } else if (k > kl && k < ku) {
+-          u.bz = FV4Face(b.x3f(m,k-1,j,i), b.x3f(m,k,j,i),
+-                         b.x3f(m,k+1,j,i), b.x3f(m,k+2,j,i));
+-        } else {
+-          u.bz = 0.5*(b.x3f(m,k,j,i) + b.x3f(m,k+1,j,i));
+-        }
+-      }
++      u.bx = mhd_bcc::CellCenteredComponent(recon, b.x1f, m,k,j,i, 0,0,1, il,iu);
++      u.by = mhd_bcc::CellCenteredComponent(recon, b.x2f, m,k,j,i, 0,1,0, jl,ju);
++      u.bz = mhd_bcc::CellCenteredComponent(recon, b.x3f, m,k,j,i, 1,0,0, kl,ku);
+     }
+ 
+     // call c2p function
+--- a/src/eos/mhd_bcc.hpp
++++ b/src/eos/mhd_bcc.hpp
+@@ -0,0 +1,99 @@
++#ifndef EOS_MHD_BCC_HPP_
++#define EOS_MHD_BCC_HPP_
++//========================================================================================
++// AthenaXXX astrophysical plasma code
++// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
++// Licensed under the 3-clause BSD License (the "LICENSE")
++//========================================================================================
++// Production and candidate PAD must use the same face-to-cell magnetic field.
++#include "athena.hpp"
++#include "reconstruct/plm.hpp"
++#include "reconstruct/ppm.hpp"
++#include "reconstruct/wenoz.hpp"
++#include "reconstruct/teno.hpp"
++#include "reconstruct/fv.hpp"
++
++namespace mhd_bcc {
++
++inline constexpr int Reach(ReconstructionMethod recon) {
++  switch (recon) {
++    case ReconstructionMethod::dc: return 1;
++    case ReconstructionMethod::plm: return 2;
++    case ReconstructionMethod::fv4: return 2;
++    case ReconstructionMethod::fv6: return 3;
++    case ReconstructionMethod::fv8: return 4;
++    default: return 3;
++  }
++}
++
++KOKKOS_INLINE_FUNCTION
++Real FaceToCenterInterp(const ReconstructionMethod recon,
++                        const Real &bf_im3, const Real &bf_im2, const Real &bf_im1,
++                        const Real &bf_i, const Real &bf_ip1, const Real &bf_ip2,
++                        const Real &bf_ip3, const Real &bf_ip4) {
++  // bf values are face-centered; cell center i is the midpoint between faces i and i+1.
++  // Limited methods reconstruct L/R dual-grid states and average them; unlimited fvN
++  // methods use the matching central interpolant of the dual-grid face averages.
++  Real qL, qR, dum;
++  switch (recon) {
++    case ReconstructionMethod::dc:
++      return 0.5*(bf_i + bf_ip1);
++    case ReconstructionMethod::plm:
++      PLM(bf_im1, bf_i, bf_ip1, qL, dum);    // center face i → qL at cell center
++      PLM(bf_i, bf_ip1, bf_ip2, dum, qR);    // center face i+1 → qR at cell center
++      return 0.5*(qL + qR);
++    case ReconstructionMethod::ppm4:
++    case ReconstructionMethod::ppmx:
++      PPM4(bf_im2, bf_im1, bf_i, bf_ip1, bf_ip2, qL, dum);  // center face i → qL at cc
++      PPM4(bf_im1, bf_i, bf_ip1, bf_ip2, bf_ip3, dum, qR);  // center face i+1 → qR at cc
++      return 0.5*(qL + qR);
++    case ReconstructionMethod::wenoz:
++      WENOZ(bf_im2, bf_im1, bf_i, bf_ip1, bf_ip2, qL, dum);  // center face i → qL at cc
++      WENOZ(bf_im1, bf_i, bf_ip1, bf_ip2, bf_ip3, dum, qR);  // center face i+1 → qR at cc
++      return 0.5*(qL + qR);
++    case ReconstructionMethod::teno:
++      TENO(bf_im2, bf_im1, bf_i, bf_ip1, bf_ip2, qL, dum);   // center face i → qL at cc
++      TENO(bf_im1, bf_i, bf_ip1, bf_ip2, bf_ip3, dum, qR);   // center face i+1 → qR at cc
++      return 0.5*(qL + qR);
++    case ReconstructionMethod::fv4:
++      return FV4Face(bf_im1, bf_i, bf_ip1, bf_ip2);
++    case ReconstructionMethod::fv6:
++      return FV6Face(bf_im2, bf_im1, bf_i, bf_ip1, bf_ip2, bf_ip3);
++    case ReconstructionMethod::fv8:
++      return FV8Face(bf_im3, bf_im2, bf_im1, bf_i, bf_ip1, bf_ip2, bf_ip3, bf_ip4);
++  }
++  return 0.5*(bf_i + bf_ip1);  // fallback
++}
++
++// Match the production interpolation's existing boundary reductions. The bounds
++// describe the production C2P range, not the smaller candidate detection halo.
++KOKKOS_INLINE_FUNCTION
++Real CellCenteredComponent(const ReconstructionMethod recon,
++    const DvceArray4D<Real> &b, const int m, const int k, const int j, const int i,
++    const int dk, const int dj, const int di, const int lo, const int hi) {
++  const int c = dk*k + dj*j + di*i;
++  if (c > lo+2 && c < hi-2) {
++    return FaceToCenterInterp(recon,
++        b(m,k-3*dk,j-3*dj,i-3*di), b(m,k-2*dk,j-2*dj,i-2*di),
++        b(m,k-dk,j-dj,i-di), b(m,k,j,i), b(m,k+dk,j+dj,i+di),
++        b(m,k+2*dk,j+2*dj,i+2*di), b(m,k+3*dk,j+3*dj,i+3*di),
++        b(m,k+4*dk,j+4*dj,i+4*di));
++  }
++  if (c > lo+1 && c < hi-1) {
++    const auto r6 = (recon == ReconstructionMethod::fv8)
++        ? ReconstructionMethod::fv6 : recon;
++    return FaceToCenterInterp(r6,
++        b(m,k-2*dk,j-2*dj,i-2*di), b(m,k-2*dk,j-2*dj,i-2*di),
++        b(m,k-dk,j-dj,i-di), b(m,k,j,i), b(m,k+dk,j+dj,i+di),
++        b(m,k+2*dk,j+2*dj,i+2*di), b(m,k+3*dk,j+3*dj,i+3*di),
++        b(m,k+3*dk,j+3*dj,i+3*di));
++  }
++  if (c > lo && c < hi) {
++    return FV4Face(b(m,k-dk,j-dj,i-di), b(m,k,j,i),
++        b(m,k+dk,j+dj,i+di), b(m,k+2*dk,j+2*dj,i+2*di));
++  }
++  return 0.5*(b(m,k,j,i) + b(m,k+dk,j+dj,i+di));
++}
++
++}  // namespace mhd_bcc
++#endif  // EOS_MHD_BCC_HPP_
+--- a/src/mhd/mhd.cpp
++++ b/src/mhd/mhd.cpp
+@@ -14,6 +14,7 @@
+ #include "parameter_input.hpp"
+ #include "mesh/mesh.hpp"
+ #include "eos/eos.hpp"
++#include "eos/mhd_bcc.hpp"
+ #include "diffusion/viscosity.hpp"
+ #include "diffusion/resistivity.hpp"
+ #include "diffusion/conduction.hpp"
+@@ -658,6 +659,13 @@
+       if (emf_method != MHD_EMF::ct_contact) {
+         h_f = ReconEdgeReach(recon_method);
+       }
++      const bool ho_pad = is_uct && pmy_pack->pmesh->multi_d &&
++          peos->eos_data.is_ideal && !pmy_pack->pcoord->is_special_relativistic &&
++          !pmy_pack->pcoord->is_general_relativistic;
++      const int pad_reach = ho_pad ? mhd_bcc::Reach(recon_method) : 1;
++      // An edge revision affects the cell-centred field tested by PAD out to the
++      // production face-to-cell interpolation reach, even when base EMFs are frozen.
++      h_f += pad_reach - 1;
+       // Light cone of the revisions.  Each revision's candidate over its halo needs
+       // the faces revised by the previous one out to the composition reach h_f beyond
+       // that halo (the staggered candidate composes corner EMFs over the halo), so the
+@@ -666,7 +674,7 @@
+       // h_f + nrevs - 1; with UCT it is wider (fv4: 2 per revision).
+       mood_halo0 = h_f*mood_max_revs;
+       if (mood_frozen_emf) {
+-        mood_halo0 = mood_max_revs;
++        mood_halo0 = pad_reach*mood_max_revs;
+       }
+       // SED reads +/-3; the extra cell in ng_need covers the outer offset.
+       // Otherwise the stencil is the reconstruction half-width.
+@@ -679,9 +687,10 @@
+       }
+       // The immutable high-order candidate is exchanged once before revisions.
+       // PLM needs two cells; SED samples +/-3. Keep the SED-safe floor even if
+-      // SED is disabled. Frozen edge replacement propagates one cell per revision.
++      // SED is disabled. PAD also needs candidate CT faces for its B interpolant.
+       if (mood_frozen_emf) {
+-        ng_need = std::max(2*ReconStencilRadius(recon_method), mood_halo0 + 3);
++        ng_need = std::max(2*ReconStencilRadius(recon_method),
++                           mood_halo0 + std::max(3, pad_reach));
+       }
+       auto &indcs = pmy_pack->pmesh->mb_indcs;
+       if (indcs.ng < ng_need) {
+--- a/src/mhd/mhd.hpp
++++ b/src/mhd/mhd.hpp
+@@ -291,6 +291,7 @@
+   TaskStatus EField(Driver *d, int stage);
+   TaskStatus SendE(Driver *d, int stage);
+   TaskStatus RecvE(Driver *d, int stage);
++  TaskStatus CheckMOODAcceptedState(Driver *d, int stage);
+   TaskStatus CT(Driver *d, int stage);
+   TaskStatus SendB_OA(Driver *d, int stage);
+   TaskStatus RecvB_OA(Driver *d, int stage);
+--- a/src/mhd/mhd_fluxes.cpp
++++ b/src/mhd/mhd_fluxes.cpp
+@@ -26,6 +26,7 @@
+ #include "coordinates/coordinates.hpp"
+ #include "mhd.hpp"
+ #include "eos/eos.hpp"
++#include "eos/mhd_bcc.hpp"
+ #include "reconstruct/recon.hpp"
+ #include "mhd/rsolvers/solve_face_mhd.hpp"
+ 
+@@ -100,7 +101,12 @@
+   const auto recon_method_ = recon_method;
+ 
+   // Face-normal flux range. MOOD needs base fluxes over mood_halo0; FOFC over 1.
+-  const int mext = mood_frozen_emf ? 0 : use_mood ? mood_halo0 : (use_fofc ? 1 : 0);
++  const bool ho_pad = use_mood && peos->eos_data.is_ideal &&
++      pmy_pack->pmesh->multi_d && emf_method != MHD_EMF::ct_contact &&
++      !pmy_pack->pcoord->is_special_relativistic &&
++      !pmy_pack->pcoord->is_general_relativistic;
++  const int pad_extra = ho_pad ? mhd_bcc::Reach(recon_method)-1 : 0;
++  const int mext = mood_frozen_emf ? 0 : use_mood ? mood_halo0+pad_extra : (use_fofc ? 1 : 0);
+   int il1 = is-mext, iu1 = ie+1+mext;
+   int jl2 = js-mext, ju2 = je+1+mext;
+   int kl3 = ks-mext, ku3 = ke+1+mext;
+@@ -129,7 +135,7 @@
+     // Without this the halo candidate differed between MeshBlocks and the demotion
+     // pattern of fv4+MOOD under UCT depended on the block decomposition.
+     if (use_mood) {
+-      if (!mood_frozen_emf) uct_ext += mood_halo0;
++      if (!mood_frozen_emf) uct_ext += mood_halo0 + pad_extra;
+     }
+   }
+   const int ext = std::max(uct_ext, mext);
+--- a/src/mhd/mhd_mood.cpp
++++ b/src/mhd/mhd_mood.cpp
+@@ -26,7 +26,7 @@
+ //!
+ //! mood_frozen_emf exchanges the initial candidate and caches PLM/DC EMFs, then replaces
+ //! only edges adjacent to demoted cells. Untouched high-order edges are retained.
+-//! This is the default for supported uniform periodic Newtonian cases and has a
++//! This is the default for supported uniform periodic NR/SR/GR cases and has a
+ //! one-cell revision reach; see
+ //! validation/frozen_emf_halo/README.md for the measured bounds and limitations.
+ //!
+@@ -37,12 +37,15 @@
+ //! the final-iteration halo equals the transverse reach of the edge composition.
+ 
+ #include <algorithm>
++#include <cstdlib>
++#include <iostream>
+ 
+ #include "athena.hpp"
+ #include "mesh/mesh.hpp"
+ #include "driver/driver.hpp"
+ #include "coordinates/coordinates.hpp"
+ #include "eos/eos.hpp"
++#include "eos/mhd_bcc.hpp"
+ #include "reconstruct/recon.hpp"
+ #include "mhd/rsolvers/solve_face_mhd.hpp"
+ #include "mhd/mhd_wb.hpp"
+@@ -134,6 +137,56 @@
+ 
+ } // namespace
+ 
++// Check owned cells after the final revision, CT, and both U/B boundary phases.
++// This uses the actual accepted faces and the production C2P interpolant, including
++// cells already at the bottom tier. A revision limit must not silently accept an
++// inadmissible state or rely on a subsequent EOS floor to repair it.
++TaskStatus MHD::CheckMOODAcceptedState(Driver *pdriver, int stage) {
++  const auto q = pmy_pack->pmesh->mb_indcs;
++  const int nmb1 = pmy_pack->nmb_thispack-1;
++  const int n1 = bcc0.extent_int(4), n2 = bcc0.extent_int(3);
++  const int n3 = bcc0.extent_int(2), nv = nmhd+nscalars;
++  const bool ho = peos->eos_data.is_ideal &&
++      !pmy_pack->pcoord->is_special_relativistic &&
++      !pmy_pack->pcoord->is_general_relativistic && emf_method != MHD_EMF::ct_contact;
++  const auto recon = recon_method;
++  auto bx = b0.x1f, by = b0.x2f, bz = b0.x3f;
++  auto bc = bcctest;
++  par_for("mood_accepted_bcc", DevExeSpace(), 0,nmb1,q.ks,q.ke,q.js,q.je,q.is,q.ie,
++  KOKKOS_LAMBDA(const int m,const int k,const int j,const int i) {
++    bc(m,IBX,k,j,i) = ho ? mhd_bcc::CellCenteredComponent(
++        recon,bx,m,k,j,i,0,0,1,0,n1-1) : 0.5*(bx(m,k,j,i)+bx(m,k,j,i+1));
++    bc(m,IBY,k,j,i) = ho ? mhd_bcc::CellCenteredComponent(
++        recon,by,m,k,j,i,0,1,0,0,n2-1) : 0.5*(by(m,k,j,i)+by(m,k,j+1,i));
++    bc(m,IBZ,k,j,i) = ho ? mhd_bcc::CellCenteredComponent(
++        recon,bz,m,k,j,i,1,0,0,0,n3-1) : 0.5*(bz(m,k,j,i)+bz(m,k+1,j,i));
++  });
++  Kokkos::deep_copy(fofc,false);
++  peos->use_c2p_mask = false;
++  peos->ConsToPrim(u0,b0,w0,bcctest,true,q.is,q.ie,q.js,q.je,q.ks,q.ke);
++  auto flags = fofc;
++  auto u = u0;
++  int bad = 0;
++  const int ni = q.ie-q.is+1, nj = q.je-q.js+1, nk = q.ke-q.ks+1;
++  Kokkos::parallel_reduce("mood_accepted_pad",
++      Kokkos::RangePolicy<>(DevExeSpace(),0,(nmb1+1)*nk*nj*ni),
++  KOKKOS_LAMBDA(const int idx,int &sum) {
++    const int i = idx%ni+q.is, j = (idx/ni)%nj+q.js;
++    const int k = (idx/(ni*nj))%nk+q.ks, m = idx/(ni*nj*nk);
++    bool danger = flags(m,k,j,i);
++    for (int n=0; n<nv; ++n) danger = danger || !isfinite(u(m,n,k,j,i));
++    for (int n=0; n<3; ++n) danger = danger || !isfinite(bc(m,n,k,j,i));
++    if (danger) ++sum;
++  }, Kokkos::Sum<int>(bad));
++  if (bad != 0) {
++    std::cerr << "MOOD final PAD rejected " << bad << " owned cells after CT and "
++              << "boundary synchronization at cycle " << pmy_pack->pmesh->ncycle
++              << ", stage " << stage << "; no EOS floor repair is accepted.\n";
++    std::exit(EXIT_FAILURE);
++  }
++  return TaskStatus::complete;
++}
++
+ //----------------------------------------------------------------------------------------
+ //! \fn void MHD::MOODLoop
+ //! \brief detect/demote/revise loop described in the file header.
+@@ -165,6 +218,10 @@
+   auto &coord_ = pmy_pack->pcoord->coord_data;
+   const bool newtonian = !(pmy_pack->pcoord->is_special_relativistic ||
+                            pmy_pack->pcoord->is_general_relativistic);
++  const bool ho_pad = newtonian && peos->eos_data.is_ideal && multi_d &&
++      emf_method != MHD_EMF::ct_contact;
++  const int pad_extra = ho_pad ? mhd_bcc::Reach(recon_method)-1 : 0;
++  const auto pad_recon = recon_method;
+ 
+   auto &u0_ = u0;
+   auto &u1_ = u1;
+@@ -205,6 +262,7 @@
+   auto b0x1 = b0.x1f;
+   auto b0x2 = b0.x2f;
+   auto b0x3 = b0.x3f;
++  auto btpad1 = b0_test.x1f, btpad2 = b0_test.x2f, btpad3 = b0_test.x3f;
+   auto flx1 = uflx.x1f;
+   auto flx2 = uflx.x2f;
+   auto flx3 = uflx.x3f;
+@@ -284,7 +342,7 @@
+ 
+   // Light-cone halo: the final iteration retains h_f = mood_halo0 - nrevs + 1 cells,
+   // the transverse reach of the corner-EMF composition (see mhd.cpp).
+-  const int h_f = mood_frozen_emf ? 1 : mood_halo0/nrevs;   // composition reach per revision (mhd.cpp)
++  const int h_f = mood_halo0/nrevs;
+ 
+   const int ndi = 1;
+   const int ndj = (multi_d) ? 1 : 0;
+@@ -327,7 +385,8 @@
+   // edge EMF reads faces i-reach..i+reach-1 (cells within reach+1), and the CT update
+   // plus the cell average add one more cell.  Every other cell keeps its accepted
+   // candidate and flags from the previous pass, so the result is bitwise identical.
+-  const bool touched_only = mood_touched_only;
++  // The wider candidate face field must be initialized throughout PAD's stencil.
++  const bool touched_only = mood_touched_only && !ho_pad;
+   auto touched_ = mood_touched;
+   auto tmp_ = mood_tmp;
+   const int r_touch = (uct_fl > 0 && multi_d) ? ReconEdgeReach(recon_method) + 2 : 1;
+@@ -557,7 +616,7 @@
+   int ndemoted_total = 0;
+   for (int rev=1; rev<=nrevs; ++rev) {
+     const bool masked = touched_only && (rev > 1);
+-    const int dh = mood_frozen_emf ? std::max(0, mood_halo0-rev+1) : h_f*(nrevs-rev+1);   // light-cone halo of this revision
++    const int dh = h_f*(nrevs-rev+1);
+     int il = is-dh, iu = ie+dh, jl = js, ju = je, kl = ks, ku = ke;
+     if (multi_d) { jl = js-dh; ju = je+dh; }
+     if (three_d) { kl = ks-dh; ku = ke+dh; }
+@@ -675,12 +734,18 @@
+       // out to this reach (mhd_fluxes.cpp), so every halo cell sees the same composed
+       // candidate as the neighbouring block's interior and the demotion pattern is
+       // block-decomposition invariant.
+-      if (!mood_frozen_emf) ComposeCornerEMF(il, iu+1, jl, ju+1, kl, (three_d ? ku+1 : ks), masked);
++      const int px = pad_extra, py = multi_d ? pad_extra : 0;
++      const int pz = three_d ? pad_extra : 0;
++      if (!mood_frozen_emf) {
++        ComposeCornerEMF(il-px, iu+1+px, jl-py, ju+1+py, kl-pz,
++                         (three_d ? ku+1+pz : ks), masked);
++      }
+       auto bt1 = b0_test.x1f;  auto bt2 = b0_test.x2f;  auto bt3 = b0_test.x3f;
+       auto e1c = efld.x1e;  auto e2c = efld.x2e;  auto e3c = efld.x3e;
+       const bool td = three_d;
+       // CT update of candidate face-B (mirrors mhd_ct.cpp)
+-      par_for("mmood_ctB1", DevExeSpace(), 0, nmb1, kl, ku, jl, ju, il, iu+1,
++      par_for("mmood_ctB1", DevExeSpace(), 0, nmb1, kl-pz, ku+pz,
++              jl-py, ju+py, il-px, iu+1+px,
+       KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+         if (masked && !touched_(m,k,j,i)) return;
+         Real b = gam0*b0x1(m,k,j,i) + gam1*b1_.x1f(m,k,j,i);
+@@ -692,7 +757,8 @@
+         if (td) b += beta_dt*(e2c(m,k+1,j,i) - e2c(m,k,j,i))/size_.d_view(m).dx3;
+         bt1(m,k,j,i) = b;
+       });
+-      par_for("mmood_ctB2", DevExeSpace(), 0, nmb1, kl, ku, jl, ju+1, il, iu,
++      par_for("mmood_ctB2", DevExeSpace(), 0, nmb1, kl-pz, ku+pz,
++              jl-py, ju+1+py, il-px, iu+px,
+       KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+         if (masked && !touched_(m,k,j,i)) return;
+         Real b = gam0*b0x2(m,k,j,i) + gam1*b1_.x2f(m,k,j,i);
+@@ -704,7 +770,8 @@
+         if (td) b -= beta_dt*(e1c(m,k+1,j,i) - e1c(m,k,j,i))/size_.d_view(m).dx3;
+         bt2(m,k,j,i) = b;
+       });
+-      par_for("mmood_ctB3", DevExeSpace(), 0, nmb1, kl, ku+td, jl, ju, il, iu,
++      par_for("mmood_ctB3", DevExeSpace(), 0, nmb1, kl-pz, ku+1+pz,
++              jl-py, ju+py, il-px, iu+px,
+       KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+         if (masked && !touched_(m,k,j,i)) return;
+         Real b = gam0*b0x3(m,k,j,i) + gam1*b1_.x3f(m,k,j,i);
+@@ -739,6 +806,14 @@
+           bcctest_(m,IBZ,k,j,i) = (td) ? 0.5*(bt3(m,k,j,i) + bt3(m,k+1,j,i))
+                                        : bt3(m,k,j,i);
+         }
++        if (ho_pad) {
++          bcctest_(m,IBX,k,j,i) = mhd_bcc::CellCenteredComponent(
++              pad_recon, bt1, m,k,j,i, 0,0,1, 0,ncells1-1);
++          bcctest_(m,IBY,k,j,i) = mhd_bcc::CellCenteredComponent(
++              pad_recon, bt2, m,k,j,i, 0,1,0, 0,ncells2-1);
++          bcctest_(m,IBZ,k,j,i) = mhd_bcc::CellCenteredComponent(
++              pad_recon, bt3, m,k,j,i, 1,0,0, 0,ncells3-1);
++        }
+       });
+     }
+ 
+@@ -812,6 +887,22 @@
+       // NAD passes: 0 = density, 1 = internal energy (ideal gas), then B (|B| in mag
+       // mode, three components in comps mode).  Bounds from the stage-input state.
+       if (!trouble && lv < 1) {
++        // Magnetic NAD compares the face-average candidate with its face-average
++        // reference. Energy/PAD above instead use the production C2P interpolant.
++        Real bn1 = bcctest_(m,IBX,k,j,i), bn2 = bcctest_(m,IBY,k,j,i);
++        Real bn3 = bcctest_(m,IBZ,k,j,i);
++        if (ho_pad) {
++          bn1 = 0.5*(btpad1(m,k,j,i) + btpad1(m,k,j,i+1));
++          bn2 = 0.5*(btpad2(m,k,j,i) + btpad2(m,k,j+1,i));
++          bn3 = three_d ? 0.5*(btpad3(m,k,j,i) + btpad3(m,k+1,j,i))
++                        : btpad3(m,k,j,i);
++          if (wb) {
++            bn1 += bcceq_(m,IBX,k,j,i) - 0.5*(beq1(m,k,j,i)+beq1(m,k,j,i+1));
++            bn2 += bcceq_(m,IBY,k,j,i) - 0.5*(beq2(m,k,j,i)+beq2(m,k,j+1,i));
++            bn3 += bcceq_(m,IBZ,k,j,i) - (three_d ?
++                0.5*(beq3(m,k,j,i)+beq3(m,k+1,j,i)) : beq3(m,k,j,i));
++          }
++        }
+         // full candidate density (WB: U' + U_eq) for the velocity/energy divisions
+         const Real dtst = utest_(m,IDN,k,j,i) + (wb ? ueq_(m,IDN,k,j,i) : 0.0);
+         const int npass_he = (is_ideal_ && nad_energy) ? 2 : 1;
+@@ -848,14 +939,14 @@
+                     - (wb ? weq_(m,IEN,k,j,i) : 0.0);
+             }
+           } else if (nad_bmag) {
+-            q_new = sqrt(SQR(bcctest_(m,IBX,k,j,i)) + SQR(bcctest_(m,IBY,k,j,i))
+-                       + SQR(bcctest_(m,IBZ,k,j,i)));
++            q_new = sqrt(SQR(bn1) + SQR(bn2) + SQR(bn3));
+             if (wb) {   // signed delta|B|
+               q_new -= sqrt(SQR(bcceq_(m,IBX,k,j,i)) + SQR(bcceq_(m,IBY,k,j,i))
+                           + SQR(bcceq_(m,IBZ,k,j,i)));
+             }
+           } else {
+-            q_new = bcctest_(m,IBX+bidx,k,j,i) - (wb ? bcceq_(m,IBX+bidx,k,j,i) : 0.0);
++            q_new = ((bidx == 0) ? bn1 : (bidx == 1) ? bn2 : bn3)
++                  - (wb ? bcceq_(m,IBX+bidx,k,j,i) : 0.0);
+           }
+           // DMP bounds from the stage-input state over the neighborhood; with WB the
+           // bounds are on the perturbation and the tolerance scale smn/smx on the full
+--- a/src/mhd/mhd_tasks.cpp
++++ b/src/mhd/mhd_tasks.cpp
+@@ -84,7 +84,11 @@
+   id.prol      = tl["stagen"]->AddTask(&MHD::Prolongate, this, id.recvb_shr);
+   id.bcs       = tl["stagen"]->AddTask(&MHD::ApplyPhysicalBCs, this, id.prol);
+   id.wbtof     = tl["stagen"]->AddTask(&MHD::WBFaceToFull, this, id.bcs);
+-  id.c2p       = tl["stagen"]->AddTask(&MHD::ConToPrim, this, id.wbtof);
++  TaskID accepted = id.wbtof;
++  if (mood_frozen_emf) {
++    accepted = tl["stagen"]->AddTask(&MHD::CheckMOODAcceptedState, this, accepted);
++  }
++  id.c2p       = tl["stagen"]->AddTask(&MHD::ConToPrim, this, accepted);
+   id.newdt     = tl["stagen"]->AddTask(&MHD::NewTimeStep, this, id.c2p);
+ 
+   // assemble "after_stagen" task list

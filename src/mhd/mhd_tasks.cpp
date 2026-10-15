@@ -84,7 +84,11 @@ void MHD::AssembleMHDTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) 
   id.prol      = tl["stagen"]->AddTask(&MHD::Prolongate, this, id.recvb_shr);
   id.bcs       = tl["stagen"]->AddTask(&MHD::ApplyPhysicalBCs, this, id.prol);
   id.wbtof     = tl["stagen"]->AddTask(&MHD::WBFaceToFull, this, id.bcs);
-  id.c2p       = tl["stagen"]->AddTask(&MHD::ConToPrim, this, id.wbtof);
+  TaskID accepted = id.wbtof;
+  if (mood_frozen_emf) {
+    accepted = tl["stagen"]->AddTask(&MHD::CheckMOODAcceptedState, this, accepted);
+  }
+  id.c2p       = tl["stagen"]->AddTask(&MHD::ConToPrim, this, accepted);
   id.newdt     = tl["stagen"]->AddTask(&MHD::NewTimeStep, this, id.c2p);
 
   // assemble "after_stagen" task list

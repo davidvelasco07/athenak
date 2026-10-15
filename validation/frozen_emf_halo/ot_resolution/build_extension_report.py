@@ -73,7 +73,7 @@ def main():
                        relative_mass_drift=r.get('conservation_max_drift',{}).get('mass'),
                        relative_energy_drift=r.get('conservation_max_drift',{}).get('tot-E'))
     with (out/'summary.csv').open('w') as f:
-        w=csv.DictWriter(f,fieldnames=list(rows[0]));w.writeheader();w.writerows(rows)
+        w=csv.DictWriter(f,fieldnames=list(rows[0]),lineterminator='\n');w.writeheader();w.writerows(rows)
     comparison=['| Case | Two revisions and 1e-4 | Four revisions and 1e-8 |','|---|---|---|']
     for r in runs:
         p=prior.get((r['order'],r['nx']))
@@ -165,13 +165,18 @@ not a ghost-counter artifact. See the [audit and raw evidence](pad_audit/README.
 
 Other cases still require physical-cell classification: their aggregate EOS
 counters include ghosts. The main sweep retains its original executable, so
-these results describe the implementation with this defect. No numerical fix
-has been applied in this report.
+these results describe the implementation with this defect. The numerical
+correction has passed the [focused GPU checks](../pad_correction/README.md);
+none of the sweep data above uses it.
 
 The two-revision, 1e-4 FV4 512² control also passes with seven ghosts. All twenty
 saved field datasets match the earlier five-ghost run bitwise. The halo increase
-alone therefore does not explain the regression. The audit records remaining
-parameter controls and a separate source-level relativistic velocity NAD issue.
+alone therefore does not explain the regression. The completed fixed-halo controls
+are clean at 1e-4 with either two or four revisions. At 1e-8, two revisions count
+their first floor at t = 0.8400127–0.8411955 and four at t = 0.8834502–0.8844739.
+The tighter tolerance triggers the counted-floor regression for both revision
+counts; four revisions delay onset at that tolerance. The audit also records a
+separate source-level relativistic velocity NAD issue.
 
 ## Conservation and fallback diagnostics
 
@@ -217,12 +222,18 @@ From an Apollo environment with the modules in the earlier report:
 python3 validation/frozen_emf_halo/ot_resolution/run_study.py --source . \\
   --exe ot-resolution/athena-ot --output ot-resolution/four-revision-rtol1e-8 \\
   --resolutions 64,128,256,512,1024,2048,4096 --orders 4,6,8 \\
-  --revisions 4 --rtol 1e-8 --timeout 172800 --resume
+  --revisions 4 --rtol 1e-8 --timeout 172800 --pre-pad-fix-halo --resume
 ```
 
 Raw binary fields and incremental live results remain on Apollo at
 `{meta['study_path']}`.
 This report freezes the checkpoint above; later completions require a refresh.
+The home filesystem hit its user quota while starting FV6 at 2048². Sixteen valid
+completed records were preserved, the aggregate index was reconstructed, and the
+remaining cases resumed on user-owned scratch. The interrupted case was retained
+separately and is not classified as a numerical failure. The original home study
+path remains a symlink; `quota_recovery.json` records the relocation. Result files
+now use atomic replacement to preserve the last complete record after write errors.
 '''
     (out/'README.md').write_text(text)
     print(f'REPORT_READY {len(runs)}/{expected}: {len(clean)} clean, {len(floors)} floor cases')

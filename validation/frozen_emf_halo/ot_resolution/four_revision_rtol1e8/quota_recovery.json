@@ -1,0 +1,8 @@
+{
+  "completed_cases_preserved": 16,
+  "old_path": "/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/four-revision-rtol1e-8",
+  "new_path": "/scratch/lustre/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/four-revision-rtol1e-8",
+  "interrupted_case": "ot_fv6_n2048",
+  "cause_observed": "home disk quota exceeded",
+  "result_writes": "atomic replace"
+}

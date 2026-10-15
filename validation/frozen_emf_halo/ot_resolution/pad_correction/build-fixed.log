@@ -1,0 +1,1528 @@
+[  1%] Built target kokkossimd
+[ 12%] Built target kokkoscore
+[ 13%] Built target kokkoscontainers
+[ 13%] Built target AlwaysCheckGit
+[ 14%] Built target impl_git_version
+[ 15%] Building CXX object src/CMakeFiles/athena.dir/bvals/prolong_prims.cpp.o
+[ 15%] Building CXX object src/CMakeFiles/athena.dir/diffusion/ambipolar.cpp.o
+[ 15%] Building CXX object src/CMakeFiles/athena.dir/coordinates/coordinates.cpp.o
+[ 15%] Building CXX object src/CMakeFiles/athena.dir/diffusion/resistivity.cpp.o
+[ 16%] Building CXX object src/CMakeFiles/athena.dir/diffusion/conduction.cpp.o
+[ 16%] Building CXX object src/CMakeFiles/athena.dir/dyn_grmhd/dyn_grmhd.cpp.o
+[ 16%] Building CXX object src/CMakeFiles/athena.dir/driver/driver.cpp.o
+[ 17%] Building CXX object src/CMakeFiles/athena.dir/dyn_grmhd/dyn_grmhd_fluxes.cpp.o
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/diffusion/conduction.cpp(355): warning #177-D: variable "spitzer_" was declared but never referenced
+    bool spitzer_ = alpha_spitzer;
+         ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+[ 17%] Building CXX object src/CMakeFiles/athena.dir/dyn_grmhd/dyn_grmhd_fofc.cpp.o
+[ 17%] Building CXX object src/CMakeFiles/athena.dir/eos/ideal_mhd.cpp.o
+[ 17%] Building CXX object src/CMakeFiles/athena.dir/eos/isothermal_mhd.cpp.o
+[ 18%] Building CXX object src/CMakeFiles/athena.dir/eos/ideal_srmhd.cpp.o
+[ 18%] Building CXX object src/CMakeFiles/athena.dir/eos/ideal_grmhd.cpp.o
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+[ 19%] Building CXX object src/CMakeFiles/athena.dir/eos/noop_dyngrmhd.cpp.o
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+[ 20%] Building CXX object src/CMakeFiles/athena.dir/geodesic-grid/spherical_grid.cpp.o
+[ 20%] Building CXX object src/CMakeFiles/athena.dir/geodesic-grid/gauss_legendre.cpp.o
+[ 20%] Building CXX object src/CMakeFiles/athena.dir/gravity/mg_gravity.cpp.o
+[ 20%] Building CXX object src/CMakeFiles/athena.dir/ion-neutral/ion-neutral.cpp.o
+[ 21%] Building CXX object src/CMakeFiles/athena.dir/ion-neutral/ion-neutral_tasks.cpp.o
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+[ 21%] Building CXX object src/CMakeFiles/athena.dir/mesh/build_tree.cpp.o
+[ 22%] Building CXX object src/CMakeFiles/athena.dir/mesh/load_balance.cpp.o
+[ 22%] Building CXX object src/CMakeFiles/athena.dir/mesh/mesh.cpp.o
+[ 22%] Building CXX object src/CMakeFiles/athena.dir/mesh/meshblock_pack.cpp.o
+[ 22%] Building CXX object src/CMakeFiles/athena.dir/mesh/mesh_refinement.cpp.o
+[ 23%] Building CXX object src/CMakeFiles/athena.dir/mesh/refinement_criteria.cpp.o
+[ 23%] Building CXX object src/CMakeFiles/athena.dir/mhd/mhd.cpp.o
+[ 24%] Building CXX object src/CMakeFiles/athena.dir/mhd/mhd_corner_e.cpp.o
+[ 24%] Building CXX object src/CMakeFiles/athena.dir/mhd/mhd_ct.cpp.o
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/mhd/mhd_corner_e.cpp(147): warning #177-D: variable "di" was declared but never referenced
+    constexpr int di = (dir == 1) ? 1 : 0;
+                  ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/mhd/mhd_corner_e.cpp(148): warning #177-D: variable "dj" was declared but never referenced
+    constexpr int dj = (dir == 2) ? 1 : 0;
+                  ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/mhd/mhd_corner_e.cpp(149): warning #177-D: variable "dk" was declared but never referenced
+    constexpr int dk = (dir == 3) ? 1 : 0;
+                  ^
+
+[ 25%] Building CXX object src/CMakeFiles/athena.dir/mhd/mhd_fluxes.cpp.o
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+[ 25%] Building CXX object src/CMakeFiles/athena.dir/mhd/mhd_fofc.cpp.o
+[ 26%] Building CXX object src/CMakeFiles/athena.dir/mhd/mhd_mood_comm.cpp.o
+[ 26%] Building CXX object src/CMakeFiles/athena.dir/mhd/mhd_mood.cpp.o
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+[ 27%] Building CXX object src/CMakeFiles/athena.dir/mhd/mhd_newdt.cpp.o
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+[ 27%] Building CXX object src/CMakeFiles/athena.dir/mhd/mhd_sts.cpp.o
+[ 28%] Building CXX object src/CMakeFiles/athena.dir/mhd/mhd_tasks.cpp.o
+[ 28%] Building CXX object src/CMakeFiles/athena.dir/mhd/mhd_update.cpp.o
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+[ 29%] Building CXX object src/CMakeFiles/athena.dir/mhd/mhd_wb.cpp.o
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+[ 29%] Building CXX object src/CMakeFiles/athena.dir/outputs/basetype_output.cpp.o
+[ 30%] Building CXX object src/CMakeFiles/athena.dir/outputs/derived_variables.cpp.o
+[ 31%] Building CXX object src/CMakeFiles/athena.dir/outputs/history.cpp.o
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+[ 31%] Building CXX object src/CMakeFiles/athena.dir/outputs/restart.cpp.o
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+[ 32%] Building CXX object src/CMakeFiles/athena.dir/outputs/pdf.cpp.o
+[ 32%] Building CXX object src/CMakeFiles/athena.dir/pgen/pgen.cpp.o
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+[ 33%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/advection.cpp.o
+[ 33%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/cpaw.cpp.o
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+[ 34%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/cshock.cpp.o
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+[ 34%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/divb_amr.cpp.o
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+[ 35%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/diffusion.cpp.o
+[ 35%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/gr_bondi.cpp.o
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+[ 36%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/gr_monopole.cpp.o
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+[ 36%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/linear_wave.cpp.o
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+[ 36%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/orszag_tang.cpp.o
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+[ 37%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/mri3d.cpp.o
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+[ 37%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/shock_tube.cpp.o
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+[ 37%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/shwave.cpp.o
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+[ 38%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/rad_linear_wave.cpp.o
+[ 38%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/jeans_wave.cpp.o
+[ 39%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/binary_gravity.cpp.o
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+[ 39%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/hydrostatic.cpp.o
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+[ 39%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/be_collapse.cpp.o
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+[ 40%] Building CXX object src/CMakeFiles/athena.dir/pgen/unit_tests/eos_compose.cpp.o
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+[ 40%] Building CXX object src/CMakeFiles/athena.dir/radiation/radiation_source.cpp.o
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+[ 41%] Building CXX object src/CMakeFiles/athena.dir/radiation/radiation_tasks.cpp.o
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+[ 41%] Building CXX object src/CMakeFiles/athena.dir/shearing_box/orbital_advection.cpp.o
+[ 42%] Building CXX object src/CMakeFiles/athena.dir/shearing_box/orbital_advection_cc.cpp.o
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+[ 42%] Building CXX object src/CMakeFiles/athena.dir/shearing_box/orbital_advection_fc.cpp.o
+[ 42%] Building CXX object src/CMakeFiles/athena.dir/shearing_box/shearing_box.cpp.o
+[ 43%] Building CXX object src/CMakeFiles/athena.dir/shearing_box/shearing_box_srcterms.cpp.o
+[ 44%] Building CXX object src/CMakeFiles/athena.dir/srcterms/srcterms.cpp.o
+[ 44%] Building CXX object src/CMakeFiles/athena.dir/srcterms/turb_driver.cpp.o
+[ 45%] Building CXX object src/CMakeFiles/athena.dir/tasklist/numerical_relativity.cpp.o
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+[ 45%] Building CXX object src/CMakeFiles/athena.dir/utils/derived_vars.cpp.o
+[ 46%] Building CXX object src/CMakeFiles/athena.dir/utils/spherical_surface.cpp.o
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(252): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IsothermalHydro"
+  class IsothermalHydro : public EquationOfState {
+        ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(276): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealHydro"
+  class IdealHydro : public EquationOfState {
+        ^
+
+/home/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/src/eos/eos.hpp(361): warning #611-D: overloaded virtual function "EquationOfState::ConsToPrimWB" is only partially overridden in class "IdealMHD"
+  class IdealMHD : public EquationOfState {
+        ^
+
+[ 46%] Building CXX object src/CMakeFiles/athena.dir/z4c/compact_object_tracker.cpp.o
+[ 46%] Building CXX object src/CMakeFiles/athena.dir/z4c/horizon_dump.cpp.o
+[ 47%] Linking CXX executable athena
+[100%] Built target athena

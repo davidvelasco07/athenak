@@ -291,6 +291,7 @@ class MHD {
   TaskStatus EField(Driver *d, int stage);
   TaskStatus SendE(Driver *d, int stage);
   TaskStatus RecvE(Driver *d, int stage);
+  TaskStatus CheckMOODAcceptedState(Driver *d, int stage);
   TaskStatus CT(Driver *d, int stage);
   TaskStatus SendB_OA(Driver *d, int stage);
   TaskStatus RecvB_OA(Driver *d, int stage);
