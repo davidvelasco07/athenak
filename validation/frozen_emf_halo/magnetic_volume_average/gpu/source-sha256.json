@@ -1,0 +1,9 @@
+{
+  "src/eos/mhd_bcc.hpp": "ab0929014a3927dbc3b8a846b3cd02305d9177989e90dff746fd53e721184a5f",
+  "src/mhd/mhd.cpp": "274e601a816d203f951b0dd34c2097b00691c34b7692c0f9dfec7550a4ddb0c5",
+  "src/mhd/mhd.hpp": "dbb40c1559be2fc6724f80e73763e15c3e7191f3ac469f26e755369de1813455",
+  "src/mhd/mhd_mood.cpp": "b6532f84da0185dbf1e2f7af0a17a1929963d3f2bec7196f9bd2bab54c158c6f",
+  "src/mhd/mhd_tasks.cpp": "4877d81a96cf22b2f37ee9e9ddd0a6ca00f270ca72dde8fb10690625a93fa134",
+  "src/reconstruct/fv.hpp": "a180c94f10d3a3fb4bedc67e78293e57db07f15a692be3a4ea479b57d85a34a1",
+  "src/eos/ideal_mhd.cpp": "446a6de25068b3f1a03815ef51b70e15b3f321255e30cdbc5bdd487aed2d01d4"
+}

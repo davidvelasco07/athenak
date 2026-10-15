@@ -38,8 +38,6 @@
 //! the final-iteration halo equals the transverse reach of the edge composition.
 
 #include <algorithm>
-#include <cstdlib>
-#include <iostream>
 
 #include "athena.hpp"
 #include "mesh/mesh.hpp"
@@ -138,56 +136,6 @@ Real SEDAlpha4(const DvceArray4D<Real> &q, const int m,
 
 } // namespace
 
-// Check owned cells after the final revision, CT, and both U/B boundary phases.
-// This uses the actual accepted faces and the production C2P interpolant, including
-// cells already at the bottom tier. A revision limit must not silently accept an
-// inadmissible state or rely on a subsequent EOS floor to repair it.
-TaskStatus MHD::CheckMOODAcceptedState(Driver *pdriver, int stage) {
-  const auto q = pmy_pack->pmesh->mb_indcs;
-  const int nmb1 = pmy_pack->nmb_thispack-1;
-  const int n1 = bcc0.extent_int(4), n2 = bcc0.extent_int(3);
-  const int n3 = bcc0.extent_int(2), nv = nmhd+nscalars;
-  const bool ho = peos->eos_data.is_ideal &&
-      !pmy_pack->pcoord->is_special_relativistic &&
-      !pmy_pack->pcoord->is_general_relativistic && emf_method != MHD_EMF::ct_contact;
-  const auto recon = recon_method;
-  auto bx = b0.x1f, by = b0.x2f, bz = b0.x3f;
-  auto bc = bcctest;
-  par_for("mood_accepted_bcc", DevExeSpace(), 0,nmb1,q.ks,q.ke,q.js,q.je,q.is,q.ie,
-  KOKKOS_LAMBDA(const int m,const int k,const int j,const int i) {
-    bc(m,IBX,k,j,i) = ho ? mhd_bcc::CellCenteredComponent(
-        recon,bx,m,k,j,i,0,0,1,0,n1-1) : 0.5*(bx(m,k,j,i)+bx(m,k,j,i+1));
-    bc(m,IBY,k,j,i) = ho ? mhd_bcc::CellCenteredComponent(
-        recon,by,m,k,j,i,0,1,0,0,n2-1) : 0.5*(by(m,k,j,i)+by(m,k,j+1,i));
-    bc(m,IBZ,k,j,i) = ho ? mhd_bcc::CellCenteredComponent(
-        recon,bz,m,k,j,i,1,0,0,0,n3-1) : 0.5*(bz(m,k,j,i)+bz(m,k+1,j,i));
-  });
-  Kokkos::deep_copy(fofc,false);
-  peos->use_c2p_mask = false;
-  peos->ConsToPrim(u0,b0,w0,bcctest,true,q.is,q.ie,q.js,q.je,q.ks,q.ke);
-  auto flags = fofc;
-  auto u = u0;
-  int bad = 0;
-  const int ni = q.ie-q.is+1, nj = q.je-q.js+1, nk = q.ke-q.ks+1;
-  Kokkos::parallel_reduce("mood_accepted_pad",
-      Kokkos::RangePolicy<>(DevExeSpace(),0,(nmb1+1)*nk*nj*ni),
-  KOKKOS_LAMBDA(const int idx,int &sum) {
-    const int i = idx%ni+q.is, j = (idx/ni)%nj+q.js;
-    const int k = (idx/(ni*nj))%nk+q.ks, m = idx/(ni*nj*nk);
-    bool danger = flags(m,k,j,i);
-    for (int n=0; n<nv; ++n) danger = danger || !isfinite(u(m,n,k,j,i));
-    for (int n=0; n<3; ++n) danger = danger || !isfinite(bc(m,n,k,j,i));
-    if (danger) ++sum;
-  }, Kokkos::Sum<int>(bad));
-  if (bad != 0) {
-    std::cerr << "MOOD final PAD rejected " << bad << " owned cells after CT and "
-              << "boundary synchronization at cycle " << pmy_pack->pmesh->ncycle
-              << ", stage " << stage << "; no EOS floor repair is accepted.\n";
-    std::exit(EXIT_FAILURE);
-  }
-  return TaskStatus::complete;
-}
-
 //----------------------------------------------------------------------------------------
 //! \fn void MHD::MOODLoop
 //! \brief detect/demote/revise loop described in the file header.
@@ -223,6 +171,7 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
       emf_method != MHD_EMF::ct_contact;
   const int pad_extra = ho_pad ? mhd_bcc::Reach(recon_method)-1 : 0;
   const auto pad_recon = recon_method;
+  const bool fv_bavg = ho_pad && mhd_bcc::IsFV(recon_method);
 
   auto &u0_ = u0;
   auto &u1_ = u1;
@@ -306,10 +255,13 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
   auto aL3 = aL_x3f;  auto dl3 = dL_x3f;  auto dr3 = dR_x3f;
   auto vt1_3 = vx_x3f;  auto vt2_3 = vy_x3f;
 
-  // NAD reference B as the plain face average (mood_nad_bcc=avg): the same averaging as
-  // the staggered candidate below, so the DMP compares like with like; the high-order
-  // bcc0 of ConsToPrim stays in use for the fluid fluxes and PAD.
-  if (nad_avg) {
+  // For fvN, the stage-input bcc0 already contains the production volume average.
+  // In the frozen path its ghosts have been exchanged from their owners: copying
+  // them also avoids order reductions at the outer edge of a local face array.
+  // The candidate below uses the same averaging for both PAD and magnetic NAD.
+  if (nad_avg && fv_bavg) {
+    Kokkos::deep_copy(bcc_nad, bcc0);
+  } else if (nad_avg) {
     auto bn_ = bcc_nad;
     const int n1m = ncells1-1, n2m = ncells2-1, n3m = ncells3-1;
     const bool md = multi_d, td = three_d;
@@ -888,11 +840,11 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
       // NAD passes: 0 = density, 1 = internal energy (ideal gas), then B (|B| in mag
       // mode, three components in comps mode).  Bounds from the stage-input state.
       if (!trouble && lv < 1) {
-        // Magnetic NAD compares the face-average candidate with its face-average
-        // reference. Energy/PAD above instead use the production C2P interpolant.
+        // fvN uses this one magnetic volume-average candidate for every test.
+        // Preserve the historical separate NAD average for the non-FV methods.
         Real bn1 = bcctest_(m,IBX,k,j,i), bn2 = bcctest_(m,IBY,k,j,i);
         Real bn3 = bcctest_(m,IBZ,k,j,i);
-        if (ho_pad) {
+        if (ho_pad && !fv_bavg) {
           bn1 = 0.5*(btpad1(m,k,j,i) + btpad1(m,k,j,i+1));
           bn2 = 0.5*(btpad2(m,k,j,i) + btpad2(m,k,j+1,i));
           bn3 = three_d ? 0.5*(btpad3(m,k,j,i) + btpad3(m,k+1,j,i))

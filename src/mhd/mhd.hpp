@@ -179,7 +179,7 @@ class MHD {
   int mood_nad_v;           // 0=off, 1=|v|, 2=components
   bool uct_diag;            // print max|d| (UCT dissipation) + EMF-NaN diagnostic
   int mood_edge_flag;       // 1: demote UCT edge recon at demoted cells; 0: blend only
-  bool mood_nad_bcc_avg = true; // NAD reference B = plain face average (mood_nad_bcc)
+  bool mood_nad_bcc_avg = true; // fvN uses volume averages; other methods use two faces
   DvceArray5D<Real> bcc_nad;    // that reference field (allocated with use_mood)
   bool mood_nad_rcfl;       // scale relative bounds by the cell-local Courant factor
   Real mood_rtol;
@@ -291,7 +291,6 @@ class MHD {
   TaskStatus EField(Driver *d, int stage);
   TaskStatus SendE(Driver *d, int stage);
   TaskStatus RecvE(Driver *d, int stage);
-  TaskStatus CheckMOODAcceptedState(Driver *d, int stage);
   TaskStatus CT(Driver *d, int stage);
   TaskStatus SendB_OA(Driver *d, int stage);
   TaskStatus RecvB_OA(Driver *d, int stage);

@@ -1,0 +1,8 @@
+# Athena event counter data
+#  cycle eos_dfloor eos_efloor eos_tfloor eos_vceil eos_fail c2p_it fofc mood
+       1        0        0        0        0        0      0        0    10754
+       2        0        0        0        0        0      0        0     8176
+       3        0        0        0        0        0      0        0     6148
+       4        0        0        0        0        0      0        0     4710
+       5        0        0        0        0        0      0        0     3800
+       6        0        0        0        0        0      0        0     2336

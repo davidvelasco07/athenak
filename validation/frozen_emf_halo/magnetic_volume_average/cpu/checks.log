@@ -1,0 +1,10 @@
+fv4_one_block True 0
+fv4_four_blocks True 0
+fv4_mpi4 True 0
+fv6_one_block True 0
+fv6_four_blocks True 0
+fv6_mpi4 True 0
+fv8_one_block True 0
+fv8_four_blocks True 0
+fv8_mpi4 True 0
+CPU_MPI_CHECKS_PASS

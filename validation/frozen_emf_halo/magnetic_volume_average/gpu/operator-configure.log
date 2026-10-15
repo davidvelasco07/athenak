@@ -1,0 +1,14 @@
+-- The CXX compiler identification is GNU 8.5.0
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /scratch/lustre/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-audit/source/kokkos/bin/nvcc_wrapper - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Found CUDAToolkit: /usr/local/cuda-12.4/include (found version "12.4.131") 
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+-- Found Threads: TRUE  
+-- Enabled Kokkos devices: SERIAL;CUDA
+-- Configuring done (3.2s)
+-- Generating done (0.0s)
+-- Build files have been written to: /scratch/lustre/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/volume-average-validation/operator-build

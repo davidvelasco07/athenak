@@ -1,0 +1,14 @@
+{
+  "source_base": "5d159627d1f4e2e55db646b641aa96acd8c11834",
+  "recorded_utc": "2026-10-15T16:01:46.893186+00:00",
+  "change": "Normal-direction polynomial integration of magnetic face-area averages for NR ideal UCT FV4/FV6/FV8; consistent PAD and magnetic NAD; remove unagreed final abort.",
+  "halo_redesigned": false,
+  "revision_failure_policy_finalized": false,
+  "gpu_executable_sha256": "f396af501beb1d1bccbcf71b594a8f57f1d06e49c3ce74656201cfbd3cb976eb",
+  "cpu_operator_checks": 1548,
+  "cuda_operator_checks": 1548,
+  "operator_source_sha256": {
+    "check_volume_average.cpp": "dff29edfff3da7ed264ca4e22eb729cf091d5129ac2e1d8a9d1fb02acd7b695b",
+    "CMakeLists.txt": "6a4d6de801367fc7f3aaea039b62c9b99efd705067ad81777a51877afde15834"
+  }
+}

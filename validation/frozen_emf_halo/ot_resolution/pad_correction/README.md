@@ -1,5 +1,12 @@
 # Production consistent magnetic PAD correction
 
+**Historical executable:** the face-to-cell interpolation and automatic abort
+described here are superseded by the
+[magnetic volume-average correction](../../magnetic_volume_average/README.md).
+The associated sweep was intentionally stopped with 15 completed runs; all
+completed and partial results are preserved. The measurements below describe
+this earlier implementation only.
+
 **The corrected FV4 512² GPU run reaches t = 1 without EOS floors.** The old
 executable, using the same eleven-ghost input, first requires energy floors at
 cycle 5263 near t = 0.884. Both runs use four revisions and local rcfl tolerance
@@ -99,7 +106,7 @@ The [extended resolution sweep](../four_revision_rtol1e8/README.md) continues wi
 its original uncorrected executable. Its results must not be presented as results
 of this correction.
 
-A separate corrected sweep is now running on Apollo GPU 0 at 64², 128², 256²,
+A separate corrected sweep was started on Apollo GPU 0 at 64², 128², 256²,
 512², 1024², 2048² and 4096² for all three orders, with four revisions and rcfl
 tolerance 1e-8. It uses 256² blocks (or one smaller block at the smallest grids)
 to reduce ghost-memory overhead for 4096². The corrected FV4 512² run also passes
@@ -108,4 +115,4 @@ bitwise; see `fixed-validation/blocks64_vs256.json`.
 
 The new sweep uses an immutable copy of the validated executable and is stored at
 `/scratch/lustre/velasco/codex-validation/local-rcfl-gpu-20261014/ot-resolution/pad-corrected-resolution`.
-The full corrected 2048²/4096² matrix remains in progress.
+That sweep is now stopped pending the agreed averaging and fallback design.

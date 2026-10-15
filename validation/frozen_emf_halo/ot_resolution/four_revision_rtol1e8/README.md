@@ -1,5 +1,10 @@
 # Orszag Tang robustness with four revisions and tolerance 1e-8
 
+**Historical study:** this pre-correction sweep is now stopped, with completed
+and partial results preserved. The checkpoint below describes its original
+executable. See the [magnetic volume-average correction](../../magnetic_volume_average/README.md)
+for the currently validated averaging implementation.
+
 Draft checkpoint: **October 15, 2026 at 09:33:14 EDT**. **16 of 21 cases completed:** 8 clean to t = 1,
 8 with actual floor events, and 5 awaiting completed results.
 The ongoing sweep covers FV4/FV6/FV8 through 4096². EOS counters include ghost

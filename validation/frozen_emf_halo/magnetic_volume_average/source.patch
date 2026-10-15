@@ -1,0 +1,309 @@
+diff --git a/src/eos/mhd_bcc.hpp b/src/eos/mhd_bcc.hpp
+index 1daf13124..39772550a 100644
+--- a/src/eos/mhd_bcc.hpp
++++ b/src/eos/mhd_bcc.hpp
+@@ -5,7 +5,7 @@
+ // Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
+ // Licensed under the 3-clause BSD License (the "LICENSE")
+ //========================================================================================
+-// Production and candidate PAD must use the same face-to-cell magnetic field.
++// Production conversion and MOOD use the same magnetic volume averages for fvN.
+ #include "athena.hpp"
+ #include "reconstruct/plm.hpp"
+ #include "reconstruct/ppm.hpp"
+@@ -15,6 +15,12 @@
+ 
+ namespace mhd_bcc {
+ 
++KOKKOS_INLINE_FUNCTION
++bool IsFV(ReconstructionMethod recon) {
++  return recon == ReconstructionMethod::fv4 || recon == ReconstructionMethod::fv6 ||
++         recon == ReconstructionMethod::fv8;
++}
++
+ inline constexpr int Reach(ReconstructionMethod recon) {
+   switch (recon) {
+     case ReconstructionMethod::dc: return 1;
+@@ -26,14 +32,35 @@ inline constexpr int Reach(ReconstructionMethod recon) {
+   }
+ }
+ 
++// Integrate the degree N-1 polynomial through N face-area averages along the
++// component's normal direction over the central cell. The tangential directions
++// are already averaged, so this integral is a volume average. These are not the
++// cell-average-to-interface weights in reconstruct/fv.hpp.
++KOKKOS_INLINE_FUNCTION
++Real FV4VolumeAverage(Real bm1, Real b0, Real bp1, Real bp2) {
++  return (13.0*(b0 + bp1) - (bm1 + bp2))/24.0;
++}
++
++KOKKOS_INLINE_FUNCTION
++Real FV6VolumeAverage(Real bm2, Real bm1, Real b0, Real bp1, Real bp2, Real bp3) {
++  return (802.0*(b0 + bp1) - 93.0*(bm1 + bp2) + 11.0*(bm2 + bp3))/1440.0;
++}
++
++KOKKOS_INLINE_FUNCTION
++Real FV8VolumeAverage(Real bm3, Real bm2, Real bm1, Real b0, Real bp1, Real bp2,
++                     Real bp3, Real bp4) {
++  return (68323.0*(b0 + bp1) - 9531.0*(bm1 + bp2) + 1879.0*(bm2 + bp3)
++          - 191.0*(bm3 + bp4))/120960.0;
++}
++
+ KOKKOS_INLINE_FUNCTION
+ Real FaceToCenterInterp(const ReconstructionMethod recon,
+                         const Real &bf_im3, const Real &bf_im2, const Real &bf_im1,
+                         const Real &bf_i, const Real &bf_ip1, const Real &bf_ip2,
+                         const Real &bf_ip3, const Real &bf_ip4) {
+   // bf values are face-centered; cell center i is the midpoint between faces i and i+1.
+-  // Limited methods reconstruct L/R dual-grid states and average them; unlimited fvN
+-  // methods use the matching central interpolant of the dual-grid face averages.
++  // Preserve the existing limited-method interpolation. fvN uses the volume
++  // integrals below instead of treating face-area averages as dual-cell averages.
+   Real qL, qR, dum;
+   switch (recon) {
+     case ReconstructionMethod::dc:
+@@ -56,22 +83,45 @@ Real FaceToCenterInterp(const ReconstructionMethod recon,
+       TENO(bf_im1, bf_i, bf_ip1, bf_ip2, bf_ip3, dum, qR);   // center face i+1 → qR at cc
+       return 0.5*(qL + qR);
+     case ReconstructionMethod::fv4:
+-      return FV4Face(bf_im1, bf_i, bf_ip1, bf_ip2);
++      return FV4VolumeAverage(bf_im1, bf_i, bf_ip1, bf_ip2);
+     case ReconstructionMethod::fv6:
+-      return FV6Face(bf_im2, bf_im1, bf_i, bf_ip1, bf_ip2, bf_ip3);
++      return FV6VolumeAverage(bf_im2, bf_im1, bf_i, bf_ip1, bf_ip2, bf_ip3);
+     case ReconstructionMethod::fv8:
+-      return FV8Face(bf_im3, bf_im2, bf_im1, bf_i, bf_ip1, bf_ip2, bf_ip3, bf_ip4);
++      return FV8VolumeAverage(bf_im3, bf_im2, bf_im1, bf_i, bf_ip1, bf_ip2,
++                              bf_ip3, bf_ip4);
+   }
+   return 0.5*(bf_i + bf_ip1);  // fallback
+ }
+ 
+-// Match the production interpolation's existing boundary reductions. The bounds
+-// describe the production C2P range, not the smaller candidate detection halo.
++// Bounds describe the full cell array used by production C2P, with faces lo..hi+1
++// in the component's normal direction. Reduce the order near array boundaries.
++// Load only the stencil actually used: candidate CT need not fill a wider one.
+ KOKKOS_INLINE_FUNCTION
+ Real CellCenteredComponent(const ReconstructionMethod recon,
+     const DvceArray4D<Real> &b, const int m, const int k, const int j, const int i,
+     const int dk, const int dj, const int di, const int lo, const int hi) {
+   const int c = dk*k + dj*j + di*i;
++  if (IsFV(recon)) {
++    if (recon == ReconstructionMethod::fv8 && c > lo+2 && c < hi-2) {
++      return FV8VolumeAverage(
++          b(m,k-3*dk,j-3*dj,i-3*di), b(m,k-2*dk,j-2*dj,i-2*di),
++          b(m,k-dk,j-dj,i-di), b(m,k,j,i), b(m,k+dk,j+dj,i+di),
++          b(m,k+2*dk,j+2*dj,i+2*di), b(m,k+3*dk,j+3*dj,i+3*di),
++          b(m,k+4*dk,j+4*dj,i+4*di));
++    }
++    if (recon != ReconstructionMethod::fv4 && c > lo+1 && c < hi-1) {
++      return FV6VolumeAverage(
++          b(m,k-2*dk,j-2*dj,i-2*di), b(m,k-dk,j-dj,i-di), b(m,k,j,i),
++          b(m,k+dk,j+dj,i+di), b(m,k+2*dk,j+2*dj,i+2*di),
++          b(m,k+3*dk,j+3*dj,i+3*di));
++    }
++    if (c > lo && c < hi) {
++      return FV4VolumeAverage(b(m,k-dk,j-dj,i-di), b(m,k,j,i),
++          b(m,k+dk,j+dj,i+di), b(m,k+2*dk,j+2*dj,i+2*di));
++    }
++    return 0.5*(b(m,k,j,i) + b(m,k+dk,j+dj,i+di));
++  }
++  // Keep the pre-existing non-FV conversion behavior.
+   if (c > lo+2 && c < hi-2) {
+     return FaceToCenterInterp(recon,
+         b(m,k-3*dk,j-3*dj,i-3*di), b(m,k-2*dk,j-2*dj,i-2*di),
+diff --git a/src/mhd/mhd.cpp b/src/mhd/mhd.cpp
+index c03cdffa4..a9d0cf3a4 100644
+--- a/src/mhd/mhd.cpp
++++ b/src/mhd/mhd.cpp
+@@ -332,16 +332,10 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
+       std::exit(EXIT_FAILURE);
+     }
+     uct_diag = pin->GetOrAddBoolean("mhd","uct_diag",false);
+-    // NAD reference field for B.  Under UCT, ConsToPrim builds bcc0 with the unlimited
+-    // high-order face->centre interpolant (ideal_mhd.cpp FaceToCenterInterp), which
+-    // overshoots at a field discontinuity (the field loop's edge: +15-19% at t=0), while
+-    // the staggered MOOD candidate is averaged to the centres with the plain face
+-    // average.
+-    // Testing that candidate against bounds built from the inflated interpolant hides
+-    // violations (field loop, 2026-10-14: 20x fewer flags than ct_contact, where both
+-    // sides are the plain average, and a ringing solution).  "avg" (default) takes the
+-    // detector's reference B, and |B| in mag mode, from the same face average; "ho" keeps
+-    // the former behaviour.  Identical under ct_contact, where bcc0 is that average.
++    // fvN compares magnetic volume averages on both sides of NAD, consistently with
++    // PAD and production conversion. For the other methods, "avg" retains the
++    // two-face NAD average and "ho" uses bcc0 as the reference. Both agree under
++    // ct_contact. The input names are retained for existing decks.
+     mood_nad_bcc_avg =
+         (pin->GetOrAddString("mhd","mood_nad_bcc","avg").compare("avg") == 0);
+     // "auto": flag for UCT, blend for ct_contact (resolved after emf is known)
+diff --git a/src/mhd/mhd.hpp b/src/mhd/mhd.hpp
+index c74288de0..f9aae68fa 100644
+--- a/src/mhd/mhd.hpp
++++ b/src/mhd/mhd.hpp
+@@ -179,7 +179,7 @@ class MHD {
+   int mood_nad_v;           // 0=off, 1=|v|, 2=components
+   bool uct_diag;            // print max|d| (UCT dissipation) + EMF-NaN diagnostic
+   int mood_edge_flag;       // 1: demote UCT edge recon at demoted cells; 0: blend only
+-  bool mood_nad_bcc_avg = true; // NAD reference B = plain face average (mood_nad_bcc)
++  bool mood_nad_bcc_avg = true; // fvN uses volume averages; other methods use two faces
+   DvceArray5D<Real> bcc_nad;    // that reference field (allocated with use_mood)
+   bool mood_nad_rcfl;       // scale relative bounds by the cell-local Courant factor
+   Real mood_rtol;
+@@ -291,7 +291,6 @@ class MHD {
+   TaskStatus EField(Driver *d, int stage);
+   TaskStatus SendE(Driver *d, int stage);
+   TaskStatus RecvE(Driver *d, int stage);
+-  TaskStatus CheckMOODAcceptedState(Driver *d, int stage);
+   TaskStatus CT(Driver *d, int stage);
+   TaskStatus SendB_OA(Driver *d, int stage);
+   TaskStatus RecvB_OA(Driver *d, int stage);
+diff --git a/src/mhd/mhd_mood.cpp b/src/mhd/mhd_mood.cpp
+index 1b349885a..05bb10474 100644
+--- a/src/mhd/mhd_mood.cpp
++++ b/src/mhd/mhd_mood.cpp
+@@ -38,8 +38,6 @@
+ //! the final-iteration halo equals the transverse reach of the edge composition.
+ 
+ #include <algorithm>
+-#include <cstdlib>
+-#include <iostream>
+ 
+ #include "athena.hpp"
+ #include "mesh/mesh.hpp"
+@@ -138,56 +136,6 @@ Real SEDAlpha4(const DvceArray4D<Real> &q, const int m,
+ 
+ } // namespace
+ 
+-// Check owned cells after the final revision, CT, and both U/B boundary phases.
+-// This uses the actual accepted faces and the production C2P interpolant, including
+-// cells already at the bottom tier. A revision limit must not silently accept an
+-// inadmissible state or rely on a subsequent EOS floor to repair it.
+-TaskStatus MHD::CheckMOODAcceptedState(Driver *pdriver, int stage) {
+-  const auto q = pmy_pack->pmesh->mb_indcs;
+-  const int nmb1 = pmy_pack->nmb_thispack-1;
+-  const int n1 = bcc0.extent_int(4), n2 = bcc0.extent_int(3);
+-  const int n3 = bcc0.extent_int(2), nv = nmhd+nscalars;
+-  const bool ho = peos->eos_data.is_ideal &&
+-      !pmy_pack->pcoord->is_special_relativistic &&
+-      !pmy_pack->pcoord->is_general_relativistic && emf_method != MHD_EMF::ct_contact;
+-  const auto recon = recon_method;
+-  auto bx = b0.x1f, by = b0.x2f, bz = b0.x3f;
+-  auto bc = bcctest;
+-  par_for("mood_accepted_bcc", DevExeSpace(), 0,nmb1,q.ks,q.ke,q.js,q.je,q.is,q.ie,
+-  KOKKOS_LAMBDA(const int m,const int k,const int j,const int i) {
+-    bc(m,IBX,k,j,i) = ho ? mhd_bcc::CellCenteredComponent(
+-        recon,bx,m,k,j,i,0,0,1,0,n1-1) : 0.5*(bx(m,k,j,i)+bx(m,k,j,i+1));
+-    bc(m,IBY,k,j,i) = ho ? mhd_bcc::CellCenteredComponent(
+-        recon,by,m,k,j,i,0,1,0,0,n2-1) : 0.5*(by(m,k,j,i)+by(m,k,j+1,i));
+-    bc(m,IBZ,k,j,i) = ho ? mhd_bcc::CellCenteredComponent(
+-        recon,bz,m,k,j,i,1,0,0,0,n3-1) : 0.5*(bz(m,k,j,i)+bz(m,k+1,j,i));
+-  });
+-  Kokkos::deep_copy(fofc,false);
+-  peos->use_c2p_mask = false;
+-  peos->ConsToPrim(u0,b0,w0,bcctest,true,q.is,q.ie,q.js,q.je,q.ks,q.ke);
+-  auto flags = fofc;
+-  auto u = u0;
+-  int bad = 0;
+-  const int ni = q.ie-q.is+1, nj = q.je-q.js+1, nk = q.ke-q.ks+1;
+-  Kokkos::parallel_reduce("mood_accepted_pad",
+-      Kokkos::RangePolicy<>(DevExeSpace(),0,(nmb1+1)*nk*nj*ni),
+-  KOKKOS_LAMBDA(const int idx,int &sum) {
+-    const int i = idx%ni+q.is, j = (idx/ni)%nj+q.js;
+-    const int k = (idx/(ni*nj))%nk+q.ks, m = idx/(ni*nj*nk);
+-    bool danger = flags(m,k,j,i);
+-    for (int n=0; n<nv; ++n) danger = danger || !isfinite(u(m,n,k,j,i));
+-    for (int n=0; n<3; ++n) danger = danger || !isfinite(bc(m,n,k,j,i));
+-    if (danger) ++sum;
+-  }, Kokkos::Sum<int>(bad));
+-  if (bad != 0) {
+-    std::cerr << "MOOD final PAD rejected " << bad << " owned cells after CT and "
+-              << "boundary synchronization at cycle " << pmy_pack->pmesh->ncycle
+-              << ", stage " << stage << "; no EOS floor repair is accepted.\n";
+-    std::exit(EXIT_FAILURE);
+-  }
+-  return TaskStatus::complete;
+-}
+-
+ //----------------------------------------------------------------------------------------
+ //! \fn void MHD::MOODLoop
+ //! \brief detect/demote/revise loop described in the file header.
+@@ -223,6 +171,7 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
+       emf_method != MHD_EMF::ct_contact;
+   const int pad_extra = ho_pad ? mhd_bcc::Reach(recon_method)-1 : 0;
+   const auto pad_recon = recon_method;
++  const bool fv_bavg = ho_pad && mhd_bcc::IsFV(recon_method);
+ 
+   auto &u0_ = u0;
+   auto &u1_ = u1;
+@@ -306,10 +255,13 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
+   auto aL3 = aL_x3f;  auto dl3 = dL_x3f;  auto dr3 = dR_x3f;
+   auto vt1_3 = vx_x3f;  auto vt2_3 = vy_x3f;
+ 
+-  // NAD reference B as the plain face average (mood_nad_bcc=avg): the same averaging as
+-  // the staggered candidate below, so the DMP compares like with like; the high-order
+-  // bcc0 of ConsToPrim stays in use for the fluid fluxes and PAD.
+-  if (nad_avg) {
++  // For fvN, the stage-input bcc0 already contains the production volume average.
++  // In the frozen path its ghosts have been exchanged from their owners: copying
++  // them also avoids order reductions at the outer edge of a local face array.
++  // The candidate below uses the same averaging for both PAD and magnetic NAD.
++  if (nad_avg && fv_bavg) {
++    Kokkos::deep_copy(bcc_nad, bcc0);
++  } else if (nad_avg) {
+     auto bn_ = bcc_nad;
+     const int n1m = ncells1-1, n2m = ncells2-1, n3m = ncells3-1;
+     const bool md = multi_d, td = three_d;
+@@ -888,11 +840,11 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
+       // NAD passes: 0 = density, 1 = internal energy (ideal gas), then B (|B| in mag
+       // mode, three components in comps mode).  Bounds from the stage-input state.
+       if (!trouble && lv < 1) {
+-        // Magnetic NAD compares the face-average candidate with its face-average
+-        // reference. Energy/PAD above instead use the production C2P interpolant.
++        // fvN uses this one magnetic volume-average candidate for every test.
++        // Preserve the historical separate NAD average for the non-FV methods.
+         Real bn1 = bcctest_(m,IBX,k,j,i), bn2 = bcctest_(m,IBY,k,j,i);
+         Real bn3 = bcctest_(m,IBZ,k,j,i);
+-        if (ho_pad) {
++        if (ho_pad && !fv_bavg) {
+           bn1 = 0.5*(btpad1(m,k,j,i) + btpad1(m,k,j,i+1));
+           bn2 = 0.5*(btpad2(m,k,j,i) + btpad2(m,k,j+1,i));
+           bn3 = three_d ? 0.5*(btpad3(m,k,j,i) + btpad3(m,k+1,j,i))
+diff --git a/src/mhd/mhd_tasks.cpp b/src/mhd/mhd_tasks.cpp
+index 191a11d86..cfe12a0a9 100644
+--- a/src/mhd/mhd_tasks.cpp
++++ b/src/mhd/mhd_tasks.cpp
+@@ -84,11 +84,7 @@ void MHD::AssembleMHDTasks(std::map<std::string, std::shared_ptr<TaskList>> tl)
+   id.prol      = tl["stagen"]->AddTask(&MHD::Prolongate, this, id.recvb_shr);
+   id.bcs       = tl["stagen"]->AddTask(&MHD::ApplyPhysicalBCs, this, id.prol);
+   id.wbtof     = tl["stagen"]->AddTask(&MHD::WBFaceToFull, this, id.bcs);
+-  TaskID accepted = id.wbtof;
+-  if (mood_frozen_emf) {
+-    accepted = tl["stagen"]->AddTask(&MHD::CheckMOODAcceptedState, this, accepted);
+-  }
+-  id.c2p       = tl["stagen"]->AddTask(&MHD::ConToPrim, this, accepted);
++  id.c2p       = tl["stagen"]->AddTask(&MHD::ConToPrim, this, id.wbtof);
+   id.newdt     = tl["stagen"]->AddTask(&MHD::NewTimeStep, this, id.c2p);
+ 
+   // assemble "after_stagen" task list
+diff --git a/src/reconstruct/fv.hpp b/src/reconstruct/fv.hpp
+index b026f285b..3ce52e52c 100644
+--- a/src/reconstruct/fv.hpp
++++ b/src/reconstruct/fv.hpp
+@@ -41,11 +41,12 @@
+ //!      fv8:  (-3 q_{i-3} + 29 q_{i-2} - 139 q_{i-1} + 533 q_i
+ //!                 + 533 q_{i+1} - 139 q_{i+2} + 29 q_{i+3} - 3 q_{i+4}) / 840
+ //!
+-//!    These are interpolations, not reconstructions to an interface: the face-to-centre
+-//!    interpolation of the staggered field (eos/ideal_mhd.cpp), the UCT edge value of
+-//!    the face field (mhd_corner_e.cpp ReconstructEdge, where both sides get the same
++//!    The UCT edge value of the face field (mhd_corner_e.cpp ReconstructEdge, where
++//!    both sides get the same
+ //!    value) and the well-balanced face equilibrium (FVFaceAt) use them.  fv4 is the
+ //!    unlimited base of PPM4/PPMX (CS08 eqn 16).
++//!    Magnetic face-to-volume averaging instead integrates the normal polynomial;
++//!    its different weights are in eos/mhd_bcc.hpp.
+ //!
+ //! Either way there is no limiter: stability relies entirely on the MOOD a-posteriori
+ //! fallback (reconstruct=fvN requires mood=true, enforced in the Hydro/MHD constructors;

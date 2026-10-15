@@ -41,11 +41,12 @@
 //!      fv8:  (-3 q_{i-3} + 29 q_{i-2} - 139 q_{i-1} + 533 q_i
 //!                 + 533 q_{i+1} - 139 q_{i+2} + 29 q_{i+3} - 3 q_{i+4}) / 840
 //!
-//!    These are interpolations, not reconstructions to an interface: the face-to-centre
-//!    interpolation of the staggered field (eos/ideal_mhd.cpp), the UCT edge value of
-//!    the face field (mhd_corner_e.cpp ReconstructEdge, where both sides get the same
+//!    The UCT edge value of the face field (mhd_corner_e.cpp ReconstructEdge, where
+//!    both sides get the same
 //!    value) and the well-balanced face equilibrium (FVFaceAt) use them.  fv4 is the
 //!    unlimited base of PPM4/PPMX (CS08 eqn 16).
+//!    Magnetic face-to-volume averaging instead integrates the normal polynomial;
+//!    its different weights are in eos/mhd_bcc.hpp.
 //!
 //! Either way there is no limiter: stability relies entirely on the MOOD a-posteriori
 //! fallback (reconstruct=fvN requires mood=true, enforced in the Hydro/MHD constructors;

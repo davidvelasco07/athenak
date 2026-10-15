@@ -1,0 +1,105 @@
+{
+  "all_identical": true,
+  "files": [
+    {
+      "file": "ot.mhd_divb.00000.bin",
+      "time": 0.0,
+      "identical": true
+    },
+    {
+      "file": "ot.mhd_divb.00001.bin",
+      "time": 0.2506396015975672,
+      "identical": true
+    },
+    {
+      "file": "ot.mhd_divb.00002.bin",
+      "time": 0.5006341109094175,
+      "identical": true
+    },
+    {
+      "file": "ot.mhd_divb.00003.bin",
+      "time": 0.7502806195206702,
+      "identical": true
+    },
+    {
+      "file": "ot.mhd_divb.00004.bin",
+      "time": 1.0,
+      "identical": true
+    },
+    {
+      "file": "ot.mhd_fb_level.00000.bin",
+      "time": 0.0,
+      "identical": true
+    },
+    {
+      "file": "ot.mhd_fb_level.00001.bin",
+      "time": 0.2506396015975672,
+      "identical": true
+    },
+    {
+      "file": "ot.mhd_fb_level.00002.bin",
+      "time": 0.5006341109094175,
+      "identical": true
+    },
+    {
+      "file": "ot.mhd_fb_level.00003.bin",
+      "time": 0.7502806195206702,
+      "identical": true
+    },
+    {
+      "file": "ot.mhd_fb_level.00004.bin",
+      "time": 1.0,
+      "identical": true
+    },
+    {
+      "file": "ot.mhd_u_bcc.00000.bin",
+      "time": 0.0,
+      "identical": true
+    },
+    {
+      "file": "ot.mhd_u_bcc.00001.bin",
+      "time": 0.2506396015975672,
+      "identical": true
+    },
+    {
+      "file": "ot.mhd_u_bcc.00002.bin",
+      "time": 0.5006341109094175,
+      "identical": true
+    },
+    {
+      "file": "ot.mhd_u_bcc.00003.bin",
+      "time": 0.7502806195206702,
+      "identical": true
+    },
+    {
+      "file": "ot.mhd_u_bcc.00004.bin",
+      "time": 1.0,
+      "identical": true
+    },
+    {
+      "file": "ot.mhd_w.00000.bin",
+      "time": 0.0,
+      "identical": true
+    },
+    {
+      "file": "ot.mhd_w.00001.bin",
+      "time": 0.2506396015975672,
+      "identical": true
+    },
+    {
+      "file": "ot.mhd_w.00002.bin",
+      "time": 0.5006341109094175,
+      "identical": true
+    },
+    {
+      "file": "ot.mhd_w.00003.bin",
+      "time": 0.7502806195206702,
+      "identical": true
+    },
+    {
+      "file": "ot.mhd_w.00004.bin",
+      "time": 1.0,
+      "identical": true
+    }
+  ]
+}
