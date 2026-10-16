@@ -79,6 +79,10 @@ void IsothermalHydro::ConsToPrim(DvceArray5D<Real> &cons, DvceArray5D<Real> &pri
   const int nmkji = nmb*nkji;
 
   int nfloord_=0;
+  // MOOD touched-cell mask (see EquationOfState::c2p_mask): skip untouched cells
+  const bool masked_ = use_c2p_mask && only_testfloors;
+  auto mask_ = c2p_mask;
+
   Kokkos::parallel_reduce("isohyd_c2p",Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
   KOKKOS_LAMBDA(const int &idx, int &sumd) {
     int m = (idx)/nkji;
@@ -87,6 +91,7 @@ void IsothermalHydro::ConsToPrim(DvceArray5D<Real> &cons, DvceArray5D<Real> &pri
     int i = (idx - m*nkji - k*nji - j*ni) + il;
     j += jl;
     k += kl;
+    if (masked_ && !mask_(m,k,j,i)) return;
 
     // load single state conserved variables
     HydCons1D u;

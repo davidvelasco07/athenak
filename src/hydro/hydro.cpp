@@ -232,6 +232,18 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
     // entirely, leaving the pure unlimited scheme.  Expect it to be unstable on hard
     // problems: that is the point of the control, not a defect to work around.
     mood_detect = pin->GetOrAddBoolean("hydro","mood_detect",true);
+    // NAD on the first check of each stage only (default): later checks re-test only
+    // physical admissibility, so a cell demotes again only for an unphysical candidate.
+    // "all" re-applies NAD after every revision (classic MOOD).
+    const std::string nadc = pin->GetOrAddString("hydro","mood_nad_checks","first");
+    if (nadc != "first" && nadc != "all") {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+        << std::endl << "<hydro> mood_nad_checks = '" << nadc << "' not implemented "
+        << "(first|all)" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    mood_nad_all = (nadc == "all");
+    mood_touched_only = pin->GetOrAddBoolean("hydro","mood_touched_only",true);
     // One-sided closure of the unlimited fv4 at inflow/user (imposed-state) boundaries
     // (reconstruct/ppm_closure.hpp); false = the old centred stencil across the imposed
     // ghost state (the negative control).  fv4 only: the closure is 4th order.
@@ -526,6 +538,10 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
       }
       if (use_mood) {
         Kokkos::realloc(fb_level, nmb, ncells3, ncells2, ncells1);
+        if (mood_frozen_flux) {
+          Kokkos::realloc(mood_touched, nmb, ncells3, ncells2, ncells1);
+          Kokkos::deep_copy(mood_touched, false);
+        }
       }
     }
   }

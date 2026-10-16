@@ -136,6 +136,7 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
   auto &utest_ = utest;
   auto &fofc_ = fofc;
   auto &fb_level_ = fb_level;
+  auto &touched_ = mood_touched;
   auto wl_ = wl3d;
   auto wr_ = wr3d;
   auto flx1 = uflx.x1f;
@@ -204,6 +205,12 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
     if (multi_d) { jl = js-dh; ju = je+dh; }
     if (three_d) { kl = ks-dh; ku = ke+dh; }
 
+    // NAD on the first check only unless mood_nad_checks = all; later checks of a frozen
+    // stage re-test only the cells next to a face revised since the previous check
+    const bool nad_now = mood_nad_all || (rev == 1);
+    const bool masked = frozen && mood_touched_only && (rev > 1) && newtonian;
+    const bool mark = frozen && mood_touched_only;
+
     if (!(frozen && mood_revise)) {
 
       // flattened-index helpers for the detection parallel_reduce
@@ -218,6 +225,7 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
       Kokkos::deep_copy(fofc_, false);
       par_for("mood_newu", DevExeSpace(), 0, nmb1, kl, ku, jl, ju, il, iu,
       KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+        if (masked && !touched_(m,k,j,i)) return;
         Real dtodx1 = beta_dt/size_.d_view(m).dx1;
         Real dtodx2 = beta_dt/size_.d_view(m).dx2;
         Real dtodx3 = beta_dt/size_.d_view(m).dx3;
@@ -236,15 +244,19 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
       //------------------------------------------------------------------------------------
       // (2) PAD: flag cells where conversion to primitives would require floors
       // (sets fofc; b0/w0 passed but not used/changed)
+      if (masked) { peos->c2p_mask = touched_; peos->use_c2p_mask = true; }
       peos->ConsToPrim(utest_, w0_, true, il, iu, jl, ju, kl, ku);
+      peos->use_c2p_mask = false;
 
       //------------------------------------------------------------------------------------
       // (3) NaN + NAD detection; combine with PAD; filter out cells that cannot descend
       // further; demote survivors and count them
-      int ndemoted = 0, ndemoted_int = 0, nviolations = 0;
+      int ndemoted = 0, ndemoted_int = 0, nviolations = 0, npad = 0, nstuck = 0;
+      int nlpad = 0, nlnad = 0;
       Kokkos::parallel_reduce("mood_detect",
       Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
-      KOKKOS_LAMBDA(const int &idx, int &sum, int &sum_int, int &sum_bad) {
+      KOKKOS_LAMBDA(const int &idx, int &sum, int &sum_int, int &sum_bad, int &sum_pad,
+                    int &sum_stuck, int &sum_lpad, int &sum_lnad) {
         int m = (idx)/nkji;
         int k = (idx - m*nkji)/nji;
         int j = (idx - m*nkji - k*nji)/ni;
@@ -252,6 +264,8 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
         j += jl;
         k += kl;
 
+        // untouched cells keep their previous verdict (their candidate is unchanged)
+        if (masked && !touched_(m,k,j,i)) return;
         // cells already at the bottom tier cannot be revised further
         const int lv = fb_level_(m,k,j,i);
         const bool owned = (i >= is && i <= ie && j >= js && j <= je &&
@@ -278,7 +292,7 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
         // DC cannot descend further, but a failed PAD/finite test still prevents
         // convergence (frozen fluxes): keep it in the consensus without a new tier
         if (lv >= n_fb) {
-          if (danger && owned) sum_bad++;
+          if (danger && owned) { sum_bad++; sum_stuck++; sum_lpad++; }
           fofc_(m,k,j,i) = false;
           return;
         }
@@ -320,7 +334,7 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
         // ghost halo or a mid-loop utest exchange), so the stage-input state — whose
         // ghosts are already valid from the regular comms — is used here.
         // NAD is only evaluated for cells still above its PLM floor (level 0).
-        if (!trouble && lv < 1) {
+        if (!trouble && lv < 1 && nad_now) {
           const Real dtst = utest_(m,IDN,k,j,i);
           const int npass = (is_ideal_ && nad_energy) ? 2 : 1;
           for (int pass=0; pass<npass && !trouble; ++pass) {
@@ -363,7 +377,7 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
         // velocity mom/rho of the trial state against the stage-input velocities over the
         // neighbourhood, with the same tolerance as density.  Components exempt smooth
         // extrema (SED); |v| has no precomputed array, so it is never exempted.
-        if (!trouble && lv < 1 && nad_von) {
+        if (!trouble && lv < 1 && nad_now && nad_von) {
           const Real dtst = utest_(m,IDN,k,j,i);
           const int nvpass = nad_vmag ? 1 : 3;
           for (int vidx=0; vidx<nvpass && !trouble; ++vidx) {
@@ -413,7 +427,7 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
         // conserved scalar density (whose bounds would move with the density even where
         // the tracer itself is perfectly smooth).  r is a passively advected scalar, so it
         // is Galilean-invariant and decomposition-invariant on the same grounds as density.
-        if (!trouble && lv < 1 && nad_scalars) {
+        if (!trouble && lv < 1 && nad_now && nad_scalars) {
           const Real dtst = utest_(m,IDN,k,j,i);
           for (int n=nhyd_; n<nvars && !trouble; ++n) {
             // a non-positive candidate density is already PAD's business; skip the ratio
@@ -444,6 +458,8 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
         // the neighbor blocks' decisions; sum_int (interior only) is the diagnostic
         // counter, so it is decomposition-invariant.
         if (trouble && owned) sum_bad++;
+        if (danger && may_demote && owned) sum_pad++;
+        if (trouble && !may_demote && owned) { if (danger) sum_lpad++; else sum_lnad++; }
         fofc_(m,k,j,i) = trouble && may_demote;
         if (trouble && may_demote) {
           fb_level_(m,k,j,i) += 1;
@@ -453,11 +469,21 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
           }
         }
       }, Kokkos::Sum<int>(ndemoted), Kokkos::Sum<int>(ndemoted_int),
-         Kokkos::Sum<int>(nviolations));
+         Kokkos::Sum<int>(nviolations), Kokkos::Sum<int>(npad), Kokkos::Sum<int>(nstuck),
+         Kokkos::Sum<int>(nlpad), Kokkos::Sum<int>(nlnad));
 
       if (frozen) {
         mood_nviolations = nviolations;
+        mood_diag_counts[0] = ndemoted_int - npad;   // new NAD demotions (to PLM)
+        mood_diag_counts[1] = npad;                  // new PAD/NaN demotions
+        mood_diag_counts[2] = nstuck;                // PAD/NaN failures already at DC
+        mood_diag_counts[3] = nviolations;           // all inadmissible owned cells
+        mood_nchanged = ndemoted_int;
+        mood_left_pad = nlpad;
+        mood_left_nad = nlnad;
         ndemoted_total += ndemoted_int;
+        // the next revision marks the cells whose candidate it changes
+        if (mark) Kokkos::deep_copy(touched_, false);
         break;  // exchange the owners' levels before revising shared faces
       }
       if (ndemoted == 0) break;
@@ -474,6 +500,7 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
     par_for("mood_rev_x1", DevExeSpace(), 0, nmb1, kl, ku, jl, ju, is-dh, ie+1+dh,
     KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
       if (fofc_(m,k,j,i-1) || fofc_(m,k,j,i)) {
+        if (mark) { touched_(m,k,j,i-1) = true; touched_(m,k,j,i) = true; }
         int lv_l = fb_level_(m,k,j,i-1), lv_r = fb_level_(m,k,j,i);
         int tier = (lv_l > lv_r) ? lv_l : lv_r;
         ReconstructionMethod frecon = (tier >= n_fb) ?
@@ -504,6 +531,7 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
       par_for("mood_rev_x2", DevExeSpace(), 0, nmb1, kl, ku, js-dh, je+1+dh, il, iu,
       KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
         if (fofc_(m,k,j-1,i) || fofc_(m,k,j,i)) {
+          if (mark) { touched_(m,k,j-1,i) = true; touched_(m,k,j,i) = true; }
           int lv_l = fb_level_(m,k,j-1,i), lv_r = fb_level_(m,k,j,i);
           int tier = (lv_l > lv_r) ? lv_l : lv_r;
           ReconstructionMethod frecon = (tier >= n_fb) ?
@@ -535,6 +563,7 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
       par_for("mood_rev_x3", DevExeSpace(), 0, nmb1, ks-dh, ke+1+dh, jl, ju, il, iu,
       KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
         if (fofc_(m,k-1,j,i) || fofc_(m,k,j,i)) {
+          if (mark) { touched_(m,k-1,j,i) = true; touched_(m,k,j,i) = true; }
           int lv_l = fb_level_(m,k-1,j,i), lv_r = fb_level_(m,k,j,i);
           int tier = (lv_l > lv_r) ? lv_l : lv_r;
           ReconstructionMethod frecon = (tier >= n_fb) ?

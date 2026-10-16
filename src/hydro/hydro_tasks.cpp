@@ -247,7 +247,23 @@ TaskStatus Hydro::ApplyFallback(Driver *pdrive, int stage) {
     if (!mood_wait_convergence) {
       mood_revise = false;
       RunFallback(pdrive, stage);  // detect owned cells, one revision
-      mood_local_active = (mood_nviolations != 0);
+      if (mood_diagnostics) {
+        int g[4] = {mood_diag_counts[0], mood_diag_counts[1], mood_diag_counts[2],
+                    mood_diag_counts[3]};
+#if MPI_PARALLEL_ENABLED
+        MPI_Allreduce(MPI_IN_PLACE, g, 4, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+#endif
+        if (global_variable::my_rank == 0) {
+          std::cout << "MOOD hydro diag cycle=" << pmy_pack->pmesh->ncycle << " stage="
+                    << stage << " check=" << mood_revision + 1 << " new_nad=" << g[0]
+                    << " new_pad=" << g[1] << " stuck_dc=" << g[2] << " inadmissible="
+                    << g[3] << std::endl;
+        }
+      }
+      // continue only while some cascade level changed somewhere; cells that cannot
+      // descend further (PAD failures at DC, or flags at the revision limit) do not
+      // keep the loop going
+      mood_local_active = (mood_nchanged != 0);
       mood_global_active = mood_local_active;
 #if MPI_PARALLEL_ENABLED
       if (global_variable::nranks > 1) {
@@ -266,9 +282,10 @@ TaskStatus Hydro::ApplyFallback(Driver *pdrive, int stage) {
     if (!ready) return TaskStatus::incomplete;
     mood_wait_convergence = false;
     if (!mood_global_active || mood_revision == mood_max_revs) {
-      if (mood_global_active && mood_nviolations != 0) {
-        std::cout << "MOOD hydro: " << mood_nviolations << " cell(s) still inadmissible "
-                  << "after " << mood_revision << " revisions, cycle="
+      if (mood_left_pad != 0 || mood_left_nad != 0) {
+        std::cout << "MOOD hydro: after " << mood_revision << " revisions, "
+                  << mood_left_pad << " cell(s) fail PAD/NaN (floors will apply), "
+                  << mood_left_nad << " NAD-flagged at the revision limit; cycle="
                   << pmy_pack->pmesh->ncycle << " stage=" << stage << " rank="
                   << global_variable::my_rank << std::endl;
       }

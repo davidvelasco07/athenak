@@ -45,6 +45,7 @@ TaskStatus Hydro::SendMOODCandidate(Driver *pdrive, int stage) {
   // each stage starts from the base scheme everywhere, independent of the previous
   // stage's cascade levels
   Kokkos::deep_copy(fb_level, 0);
+  Kokkos::deep_copy(mood_touched, false);
   mood_revision = 0;
   mood_wait_flags = false;
   mood_wait_convergence = false;
