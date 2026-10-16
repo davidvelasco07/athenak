@@ -247,28 +247,26 @@ TaskStatus Hydro::ApplyFallback(Driver *pdrive, int stage) {
     if (!mood_wait_convergence) {
       mood_revise = false;
       RunFallback(pdrive, stage);  // detect owned cells, one revision
-      if (mood_diagnostics) {
-        int g[4] = {mood_diag_counts[0], mood_diag_counts[1], mood_diag_counts[2],
-                    mood_diag_counts[3]};
-#if MPI_PARALLEL_ENABLED
-        MPI_Allreduce(MPI_IN_PLACE, g, 4, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-#endif
-        if (global_variable::my_rank == 0) {
-          std::cout << "MOOD hydro diag cycle=" << pmy_pack->pmesh->ncycle << " stage="
-                    << stage << " check=" << mood_revision + 1 << " new_nad=" << g[0]
-                    << " new_pad=" << g[1] << " stuck_dc=" << g[2] << " inadmissible="
-                    << g[3] << std::endl;
-        }
-      }
       // continue only while some cascade level changed somewhere; cells that cannot
       // descend further (PAD failures at DC, or flags at the revision limit) do not
       // keep the loop going
       mood_local_active = (mood_nchanged != 0);
       mood_global_active = mood_local_active;
+      mood_counts_local[0] = mood_nchanged;
+      mood_counts_local[1] = mood_diag_counts[0];
+      mood_counts_local[2] = mood_diag_counts[1];
+      mood_counts_local[3] = mood_diag_counts[2];
+      for (int n=0; n<4; ++n) mood_counts_global[n] = mood_counts_local[n];
 #if MPI_PARALLEL_ENABLED
       if (global_variable::nranks > 1) {
-        MPI_Iallreduce(&mood_local_active, &mood_global_active, 1, MPI_INT, MPI_MAX,
-                       mood_convergence_comm, &mood_convergence_req);
+        if (mood_diagnostics) {
+          // one nonblocking collective also carries the exact global counts
+          MPI_Iallreduce(mood_counts_local, mood_counts_global, 4, MPI_UNSIGNED_LONG_LONG,
+                         MPI_SUM, mood_convergence_comm, &mood_convergence_req);
+        } else {
+          MPI_Iallreduce(&mood_local_active, &mood_global_active, 1, MPI_INT, MPI_MAX,
+                         mood_convergence_comm, &mood_convergence_req);
+        }
       }
 #endif
       mood_wait_convergence = true;
@@ -281,6 +279,15 @@ TaskStatus Hydro::ApplyFallback(Driver *pdrive, int stage) {
 #endif
     if (!ready) return TaskStatus::incomplete;
     mood_wait_convergence = false;
+    if (mood_diagnostics) {
+      mood_global_active = (mood_counts_global[0] != 0);
+      if (global_variable::my_rank == 0) {
+        std::cout << "MOOD hydro diag cycle=" << pmy_pack->pmesh->ncycle << " stage="
+                  << stage << " check=" << mood_revision + 1 << " new_nad="
+                  << mood_counts_global[1] << " new_pad=" << mood_counts_global[2]
+                  << " stuck_dc=" << mood_counts_global[3] << std::endl;
+      }
+    }
     if (!mood_global_active || mood_revision == mood_max_revs) {
       if (mood_left_pad != 0 || mood_left_nad != 0) {
         std::cout << "MOOD hydro: after " << mood_revision << " revisions, "
