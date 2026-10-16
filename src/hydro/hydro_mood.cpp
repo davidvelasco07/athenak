@@ -208,6 +208,9 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
     // NAD on the first check only unless mood_nad_checks = all; later checks of a frozen
     // stage re-test only the cells next to a face revised since the previous check
     const bool nad_now = mood_nad_all || (rev == 1);
+    // deepest tier NAD alone may demote to: PLM (default) or, with mood_nad_tier = dc,
+    // first order, a PLM cell whose candidate still fails NAD descending once more
+    const int nad_lv_max = mood_nad_to_dc ? n_fb : 1;
     const bool masked = frozen && mood_touched_only && (rev > 1) && newtonian;
     const bool mark = frozen && mood_touched_only;
 
@@ -301,7 +304,7 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
         // Retain the max-component/min-spacing convention and full-step dt of rcfl;
         // no pack/domain extrema or additional stencil are needed.
         Real cell_rtol = rtol;
-        if (local_rcfl && !danger && lv < 1) {
+        if (local_rcfl && !danger && lv < nad_lv_max) {
           Real speed = fmax(fabs(w0_(m,IVX,k,j,i)),
                        fmax(fabs(w0_(m,IVY,k,j,i)), fabs(w0_(m,IVZ,k,j,i))));
           Real dx = size_.d_view(m).dx1;
@@ -334,7 +337,7 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
         // ghost halo or a mid-loop utest exchange), so the stage-input state — whose
         // ghosts are already valid from the regular comms — is used here.
         // NAD is only evaluated for cells still above its PLM floor (level 0).
-        if (!trouble && lv < 1 && nad_now) {
+        if (!trouble && lv < nad_lv_max && nad_now) {
           const Real dtst = utest_(m,IDN,k,j,i);
           const int npass = (is_ideal_ && nad_energy) ? 2 : 1;
           for (int pass=0; pass<npass && !trouble; ++pass) {
@@ -377,7 +380,7 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
         // velocity mom/rho of the trial state against the stage-input velocities over the
         // neighbourhood, with the same tolerance as density.  Components exempt smooth
         // extrema (SED); |v| has no precomputed array, so it is never exempted.
-        if (!trouble && lv < 1 && nad_now && nad_von) {
+        if (!trouble && lv < nad_lv_max && nad_now && nad_von) {
           const Real dtst = utest_(m,IDN,k,j,i);
           const int nvpass = nad_vmag ? 1 : 3;
           for (int vidx=0; vidx<nvpass && !trouble; ++vidx) {
@@ -427,7 +430,7 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
         // conserved scalar density (whose bounds would move with the density even where
         // the tracer itself is perfectly smooth).  r is a passively advected scalar, so it
         // is Galilean-invariant and decomposition-invariant on the same grounds as density.
-        if (!trouble && lv < 1 && nad_now && nad_scalars) {
+        if (!trouble && lv < nad_lv_max && nad_now && nad_scalars) {
           const Real dtst = utest_(m,IDN,k,j,i);
           for (int n=nhyd_; n<nvars && !trouble; ++n) {
             // a non-positive candidate density is already PAD's business; skip the ratio

@@ -149,9 +149,13 @@ class Hydro {
   int mood_left_pad = 0;        // owned cells still failing PAD/NaN in the latest check
   int mood_left_nad = 0;        // owned cells NAD-flagged but not demoted (revision limit)
   bool mood_nad_all = false;    // NAD on every check (true) or only the first (default)
+  bool mood_nad_to_dc = false;  // NAD may demote PLM cells to first order (mood_nad_tier=dc)
   bool mood_touched_only = true;  // frozen: later checks only re-test touched cells
   DvceArray4D<bool> mood_touched;   // cells adjacent to a face revised since the last check
   int mood_local_active = 0, mood_global_active = 0;
+  // diagnostics: the consensus becomes one nonblocking sum of these counters (changed,
+  // new NAD, new PAD, stuck at DC), never a blocking collective inside the task list
+  unsigned long long mood_counts_local[4] = {}, mood_counts_global[4] = {};
   bool mood_diagnostics = false;
 #if MPI_PARALLEL_ENABLED
   MPI_Comm mood_convergence_comm = MPI_COMM_NULL;

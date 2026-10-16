@@ -243,6 +243,23 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
       std::exit(EXIT_FAILURE);
     }
     mood_nad_all = (nadc == "all");
+    // Deepest tier NAD alone may demote to.  plm (default): NAD stops at the PLM tier and
+    // only PAD/NaN reach first order.  dc: a PLM cell that still fails NAD descends to
+    // first order; reaching it takes a second NAD check, so this needs mood_nad_checks=all.
+    const std::string nadt = pin->GetOrAddString("hydro","mood_nad_tier","plm");
+    if (nadt != "plm" && nadt != "dc") {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+        << std::endl << "<hydro> mood_nad_tier = '" << nadt << "' not implemented (plm|dc)"
+        << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    mood_nad_to_dc = (nadt == "dc");
+    if (use_mood && mood_nad_to_dc && !mood_nad_all) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+        << std::endl << "<hydro> mood_nad_tier = dc needs mood_nad_checks = all (NAD must "
+        << "re-test PLM cells)" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
     mood_touched_only = pin->GetOrAddBoolean("hydro","mood_touched_only",true);
     // One-sided closure of the unlimited fv4 at inflow/user (imposed-state) boundaries
     // (reconstruct/ppm_closure.hpp); false = the old centred stencil across the imposed
