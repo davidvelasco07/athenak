@@ -1,0 +1,11 @@
+{
+  "builtin_executable_sha256": "eae06705a93bacecaa8a9886545d29794b0fd43b83e4f579b280911cfa567820",
+  "blast_executable_sha256": "8abc4f711aff7adb25a8c5f2d2177cfdfd5c7cf68ba0954bc4c66c767069adb8",
+  "kokkos_commit": "08ceff92bcf3a828844480bc1e6137eb74028517",
+  "gpu": "index, name, driver_version\n0, NVIDIA A100-PCIE-40GB, 580.95.05\n1, NVIDIA A100-PCIE-40GB, 580.95.05\n",
+  "numerical_source_files_verified": 347,
+  "bounds_check": false,
+  "precision": "double",
+  "overlap_with_pinned_ot_study": true,
+  "performance_claims": false
+}

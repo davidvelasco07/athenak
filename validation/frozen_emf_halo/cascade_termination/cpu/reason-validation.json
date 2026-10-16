@@ -1,0 +1,6 @@
+{
+  "runs": 14,
+  "event_log_demotions_match_global_reason_totals": true,
+  "mpi_trace_pairs": 7,
+  "all_equal": true
+}

@@ -1,0 +1,14 @@
+{
+  "base_commit": "b3f756c38d257de43728ed9ba6982e4846121c84",
+  "new_cpu_executable_sha256": "f922444e1a9c232cbfc5fccd3e2f08ee360a837af3790351a6e75d387435cf8c",
+  "old_cpu_executable_sha256": "5a732eaf2be3a18b9c537e1a54052c37ef3c68bd820d97c1257c4a77f9bffc17",
+  "serial_executable_sha256": "d9a67ab99768e6626e7673a17ddebdef7627dc8c3740ed5bc424d671c71fed8b",
+  "audit_executable_sha256": "9cadf1a0a6197ee0b1d316de32cd44bec7068718050eba89f78f3e756e17a237",
+  "bounds_check": true,
+  "precision": "double",
+  "backend": "Serial",
+  "cpu_runs": 17,
+  "normal_arrays": 300,
+  "serial_legacy_arrays": 90,
+  "forced_cases": 19
+}

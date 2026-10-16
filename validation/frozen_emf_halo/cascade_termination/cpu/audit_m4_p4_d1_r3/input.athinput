@@ -1,0 +1,109 @@
+<job>
+basename = ot
+
+<mesh>
+nghost = 5
+nx1 = 32
+x1min = -0.5
+x1max = 0.5
+ix1_bc = periodic
+ox1_bc = periodic
+nx2 = 32
+x2min = -0.5
+x2max = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 1
+x3min = -0.5
+x3max = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 16
+nx2 = 16
+nx3 = 1
+
+<time>
+evolution = dynamic
+integrator = rk3
+cfl_number = 0.25
+nlim = -1
+tlim = 0.001
+ndiag = 10
+
+<mhd>
+eos = ideal
+reconstruct = fv8
+rsolver = hlld
+emf = uct_hlld
+gamma = 1.6666666666666667
+mood = true
+mood_detect = true
+mood_frozen_emf = true
+mood_max_revs = 3
+mood_diagnostics = true
+mood_nad_scale = rcfl
+mood_rtol = 1e-08
+mood_atol = 0.0
+mood_eps0 = 1e-12
+mood_sed = true
+mood_nad_energy = true
+mood_nad_v = off
+mood_nad_b = comps
+mood_nad_bcc = avg
+mood_edge = flag
+mood_touched_only = false
+mood_diagnostics = true
+dfloor = 1e-12
+pfloor = 1e-12
+
+<problem>
+pgen_name = shock_tube
+shock_dir = 1
+xshock = 0
+dl = 1.0
+ul = 0
+vl = 0
+wl = 0
+pl = 1.0
+bxl = 0.5
+byl = 0.5
+bzl = 0.2
+dr = 1.0
+ur = 0
+vr = 0
+wr = 0
+pr = 1.0
+bxr = 0.5
+byr = 0.5
+bzr = 0.2
+<output1>
+file_type = log
+dcycle = 1
+
+<output2>
+file_type = hst
+dt = 0.01
+data_format = %.17e
+
+<output3>
+file_type = bin
+variable = mhd_u_bcc
+dt = 0.25
+
+<output4>
+file_type = bin
+variable = mhd_w
+dt = 0.25
+
+<output5>
+file_type = bin
+variable = mhd_fb_level
+dt = 0.25
+
+<output6>
+file_type = bin
+variable = mhd_divb
+dt = 0.25
+

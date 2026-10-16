@@ -1,0 +1,26 @@
+{
+  "new_trace": {
+    "stages": 18,
+    "mean_revisions": 4.0,
+    "histogram": {
+      "1": 1,
+      "2": 3,
+      "3": 6,
+      "4": 2,
+      "5": 3,
+      "8": 3
+    },
+    "statuses": {
+      "converged": 16,
+      "revision_limit": 2
+    },
+    "checks_equal_revisions_plus_one": true,
+    "reason_stages": 18,
+    "applied_nad_demotions": 35954,
+    "applied_pad_demotions": 0,
+    "terminal_nad_requests": 6,
+    "terminal_pad_requests": 0,
+    "terminal_dc_failures": 0
+  },
+  "old_log_optional_fields_absent": true
+}

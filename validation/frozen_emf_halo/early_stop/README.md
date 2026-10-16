@@ -1,5 +1,9 @@
 # Convergent termination of the frozen MHD revision loop
 
+**Historical stopping predicate.** The current [cascade-change rule](../cascade_termination/README.md)
+stops when no levels can increase and reports stable DC failures separately.
+The results below retain their pinned any-violation implementation.
+
 `mood_max_revs` is now a maximum number of flux/EMF corrections per RK stage.
 The stage exits as soon as all ranks report clear owned-cell detector tests.
 An initially clear candidate performs zero corrections. High-order fluxes and

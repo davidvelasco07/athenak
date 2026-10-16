@@ -284,19 +284,33 @@ TaskStatus MHD::ApplyFallback(Driver *pdrive, int stage) {
   if (!mood_frozen_emf) return RunFallback(pdrive, stage);
 
   // Check the current candidate before every correction, including after the
-  // final allowed correction. Quiet ranks must still join remote repairs until
-  // the detector is clear everywhere. The nonblocking consensus has its own
+  // final allowed correction. Repeat only while owned cascade levels change;
+  // a stable but unphysical DC candidate is reported separately. Quiet ranks
+  // still join remote repairs. The nonblocking consensus has its own
   // communicator so it cannot match a different stage/diagnostic collective.
   if (!mood_wait_flags) {
     if (!mood_wait_convergence) {
       mood_revise = false;
       RunFallback(pdrive, stage);  // detect owned cells, without applying floors
-      mood_local_active = (mood_nviolations != 0);
-      mood_global_active = mood_local_active;
+      mood_local_state =
+          ((mood_nad_requests || mood_pad_requests) ? mood_pending_bit : 0) |
+          ((mood_pad_requests || mood_dc_bad) ? mood_pad_bit : 0);
+      mood_global_state = mood_local_state;
+      mood_counts_local[0] = mood_nad_requests;
+      mood_counts_local[1] = mood_pad_requests;
+      mood_counts_local[2] = mood_dc_bad;
+      for (int n=0; n<3; ++n) mood_counts_global[n] = mood_counts_local[n];
 #if MPI_PARALLEL_ENABLED
       if (global_variable::nranks > 1) {
-        MPI_Iallreduce(&mood_local_active, &mood_global_active, 1, MPI_INT, MPI_MAX,
-                      mood_convergence_comm, &mood_convergence_req);
+        if (mood_diagnostics) {
+          // One collective also provides exact global diagnostic counts.
+          MPI_Iallreduce(mood_counts_local, mood_counts_global, 3,
+                        MPI_UNSIGNED_LONG_LONG, MPI_SUM, mood_convergence_comm,
+                        &mood_convergence_req);
+        } else {
+          MPI_Iallreduce(&mood_local_state, &mood_global_state, 1, MPI_INT, MPI_BOR,
+                        mood_convergence_comm, &mood_convergence_req);
+        }
       }
 #endif
       mood_wait_convergence = true;
@@ -309,14 +323,31 @@ TaskStatus MHD::ApplyFallback(Driver *pdrive, int stage) {
 #endif
     if (!ready) return TaskStatus::incomplete;
     mood_wait_convergence = false;
-    if (!mood_global_active || mood_revision == mood_max_revs) {
+    if (mood_diagnostics) {
+      mood_global_state =
+          ((mood_counts_global[0] || mood_counts_global[1]) ? mood_pending_bit : 0) |
+          ((mood_counts_global[1] || mood_counts_global[2]) ? mood_pad_bit : 0);
+    }
+    const bool pending = mood_global_state & mood_pending_bit;
+    const bool bad_pad = mood_global_state & mood_pad_bit;
+    if (!pending || mood_revision == mood_max_revs) {
       if (mood_diagnostics && global_variable::my_rank == 0) {
         std::cout << "MOOD cycle=" << pmy_pack->pmesh->ncycle << " stage=" << stage
                   << " revisions=" << mood_revision << " checks=" << mood_revision+1
-                  << " status=" << (mood_global_active ? "revision_limit" : "converged")
+                  << " status=" << (pending ? "revision_limit" :
+                                       bad_pad ? "stalled_unphysical" : "converged")
+                  << " nad_demotions=" << mood_nad_demotions
+                  << " pad_demotions=" << mood_pad_demotions
+                  << " nad_pending=" << mood_counts_global[0]
+                  << " pad_pending=" << mood_counts_global[1]
+                  << " dc_bad=" << mood_counts_global[2]
                   << '\n';
       }
       return TaskStatus::complete;
+    }
+    if (mood_diagnostics) {
+      mood_nad_demotions += mood_counts_global[0];
+      mood_pad_demotions += mood_counts_global[1];
     }
     pbval_mood_flags->InitRecvIntCC();
     pbval_mood_flags->PackAndSendIntCC(fb_level);

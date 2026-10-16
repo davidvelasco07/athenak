@@ -74,6 +74,15 @@ def analyze(run, nx, tlim, reader):
           'histogram':dict(sorted(counts.items())),
           'statuses':dict(Counter(s[4] for s in stages)),
           'checks_equal_revisions_plus_one':all(int(s[3])==int(s[2])+1 for s in stages)}
+        reasons=re.findall(r'^MOOD .* nad_demotions=(\d+) pad_demotions=(\d+) '
+                           r'nad_pending=(\d+) pad_pending=(\d+) dc_bad=(\d+)',
+                           stdout,re.M)
+        if reasons:
+            result['revision_diagnostics']['reason_stages']=len(reasons)
+            for i,name in enumerate(('applied_nad_demotions','applied_pad_demotions',
+                                     'terminal_nad_requests','terminal_pad_requests',
+                                     'terminal_dc_failures')):
+                result['revision_diagnostics'][name]=sum(int(r[i]) for r in reasons)
     rejected=re.search(r'MOOD final PAD rejected (\d+) owned cells.*?cycle (\d+), stage (\d+)',stdout)
     if rejected:
         result['final_pad_rejection']={'owned_cells':int(rejected[1]),'cycle':int(rejected[2]),'stage':int(rejected[3])}

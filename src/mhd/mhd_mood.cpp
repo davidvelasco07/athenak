@@ -795,10 +795,11 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
     // (3) NaN + NAD detection; combine with PAD; demote survivors and count them.
     // Same tier-floor split as hydro: PAD/NaN may cascade to DC, NAD (density, energy,
     // magnetic field) demotes to the PLM tier only.
-    int ndemoted = 0, ndemoted_int = 0, nviolations = 0;
+    int ndemoted = 0, ndemoted_int = 0, nnad = 0, npad = 0, ndc = 0;
     Kokkos::parallel_reduce("mmood_detect",
     Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
-    KOKKOS_LAMBDA(const int &idx, int &sum, int &sum_int, int &sum_bad) {
+    KOKKOS_LAMBDA(const int &idx, int &sum, int &sum_int,
+                  int &sum_nad, int &sum_pad, int &sum_dc) {
       int m = (idx)/nkji;
       int k = (idx - m*nkji)/nji;
       int j = (idx - m*nkji - k*nji)/ni;
@@ -824,10 +825,10 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
         if (!isfinite(bcctest_(m,IBX,k,j,i)) || !isfinite(bcctest_(m,IBY,k,j,i)) ||
             !isfinite(bcctest_(m,IBZ,k,j,i))) { danger = true; }
       }
-      // DC cannot descend further, but a failed PAD/finite test still prevents
-      // convergence. Preserve it in the consensus without revising its tier.
+      // DC cannot descend further. Record physical failure separately so it
+      // cannot request another correction with an unchanged cascade map.
       if (lv >= n_fb) {
-        if (danger && owned) sum_bad++;
+        if (danger && owned) sum_dc++;
         fofc_(m,k,j,i) = false;
         return;
       }
@@ -1106,7 +1107,13 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
 
       // The check after the last allowed correction must not change the levels:
       // those levels describe the fluxes/EMFs that will actually be committed.
-      if (trouble && owned) sum_bad++;
+      // All surviving trouble below DC requests a genuine level increase.
+      // Count requests independently of may_demote: the terminal check must
+      // distinguish pending corrections from a stable map without mutating it.
+      if (trouble && owned) {
+        if (danger) sum_pad++;
+        else sum_nad++;
+      }
       fofc_(m,k,j,i) = trouble && may_demote;
       if (trouble && may_demote) {
         fb_level_(m,k,j,i) += 1;
@@ -1116,10 +1123,12 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
         }
       }
     }, Kokkos::Sum<int>(ndemoted), Kokkos::Sum<int>(ndemoted_int),
-       Kokkos::Sum<int>(nviolations));
+       Kokkos::Sum<int>(nnad), Kokkos::Sum<int>(npad), Kokkos::Sum<int>(ndc));
 
     if (mood_frozen_emf) {
-      mood_nviolations = nviolations;
+      mood_nad_requests = nnad;
+      mood_pad_requests = npad;
+      mood_dc_bad = ndc;
       ndemoted_total += ndemoted_int;
       break;  // exchange owner levels before revising shared faces and halo edges
     }

@@ -1,0 +1,16 @@
+{
+  "normal_cpu_runs": 17,
+  "normal_cpu_arrays": 300,
+  "serial_legacy_arrays": 90,
+  "forced_cpu_cases": 19,
+  "gpu_runs_including_references": 14,
+  "gpu_arrays": 260,
+  "total_equal_arrays": 650,
+  "gr_stage_count": 855,
+  "gr_limit_causes": {
+    "nad_only": 0,
+    "pad_only": 87,
+    "nad_and_pad": 0
+  },
+  "gr_stalled_stages": 2
+}

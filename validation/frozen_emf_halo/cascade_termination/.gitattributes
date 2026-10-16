@@ -1,0 +1,5 @@
+# Preserve captured evidence and unified-diff context verbatim.
+cpu/** -whitespace
+gpu/** -whitespace
+*.patch -whitespace
+uniform.athinput -whitespace

@@ -14,11 +14,15 @@ one level per halo cell after each owned-cell detection pass. MHD ghost counts
 are **3/4/5** for FV4/FV6/FV8 with HLLD/HLLE/LLF, and **4/5/6** for L-HLLD's
 extra sensor cell, independently of revision count. SR/GR use their supported
 LLF/HLLE solvers with **3/4/5**. The preceding wider-halo results are historical.
-The [early-termination correction](early_stop/README.md) makes `mood_max_revs`
-a maximum for frozen MHD: all ranks stop as soon as their owned detector checks
-are clear. It uses one nonblocking integer consensus per check, retains DC PAD
-failures as unresolved, and checks the final corrected candidate without changing
-its accepted levels. Enable `mood_diagnostics` for actual per-stage counts.
+The [cascade-change stopping rule](cascade_termination/README.md) repeats a
+frozen MHD correction only while an owned cell requests a higher cascade level
+somewhere in the MPI domain. NAD stops at PLM; only PAD/nonfinite states can reach
+first order. A stable but unphysical first-order candidate is reported as
+`stalled_unphysical`, with the existing EOS repair policy retained. The terminal
+check is read-only at the revision cap. Enable `mood_diagnostics` for global
+accepted NAD/PAD demotions, pending requests, DC failures, and actual rounds.
+The [preceding early-termination report](early_stop/README.md) records the earlier
+any-violation stopping predicate and its pinned tests.
 
 Hydro is unchanged: it needs **5** for all three orders at two revisions,
 `max(reconstruction_radius + 1, revisions + 3)`.
@@ -34,7 +38,9 @@ The [current OT resolution study](ot_resolution/early_exit/README.md) reruns FV4
 from 64² through 4096² on Apollo with four revisions maximum, `rcfl` tolerance
 `1e-8`, magnetic volume averages, 3/4/5 ghosts, and early termination. It records
 actual revision counts, unresolved final checks, EOS repairs, conservation, and
-t = 1 maps. Larger resolutions remain pending until their recorded runs complete.
+t = 1 maps. Larger resolutions remain pending until their recorded runs complete. That batch
+retains the preceding pinned stopping implementation; this change has separate
+[cascade-termination controls](cascade_termination/README.md).
 
 The [earlier two-revision](ot_resolution/README.md) and
 [four-revision](ot_resolution/four_revision_rtol1e8/README.md) sweeps retain their

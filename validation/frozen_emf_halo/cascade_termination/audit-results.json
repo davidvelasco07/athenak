@@ -1,0 +1,1725 @@
+[
+  {
+    "name": "audit_m1_p1_d0_r8",
+    "mode": 1,
+    "mpi": 1,
+    "diagnostics": false,
+    "cap": 8,
+    "revisions": 2,
+    "status": "converged",
+    "checks_per_rank": {
+      "(0, 1)": [
+        0,
+        1,
+        2
+      ],
+      "(0, 2)": [
+        0,
+        1,
+        2
+      ],
+      "(0, 3)": [
+        0,
+        1,
+        2
+      ]
+    },
+    "rounds": [],
+    "final_plm_cells": 0,
+    "final_dc_cells": 1
+  },
+  {
+    "name": "audit_m1_p1_d1_r8",
+    "mode": 1,
+    "mpi": 1,
+    "diagnostics": true,
+    "cap": 8,
+    "revisions": 2,
+    "status": "converged",
+    "checks_per_rank": {
+      "(0, 1)": [
+        0,
+        1,
+        2
+      ],
+      "(0, 2)": [
+        0,
+        1,
+        2
+      ],
+      "(0, 3)": [
+        0,
+        1,
+        2
+      ]
+    },
+    "rounds": [
+      {
+        "cycle": "0",
+        "stage": "1",
+        "revisions": "2",
+        "checks": "3",
+        "status": "converged",
+        "nad_demotions": "0",
+        "pad_demotions": "2",
+        "nad_pending": "0",
+        "pad_pending": "0",
+        "dc_bad": "0"
+      },
+      {
+        "cycle": "0",
+        "stage": "2",
+        "revisions": "2",
+        "checks": "3",
+        "status": "converged",
+        "nad_demotions": "0",
+        "pad_demotions": "2",
+        "nad_pending": "0",
+        "pad_pending": "0",
+        "dc_bad": "0"
+      },
+      {
+        "cycle": "0",
+        "stage": "3",
+        "revisions": "2",
+        "checks": "3",
+        "status": "converged",
+        "nad_demotions": "0",
+        "pad_demotions": "2",
+        "nad_pending": "0",
+        "pad_pending": "0",
+        "dc_bad": "0"
+      }
+    ],
+    "final_plm_cells": 0,
+    "final_dc_cells": 1
+  },
+  {
+    "name": "audit_m1_p4_d0_r8",
+    "mode": 1,
+    "mpi": 4,
+    "diagnostics": false,
+    "cap": 8,
+    "revisions": 2,
+    "status": "converged",
+    "checks_per_rank": {
+      "(1, 1)": [
+        0,
+        1,
+        2
+      ],
+      "(2, 1)": [
+        0,
+        1,
+        2
+      ],
+      "(3, 1)": [
+        0,
+        1,
+        2
+      ],
+      "(0, 1)": [
+        0,
+        1,
+        2
+      ],
+      "(2, 2)": [
+        0,
+        1,
+        2
+      ],
+      "(1, 2)": [
+        0,
+        1,
+        2
+      ],
+      "(3, 2)": [
+        0,
+        1,
+        2
+      ],
+      "(0, 2)": [
+        0,
+        1,
+        2
+      ],
+      "(3, 3)": [
+        0,
+        1,
+        2
+      ],
+      "(0, 3)": [
+        0,
+        1,
+        2
+      ],
+      "(1, 3)": [
+        0,
+        1,
+        2
+      ],
+      "(2, 3)": [
+        0,
+        1,
+        2
+      ]
+    },
+    "rounds": [],
+    "final_plm_cells": 0,
+    "final_dc_cells": 1
+  },
+  {
+    "name": "audit_m1_p4_d1_r8",
+    "mode": 1,
+    "mpi": 4,
+    "diagnostics": true,
+    "cap": 8,
+    "revisions": 2,
+    "status": "converged",
+    "checks_per_rank": {
+      "(0, 1)": [
+        0,
+        1,
+        2
+      ],
+      "(2, 1)": [
+        0,
+        1,
+        2
+      ],
+      "(3, 1)": [
+        0,
+        1,
+        2
+      ],
+      "(1, 1)": [
+        0,
+        1,
+        2
+      ],
+      "(0, 2)": [
+        0,
+        1,
+        2
+      ],
+      "(3, 2)": [
+        0,
+        1,
+        2
+      ],
+      "(2, 2)": [
+        0,
+        1,
+        2
+      ],
+      "(1, 2)": [
+        0,
+        1,
+        2
+      ],
+      "(0, 3)": [
+        0,
+        1,
+        2
+      ],
+      "(3, 3)": [
+        0,
+        1,
+        2
+      ],
+      "(2, 3)": [
+        0,
+        1,
+        2
+      ],
+      "(1, 3)": [
+        0,
+        1,
+        2
+      ]
+    },
+    "rounds": [
+      {
+        "cycle": "0",
+        "stage": "1",
+        "revisions": "2",
+        "checks": "3",
+        "status": "converged",
+        "nad_demotions": "0",
+        "pad_demotions": "2",
+        "nad_pending": "0",
+        "pad_pending": "0",
+        "dc_bad": "0"
+      },
+      {
+        "cycle": "0",
+        "stage": "2",
+        "revisions": "2",
+        "checks": "3",
+        "status": "converged",
+        "nad_demotions": "0",
+        "pad_demotions": "2",
+        "nad_pending": "0",
+        "pad_pending": "0",
+        "dc_bad": "0"
+      },
+      {
+        "cycle": "0",
+        "stage": "3",
+        "revisions": "2",
+        "checks": "3",
+        "status": "converged",
+        "nad_demotions": "0",
+        "pad_demotions": "2",
+        "nad_pending": "0",
+        "pad_pending": "0",
+        "dc_bad": "0"
+      }
+    ],
+    "final_plm_cells": 0,
+    "final_dc_cells": 1
+  },
+  {
+    "name": "audit_m2_p1_d0_r8",
+    "mode": 2,
+    "mpi": 1,
+    "diagnostics": false,
+    "cap": 8,
+    "revisions": 2,
+    "status": "stalled_unphysical",
+    "checks_per_rank": {
+      "(0, 1)": [
+        0,
+        1,
+        2
+      ],
+      "(0, 2)": [
+        0,
+        1,
+        2
+      ],
+      "(0, 3)": [
+        0,
+        1,
+        2
+      ]
+    },
+    "rounds": [],
+    "final_plm_cells": 0,
+    "final_dc_cells": 1
+  },
+  {
+    "name": "audit_m2_p1_d1_r8",
+    "mode": 2,
+    "mpi": 1,
+    "diagnostics": true,
+    "cap": 8,
+    "revisions": 2,
+    "status": "stalled_unphysical",
+    "checks_per_rank": {
+      "(0, 1)": [
+        0,
+        1,
+        2
+      ],
+      "(0, 2)": [
+        0,
+        1,
+        2
+      ],
+      "(0, 3)": [
+        0,
+        1,
+        2
+      ]
+    },
+    "rounds": [
+      {
+        "cycle": "0",
+        "stage": "1",
+        "revisions": "2",
+        "checks": "3",
+        "status": "stalled_unphysical",
+        "nad_demotions": "0",
+        "pad_demotions": "2",
+        "nad_pending": "0",
+        "pad_pending": "0",
+        "dc_bad": "1"
+      },
+      {
+        "cycle": "0",
+        "stage": "2",
+        "revisions": "2",
+        "checks": "3",
+        "status": "stalled_unphysical",
+        "nad_demotions": "0",
+        "pad_demotions": "2",
+        "nad_pending": "0",
+        "pad_pending": "0",
+        "dc_bad": "1"
+      },
+      {
+        "cycle": "0",
+        "stage": "3",
+        "revisions": "2",
+        "checks": "3",
+        "status": "stalled_unphysical",
+        "nad_demotions": "0",
+        "pad_demotions": "2",
+        "nad_pending": "0",
+        "pad_pending": "0",
+        "dc_bad": "1"
+      }
+    ],
+    "final_plm_cells": 0,
+    "final_dc_cells": 1
+  },
+  {
+    "name": "audit_m2_p4_d0_r8",
+    "mode": 2,
+    "mpi": 4,
+    "diagnostics": false,
+    "cap": 8,
+    "revisions": 2,
+    "status": "stalled_unphysical",
+    "checks_per_rank": {
+      "(0, 1)": [
+        0,
+        1,
+        2
+      ],
+      "(3, 1)": [
+        0,
+        1,
+        2
+      ],
+      "(2, 1)": [
+        0,
+        1,
+        2
+      ],
+      "(1, 1)": [
+        0,
+        1,
+        2
+      ],
+      "(0, 2)": [
+        0,
+        1,
+        2
+      ],
+      "(3, 2)": [
+        0,
+        1,
+        2
+      ],
+      "(2, 2)": [
+        0,
+        1,
+        2
+      ],
+      "(1, 2)": [
+        0,
+        1,
+        2
+      ],
+      "(0, 3)": [
+        0,
+        1,
+        2
+      ],
+      "(3, 3)": [
+        0,
+        1,
+        2
+      ],
+      "(2, 3)": [
+        0,
+        1,
+        2
+      ],
+      "(1, 3)": [
+        0,
+        1,
+        2
+      ]
+    },
+    "rounds": [],
+    "final_plm_cells": 0,
+    "final_dc_cells": 1
+  },
+  {
+    "name": "audit_m2_p4_d1_r8",
+    "mode": 2,
+    "mpi": 4,
+    "diagnostics": true,
+    "cap": 8,
+    "revisions": 2,
+    "status": "stalled_unphysical",
+    "checks_per_rank": {
+      "(2, 1)": [
+        0,
+        1,
+        2
+      ],
+      "(3, 1)": [
+        0,
+        1,
+        2
+      ],
+      "(0, 1)": [
+        0,
+        1,
+        2
+      ],
+      "(1, 1)": [
+        0,
+        1,
+        2
+      ],
+      "(2, 2)": [
+        0,
+        1,
+        2
+      ],
+      "(1, 2)": [
+        0,
+        1,
+        2
+      ],
+      "(3, 2)": [
+        0,
+        1,
+        2
+      ],
+      "(0, 2)": [
+        0,
+        1,
+        2
+      ],
+      "(1, 3)": [
+        0,
+        1,
+        2
+      ],
+      "(3, 3)": [
+        0,
+        1,
+        2
+      ],
+      "(0, 3)": [
+        0,
+        1,
+        2
+      ],
+      "(2, 3)": [
+        0,
+        1,
+        2
+      ]
+    },
+    "rounds": [
+      {
+        "cycle": "0",
+        "stage": "1",
+        "revisions": "2",
+        "checks": "3",
+        "status": "stalled_unphysical",
+        "nad_demotions": "0",
+        "pad_demotions": "2",
+        "nad_pending": "0",
+        "pad_pending": "0",
+        "dc_bad": "1"
+      },
+      {
+        "cycle": "0",
+        "stage": "2",
+        "revisions": "2",
+        "checks": "3",
+        "status": "stalled_unphysical",
+        "nad_demotions": "0",
+        "pad_demotions": "2",
+        "nad_pending": "0",
+        "pad_pending": "0",
+        "dc_bad": "1"
+      },
+      {
+        "cycle": "0",
+        "stage": "3",
+        "revisions": "2",
+        "checks": "3",
+        "status": "stalled_unphysical",
+        "nad_demotions": "0",
+        "pad_demotions": "2",
+        "nad_pending": "0",
+        "pad_pending": "0",
+        "dc_bad": "1"
+      }
+    ],
+    "final_plm_cells": 0,
+    "final_dc_cells": 1
+  },
+  {
+    "name": "audit_m3_p1_d0_r8",
+    "mode": 3,
+    "mpi": 1,
+    "diagnostics": false,
+    "cap": 8,
+    "revisions": 8,
+    "status": "revision_limit",
+    "checks_per_rank": {
+      "(0, 1)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "(0, 2)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "(0, 3)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    "rounds": [],
+    "final_plm_cells": 8,
+    "final_dc_cells": 0
+  },
+  {
+    "name": "audit_m3_p1_d1_r8",
+    "mode": 3,
+    "mpi": 1,
+    "diagnostics": true,
+    "cap": 8,
+    "revisions": 8,
+    "status": "revision_limit",
+    "checks_per_rank": {
+      "(0, 1)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "(0, 2)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "(0, 3)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    "rounds": [
+      {
+        "cycle": "0",
+        "stage": "1",
+        "revisions": "8",
+        "checks": "9",
+        "status": "revision_limit",
+        "nad_demotions": "0",
+        "pad_demotions": "8",
+        "nad_pending": "0",
+        "pad_pending": "1",
+        "dc_bad": "0"
+      },
+      {
+        "cycle": "0",
+        "stage": "2",
+        "revisions": "8",
+        "checks": "9",
+        "status": "revision_limit",
+        "nad_demotions": "0",
+        "pad_demotions": "8",
+        "nad_pending": "0",
+        "pad_pending": "1",
+        "dc_bad": "0"
+      },
+      {
+        "cycle": "0",
+        "stage": "3",
+        "revisions": "8",
+        "checks": "9",
+        "status": "revision_limit",
+        "nad_demotions": "0",
+        "pad_demotions": "8",
+        "nad_pending": "0",
+        "pad_pending": "1",
+        "dc_bad": "0"
+      }
+    ],
+    "final_plm_cells": 8,
+    "final_dc_cells": 0
+  },
+  {
+    "name": "audit_m3_p4_d0_r8",
+    "mode": 3,
+    "mpi": 4,
+    "diagnostics": false,
+    "cap": 8,
+    "revisions": 8,
+    "status": "revision_limit",
+    "checks_per_rank": {
+      "(1, 1)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "(3, 1)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "(2, 1)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "(0, 1)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "(1, 2)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "(3, 2)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "(2, 2)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "(0, 2)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "(1, 3)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "(3, 3)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "(2, 3)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "(0, 3)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    "rounds": [],
+    "final_plm_cells": 8,
+    "final_dc_cells": 0
+  },
+  {
+    "name": "audit_m3_p4_d1_r8",
+    "mode": 3,
+    "mpi": 4,
+    "diagnostics": true,
+    "cap": 8,
+    "revisions": 8,
+    "status": "revision_limit",
+    "checks_per_rank": {
+      "(1, 1)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "(0, 1)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "(3, 1)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "(2, 1)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "(3, 2)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "(1, 2)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "(0, 2)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "(2, 2)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "(0, 3)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "(2, 3)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "(3, 3)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "(1, 3)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    "rounds": [
+      {
+        "cycle": "0",
+        "stage": "1",
+        "revisions": "8",
+        "checks": "9",
+        "status": "revision_limit",
+        "nad_demotions": "0",
+        "pad_demotions": "8",
+        "nad_pending": "0",
+        "pad_pending": "1",
+        "dc_bad": "0"
+      },
+      {
+        "cycle": "0",
+        "stage": "2",
+        "revisions": "8",
+        "checks": "9",
+        "status": "revision_limit",
+        "nad_demotions": "0",
+        "pad_demotions": "8",
+        "nad_pending": "0",
+        "pad_pending": "1",
+        "dc_bad": "0"
+      },
+      {
+        "cycle": "0",
+        "stage": "3",
+        "revisions": "8",
+        "checks": "9",
+        "status": "revision_limit",
+        "nad_demotions": "0",
+        "pad_demotions": "8",
+        "nad_pending": "0",
+        "pad_pending": "1",
+        "dc_bad": "0"
+      }
+    ],
+    "final_plm_cells": 8,
+    "final_dc_cells": 0
+  },
+  {
+    "name": "audit_m4_p1_d0_r8",
+    "mode": 4,
+    "mpi": 1,
+    "diagnostics": false,
+    "cap": 8,
+    "revisions": 5,
+    "status": "stalled_unphysical",
+    "checks_per_rank": {
+      "(0, 1)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "(0, 2)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "(0, 3)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ]
+    },
+    "rounds": [],
+    "final_plm_cells": 5,
+    "final_dc_cells": 1
+  },
+  {
+    "name": "audit_m4_p1_d1_r8",
+    "mode": 4,
+    "mpi": 1,
+    "diagnostics": true,
+    "cap": 8,
+    "revisions": 5,
+    "status": "stalled_unphysical",
+    "checks_per_rank": {
+      "(0, 1)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "(0, 2)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "(0, 3)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ]
+    },
+    "rounds": [
+      {
+        "cycle": "0",
+        "stage": "1",
+        "revisions": "5",
+        "checks": "6",
+        "status": "stalled_unphysical",
+        "nad_demotions": "5",
+        "pad_demotions": "2",
+        "nad_pending": "0",
+        "pad_pending": "0",
+        "dc_bad": "1"
+      },
+      {
+        "cycle": "0",
+        "stage": "2",
+        "revisions": "5",
+        "checks": "6",
+        "status": "stalled_unphysical",
+        "nad_demotions": "5",
+        "pad_demotions": "2",
+        "nad_pending": "0",
+        "pad_pending": "0",
+        "dc_bad": "1"
+      },
+      {
+        "cycle": "0",
+        "stage": "3",
+        "revisions": "5",
+        "checks": "6",
+        "status": "stalled_unphysical",
+        "nad_demotions": "5",
+        "pad_demotions": "2",
+        "nad_pending": "0",
+        "pad_pending": "0",
+        "dc_bad": "1"
+      }
+    ],
+    "final_plm_cells": 5,
+    "final_dc_cells": 1
+  },
+  {
+    "name": "audit_m4_p4_d0_r8",
+    "mode": 4,
+    "mpi": 4,
+    "diagnostics": false,
+    "cap": 8,
+    "revisions": 5,
+    "status": "stalled_unphysical",
+    "checks_per_rank": {
+      "(3, 1)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "(2, 1)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "(1, 1)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "(0, 1)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "(0, 2)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "(1, 2)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "(3, 2)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "(2, 2)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "(0, 3)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "(3, 3)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "(2, 3)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "(1, 3)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ]
+    },
+    "rounds": [],
+    "final_plm_cells": 5,
+    "final_dc_cells": 1
+  },
+  {
+    "name": "audit_m4_p4_d1_r8",
+    "mode": 4,
+    "mpi": 4,
+    "diagnostics": true,
+    "cap": 8,
+    "revisions": 5,
+    "status": "stalled_unphysical",
+    "checks_per_rank": {
+      "(0, 1)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "(1, 1)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "(3, 1)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "(2, 1)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "(1, 2)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "(0, 2)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "(2, 2)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "(3, 2)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "(0, 3)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "(2, 3)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "(3, 3)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "(1, 3)": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ]
+    },
+    "rounds": [
+      {
+        "cycle": "0",
+        "stage": "1",
+        "revisions": "5",
+        "checks": "6",
+        "status": "stalled_unphysical",
+        "nad_demotions": "5",
+        "pad_demotions": "2",
+        "nad_pending": "0",
+        "pad_pending": "0",
+        "dc_bad": "1"
+      },
+      {
+        "cycle": "0",
+        "stage": "2",
+        "revisions": "5",
+        "checks": "6",
+        "status": "stalled_unphysical",
+        "nad_demotions": "5",
+        "pad_demotions": "2",
+        "nad_pending": "0",
+        "pad_pending": "0",
+        "dc_bad": "1"
+      },
+      {
+        "cycle": "0",
+        "stage": "3",
+        "revisions": "5",
+        "checks": "6",
+        "status": "stalled_unphysical",
+        "nad_demotions": "5",
+        "pad_demotions": "2",
+        "nad_pending": "0",
+        "pad_pending": "0",
+        "dc_bad": "1"
+      }
+    ],
+    "final_plm_cells": 5,
+    "final_dc_cells": 1
+  },
+  {
+    "name": "audit_m2_p4_d1_r2",
+    "mode": 2,
+    "mpi": 4,
+    "diagnostics": true,
+    "cap": 2,
+    "revisions": 2,
+    "status": "stalled_unphysical",
+    "checks_per_rank": {
+      "(0, 1)": [
+        0,
+        1,
+        2
+      ],
+      "(3, 1)": [
+        0,
+        1,
+        2
+      ],
+      "(2, 1)": [
+        0,
+        1,
+        2
+      ],
+      "(1, 1)": [
+        0,
+        1,
+        2
+      ],
+      "(0, 2)": [
+        0,
+        1,
+        2
+      ],
+      "(3, 2)": [
+        0,
+        1,
+        2
+      ],
+      "(1, 2)": [
+        0,
+        1,
+        2
+      ],
+      "(2, 2)": [
+        0,
+        1,
+        2
+      ],
+      "(3, 3)": [
+        0,
+        1,
+        2
+      ],
+      "(2, 3)": [
+        0,
+        1,
+        2
+      ],
+      "(1, 3)": [
+        0,
+        1,
+        2
+      ],
+      "(0, 3)": [
+        0,
+        1,
+        2
+      ]
+    },
+    "rounds": [
+      {
+        "cycle": "0",
+        "stage": "1",
+        "revisions": "2",
+        "checks": "3",
+        "status": "stalled_unphysical",
+        "nad_demotions": "0",
+        "pad_demotions": "2",
+        "nad_pending": "0",
+        "pad_pending": "0",
+        "dc_bad": "1"
+      },
+      {
+        "cycle": "0",
+        "stage": "2",
+        "revisions": "2",
+        "checks": "3",
+        "status": "stalled_unphysical",
+        "nad_demotions": "0",
+        "pad_demotions": "2",
+        "nad_pending": "0",
+        "pad_pending": "0",
+        "dc_bad": "1"
+      },
+      {
+        "cycle": "0",
+        "stage": "3",
+        "revisions": "2",
+        "checks": "3",
+        "status": "stalled_unphysical",
+        "nad_demotions": "0",
+        "pad_demotions": "2",
+        "nad_pending": "0",
+        "pad_pending": "0",
+        "dc_bad": "1"
+      }
+    ],
+    "final_plm_cells": 0,
+    "final_dc_cells": 1
+  },
+  {
+    "name": "audit_m3_p4_d1_r1",
+    "mode": 3,
+    "mpi": 4,
+    "diagnostics": true,
+    "cap": 1,
+    "revisions": 1,
+    "status": "revision_limit",
+    "checks_per_rank": {
+      "(1, 1)": [
+        0,
+        1
+      ],
+      "(2, 1)": [
+        0,
+        1
+      ],
+      "(0, 1)": [
+        0,
+        1
+      ],
+      "(3, 1)": [
+        0,
+        1
+      ],
+      "(2, 2)": [
+        0,
+        1
+      ],
+      "(3, 2)": [
+        0,
+        1
+      ],
+      "(0, 2)": [
+        0,
+        1
+      ],
+      "(1, 2)": [
+        0,
+        1
+      ],
+      "(2, 3)": [
+        0,
+        1
+      ],
+      "(3, 3)": [
+        0,
+        1
+      ],
+      "(0, 3)": [
+        0,
+        1
+      ],
+      "(1, 3)": [
+        0,
+        1
+      ]
+    },
+    "rounds": [
+      {
+        "cycle": "0",
+        "stage": "1",
+        "revisions": "1",
+        "checks": "2",
+        "status": "revision_limit",
+        "nad_demotions": "0",
+        "pad_demotions": "1",
+        "nad_pending": "0",
+        "pad_pending": "1",
+        "dc_bad": "0"
+      },
+      {
+        "cycle": "0",
+        "stage": "2",
+        "revisions": "1",
+        "checks": "2",
+        "status": "revision_limit",
+        "nad_demotions": "0",
+        "pad_demotions": "1",
+        "nad_pending": "0",
+        "pad_pending": "1",
+        "dc_bad": "0"
+      },
+      {
+        "cycle": "0",
+        "stage": "3",
+        "revisions": "1",
+        "checks": "2",
+        "status": "revision_limit",
+        "nad_demotions": "0",
+        "pad_demotions": "1",
+        "nad_pending": "0",
+        "pad_pending": "1",
+        "dc_bad": "0"
+      }
+    ],
+    "final_plm_cells": 1,
+    "final_dc_cells": 0
+  },
+  {
+    "name": "audit_m4_p4_d1_r3",
+    "mode": 4,
+    "mpi": 4,
+    "diagnostics": true,
+    "cap": 3,
+    "revisions": 3,
+    "status": "revision_limit",
+    "checks_per_rank": {
+      "(2, 1)": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "(1, 1)": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "(3, 1)": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "(0, 1)": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "(3, 2)": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "(2, 2)": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "(0, 2)": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "(1, 2)": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "(2, 3)": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "(3, 3)": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "(1, 3)": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "(0, 3)": [
+        0,
+        1,
+        2,
+        3
+      ]
+    },
+    "rounds": [
+      {
+        "cycle": "0",
+        "stage": "1",
+        "revisions": "3",
+        "checks": "4",
+        "status": "revision_limit",
+        "nad_demotions": "3",
+        "pad_demotions": "2",
+        "nad_pending": "1",
+        "pad_pending": "0",
+        "dc_bad": "1"
+      },
+      {
+        "cycle": "0",
+        "stage": "2",
+        "revisions": "3",
+        "checks": "4",
+        "status": "revision_limit",
+        "nad_demotions": "3",
+        "pad_demotions": "2",
+        "nad_pending": "1",
+        "pad_pending": "0",
+        "dc_bad": "1"
+      },
+      {
+        "cycle": "0",
+        "stage": "3",
+        "revisions": "3",
+        "checks": "4",
+        "status": "revision_limit",
+        "nad_demotions": "3",
+        "pad_demotions": "2",
+        "nad_pending": "1",
+        "pad_pending": "0",
+        "dc_bad": "1"
+      }
+    ],
+    "final_plm_cells": 3,
+    "final_dc_cells": 1
+  }
+]

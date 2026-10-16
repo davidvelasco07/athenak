@@ -1,0 +1,17 @@
+[
+  {
+    "case": "serial_uniform",
+    "arrays_compared": 30,
+    "all_equal": true
+  },
+  {
+    "case": "serial_ot",
+    "arrays_compared": 30,
+    "all_equal": true
+  },
+  {
+    "case": "legacy",
+    "arrays_compared": 30,
+    "all_equal": true
+  }
+]

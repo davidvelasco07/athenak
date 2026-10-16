@@ -199,8 +199,13 @@ class MHD {
   bool mood_wait_flags = false;
   bool mood_wait_convergence = false;
   bool mood_revise = false;
-  int mood_nviolations = 0;
-  int mood_local_active = 0, mood_global_active = 0;
+  // Requested increases are counted even in the final read-only check.
+  int mood_nad_requests = 0, mood_pad_requests = 0, mood_dc_bad = 0;
+  enum : int { mood_pending_bit = 1, mood_pad_bit = 2 };
+  int mood_local_state = 0, mood_global_state = 0;
+  // Diagnostics replace the one-word consensus with one three-counter sum.
+  unsigned long long mood_counts_local[3] = {}, mood_counts_global[3] = {};
+  unsigned long long mood_nad_demotions = 0, mood_pad_demotions = 0;
   bool mood_diagnostics = false;
 #if MPI_PARALLEL_ENABLED
   MPI_Comm mood_convergence_comm = MPI_COMM_NULL;

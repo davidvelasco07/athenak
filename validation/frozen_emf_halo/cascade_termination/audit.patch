@@ -1,0 +1,50 @@
+--- src/mhd/mhd_mood.cpp
++++ audit/mhd_mood.cpp
+@@ -38,6 +38,8 @@
+ //! the final-iteration halo equals the transverse reach of the edge composition.
+ 
+ #include <algorithm>
++#include <cstdlib>
++#include "globals.hpp"
+ 
+ #include "athena.hpp"
+ #include "mesh/mesh.hpp"
+@@ -575,6 +577,9 @@
+   const int first_rev = mood_frozen_emf ? mood_revision+1 : 1;
+   const int last_rev = mood_frozen_emf ? first_rev : nrevs;
+   const bool frozen = mood_frozen_emf;
++  const int audit_mode = std::getenv("MOOD_CASCADE_AUDIT") ? std::atoi(std::getenv("MOOD_CASCADE_AUDIT")) : 0;
++  const bool audit_last = global_variable::my_rank == global_variable::nranks-1;
++  const bool audit_first = global_variable::my_rank == 0;
+   const bool may_demote = !frozen || mood_revision < nrevs;
+   for (int rev=first_rev; rev<=last_rev; ++rev) {
+     const bool masked = touched_only && (rev > 1);
+@@ -825,6 +830,10 @@
+         if (!isfinite(bcctest_(m,IBX,k,j,i)) || !isfinite(bcctest_(m,IBY,k,j,i)) ||
+             !isfinite(bcctest_(m,IBZ,k,j,i))) { danger = true; }
+       }
++      const bool audit_pad_cell = audit_last && m == 0 && j == js && k == ks;
++      if (audit_pad_cell && audit_mode == 1 && i == is && rev <= 2) danger = true;
++      if (audit_pad_cell && (audit_mode == 2 || audit_mode == 4) && i == is) danger = true;
++      if (audit_pad_cell && audit_mode == 3 && i == is+rev-1) danger = true;
+       // DC cannot descend further. Record physical failure separately so it
+       // cannot request another correction with an unchanged cascade map.
+       if (lv >= n_fb) {
+@@ -1105,6 +1114,8 @@
+         }
+       }
+ 
++      if (audit_mode == 4 && audit_first && m == 0 && k == ks && j == js+1 &&
++          i == is+rev-1 && rev <= 5 && lv < 1) trouble = true;
+       // The check after the last allowed correction must not change the levels:
+       // those levels describe the fluxes/EMFs that will actually be committed.
+       // All surviving trouble below DC requests a genuine level increase.
+@@ -1126,6 +1137,8 @@
+        Kokkos::Sum<int>(nnad), Kokkos::Sum<int>(npad), Kokkos::Sum<int>(ndc));
+ 
+     if (mood_frozen_emf) {
++      printf("AUDIT_CHECK rank=%d stage=%d revision=%d\n",
++             global_variable::my_rank,stage,mood_revision);
+       mood_nad_requests = nnad;
+       mood_pad_requests = npad;
+       mood_dc_bad = ndc;

@@ -67,6 +67,7 @@ TaskStatus MHD::SendMOODCandidate(Driver *pdrive, int stage) {
   mood_wait_flags = false;
   mood_wait_convergence = false;
   mood_revise = false;
+  mood_nad_demotions = mood_pad_demotions = 0;
   ComposeCornerEMF(q.is,q.ie+1,q.js,q.je+1,q.ks,td ? q.ke+1 : q.ks,false);
   pbval_mood_candidate->InitRecv(off+3);
   auto data = mood_candidate;

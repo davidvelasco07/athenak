@@ -1,0 +1,1692 @@
+{
+  "runs": [
+    {
+      "name": "uniform_p1",
+      "order": 8,
+      "mpi": 1,
+      "regime": "nr",
+      "uniform": true,
+      "reference": false,
+      "binary_sha256": "eae06705a93bacecaa8a9886545d29794b0fd43b83e4f579b280911cfa567820",
+      "traces": [
+        {
+          "cycle": "0",
+          "stage": "1",
+          "revisions": "0",
+          "checks": "1",
+          "status": "converged",
+          "nad_demotions": "0",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "0",
+          "stage": "2",
+          "revisions": "0",
+          "checks": "1",
+          "status": "converged",
+          "nad_demotions": "0",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "0",
+          "stage": "3",
+          "revisions": "0",
+          "checks": "1",
+          "status": "converged",
+          "nad_demotions": "0",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        }
+      ]
+    },
+    {
+      "name": "uniform_p4",
+      "order": 8,
+      "mpi": 4,
+      "regime": "nr",
+      "uniform": true,
+      "reference": false,
+      "binary_sha256": "eae06705a93bacecaa8a9886545d29794b0fd43b83e4f579b280911cfa567820",
+      "traces": [
+        {
+          "cycle": "0",
+          "stage": "1",
+          "revisions": "0",
+          "checks": "1",
+          "status": "converged",
+          "nad_demotions": "0",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "0",
+          "stage": "2",
+          "revisions": "0",
+          "checks": "1",
+          "status": "converged",
+          "nad_demotions": "0",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "0",
+          "stage": "3",
+          "revisions": "0",
+          "checks": "1",
+          "status": "converged",
+          "nad_demotions": "0",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        }
+      ]
+    },
+    {
+      "name": "ot_fv4_p1",
+      "order": 4,
+      "mpi": 1,
+      "regime": "nr",
+      "uniform": false,
+      "reference": false,
+      "binary_sha256": "eae06705a93bacecaa8a9886545d29794b0fd43b83e4f579b280911cfa567820",
+      "traces": [
+        {
+          "cycle": "0",
+          "stage": "1",
+          "revisions": "1",
+          "checks": "2",
+          "status": "converged",
+          "nad_demotions": "3985",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "0",
+          "stage": "2",
+          "revisions": "8",
+          "checks": "9",
+          "status": "revision_limit",
+          "nad_demotions": "3297",
+          "pad_demotions": "0",
+          "nad_pending": "2",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "0",
+          "stage": "3",
+          "revisions": "8",
+          "checks": "9",
+          "status": "revision_limit",
+          "nad_demotions": "3478",
+          "pad_demotions": "0",
+          "nad_pending": "1",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "1",
+          "stage": "1",
+          "revisions": "5",
+          "checks": "6",
+          "status": "converged",
+          "nad_demotions": "3889",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "1",
+          "stage": "2",
+          "revisions": "4",
+          "checks": "5",
+          "status": "converged",
+          "nad_demotions": "1660",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "1",
+          "stage": "3",
+          "revisions": "6",
+          "checks": "7",
+          "status": "converged",
+          "nad_demotions": "2630",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "2",
+          "stage": "1",
+          "revisions": "5",
+          "checks": "6",
+          "status": "converged",
+          "nad_demotions": "3237",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "2",
+          "stage": "2",
+          "revisions": "2",
+          "checks": "3",
+          "status": "converged",
+          "nad_demotions": "962",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "2",
+          "stage": "3",
+          "revisions": "7",
+          "checks": "8",
+          "status": "converged",
+          "nad_demotions": "1926",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "3",
+          "stage": "1",
+          "revisions": "8",
+          "checks": "9",
+          "status": "converged",
+          "nad_demotions": "2644",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "3",
+          "stage": "2",
+          "revisions": "3",
+          "checks": "4",
+          "status": "converged",
+          "nad_demotions": "596",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "3",
+          "stage": "3",
+          "revisions": "3",
+          "checks": "4",
+          "status": "converged",
+          "nad_demotions": "1440",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "4",
+          "stage": "1",
+          "revisions": "3",
+          "checks": "4",
+          "status": "converged",
+          "nad_demotions": "2204",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "4",
+          "stage": "2",
+          "revisions": "3",
+          "checks": "4",
+          "status": "converged",
+          "nad_demotions": "405",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "4",
+          "stage": "3",
+          "revisions": "4",
+          "checks": "5",
+          "status": "converged",
+          "nad_demotions": "1196",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "5",
+          "stage": "1",
+          "revisions": "2",
+          "checks": "3",
+          "status": "converged",
+          "nad_demotions": "1443",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "5",
+          "stage": "2",
+          "revisions": "2",
+          "checks": "3",
+          "status": "converged",
+          "nad_demotions": "202",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "5",
+          "stage": "3",
+          "revisions": "2",
+          "checks": "3",
+          "status": "converged",
+          "nad_demotions": "690",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        }
+      ]
+    },
+    {
+      "name": "old_ot_fv4",
+      "order": 4,
+      "mpi": 1,
+      "regime": "nr",
+      "uniform": false,
+      "reference": true,
+      "binary_sha256": "87f247504b87e4e6ed2a457a583640face97c6f9fff9bc9a44e04bfca0d6ee5f",
+      "traces": [
+        {
+          "cycle": "0",
+          "stage": "1",
+          "revisions": "1",
+          "checks": "2",
+          "status": "converged"
+        },
+        {
+          "cycle": "0",
+          "stage": "2",
+          "revisions": "8",
+          "checks": "9",
+          "status": "revision_limit"
+        },
+        {
+          "cycle": "0",
+          "stage": "3",
+          "revisions": "8",
+          "checks": "9",
+          "status": "revision_limit"
+        },
+        {
+          "cycle": "1",
+          "stage": "1",
+          "revisions": "5",
+          "checks": "6",
+          "status": "converged"
+        },
+        {
+          "cycle": "1",
+          "stage": "2",
+          "revisions": "4",
+          "checks": "5",
+          "status": "converged"
+        },
+        {
+          "cycle": "1",
+          "stage": "3",
+          "revisions": "6",
+          "checks": "7",
+          "status": "converged"
+        },
+        {
+          "cycle": "2",
+          "stage": "1",
+          "revisions": "5",
+          "checks": "6",
+          "status": "converged"
+        },
+        {
+          "cycle": "2",
+          "stage": "2",
+          "revisions": "2",
+          "checks": "3",
+          "status": "converged"
+        },
+        {
+          "cycle": "2",
+          "stage": "3",
+          "revisions": "7",
+          "checks": "8",
+          "status": "converged"
+        },
+        {
+          "cycle": "3",
+          "stage": "1",
+          "revisions": "8",
+          "checks": "9",
+          "status": "converged"
+        },
+        {
+          "cycle": "3",
+          "stage": "2",
+          "revisions": "3",
+          "checks": "4",
+          "status": "converged"
+        },
+        {
+          "cycle": "3",
+          "stage": "3",
+          "revisions": "3",
+          "checks": "4",
+          "status": "converged"
+        },
+        {
+          "cycle": "4",
+          "stage": "1",
+          "revisions": "3",
+          "checks": "4",
+          "status": "converged"
+        },
+        {
+          "cycle": "4",
+          "stage": "2",
+          "revisions": "3",
+          "checks": "4",
+          "status": "converged"
+        },
+        {
+          "cycle": "4",
+          "stage": "3",
+          "revisions": "4",
+          "checks": "5",
+          "status": "converged"
+        },
+        {
+          "cycle": "5",
+          "stage": "1",
+          "revisions": "2",
+          "checks": "3",
+          "status": "converged"
+        },
+        {
+          "cycle": "5",
+          "stage": "2",
+          "revisions": "2",
+          "checks": "3",
+          "status": "converged"
+        },
+        {
+          "cycle": "5",
+          "stage": "3",
+          "revisions": "2",
+          "checks": "3",
+          "status": "converged"
+        }
+      ]
+    },
+    {
+      "name": "ot_fv6_p1",
+      "order": 6,
+      "mpi": 1,
+      "regime": "nr",
+      "uniform": false,
+      "reference": false,
+      "binary_sha256": "eae06705a93bacecaa8a9886545d29794b0fd43b83e4f579b280911cfa567820",
+      "traces": [
+        {
+          "cycle": "0",
+          "stage": "1",
+          "revisions": "1",
+          "checks": "2",
+          "status": "converged",
+          "nad_demotions": "3987",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "0",
+          "stage": "2",
+          "revisions": "8",
+          "checks": "9",
+          "status": "revision_limit",
+          "nad_demotions": "3309",
+          "pad_demotions": "0",
+          "nad_pending": "2",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "0",
+          "stage": "3",
+          "revisions": "8",
+          "checks": "9",
+          "status": "converged",
+          "nad_demotions": "3471",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "1",
+          "stage": "1",
+          "revisions": "5",
+          "checks": "6",
+          "status": "converged",
+          "nad_demotions": "3878",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "1",
+          "stage": "2",
+          "revisions": "4",
+          "checks": "5",
+          "status": "converged",
+          "nad_demotions": "1666",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "1",
+          "stage": "3",
+          "revisions": "6",
+          "checks": "7",
+          "status": "converged",
+          "nad_demotions": "2639",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "2",
+          "stage": "1",
+          "revisions": "3",
+          "checks": "4",
+          "status": "converged",
+          "nad_demotions": "3219",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "2",
+          "stage": "2",
+          "revisions": "3",
+          "checks": "4",
+          "status": "converged",
+          "nad_demotions": "950",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "2",
+          "stage": "3",
+          "revisions": "6",
+          "checks": "7",
+          "status": "converged",
+          "nad_demotions": "1909",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "3",
+          "stage": "1",
+          "revisions": "8",
+          "checks": "9",
+          "status": "converged",
+          "nad_demotions": "2666",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "3",
+          "stage": "2",
+          "revisions": "4",
+          "checks": "5",
+          "status": "converged",
+          "nad_demotions": "588",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "3",
+          "stage": "3",
+          "revisions": "4",
+          "checks": "5",
+          "status": "converged",
+          "nad_demotions": "1456",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "4",
+          "stage": "1",
+          "revisions": "2",
+          "checks": "3",
+          "status": "converged",
+          "nad_demotions": "2198",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "4",
+          "stage": "2",
+          "revisions": "2",
+          "checks": "3",
+          "status": "converged",
+          "nad_demotions": "418",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "4",
+          "stage": "3",
+          "revisions": "3",
+          "checks": "4",
+          "status": "converged",
+          "nad_demotions": "1166",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "5",
+          "stage": "1",
+          "revisions": "4",
+          "checks": "5",
+          "status": "converged",
+          "nad_demotions": "1465",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "5",
+          "stage": "2",
+          "revisions": "2",
+          "checks": "3",
+          "status": "converged",
+          "nad_demotions": "195",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "5",
+          "stage": "3",
+          "revisions": "2",
+          "checks": "3",
+          "status": "converged",
+          "nad_demotions": "699",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        }
+      ]
+    },
+    {
+      "name": "old_ot_fv6",
+      "order": 6,
+      "mpi": 1,
+      "regime": "nr",
+      "uniform": false,
+      "reference": true,
+      "binary_sha256": "87f247504b87e4e6ed2a457a583640face97c6f9fff9bc9a44e04bfca0d6ee5f",
+      "traces": [
+        {
+          "cycle": "0",
+          "stage": "1",
+          "revisions": "1",
+          "checks": "2",
+          "status": "converged"
+        },
+        {
+          "cycle": "0",
+          "stage": "2",
+          "revisions": "8",
+          "checks": "9",
+          "status": "revision_limit"
+        },
+        {
+          "cycle": "0",
+          "stage": "3",
+          "revisions": "8",
+          "checks": "9",
+          "status": "converged"
+        },
+        {
+          "cycle": "1",
+          "stage": "1",
+          "revisions": "5",
+          "checks": "6",
+          "status": "converged"
+        },
+        {
+          "cycle": "1",
+          "stage": "2",
+          "revisions": "4",
+          "checks": "5",
+          "status": "converged"
+        },
+        {
+          "cycle": "1",
+          "stage": "3",
+          "revisions": "6",
+          "checks": "7",
+          "status": "converged"
+        },
+        {
+          "cycle": "2",
+          "stage": "1",
+          "revisions": "3",
+          "checks": "4",
+          "status": "converged"
+        },
+        {
+          "cycle": "2",
+          "stage": "2",
+          "revisions": "3",
+          "checks": "4",
+          "status": "converged"
+        },
+        {
+          "cycle": "2",
+          "stage": "3",
+          "revisions": "6",
+          "checks": "7",
+          "status": "converged"
+        },
+        {
+          "cycle": "3",
+          "stage": "1",
+          "revisions": "8",
+          "checks": "9",
+          "status": "converged"
+        },
+        {
+          "cycle": "3",
+          "stage": "2",
+          "revisions": "4",
+          "checks": "5",
+          "status": "converged"
+        },
+        {
+          "cycle": "3",
+          "stage": "3",
+          "revisions": "4",
+          "checks": "5",
+          "status": "converged"
+        },
+        {
+          "cycle": "4",
+          "stage": "1",
+          "revisions": "2",
+          "checks": "3",
+          "status": "converged"
+        },
+        {
+          "cycle": "4",
+          "stage": "2",
+          "revisions": "2",
+          "checks": "3",
+          "status": "converged"
+        },
+        {
+          "cycle": "4",
+          "stage": "3",
+          "revisions": "3",
+          "checks": "4",
+          "status": "converged"
+        },
+        {
+          "cycle": "5",
+          "stage": "1",
+          "revisions": "4",
+          "checks": "5",
+          "status": "converged"
+        },
+        {
+          "cycle": "5",
+          "stage": "2",
+          "revisions": "2",
+          "checks": "3",
+          "status": "converged"
+        },
+        {
+          "cycle": "5",
+          "stage": "3",
+          "revisions": "2",
+          "checks": "3",
+          "status": "converged"
+        }
+      ]
+    },
+    {
+      "name": "ot_fv8_p1",
+      "order": 8,
+      "mpi": 1,
+      "regime": "nr",
+      "uniform": false,
+      "reference": false,
+      "binary_sha256": "eae06705a93bacecaa8a9886545d29794b0fd43b83e4f579b280911cfa567820",
+      "traces": [
+        {
+          "cycle": "0",
+          "stage": "1",
+          "revisions": "1",
+          "checks": "2",
+          "status": "converged",
+          "nad_demotions": "3989",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "0",
+          "stage": "2",
+          "revisions": "8",
+          "checks": "9",
+          "status": "revision_limit",
+          "nad_demotions": "3311",
+          "pad_demotions": "0",
+          "nad_pending": "1",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "0",
+          "stage": "3",
+          "revisions": "8",
+          "checks": "9",
+          "status": "converged",
+          "nad_demotions": "3464",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "1",
+          "stage": "1",
+          "revisions": "5",
+          "checks": "6",
+          "status": "converged",
+          "nad_demotions": "3877",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "1",
+          "stage": "2",
+          "revisions": "4",
+          "checks": "5",
+          "status": "converged",
+          "nad_demotions": "1625",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "1",
+          "stage": "3",
+          "revisions": "5",
+          "checks": "6",
+          "status": "converged",
+          "nad_demotions": "2620",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "2",
+          "stage": "1",
+          "revisions": "4",
+          "checks": "5",
+          "status": "converged",
+          "nad_demotions": "3227",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "2",
+          "stage": "2",
+          "revisions": "3",
+          "checks": "4",
+          "status": "converged",
+          "nad_demotions": "946",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "2",
+          "stage": "3",
+          "revisions": "5",
+          "checks": "6",
+          "status": "converged",
+          "nad_demotions": "1913",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "3",
+          "stage": "1",
+          "revisions": "8",
+          "checks": "9",
+          "status": "revision_limit",
+          "nad_demotions": "2638",
+          "pad_demotions": "0",
+          "nad_pending": "2",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "3",
+          "stage": "2",
+          "revisions": "2",
+          "checks": "3",
+          "status": "converged",
+          "nad_demotions": "583",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "3",
+          "stage": "3",
+          "revisions": "3",
+          "checks": "4",
+          "status": "converged",
+          "nad_demotions": "1467",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "4",
+          "stage": "1",
+          "revisions": "2",
+          "checks": "3",
+          "status": "converged",
+          "nad_demotions": "2189",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "4",
+          "stage": "2",
+          "revisions": "3",
+          "checks": "4",
+          "status": "converged",
+          "nad_demotions": "416",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "4",
+          "stage": "3",
+          "revisions": "4",
+          "checks": "5",
+          "status": "converged",
+          "nad_demotions": "1176",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "5",
+          "stage": "1",
+          "revisions": "3",
+          "checks": "4",
+          "status": "converged",
+          "nad_demotions": "1446",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "5",
+          "stage": "2",
+          "revisions": "2",
+          "checks": "3",
+          "status": "converged",
+          "nad_demotions": "194",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "5",
+          "stage": "3",
+          "revisions": "3",
+          "checks": "4",
+          "status": "converged",
+          "nad_demotions": "700",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        }
+      ]
+    },
+    {
+      "name": "old_ot_fv8",
+      "order": 8,
+      "mpi": 1,
+      "regime": "nr",
+      "uniform": false,
+      "reference": true,
+      "binary_sha256": "87f247504b87e4e6ed2a457a583640face97c6f9fff9bc9a44e04bfca0d6ee5f",
+      "traces": [
+        {
+          "cycle": "0",
+          "stage": "1",
+          "revisions": "1",
+          "checks": "2",
+          "status": "converged"
+        },
+        {
+          "cycle": "0",
+          "stage": "2",
+          "revisions": "8",
+          "checks": "9",
+          "status": "revision_limit"
+        },
+        {
+          "cycle": "0",
+          "stage": "3",
+          "revisions": "8",
+          "checks": "9",
+          "status": "converged"
+        },
+        {
+          "cycle": "1",
+          "stage": "1",
+          "revisions": "5",
+          "checks": "6",
+          "status": "converged"
+        },
+        {
+          "cycle": "1",
+          "stage": "2",
+          "revisions": "4",
+          "checks": "5",
+          "status": "converged"
+        },
+        {
+          "cycle": "1",
+          "stage": "3",
+          "revisions": "5",
+          "checks": "6",
+          "status": "converged"
+        },
+        {
+          "cycle": "2",
+          "stage": "1",
+          "revisions": "4",
+          "checks": "5",
+          "status": "converged"
+        },
+        {
+          "cycle": "2",
+          "stage": "2",
+          "revisions": "3",
+          "checks": "4",
+          "status": "converged"
+        },
+        {
+          "cycle": "2",
+          "stage": "3",
+          "revisions": "5",
+          "checks": "6",
+          "status": "converged"
+        },
+        {
+          "cycle": "3",
+          "stage": "1",
+          "revisions": "8",
+          "checks": "9",
+          "status": "revision_limit"
+        },
+        {
+          "cycle": "3",
+          "stage": "2",
+          "revisions": "2",
+          "checks": "3",
+          "status": "converged"
+        },
+        {
+          "cycle": "3",
+          "stage": "3",
+          "revisions": "3",
+          "checks": "4",
+          "status": "converged"
+        },
+        {
+          "cycle": "4",
+          "stage": "1",
+          "revisions": "2",
+          "checks": "3",
+          "status": "converged"
+        },
+        {
+          "cycle": "4",
+          "stage": "2",
+          "revisions": "3",
+          "checks": "4",
+          "status": "converged"
+        },
+        {
+          "cycle": "4",
+          "stage": "3",
+          "revisions": "4",
+          "checks": "5",
+          "status": "converged"
+        },
+        {
+          "cycle": "5",
+          "stage": "1",
+          "revisions": "3",
+          "checks": "4",
+          "status": "converged"
+        },
+        {
+          "cycle": "5",
+          "stage": "2",
+          "revisions": "2",
+          "checks": "3",
+          "status": "converged"
+        },
+        {
+          "cycle": "5",
+          "stage": "3",
+          "revisions": "3",
+          "checks": "4",
+          "status": "converged"
+        }
+      ]
+    },
+    {
+      "name": "ot_fv8_p4",
+      "order": 8,
+      "mpi": 4,
+      "regime": "nr",
+      "uniform": false,
+      "reference": false,
+      "binary_sha256": "eae06705a93bacecaa8a9886545d29794b0fd43b83e4f579b280911cfa567820",
+      "traces": [
+        {
+          "cycle": "0",
+          "stage": "1",
+          "revisions": "1",
+          "checks": "2",
+          "status": "converged",
+          "nad_demotions": "3989",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "0",
+          "stage": "2",
+          "revisions": "8",
+          "checks": "9",
+          "status": "revision_limit",
+          "nad_demotions": "3311",
+          "pad_demotions": "0",
+          "nad_pending": "1",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "0",
+          "stage": "3",
+          "revisions": "8",
+          "checks": "9",
+          "status": "converged",
+          "nad_demotions": "3464",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "1",
+          "stage": "1",
+          "revisions": "5",
+          "checks": "6",
+          "status": "converged",
+          "nad_demotions": "3877",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "1",
+          "stage": "2",
+          "revisions": "4",
+          "checks": "5",
+          "status": "converged",
+          "nad_demotions": "1625",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "1",
+          "stage": "3",
+          "revisions": "5",
+          "checks": "6",
+          "status": "converged",
+          "nad_demotions": "2620",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "2",
+          "stage": "1",
+          "revisions": "4",
+          "checks": "5",
+          "status": "converged",
+          "nad_demotions": "3227",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "2",
+          "stage": "2",
+          "revisions": "3",
+          "checks": "4",
+          "status": "converged",
+          "nad_demotions": "946",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "2",
+          "stage": "3",
+          "revisions": "5",
+          "checks": "6",
+          "status": "converged",
+          "nad_demotions": "1913",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "3",
+          "stage": "1",
+          "revisions": "8",
+          "checks": "9",
+          "status": "revision_limit",
+          "nad_demotions": "2638",
+          "pad_demotions": "0",
+          "nad_pending": "2",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "3",
+          "stage": "2",
+          "revisions": "2",
+          "checks": "3",
+          "status": "converged",
+          "nad_demotions": "583",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "3",
+          "stage": "3",
+          "revisions": "3",
+          "checks": "4",
+          "status": "converged",
+          "nad_demotions": "1467",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "4",
+          "stage": "1",
+          "revisions": "2",
+          "checks": "3",
+          "status": "converged",
+          "nad_demotions": "2189",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "4",
+          "stage": "2",
+          "revisions": "3",
+          "checks": "4",
+          "status": "converged",
+          "nad_demotions": "416",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "4",
+          "stage": "3",
+          "revisions": "4",
+          "checks": "5",
+          "status": "converged",
+          "nad_demotions": "1176",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "5",
+          "stage": "1",
+          "revisions": "3",
+          "checks": "4",
+          "status": "converged",
+          "nad_demotions": "1446",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "5",
+          "stage": "2",
+          "revisions": "2",
+          "checks": "3",
+          "status": "converged",
+          "nad_demotions": "194",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "5",
+          "stage": "3",
+          "revisions": "3",
+          "checks": "4",
+          "status": "converged",
+          "nad_demotions": "700",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        }
+      ]
+    },
+    {
+      "name": "sr",
+      "order": 8,
+      "mpi": 1,
+      "regime": "sr",
+      "uniform": false,
+      "reference": false,
+      "binary_sha256": "eae06705a93bacecaa8a9886545d29794b0fd43b83e4f579b280911cfa567820",
+      "traces": [
+        {
+          "cycle": "0",
+          "stage": "1",
+          "revisions": "1",
+          "checks": "2",
+          "status": "converged",
+          "nad_demotions": "512",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "0",
+          "stage": "2",
+          "revisions": "1",
+          "checks": "2",
+          "status": "converged",
+          "nad_demotions": "1792",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "0",
+          "stage": "3",
+          "revisions": "1",
+          "checks": "2",
+          "status": "converged",
+          "nad_demotions": "3328",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "1",
+          "stage": "1",
+          "revisions": "1",
+          "checks": "2",
+          "status": "converged",
+          "nad_demotions": "4096",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "1",
+          "stage": "2",
+          "revisions": "1",
+          "checks": "2",
+          "status": "converged",
+          "nad_demotions": "4096",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "1",
+          "stage": "3",
+          "revisions": "2",
+          "checks": "3",
+          "status": "converged",
+          "nad_demotions": "3968",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        }
+      ]
+    },
+    {
+      "name": "old_sr",
+      "order": 8,
+      "mpi": 1,
+      "regime": "sr",
+      "uniform": false,
+      "reference": true,
+      "binary_sha256": "dde667408da5817556d646390fa6723103129a634d39a70850ffb0813eea8ee8",
+      "traces": []
+    },
+    {
+      "name": "gr",
+      "order": 8,
+      "mpi": 1,
+      "regime": "gr",
+      "uniform": false,
+      "reference": false,
+      "binary_sha256": "eae06705a93bacecaa8a9886545d29794b0fd43b83e4f579b280911cfa567820",
+      "traces": [
+        {
+          "cycle": "0",
+          "stage": "1",
+          "revisions": "1",
+          "checks": "2",
+          "status": "converged",
+          "nad_demotions": "512",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "0",
+          "stage": "2",
+          "revisions": "1",
+          "checks": "2",
+          "status": "converged",
+          "nad_demotions": "1792",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "0",
+          "stage": "3",
+          "revisions": "1",
+          "checks": "2",
+          "status": "converged",
+          "nad_demotions": "3328",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "1",
+          "stage": "1",
+          "revisions": "1",
+          "checks": "2",
+          "status": "converged",
+          "nad_demotions": "4096",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "1",
+          "stage": "2",
+          "revisions": "1",
+          "checks": "2",
+          "status": "converged",
+          "nad_demotions": "4096",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "1",
+          "stage": "3",
+          "revisions": "1",
+          "checks": "2",
+          "status": "converged",
+          "nad_demotions": "4096",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "2",
+          "stage": "1",
+          "revisions": "1",
+          "checks": "2",
+          "status": "converged",
+          "nad_demotions": "4096",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "2",
+          "stage": "2",
+          "revisions": "2",
+          "checks": "3",
+          "status": "converged",
+          "nad_demotions": "3968",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        },
+        {
+          "cycle": "2",
+          "stage": "3",
+          "revisions": "1",
+          "checks": "2",
+          "status": "converged",
+          "nad_demotions": "3968",
+          "pad_demotions": "0",
+          "nad_pending": "0",
+          "pad_pending": "0",
+          "dc_bad": "0"
+        }
+      ]
+    },
+    {
+      "name": "old_gr",
+      "order": 8,
+      "mpi": 1,
+      "regime": "gr",
+      "uniform": false,
+      "reference": true,
+      "binary_sha256": "dde667408da5817556d646390fa6723103129a634d39a70850ffb0813eea8ee8",
+      "traces": []
+    }
+  ],
+  "comparisons": [
+    {
+      "reference": "uniform_p1",
+      "test": "uniform_p4",
+      "arrays_compared": 30,
+      "bitwise_equal": true,
+      "global_traces_equal": true
+    },
+    {
+      "reference": "old_ot_fv4",
+      "test": "ot_fv4_p1",
+      "arrays_compared": 30,
+      "bitwise_equal": true,
+      "global_traces_equal": false
+    },
+    {
+      "reference": "old_ot_fv6",
+      "test": "ot_fv6_p1",
+      "arrays_compared": 30,
+      "bitwise_equal": true,
+      "global_traces_equal": false
+    },
+    {
+      "reference": "old_ot_fv8",
+      "test": "ot_fv8_p1",
+      "arrays_compared": 30,
+      "bitwise_equal": true,
+      "global_traces_equal": false
+    },
+    {
+      "reference": "ot_fv8_p1",
+      "test": "ot_fv8_p4",
+      "arrays_compared": 30,
+      "bitwise_equal": true,
+      "global_traces_equal": true
+    },
+    {
+      "reference": "old_sr",
+      "test": "sr",
+      "arrays_compared": 30,
+      "bitwise_equal": true,
+      "global_traces_equal": false
+    },
+    {
+      "reference": "old_gr",
+      "test": "gr",
+      "arrays_compared": 30,
+      "bitwise_equal": true,
+      "global_traces_equal": false
+    }
+  ],
+  "interval_end_unix": 1792111007.1392894,
+  "overlaps_pinned_ot_study": true
+}

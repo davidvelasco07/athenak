@@ -1,0 +1,193 @@
+diff --git a/src/mhd/mhd.hpp b/src/mhd/mhd.hpp
+index 4b201c076..2338c32d1 100644
+--- a/src/mhd/mhd.hpp
++++ b/src/mhd/mhd.hpp
+@@ -199,8 +199,13 @@ class MHD {
+   bool mood_wait_flags = false;
+   bool mood_wait_convergence = false;
+   bool mood_revise = false;
+-  int mood_nviolations = 0;
+-  int mood_local_active = 0, mood_global_active = 0;
++  // Requested increases are counted even in the final read-only check.
++  int mood_nad_requests = 0, mood_pad_requests = 0, mood_dc_bad = 0;
++  enum : int { mood_pending_bit = 1, mood_pad_bit = 2 };
++  int mood_local_state = 0, mood_global_state = 0;
++  // Diagnostics replace the one-word consensus with one three-counter sum.
++  unsigned long long mood_counts_local[3] = {}, mood_counts_global[3] = {};
++  unsigned long long mood_nad_demotions = 0, mood_pad_demotions = 0;
+   bool mood_diagnostics = false;
+ #if MPI_PARALLEL_ENABLED
+   MPI_Comm mood_convergence_comm = MPI_COMM_NULL;
+diff --git a/src/mhd/mhd_mood.cpp b/src/mhd/mhd_mood.cpp
+index 449c7d3c0..4e2e43a2a 100644
+--- a/src/mhd/mhd_mood.cpp
++++ b/src/mhd/mhd_mood.cpp
+@@ -795,10 +795,11 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
+     // (3) NaN + NAD detection; combine with PAD; demote survivors and count them.
+     // Same tier-floor split as hydro: PAD/NaN may cascade to DC, NAD (density, energy,
+     // magnetic field) demotes to the PLM tier only.
+-    int ndemoted = 0, ndemoted_int = 0, nviolations = 0;
++    int ndemoted = 0, ndemoted_int = 0, nnad = 0, npad = 0, ndc = 0;
+     Kokkos::parallel_reduce("mmood_detect",
+     Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+-    KOKKOS_LAMBDA(const int &idx, int &sum, int &sum_int, int &sum_bad) {
++    KOKKOS_LAMBDA(const int &idx, int &sum, int &sum_int,
++                  int &sum_nad, int &sum_pad, int &sum_dc) {
+       int m = (idx)/nkji;
+       int k = (idx - m*nkji)/nji;
+       int j = (idx - m*nkji - k*nji)/ni;
+@@ -824,10 +825,10 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
+         if (!isfinite(bcctest_(m,IBX,k,j,i)) || !isfinite(bcctest_(m,IBY,k,j,i)) ||
+             !isfinite(bcctest_(m,IBZ,k,j,i))) { danger = true; }
+       }
+-      // DC cannot descend further, but a failed PAD/finite test still prevents
+-      // convergence. Preserve it in the consensus without revising its tier.
++      // DC cannot descend further. Record physical failure separately so it
++      // cannot request another correction with an unchanged cascade map.
+       if (lv >= n_fb) {
+-        if (danger && owned) sum_bad++;
++        if (danger && owned) sum_dc++;
+         fofc_(m,k,j,i) = false;
+         return;
+       }
+@@ -1106,7 +1107,13 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
+ 
+       // The check after the last allowed correction must not change the levels:
+       // those levels describe the fluxes/EMFs that will actually be committed.
+-      if (trouble && owned) sum_bad++;
++      // All surviving trouble below DC requests a genuine level increase.
++      // Count requests independently of may_demote: the terminal check must
++      // distinguish pending corrections from a stable map without mutating it.
++      if (trouble && owned) {
++        if (danger) sum_pad++;
++        else sum_nad++;
++      }
+       fofc_(m,k,j,i) = trouble && may_demote;
+       if (trouble && may_demote) {
+         fb_level_(m,k,j,i) += 1;
+@@ -1116,10 +1123,12 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
+         }
+       }
+     }, Kokkos::Sum<int>(ndemoted), Kokkos::Sum<int>(ndemoted_int),
+-       Kokkos::Sum<int>(nviolations));
++       Kokkos::Sum<int>(nnad), Kokkos::Sum<int>(npad), Kokkos::Sum<int>(ndc));
+ 
+     if (mood_frozen_emf) {
+-      mood_nviolations = nviolations;
++      mood_nad_requests = nnad;
++      mood_pad_requests = npad;
++      mood_dc_bad = ndc;
+       ndemoted_total += ndemoted_int;
+       break;  // exchange owner levels before revising shared faces and halo edges
+     }
+diff --git a/src/mhd/mhd_mood_comm.cpp b/src/mhd/mhd_mood_comm.cpp
+index 6b76c0e17..7068b5712 100644
+--- a/src/mhd/mhd_mood_comm.cpp
++++ b/src/mhd/mhd_mood_comm.cpp
+@@ -67,6 +67,7 @@ TaskStatus MHD::SendMOODCandidate(Driver *pdrive, int stage) {
+   mood_wait_flags = false;
+   mood_wait_convergence = false;
+   mood_revise = false;
++  mood_nad_demotions = mood_pad_demotions = 0;
+   ComposeCornerEMF(q.is,q.ie+1,q.js,q.je+1,q.ks,td ? q.ke+1 : q.ks,false);
+   pbval_mood_candidate->InitRecv(off+3);
+   auto data = mood_candidate;
+diff --git a/src/mhd/mhd_tasks.cpp b/src/mhd/mhd_tasks.cpp
+index a4073cf23..db3adc78c 100644
+--- a/src/mhd/mhd_tasks.cpp
++++ b/src/mhd/mhd_tasks.cpp
+@@ -284,19 +284,33 @@ TaskStatus MHD::ApplyFallback(Driver *pdrive, int stage) {
+   if (!mood_frozen_emf) return RunFallback(pdrive, stage);
+ 
+   // Check the current candidate before every correction, including after the
+-  // final allowed correction. Quiet ranks must still join remote repairs until
+-  // the detector is clear everywhere. The nonblocking consensus has its own
++  // final allowed correction. Repeat only while owned cascade levels change;
++  // a stable but unphysical DC candidate is reported separately. Quiet ranks
++  // still join remote repairs. The nonblocking consensus has its own
+   // communicator so it cannot match a different stage/diagnostic collective.
+   if (!mood_wait_flags) {
+     if (!mood_wait_convergence) {
+       mood_revise = false;
+       RunFallback(pdrive, stage);  // detect owned cells, without applying floors
+-      mood_local_active = (mood_nviolations != 0);
+-      mood_global_active = mood_local_active;
++      mood_local_state =
++          ((mood_nad_requests || mood_pad_requests) ? mood_pending_bit : 0) |
++          ((mood_pad_requests || mood_dc_bad) ? mood_pad_bit : 0);
++      mood_global_state = mood_local_state;
++      mood_counts_local[0] = mood_nad_requests;
++      mood_counts_local[1] = mood_pad_requests;
++      mood_counts_local[2] = mood_dc_bad;
++      for (int n=0; n<3; ++n) mood_counts_global[n] = mood_counts_local[n];
+ #if MPI_PARALLEL_ENABLED
+       if (global_variable::nranks > 1) {
+-        MPI_Iallreduce(&mood_local_active, &mood_global_active, 1, MPI_INT, MPI_MAX,
+-                      mood_convergence_comm, &mood_convergence_req);
++        if (mood_diagnostics) {
++          // One collective also provides exact global diagnostic counts.
++          MPI_Iallreduce(mood_counts_local, mood_counts_global, 3,
++                        MPI_UNSIGNED_LONG_LONG, MPI_SUM, mood_convergence_comm,
++                        &mood_convergence_req);
++        } else {
++          MPI_Iallreduce(&mood_local_state, &mood_global_state, 1, MPI_INT, MPI_BOR,
++                        mood_convergence_comm, &mood_convergence_req);
++        }
+       }
+ #endif
+       mood_wait_convergence = true;
+@@ -309,15 +323,32 @@ TaskStatus MHD::ApplyFallback(Driver *pdrive, int stage) {
+ #endif
+     if (!ready) return TaskStatus::incomplete;
+     mood_wait_convergence = false;
+-    if (!mood_global_active || mood_revision == mood_max_revs) {
++    if (mood_diagnostics) {
++      mood_global_state =
++          ((mood_counts_global[0] || mood_counts_global[1]) ? mood_pending_bit : 0) |
++          ((mood_counts_global[1] || mood_counts_global[2]) ? mood_pad_bit : 0);
++    }
++    const bool pending = mood_global_state & mood_pending_bit;
++    const bool bad_pad = mood_global_state & mood_pad_bit;
++    if (!pending || mood_revision == mood_max_revs) {
+       if (mood_diagnostics && global_variable::my_rank == 0) {
+         std::cout << "MOOD cycle=" << pmy_pack->pmesh->ncycle << " stage=" << stage
+                   << " revisions=" << mood_revision << " checks=" << mood_revision+1
+-                  << " status=" << (mood_global_active ? "revision_limit" : "converged")
++                  << " status=" << (pending ? "revision_limit" :
++                                       bad_pad ? "stalled_unphysical" : "converged")
++                  << " nad_demotions=" << mood_nad_demotions
++                  << " pad_demotions=" << mood_pad_demotions
++                  << " nad_pending=" << mood_counts_global[0]
++                  << " pad_pending=" << mood_counts_global[1]
++                  << " dc_bad=" << mood_counts_global[2]
+                   << '\n';
+       }
+       return TaskStatus::complete;
+     }
++    if (mood_diagnostics) {
++      mood_nad_demotions += mood_counts_global[0];
++      mood_pad_demotions += mood_counts_global[1];
++    }
+     pbval_mood_flags->InitRecvIntCC();
+     pbval_mood_flags->PackAndSendIntCC(fb_level);
+     mood_wait_flags = true;
+diff --git a/validation/frozen_emf_halo/ot_resolution/run_study.py b/validation/frozen_emf_halo/ot_resolution/run_study.py
+index 194ba4f0b..df0507ce2 100644
+--- a/validation/frozen_emf_halo/ot_resolution/run_study.py
++++ b/validation/frozen_emf_halo/ot_resolution/run_study.py
+@@ -74,6 +74,15 @@ def analyze(run, nx, tlim, reader):
+           'histogram':dict(sorted(counts.items())),
+           'statuses':dict(Counter(s[4] for s in stages)),
+           'checks_equal_revisions_plus_one':all(int(s[3])==int(s[2])+1 for s in stages)}
++        reasons=re.findall(r'^MOOD .* nad_demotions=(\d+) pad_demotions=(\d+) '
++                           r'nad_pending=(\d+) pad_pending=(\d+) dc_bad=(\d+)',
++                           stdout,re.M)
++        if reasons:
++            result['revision_diagnostics']['reason_stages']=len(reasons)
++            for i,name in enumerate(('applied_nad_demotions','applied_pad_demotions',
++                                     'terminal_nad_requests','terminal_pad_requests',
++                                     'terminal_dc_failures')):
++                result['revision_diagnostics'][name]=sum(int(r[i]) for r in reasons)
+     rejected=re.search(r'MOOD final PAD rejected (\d+) owned cells.*?cycle (\d+), stage (\d+)',stdout)
+     if rejected:
+         result['final_pad_rejection']={'owned_cells':int(rejected[1]),'cycle':int(rejected[2]),'stage':int(rejected[3])}
