@@ -477,8 +477,15 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
 
       if (frozen) {
         mood_nviolations = nviolations;
-        mood_diag_counts[0] = ndemoted_int - npad;   // new NAD demotions (to PLM)
-        mood_diag_counts[1] = npad;                  // new PAD/NaN demotions
+        if (may_demote) {
+          mood_diag_counts[0] = ndemoted_int - npad;   // new NAD demotions
+          mood_diag_counts[1] = npad;                  // new PAD/NaN demotions
+        } else {
+          // the check after the last allowed revision demotes nothing: report the cells
+          // it flagged instead, so a stage that ends at the limit shows it
+          mood_diag_counts[0] = nlnad;                 // NAD-flagged, left as they are
+          mood_diag_counts[1] = nlpad - nstuck;        // PAD/NaN above DC, left
+        }
         mood_diag_counts[2] = nstuck;                // PAD/NaN failures already at DC
         mood_diag_counts[3] = nviolations;           // all inadmissible owned cells
         mood_nchanged = ndemoted_int;

@@ -144,7 +144,8 @@ class Hydro {
   bool mood_wait_convergence = false;
   bool mood_revise = false;
   int mood_nviolations = 0;
-  int mood_diag_counts[4] = {0, 0, 0, 0};   // per detection: NAD/PAD demotions, stuck, all
+  int mood_diag_counts[4] = {0, 0, 0, 0};   // per check: NAD/PAD demotions (at the limit:
+                                            // flagged, not demoted), stuck at DC, all
   int mood_nchanged = 0;        // owned cells demoted in the latest check (stop rule)
   int mood_left_pad = 0;        // owned cells still failing PAD/NaN in the latest check
   int mood_left_nad = 0;        // owned cells NAD-flagged but not demoted (revision limit)

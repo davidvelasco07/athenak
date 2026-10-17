@@ -279,13 +279,21 @@ TaskStatus Hydro::ApplyFallback(Driver *pdrive, int stage) {
 #endif
     if (!ready) return TaskStatus::incomplete;
     mood_wait_convergence = false;
+    // the check after the last allowed revision changes no level, so the stop rule alone
+    // cannot tell a converged stage from one cut off with cells still flagged; that
+    // check reports the flagged cells in the NAD/PAD counts instead
+    bool at_limit = false;
     if (mood_diagnostics) {
       mood_global_active = (mood_counts_global[0] != 0);
+      at_limit = (mood_revision == mood_max_revs) &&
+                 (mood_counts_global[1] + mood_counts_global[2] != 0);
       if (global_variable::my_rank == 0) {
         std::cout << "MOOD hydro diag cycle=" << pmy_pack->pmesh->ncycle << " stage="
                   << stage << " check=" << mood_revision + 1 << " new_nad="
                   << mood_counts_global[1] << " new_pad=" << mood_counts_global[2]
-                  << " stuck_dc=" << mood_counts_global[3] << std::endl;
+                  << " stuck_dc=" << mood_counts_global[3]
+                  << ((mood_revision == mood_max_revs) ? " (limit: flagged, not demoted)"
+                                                       : "") << std::endl;
       }
     }
     if (!mood_global_active || mood_revision == mood_max_revs) {
@@ -299,7 +307,7 @@ TaskStatus Hydro::ApplyFallback(Driver *pdrive, int stage) {
       if (mood_diagnostics && global_variable::my_rank == 0) {
         std::cout << "MOOD hydro cycle=" << pmy_pack->pmesh->ncycle << " stage=" << stage
                   << " revisions=" << mood_revision << " status="
-                  << (mood_global_active ? "revision_limit" : "converged") << std::endl;
+                  << (at_limit ? "revision_limit" : "converged") << std::endl;
       }
       return TaskStatus::complete;
     }
