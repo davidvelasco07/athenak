@@ -255,3 +255,16 @@ configure_file(config.hpp.in config.hpp)
 
 install( TARGETS athena DESTINATION bin )
 
+# Reusable sparse cell fields; no physics module is required by this library.
+add_library(athena_sparse src/sparse/sparse_variables.cpp)
+target_include_directories(athena_sparse PUBLIC
+  ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_BINARY_DIR})
+target_link_libraries(athena_sparse PUBLIC Kokkos::kokkos)
+target_link_libraries(athena PRIVATE athena_sparse)
+
+option(Athena_BUILD_SPARSE_TESTS "Build sparse storage tests and benchmarks" OFF)
+if(Athena_BUILD_SPARSE_TESTS)
+  enable_testing()
+  add_subdirectory(tst/sparse)
+endif()
+
