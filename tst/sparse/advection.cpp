@@ -19,7 +19,7 @@ struct Result {
   double seconds = 0, allocation_seconds = 0;
   std::size_t reserved = 0, metadata = 0;
   int initial_pairs = 0, final_pairs = 0, peak_pairs = 0;
-  int activations = 0, deallocations = 0;
+  std::int64_t activations = 0, deallocations = 0;
 };
 
 KOKKOS_INLINE_FUNCTION
@@ -46,7 +46,7 @@ std::vector<Real> Reference(const Options &o) {
   return q;
 }
 
-Result Dense(const Options &o) {
+Result Dense(const Options &o, bool fused = false) {
   const int nb = o.blocks, nf = o.fields, nx = o.cells, n = nb*nx;
   const int width = o.width, direction = o.direction;
   const Real courant = o.courant;
@@ -62,7 +62,7 @@ Result Dense(const Options &o) {
   int current = 0;
   for (int step = 0; step < o.steps; ++step) {
     const int next = 1-current;
-    Kokkos::parallel_for("dense_ghost_exchange", Range(0,nb*nf),
+    if (!fused) Kokkos::parallel_for("dense_ghost_exchange", Range(0,nb*nf),
         KOKKOS_LAMBDA(std::int64_t idx) {
       const int b = idx/nf, f = idx%nf;
       q(current,b,f,0) = q(current,(b+nb-1)%nb,f,nx);
@@ -71,8 +71,11 @@ Result Dense(const Options &o) {
     Kokkos::parallel_for("dense_advect", Range(0,static_cast<std::int64_t>(nb)*nf*nx),
         KOKKOS_LAMBDA(std::int64_t idx) {
       const int pair = idx/nx, i = idx%nx+1, b = pair/nf, f = pair%nf;
+      int up = i-direction, neighbor = b;
+      if (fused && up == 0) { up = nx; neighbor = (b+nb-1)%nb; }
+      if (fused && up == nx+1) { up = 1; neighbor = (b+1)%nb; }
       q(next,b,f,i) = (Real(1)-courant)*q(current,b,f,i)
-                     + courant*q(current,b,f,i-direction);
+                     + courant*q(current,neighbor,f,up);
     });
     current = next;
   }
@@ -210,6 +213,115 @@ Result Sparse(const Options &o, bool forced) {
   return result;
 }
 
+Result DeviceSparse(const Options &o) {
+  const int nb = o.blocks, nf = o.fields, nx = o.cells, n = nb*nx;
+  const int width = o.width, direction = o.direction;
+  const Real courant = o.courant;
+  const bool prune = o.prune;
+  sparse::Variables store("device_advection",sparse_test::MakeRegistry(nf),
+                          nb,1,1,nx+2,2);
+  std::vector<sparse::BlockField> initial;
+  for (int b = 0; b < nb; ++b) {
+    for (int f = 0; f < nf; ++f) {
+      for (int i = 0; i < nx; ++i) if (Initial(f,b*nx+i,n,width) != 0) {
+        initial.push_back({b,17*f-5});
+        break;
+      }
+    }
+  }
+  store.SetAllocation(initial);
+  auto view = store.GetDeviceView();
+  Kokkos::parallel_for("device_initial",Range(0,view.active_count*nx),
+      KOKKOS_LAMBDA(std::int64_t idx) {
+    const int slot = view.ActiveSlot(idx/nx), i = idx%nx;
+    view.At(0,slot,0,0,i+1) = Initial(view.FieldIndex(slot),view.Block(slot)*nx+i,n,width);
+  });
+  DvceArray2D<int> requests("device_requests",nb,nf);
+  Kokkos::deep_copy(requests,0);
+  Result result;
+  result.initial_pairs = store.ActiveCount();
+  // A translating patch needs at most one extra receiving block per field.
+  // Diffusion/no-prune can expand support by at most ceil(steps/nx)+1 blocks.
+  const std::int64_t extra = (prune && courant == 1) ? nf :
+      static_cast<std::int64_t>(nf)*(1+(static_cast<std::int64_t>(o.steps)+nx-1)/nx);
+  const int budget = std::min<std::int64_t>(nb*nf,result.initial_pairs+extra);
+  Kokkos::fence();
+  Kokkos::Timer timer;
+  store.BeginDeviceAllocation(budget);
+  const auto pool = store.GetDevicePoolView();
+  const int capacity = pool.capacity;
+  view = pool.fields;
+  Kokkos::parallel_for("device_initial_requests",Range(0,capacity),
+      KOKKOS_LAMBDA(std::int64_t slot) {
+    if (view.Block(slot) < 0) return;
+    const int b = view.Block(slot), f = view.FieldIndex(slot);
+    Kokkos::atomic_exchange(&requests(b,f),1);
+    if (view.At(0,slot,0,0,direction > 0 ? nx : 1) != 0) {
+      Kokkos::atomic_exchange(&requests((b+direction+nb)%nb,f),1);
+    }
+  });
+  store.ApplyDeviceMask(requests,1);
+  int current = 0;
+  for (int step = 0; step < o.steps; ++step) {
+    const int next = 1-current, epoch = step+2;
+    const bool halo = step+1 < o.steps;
+    using Team = Kokkos::TeamPolicy<DevExeSpace>;
+    // CUDA's default dispatch may stage a large capture in shared constant memory
+    // and synchronize its reuse. Kernel arguments keep this small kernel asynchronous.
+    const auto policy = Kokkos::Experimental::require(Team(capacity,Kokkos::AUTO),
+        Kokkos::Experimental::WorkItemProperty::HintLightWeight);
+    Kokkos::parallel_for("device_advect_and_request",policy,
+        KOKKOS_LAMBDA(const Team::member_type &team) {
+      const int slot = team.league_rank();
+      if (view.Block(slot) < 0) return;
+      const int b = view.Block(slot), f = view.FieldIndex(slot);
+      int nonzero = 0;
+      Kokkos::parallel_reduce(Kokkos::TeamThreadRange(team,nx),
+          [&](int x, int &count) {
+        const int i = x+1;
+        int up = i-direction, neighbor = b;
+        if (up == 0) { up = nx; neighbor = (b+nb-1)%nb; }
+        if (up == nx+1) { up = 1; neighbor = (b+1)%nb; }
+        const Real value = (Real(1)-courant)*view.At(current,slot,0,0,i)
+                           + courant*view.Read(current,neighbor,f,0,0,up);
+        view.At(next,slot,0,0,i) = value;
+        if (value != 0) ++count;
+      },nonzero);
+      team.team_barrier();
+      Kokkos::single(Kokkos::PerTeam(team),[&]() {
+        if (!prune || nonzero) Kokkos::atomic_exchange(&requests(b,f),epoch);
+        if (halo && view.At(next,slot,0,0,direction > 0 ? nx : 1) != 0) {
+          Kokkos::atomic_exchange(&requests((b+direction+nb)%nb,f),epoch);
+        }
+      });
+    });
+    store.ApplyDeviceMask(requests,epoch);
+    current = next;
+  }
+  const auto stats = store.EndDeviceAllocation();
+  result.seconds = timer.seconds();  // Includes session setup and final host reconciliation.
+  result.activations = stats.activations;
+  result.deallocations = stats.deallocations;
+  result.peak_pairs = stats.peak_pairs;
+  result.final_pairs = store.ActiveCount();
+  const auto memory = store.Memory();
+  result.reserved = memory.reserved_payload;
+  result.metadata = memory.device_metadata;
+  view = store.GetDeviceView();
+  DvceArray2D<Real> output("device_final",nf,n);
+  Kokkos::parallel_for("device_extract",Range(0,static_cast<std::int64_t>(nf)*n),
+      KOKKOS_LAMBDA(std::int64_t idx) {
+    const int f = idx/n, x = idx%n;
+    output(f,x) = view.Read(current,x/nx,f,0,0,x%nx+1);
+  });
+  const auto host = Kokkos::create_mirror_view_and_copy(HostMemSpace(),output);
+  result.values.resize(static_cast<std::size_t>(nf)*n);
+  for (int f = 0; f < nf; ++f) {
+    for (int x = 0; x < n; ++x) result.values[f*n+x] = host(f,x);
+  }
+  return result;
+}
+
 void Check(const Options &o, const Result &r, const std::vector<Real> &reference,
            const std::string &mode) {
   const int n = o.blocks*o.cells;
@@ -233,7 +345,8 @@ void Check(const Options &o, const Result &r, const std::vector<Real> &reference
   }
   Require(error < tolerance && mass_error < tolerance && translated_error < tolerance,
           "Sparse transport failed dense reference, conservation, or translation");
-  if (mode == "sparse" && o.courant == 1 && o.blocks > 2 && o.width < o.cells &&
+  if ((mode == "sparse" || mode == "device") && o.courant == 1 &&
+      o.blocks > 2 && o.width < o.cells &&
       o.steps >= n && o.prune) {
     Require(r.activations > 0 && r.deallocations > 0,
             "Full-period transport did not exercise activation and slot reuse");
@@ -260,8 +373,10 @@ void Main(int argc, char **argv) {
       args.Integer("fields",32),args.Integer("steps",512),args.Integer("direction",1),
       args.Integer("width",4),args.Integer("prune",1),
       static_cast<Real>(args.Number("courant",1))};
+  const auto mode = args.String("mode","all");
   args.Finish();
   Require(o.blocks > 0 && o.cells > 0 && o.fields > 0 && o.steps > 0 &&
+          o.steps < std::numeric_limits<int>::max()-1 &&
           (o.direction == 1 || o.direction == -1) && o.courant > 0 && o.courant <= 1 &&
           (o.prune == 0 || o.prune == 1) && o.width > 0 &&
           static_cast<std::int64_t>(o.blocks)*o.cells <= std::numeric_limits<int>::max() &&
@@ -270,9 +385,15 @@ void Main(int argc, char **argv) {
           "Invalid advection parameters");
   const auto reference = Reference(o);
   sparse_test::PrintEnvironment();
-  Check(o,Dense(o),reference,"dense");
-  Check(o,Sparse(o,true),reference,"forced");
-  Check(o,Sparse(o,false),reference,"sparse");
+  Require(mode == "all" || mode == "dense" || mode == "dense_fused" ||
+          mode == "forced" || mode == "sparse" || mode == "device", "Invalid mode");
+  if (mode == "all" || mode == "dense") Check(o,Dense(o),reference,"dense");
+  if (mode == "all" || mode == "dense_fused") {
+    Check(o,Dense(o,true),reference,"dense_fused");
+  }
+  if (mode == "all" || mode == "forced") Check(o,Sparse(o,true),reference,"forced");
+  if (mode == "all" || mode == "sparse") Check(o,Sparse(o,false),reference,"sparse");
+  if (mode == "all" || mode == "device") Check(o,DeviceSparse(o),reference,"device");
 }
 }  // namespace
 

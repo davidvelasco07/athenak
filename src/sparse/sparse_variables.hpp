@@ -88,9 +88,23 @@ struct MemoryUsage {
   std::size_t device_metadata;
 };
 
+//! Pointer-stable view during a bounded device allocation session. Iterate capacity
+//! and skip holes; the host compact work list/count is unavailable until End.
+struct DevicePoolView {
+  DeviceView fields;
+  int capacity;
+  KOKKOS_INLINE_FUNCTION
+  bool IsAllocated(int slot) const { return fields.Block(slot) >= 0; }
+};
+
+struct AllocationStats {
+  std::int64_t activations, deallocations;
+  int peak_pairs;
+};
+
 //! One slot owns all registers (including ghosts) for one block/field pair.
 //! n1/n2/n3 are storage extents; the owner defines interior/ghost index ranges.
-//! Mutations are synchronous host operations that fence outstanding device work.
+//! Host mutations fence device work; bounded device sessions enqueue mutations.
 //! A snapshot is valid only until the next mutation; IsCurrent checks its generation.
 //! Pool capacity is retained after freeing slots. No cached snapshot may be used after
 //! mutation, even if its Kokkos Views keep the old allocation alive.
@@ -107,10 +121,22 @@ class Variables {
   void SetAllocation(const std::vector<BlockField> &pairs);
   void Allocate(const std::vector<BlockField> &pairs);
   void Deallocate(const std::vector<BlockField> &pairs);
+  //! Reserve a fixed slot budget and enter device allocation mode. This fences.
+  //! Host allocation/queries are forbidden until EndDeviceAllocation(). Retained
+  //! slots stay fixed; new slots are default-filled in every register/cell.
+  void BeginDeviceAllocation(int capacity);
+  DevicePoolView GetDevicePoolView() const;
+  //! Enqueue exact membership (requests(b,f)==epoch) on the default execution
+  //! space. No fence, host transfer, or allocation. Producers and consumers must
+  //! use that same ordered stream; keep requests alive until End. epoch must be
+  //! positive. Exceeding the fixed budget aborts on device, never drops fields.
+  void ApplyDeviceMask(DvceArray2D<const int> requests, int epoch);
+  //! Fence, reconcile host metadata, restore the sorted compact work list.
+  AllocationStats EndDeviceAllocation();
   DeviceView GetDeviceView() const;
   bool IsCurrent(const DeviceView &view) const;
   int Slot(int block, int field_id) const;
-  int ActiveCount() const { return active_count_; }
+  int ActiveCount() const;
   int Capacity() const { return capacity_; }
   const Registry &Fields() const { return registry_; }
   MemoryUsage Memory() const;
@@ -118,6 +144,8 @@ class Variables {
  private:
   std::size_t Key(const BlockField &pair) const;
   void ApplyMask(const std::vector<unsigned char> &wanted);
+  void RequireHost() const;
+  DeviceView View() const;
   std::string label_;
   Registry registry_;
   int nblocks_, n3_, n2_, n1_, nregisters_;
@@ -129,6 +157,9 @@ class Variables {
   DvceArray2D<int> slot_of_;
   DvceArray1D<int> active_slots_, block_of_, field_of_, field_ids_;
   DvceArray1D<Real> defaults_;
+  bool device_mode_ = false;
+  DvceArray1D<int> free_slots_, pending_;
+  DvceArray1D<std::int64_t> state_;
 };
 
 }  // namespace sparse

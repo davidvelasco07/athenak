@@ -33,11 +33,18 @@ for shape in large small; do
   done
 done
 
-# End-to-end results include activation detection, device/host copies, pool maintenance,
-# ghost refresh, exact-zero removal and kernels. These are NOT kernel-only timings.
-for trial in 1 2 3; do
+# End-to-end comparison: legacy host allocator, GPU pool, and a fused dense control.
+# The GPU pool includes its session setup and final host reconciliation in timing.
+for trial in 1 2 3 4 5; do
   "$bin/sparse_advection_test" --blocks 64 --cells 64 --fields 64 --steps 256 \
     > "$out/advection_${trial}.jsonl"
+done
+# Larger cell work and expanding support exercise different cost/occupancy regimes.
+for trial in 1 2 3; do
+  "$bin/sparse_advection_test" --blocks 128 --cells 512 --fields 64 --steps 128 \
+    > "$out/advection_large_${trial}.jsonl"
+  "$bin/sparse_advection_test" --blocks 32 --cells 64 --fields 32 --steps 128 \
+    --courant 0.4 > "$out/advection_diffusive_${trial}.jsonl"
 done
 sanitizer=$(command -v compute-sanitizer || true)
 if [[ -z "$sanitizer" && -x /usr/local/cuda-12.9/compute-sanitizer/compute-sanitizer ]]; then

@@ -6,6 +6,10 @@ foreach(target sparse_storage_test sparse_benchmark sparse_advection_test)
 endforeach()
 
 add_test(NAME sparse_storage COMMAND sparse_storage_test)
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+add_test(NAME sparse_device_capacity COMMAND ${Python3_EXECUTABLE}
+  ${CMAKE_CURRENT_SOURCE_DIR}/expect_capacity_failure.py $<TARGET_FILE:sparse_storage_test>)
+set_tests_properties(sparse_device_capacity PROPERTIES TIMEOUT 60)
 add_test(NAME sparse_advection_periodic COMMAND sparse_advection_test
   --blocks 8 --cells 16 --fields 13 --steps 256 --courant 1)
 add_test(NAME sparse_advection_reverse COMMAND sparse_advection_test

@@ -1,4 +1,4 @@
-# Sparse cell fields: initial implementation
+# Sparse cell fields
 
 `athena_sparse` is a Kokkos library independent of any physics module. It allocates a
 scalar field on a whole block or leaves it absent. The owning module supplies the block
@@ -47,6 +47,55 @@ and persistent device metadata. It excludes host metadata, temporary allocation/
 buffers, stale snapshots, and allocator overhead. Metadata includes an O(blocks*fields)
 slot table. Neither memory accounting nor active counts imply a runtime speedup.
 
+## GPU-resident allocation sessions
+
+The synchronous host API remains useful for setup and occasional changes. Frequent
+changes can instead use a fixed-budget device session:
+
+```cpp
+vars.BeginDeviceAllocation(slot_budget);  // reserve; synchronize once
+const auto pool = vars.GetDevicePoolView();
+// Allocate requests(nblocks, fields.Size()) and initialize it before the loop.
+// In each epoch, a device producer marks every desired pair with that epoch.
+vars.ApplyDeviceMask(requests, epoch);
+// Consumers iterate 0 .. pool.capacity-1 and skip !pool.IsAllocated(slot).
+const auto stats = vars.EndDeviceAllocation();  // synchronize; restore host queries
+```
+
+`ApplyDeviceMask` enqueues two kernels on the default execution-space stream. The first
+releases unwanted pairs and queues new pairs; the second consumes a device free stack
+and fills all new slot cells/registers with their defaults. Neither operation allocates
+memory, copies metadata to/from the host, or fences. Existing pairs retain their slots
+and values. The second kernel uses one team with vectorized cell initialization; large
+simultaneous activation bursts may need a more scalable initializer later.
+
+Every desired pair must have `requests(block,ordinal)==epoch`. Use positive, distinct
+epochs, or clear the mask before reusing an epoch. Publish marks atomically if multiple
+producers can mark the same pair. Requests, producers, allocation, and consumers must
+use the same default ordered stream. Do not mutate the mask concurrently, use cached
+slots after their pair is removed, or read/write removed slots. Keep request arrays alive
+until `EndDeviceAllocation`. Deallocate only at a module-defined safe lifetime boundary.
+
+The budget is bounded by the number of possible pairs and must cover the peak live set.
+Previously reserved capacity is retained, so `pool.capacity` may exceed the requested
+budget. Exceeding actual capacity **aborts explicitly on the device** rather than dropping
+fields. There is no implicit asynchronous growth or retry. Choose a conservative budget
+or end the session and reserve more at a known synchronization point. Transitions to an
+empty set and zero-block stores are supported. Forced dense sessions preserve all pairs.
+
+Begin and End invalidate ordinary snapshots. Within a session, `pool` pointers stay
+valid across transitions; `pool.fields.active_count` is -1 and its compact work list must
+not be used. Iterate capacity and test `IsAllocated`. Host count/map/memory queries and
+host allocation operations throw during a session. End copies the map/counters once and
+restores the ordered compact work list. For small CUDA kernels, keep captures small and consider Kokkos's `HintLightWeight`
+policy property: the pinned Kokkos otherwise stages sufficiently large functors in
+constant memory and synchronizes reuse on each launch. The device advection example
+uses this hint and captures its field view only once.
+
+Device slot assignment is not deterministic;
+logical `(block, field)` membership and values are the reproducibility contract. Persistent
+metadata also includes a free stack, a possible-pair-sized request queue, and counters.
+
 ## Build and verify
 
 ```sh
@@ -79,7 +128,8 @@ partitions/account. Check local policy and compiler environment before submittin
 ## What the executables test
 
 * `sparse_storage_test`: absent/default reads, non-contiguous IDs, three registers,
-  growth preserving values, slot reuse, invalid requests without partial commit,
+  growth preserving values, GPU session transitions/default initialization, slot reuse,
+  explicit device capacity failure, invalid requests without partial commit,
   ordered work lists, zero-block stores, forced dense mode, and memory accounting.
 * `sparse_benchmark`: controlled occupancy with a manufactured decay update and analytic
   verification. Runs ordinary dense, forced dense through the sparse interface, and
@@ -90,7 +140,7 @@ partitions/account. Check local policy and compiler environment before submittin
   an integer number of blocks per field and is reported alongside requested occupancy.
 * `sparse_advection_test`: a standalone 1D uniform periodic mesh of logical blocks,
   unrelated to the main AthenaK Mesh object. A prescribed constant velocity transports
-  compact top-hat patches by donor-cell finite volumes. All three modes are checked
+  compact top-hat patches by donor-cell finite volumes. All five modes are checked
   against an independent host reference, per-field conservation, positivity, and (at
   Courant number one) the exact translated discrete profile. Both flow directions and
   periodic wraparound are tested. There is one ghost cell per end and two state
@@ -98,13 +148,24 @@ partitions/account. Check local policy and compiler environment before submittin
   Optional exact-zero pruning occurs only after the completed update, when the old
   register and old ghosts are dead. This is not a generic RK deallocation policy.
 
-The advection test reports end-to-end evolution time including device/host activation
-flags, host scans, metadata publication, allocation fences, ghost filling, and pruning.
-Its host control path prioritizes correctness and is expected to be costly for small
-GPU workloads. Initial setup, the independent reference, and final verification are
-outside that timed interval. It uses direct local ghost kernels, not AthenaK's existing
-boundary communication classes. It does not implement MPI, AMR, restart, arbitrary
-topology, vector fields, threshold pruning, or integration with a physics module.
+The advection test reports end-to-end evolution time. `--mode sparse` retains the original
+host allocation path (device/host flags, scans, metadata publication, fences, ghosts,
+pruning). `--mode device` uses GPU allocation and combines direct periodic neighbor reads,
+transport, liveness, and next-step halo requests in one kernel. Only mask epochs change;
+there is no per-step host copy or global mask clear. Its interval includes Begin/End and
+all allocation kernels. `--mode dense_fused` combines neighbor reads and transport too,
+providing a control for fusion independent of sparse storage. `dense` and `forced` retain
+the original separate ghost/transport kernels. The default `--mode all` checks all five.
+The reported `allocation_seconds` measures synchronous host allocation calls only in the
+legacy path; zero in device mode does not mean its allocation kernels are free. Use a
+GPU profiler for that attribution.
+
+Initial field setup, the independent reference, and final verification are excluded from
+all timings. The device advection budget follows a conservative bound for this particular
+patch transport problem; it is not an automatic general-purpose occupancy predictor.
+These are direct local kernels on uniform logical blocks, with no MPI or dependency on
+AthenaK boundary classes. MPI, AMR, restart, arbitrary topology, vector fields, threshold
+pruning, and physics-module integration remain future work.
 
 ## Next steps
 
