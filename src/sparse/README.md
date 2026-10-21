@@ -274,3 +274,20 @@ must not be used as timing evidence. Tracer movies show physical time; the quasi
 beam movie shows convergence iterations, not photon propagation in physical time.
 Movie allocation maps count live pairs, while memory figures include the reserved pool
 capacity. Default full-size capacity does not save reserved payload memory.
+
+To measure the effect of spatial block granularity without changing the tracer physics:
+
+```sh
+python3 tst/sparse/block_sizes.py --exe BUILD/src/athena --output FRESH_RESULTS
+```
+
+This holds the mesh at 512² cells, 32 labels and 48 steps while testing 8², 16², 32²
+and 64² blocks. Each size first runs with native scalar comparison enabled and a full
+pool to measure peak support. Separate timing runs use a pool with 25% headroom over
+that peak, rounded up to 64 slots, capped at the full pair count. This is offline
+capacity tuning for the specific test, not a production occupancy predictor. The
+runner discards one warm-up for each (size,mode), randomizes subsequent cases, and
+records five trials for native scalars, equivalent dense pilot and sparse pilot.
+Compare both at equal block size and against each implementation's best tested size:
+a same-block speedup can coexist with a slower best overall configuration. Smaller
+blocks improve spatial localization but increase ghost storage, metadata and block work.
