@@ -20,6 +20,8 @@
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
 #include "nr_radiation/nr_radiation.hpp"
+#include "nr_radiation/sc/beam_storage.hpp"
+#include <stdexcept>
 
 namespace nr_radiation {
 
@@ -262,7 +264,27 @@ SC::SC(MeshBlockPack *ppack, ParameterInput *pin) :
   int ncells2 = (indcs.nx2 > 1) ? (indcs.nx2 + 2*(indcs.ng)) : 1;
   int ncells3 = (indcs.nx3 > 1) ? (indcs.nx3 + 2*(indcs.ng)) : 1;
 
-  Kokkos::realloc(ir, nmb, nang_tot, ncells3, ncells2, ncells1);
+  intensity_storage = pin->GetOrAddString("nr_radiation","intensity_storage","dense");
+  beam_frame_interval = pin->GetOrAddInteger("nr_radiation","frame_interval",0);
+  beam_frame_directory = pin->GetOrAddString("nr_radiation","frames","beam_frames");
+  beam_dump_final = pin->GetOrAddBoolean("nr_radiation","dump_final",false);
+  beam_diagnostics = pin->GetOrAddBoolean("nr_radiation","beam_diagnostics",false);
+  if (intensity_storage != "dense") {
+    if ((intensity_storage != "selected" && intensity_storage != "forced" &&
+         intensity_storage != "sparse") ||
+        pin->GetString("problem","pgen_name") != "sc_beam" ||
+        global_variable::nranks != 1 || ppack->pmesh->multilevel || pang->ndim != 2 ||
+        is_hydro_enabled || is_mhd_enabled || sweep_kernel != SweepKernel::tiled ||
+        qrad_form != QradForm::integral) {
+      throw std::runtime_error("SC beam storage pilot requires single-rank uniform 2D "
+          "sc_beam, no fluid, tiled sweeps, integral coupling");
+    }
+    for (int face = 0; face < 4; ++face) {
+      if (ppack->pmesh->mesh_bcs[face] != BoundaryFlag::user) {
+        throw std::runtime_error("SC beam pilot requires four user/vacuum boundaries");
+      }
+    }
+  } else { Kokkos::realloc(ir, nmb, nang_tot, ncells3, ncells2, ncells1); }
   Kokkos::realloc(srad, nmb, 1, ncells3, ncells2, ncells1);
   Kokkos::realloc(chi, nmb, ncells3, ncells2, ncells1);
   Kokkos::realloc(brad, nmb, ncells3, ncells2, ncells1);
@@ -295,7 +317,7 @@ SC::SC(MeshBlockPack *ppack, ParameterInput *pin) :
   // pbval_ir->i_in(nang_tot, 6 faces) that RadiationBCs reads on faces flagged `inflow`;
   // a pgen that wants a lit face writes it, as the GR module's pgens do (default: vacuum)
   pbval_ir = new MeshBoundaryValuesCC(ppack, pin, false);
-  pbval_ir->InitializeBuffers(nang_tot);
+  if (intensity_storage == "dense") pbval_ir->InitializeBuffers(nang_tot);
   pbval_srad = new MeshBoundaryValuesCC(ppack, pin, false);
   pbval_srad->InitializeBuffers(1);
   // Coarse-fine flux correction of hflx (nvar = 1, matching hflx's second extent; the

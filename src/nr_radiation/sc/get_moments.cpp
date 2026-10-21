@@ -24,6 +24,7 @@ namespace nr_radiation {
 //! every sweep for the residual, and by MeshRefinement after a remesh.
 
 void SC::ComputeJ() {
+  if (beam_storage) { ComputeBeamMoments(false); return; }
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   int is = indcs.is, ie = indcs.ie;
   int js = indcs.js, je = indcs.je;
@@ -53,6 +54,7 @@ void SC::ComputeJ() {
 //! whereas ComputeJ is once per sweep.
 
 void SC::ComputeHK() {
+  if (beam_storage) { ComputeBeamMoments(true); return; }
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   int is = indcs.is - 1, ie = indcs.ie + 1;
   int js = indcs.js, je = indcs.je;

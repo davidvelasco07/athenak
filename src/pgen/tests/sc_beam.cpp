@@ -21,6 +21,7 @@
 #include "mesh/mesh.hpp"
 #include "pgen/pgen.hpp"
 #include "nr_radiation/nr_radiation.hpp"
+#include "nr_radiation/sc/beam_storage.hpp"
 
 namespace {
 struct BeamVars {
@@ -72,7 +73,8 @@ void BeamEmission(MeshBlockPack *pmbp) {
 //! position, so a refined block on the face injects the beam into every fine cell inside
 //! that root cell. Runs on the device with no host<->device traffic.
 
-void SCBeamBCs(Mesh *pm) {
+template<class Intensity>
+void ApplySCBeamBCs(Mesh *pm,Intensity ir) {
   MeshBlockPack *pmbp = pm->pmb_pack;
   if (pmbp->pnrrad == nullptr) return;
   auto &indcs = pm->mb_indcs;
@@ -82,7 +84,6 @@ void SCBeamBCs(Mesh *pm) {
   int nmb = pmbp->nmb_thispack;
   int nang = pmbp->pnrrad->pang->nang, nang_tot = pmbp->pnrrad->nang_tot;
   const BeamVars bv = beamvars;
-  auto ir = pmbp->pnrrad->ir;
   auto &mb_bcs = pmbp->pmb->mb_bcs;
   auto &size = pmbp->pmb->mb_size;
 
@@ -131,6 +132,14 @@ void SCBeamBCs(Mesh *pm) {
   });
 }
 
+void SCBeamBCs(Mesh *pm) {
+  auto *sc = pm->pmb_pack->pnrrad;
+  if (!sc) return;
+  // Preserve the original raw-view kernel on the native full-angle path.
+  if (sc->beam_storage) ApplySCBeamBCs(pm,sc->GetIntensityView());
+  else ApplySCBeamBCs(pm,sc->ir);
+}
+
 //----------------------------------------------------------------------------------------
 //! \fn void SCBeamErrors()
 //! \brief Diagnostics of the beams, written to sc_beam-errs.dat as
@@ -160,6 +169,7 @@ void SCBeamErrors(ParameterInput *pin, Mesh *pm) {
   MeshBlockPack *pmbp = pm->pmb_pack;
   nr_radiation::SC *psc = pmbp->pnrrad;
   if (psc == nullptr) return;
+  psc->DumpBeamState();
   auto &indcs = pm->mb_indcs;
   int is = indcs.is, ie = indcs.ie, js = indcs.js, je = indcs.je, ks = indcs.ks;
   int nx1 = indcs.nx1, nx2 = indcs.nx2;
@@ -316,4 +326,5 @@ void ProblemGenerator::SCBeam(ParameterInput *pin, const bool restart) {
 
   pmbp->pnrrad->EnrollOpacityFunction(BeamOpacity);
   pmbp->pnrrad->EnrollEmissionFunction(BeamEmission);
+  pmbp->pnrrad->ConfigureBeamStorage(pin);
 }

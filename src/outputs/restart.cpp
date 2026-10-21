@@ -1,3 +1,4 @@
+#include <stdexcept>
 //========================================================================================
 // AthenaXXX astrophysical plasma code
 // Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
@@ -53,6 +54,10 @@ RestartOutput::RestartOutput(ParameterInput *pin, Mesh *pm, OutputParameters op)
 // variables, including ghost zones.
 
 void RestartOutput::LoadOutputData(Mesh *pm) {
+  if ((pm->pmb_pack->phydro && pm->pmb_pack->phydro->ptracers) ||
+      (pm->pmb_pack->pnrrad && pm->pmb_pack->pnrrad->intensity_storage != "dense")) {
+    throw std::runtime_error("Sparse physics pilot restart output is not implemented");
+  }
   // get spatial dimensions of arrays, including ghost zones
   auto &indcs = pm->pmb_pack->pmesh->mb_indcs;
   int nout1 = indcs.nx1 + 2*(indcs.ng);
@@ -147,6 +152,9 @@ void RestartOutput::LoadOutputData(Mesh *pm) {
 //  \brief Cycles over all MeshBlocks and writes everything to a single restart file
 
 void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
+  if (pm->pmb_pack->phydro && pm->pmb_pack->phydro->ptracers) {
+    throw std::runtime_error("Sparse tracer restart output is not implemented");
+  }
   // get spatial dimensions of arrays, including ghost zones
   auto &indcs = pm->pmb_pack->pmesh->mb_indcs;
   int nout1 = indcs.nx1 + 2*(indcs.ng);

@@ -27,6 +27,7 @@
 #include "eos/eos.hpp"
 #include "driver/driver.hpp"
 #include "nr_radiation/nr_radiation.hpp"
+#include "nr_radiation/sc/beam_storage.hpp"
 
 namespace nr_radiation {
 
@@ -204,7 +205,7 @@ void SC::UpdateSource() {
 //! \brief Intensity physical BCs only (RadiationBCs + optional user_bcs).
 
 void SC::ApplyPhysicalBCs() {
-  if (!(pmy_pack->pmesh->strictly_periodic)) {
+  if (!beam_storage && !(pmy_pack->pmesh->strictly_periodic)) {
     pbval_ir->RadiationBCs(pmy_pack, pbval_ir->i_in, ir);
     ApplyReflectBCs();   // reflect is not handled by RadiationBCs; see below
   }
@@ -471,6 +472,7 @@ TaskStatus SC::ClearRecvHflx(Driver *pdrive, int stage) {
 
 TaskStatus SC::InitRecvIr(Driver *pdrive, int stage) {
   (void)pdrive; (void)stage;
+  if (beam_storage) return TaskStatus::complete;
   return pbval_ir->InitRecv(nang_tot);
 }
 
@@ -484,11 +486,13 @@ TaskStatus SC::RestrictIr(Driver *pdrive, int stage) {
 
 TaskStatus SC::SendIr(Driver *pdrive, int stage) {
   (void)pdrive; (void)stage;
+  if (beam_storage) return TaskStatus::complete;
   return pbval_ir->PackAndSendCC(ir, coarse_ir);
 }
 
 TaskStatus SC::RecvIr(Driver *pdrive, int stage) {
   (void)pdrive; (void)stage;
+  if (beam_storage) { beam_storage->ExchangeGhosts(); return TaskStatus::complete; }
   return pbval_ir->RecvAndUnpackCC(ir, coarse_ir);
 }
 
@@ -509,11 +513,13 @@ TaskStatus SC::ProlongateIr(Driver *pdrive, int stage) {
 
 TaskStatus SC::ClearSendIr(Driver *pdrive, int stage) {
   (void)pdrive; (void)stage;
+  if (beam_storage) return TaskStatus::complete;
   return pbval_ir->ClearSend();
 }
 
 TaskStatus SC::ClearRecvIr(Driver *pdrive, int stage) {
   (void)pdrive; (void)stage;
+  if (beam_storage) return TaskStatus::complete;
   return pbval_ir->ClearRecv();
 }
 
@@ -616,6 +622,7 @@ TaskStatus SC::SolveTransfer(Driver *pdrive, int stage) {
     pdrive->ExecuteTaskList(pmy_pack->pmesh, "sc_bvals_srad", 0);
   }
 
+  WriteBeamFrame(0);
   for (int it = 0; it < iter_max; ++it) {
     // carry J forward as the residual's reference; ResidualJ reads only the active range
     par_for("sc_carry_j", DevExeSpace(), 0,nmb1, ks,ke, js,je, is,ie,
@@ -629,6 +636,7 @@ TaskStatus SC::SolveTransfer(Driver *pdrive, int stage) {
     ir_ghosts_fresh_ = true;
     ir_ghosts_seq_ = pmy_pack->pmesh->GetAMRLoadBalanceUpdateSeq();
     ComputeJ();
+    WriteBeamFrame(it+1);
     max_rel = ResidualJ();
 
     niter_last = it + 1;

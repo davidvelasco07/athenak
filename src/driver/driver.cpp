@@ -80,6 +80,7 @@ Driver::Driver(ParameterInput *pin, Mesh *pmesh, Real wtlim, Kokkos::Timer* ptim
   nmb_updated_(0),
   npart_updated_(0),
   lb_efficiency_(0) {
+  pin->GetOrAddBoolean("time","profile_evolution",false);
   // set time-evolution option (no default)
   {
     std::string evolution_t = pin->GetString("time","evolution");
@@ -533,6 +534,9 @@ void Driver::Initialize(Mesh *pmesh, ParameterInput *pin, Outputs *pout, bool re
 //! performs outputs. Updates counters like (ncycle, time, etc.)
 
 void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout, bool wdflag) {
+  const bool profile_evolution = pin->GetOrAddBoolean("time","profile_evolution",false);
+  if (profile_evolution) Kokkos::fence();
+  Kokkos::Timer evolution_timer;
   if (global_variable::my_rank == 0) {
     std::cout << "\nSetup complete, executing task list(s)...\n" << std::endl;
   }
@@ -639,6 +643,11 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout, bool wdfla
       }
     }  // end while
   }    // end of (time_evolution != tstatic) clause
+  if (profile_evolution) {
+    Kokkos::fence();
+    std::cout << "physics_evolution_seconds=" << std::setprecision(17)
+              << evolution_timer.seconds() << std::endl;
+  }
   return;
 }
 

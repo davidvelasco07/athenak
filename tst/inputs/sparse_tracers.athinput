@@ -1,0 +1,49 @@
+<mesh>
+nghost = 2
+nx1 = 128
+nx2 = 128
+nx3 = 1
+x1min = 0.0
+x1max = 1.0
+x2min = 0.0
+x2max = 1.0
+x3min = 0.0
+x3max = 1.0
+ix1_bc = periodic
+ox1_bc = periodic
+ix2_bc = periodic
+ox2_bc = periodic
+ix3_bc = periodic
+ox3_bc = periodic
+<meshblock>
+nx1 = 16
+nx2 = 16
+nx3 = 1
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.35
+nlim = 32
+tlim = 1.0
+ndiag = 10000
+profile_evolution = true
+<hydro>
+eos = ideal
+gamma = 1.6666666666666667
+rsolver = hllc
+reconstruct = plm
+nscalars = 8
+<passive_tracers>
+nfields = 8
+storage = sparse
+capacity = 512
+compare_dense = true
+profile = false
+frame_interval = 0
+frames = tracer_frames
+<problem>
+pgen_name = sparse_tracers
+radius = 0.045
+vx = 0.7
+vy = 0.35
+density_contrast = 0.2

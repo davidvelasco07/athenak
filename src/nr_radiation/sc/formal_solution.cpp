@@ -22,6 +22,7 @@
 #include "mesh/mesh.hpp"
 #include "nr_radiation/nr_radiation.hpp"
 #include "nr_radiation/sc/sc_interp.hpp"
+#include "nr_radiation/sc/beam_storage.hpp"
 
 namespace nr_radiation {
 
@@ -165,6 +166,7 @@ void SC::BuildIndices() {
 //! \brief Dispatch on sweep_kernel.
 
 void SC::FormalSolution() {
+  if (beam_storage) { FormalSolutionBeam(); return; }
   switch (sweep_kernel) {
     case SweepKernel::tiled: FormalSolutionTiled(); break;
     case SweepKernel::plane: FormalSolutionPlane(); break;
@@ -214,6 +216,95 @@ void SC::FormalSolutionTiled() {
       const int rem = lid - t * (nmb * nang_tot_);
       const int m = rem / nang_tot_;
       const int angg = rem - m * nang_tot_;
+
+      const int tlin = tpc_(tlo + t);   // packed tile index (tc*nt2+tb)*nt1+ta
+      const int tc = tlin / nt12;
+      const int tr = tlin - tc * nt12;
+      const int tb = tr / nt1;
+      const int ta = tr - tb * nt1;
+
+      const SweepRay g = RayGeometry(mu.d_view, angg, nang, ndim,
+                                     mbsize.d_view(m).dx1,
+                                     mbsize.d_view(m).dx2,
+                                     mbsize.d_view(m).dx3);
+
+      // the tile's upwind corner for this ray
+      const int i0 = (g.sx > 0) ? (is + ta*tx1) : (ie - ta*tx1);
+      const int j0 = (g.sy > 0) ? (js + tb*tx2) : (je - tb*tx2);
+      const int k0 = (g.sz > 0) ? (ks + tc*tx3) : (ke - tc*tx3);
+
+      // the tile's plane count and transverse extents along this ray's marching axis
+      int np, nu, nv;
+      AxisExtents(g.march_axis, tx1, tx2, tx3, np, nu, nv);
+      const int cnt = nu*nv;
+      for (int p = 0; p < np; ++p) {
+        Kokkos::parallel_for(Kokkos::TeamThreadRange(tmember, cnt),
+        [&](const int c) {
+          // u is the fast transverse index and is l1 on every axis but x, so the plane is
+          // contiguous in i there; see the tie-break in ComputeSCAngleInv, which steers
+          // rays onto those axes whenever the dominant axis is ambiguous.
+          const int u = c % nu;
+          const int v = c / nu;
+          int l1, l2, l3;
+          if (g.march_axis == 0) {
+            l1 = p; l2 = u; l3 = v;
+          } else if (g.march_axis == 1) {
+            l2 = p; l1 = u; l3 = v;
+          } else {
+            l3 = p; l1 = u; l2 = v;
+          }
+          const int i = (g.sx > 0) ? (i0 + l1) : (i0 - l1);
+          const int j = (g.sy > 0) ? (j0 + l2) : (j0 - l2);
+          const int k = (g.sz > 0) ? (k0 + l3) : (k0 - l3);
+          Real a1 = 0.0;
+          ir_(m,angg,k,j,i) = GatherSolveSC(chi_,srad_,ir_,m,angg,i,j,k,g.inv,
+                                            ndim,ks,js,&a1);
+        });
+        tmember.team_barrier();
+      }
+    });
+  }
+}
+
+void SC::FormalSolutionBeam() {
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  int is = indcs.is, ie = indcs.ie;
+  int js = indcs.js, je = indcs.je;
+  int ks = indcs.ks, ke = indcs.ke;
+  int nmb = pmy_pack->nmb_thispack;
+  int ndim = pang->ndim;
+  int nang = pang->nang;
+  int nang_tot_ = nang_tot;
+  auto &mu = pang->mu;
+  auto &mbsize = pmy_pack->pmb->mb_size;
+  auto ir_ = GetIntensityView();
+  const int pair_count = ir_.work_count;
+  auto chi_ = chi;
+  auto srad_ = srad;
+
+  auto tpc_ = block_tiles.items;
+  const int tx1 = tile_nx1, tx2 = tile_nx2, tx3 = tile_nx3;
+  const int nt1 = ntile1;   // nt2 is implicit in nt12 below; see the packing comment
+  const int nt12 = ntile1 * ntile2;
+  const int ts = team_size;
+
+  for (int H = 0; H < block_tiles.nplanes; ++H) {
+    const int tlo = block_tiles.start[H];
+    const int ntile = block_tiles.start[H+1] - tlo;
+    if (ntile <= 0) continue;
+
+    const int league_size = ntile * pair_count;
+    if (pair_count == 0) continue;
+    using Policy = Kokkos::TeamPolicy<DevExeSpace,
+        Kokkos::Experimental::WorkItemProperty::HintLightWeight_t>;
+    Policy policy = (ts > 0) ? Policy(league_size,ts) : Policy(league_size,Kokkos::AUTO);
+    Kokkos::parallel_for("sc_sweep_tiled", policy,
+    KOKKOS_LAMBDA(const TeamMember_t &tmember) {
+      const int lid = tmember.league_rank();
+      const int t = lid / pair_count;
+      const int rem = lid - t * pair_count;
+      const int m = ir_.Block(rem);
+      const int angg = ir_.Angle(rem);
 
       const int tlin = tpc_(tlo + t);   // packed tile index (tc*nt2+tb)*nt1+ta
       const int tc = tlin / nt12;

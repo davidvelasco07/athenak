@@ -21,6 +21,8 @@
 #include "shearing_box/orbital_advection.hpp"
 #include "bvals/bvals.hpp"
 #include "hydro/hydro.hpp"
+#include "tracers/passive_tracers.hpp"
+#include <stdexcept>
 
 namespace hydro {
 //----------------------------------------------------------------------------------------
@@ -329,6 +331,19 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
       // cell range (including ghost zones) in every dimension.
       Kokkos::realloc(wl3d, nmb, (nhydro+nscalars), ncells3, ncells2, ncells1);
       Kokkos::realloc(wr3d, nmb, (nhydro+nscalars), ncells3, ncells2, ncells1);
+    }
+  }
+  if (pin->DoesBlockExist("passive_tracers")) {
+    if ((recon_method != ReconstructionMethod::dc &&
+         recon_method != ReconstructionMethod::plm) || use_fofc || porb_u != nullptr ||
+        psrc != nullptr || pvisc != nullptr || pcond != nullptr ||
+        pin->DoesBlockExist("mhd") || pin->DoesBlockExist("nr_radiation")) {
+      throw std::runtime_error("Passive tracer pilot supports DC/PLM hydro without "
+                               "FOFC, diffusion, source terms, shear, or other fluids");
+    }
+    ptracers = std::make_unique<tracers::PassiveTracers>(ppack,pin);
+    if (ptracers->CompareDense() && nscalars != ptracers->Count()) {
+      throw std::runtime_error("Tracer dense comparison requires nscalars=nfields");
     }
   }
 }

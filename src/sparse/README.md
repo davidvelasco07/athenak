@@ -164,14 +164,113 @@ Initial field setup, the independent reference, and final verification are exclu
 all timings. The device advection budget follows a conservative bound for this particular
 patch transport problem; it is not an automatic general-purpose occupancy predictor.
 These are direct local kernels on uniform logical blocks, with no MPI or dependency on
-AthenaK boundary classes. MPI, AMR, restart, arbitrary topology, vector fields, threshold
-pruning, and physics-module integration remain future work.
+AthenaK boundary classes. MPI, AMR, restart, arbitrary topology, vector fields, and threshold pruning remain
+future work. Limited physics integrations are described below.
 
 ## Next steps
 
-Use these tests to choose capacity and metadata policies before connecting the library
-to MeshBlockPack and real mesh neighbor lists. Then add sparse MPI manifests/payloads,
+Use these tests and the physics pilots below to choose capacity and metadata policies.
+Then add sparse MPI manifests/payloads,
 AMR transfer and flux correction, restart masks, and module-specific lifetime rules.
 Keep exact-zero omission separate from approximate positive thresholds and validate the
 conservation and physics error of the latter explicitly. RT can later use global ray IDs;
 the generic store does not prescribe angular quadrature or decide which rays to retain.
+
+## Physics pilots: passive tracers, then SC beam
+
+Two opt-in integrations now exercise the store with real AthenaK physics. These are
+single-rank, single-pack uniform-grid pilots, not general sparse MPI/AMR support.
+The generic allocation library remains independent of either module.
+
+### Passive tracers
+
+Run `athena -i tst/inputs/sparse_tracers.athinput` for an in-process comparison with
+AthenaK's existing appended passive scalars. Each field stores conserved `rho*C`;
+the transport uses the actual hydro mass flux, DC/PLM mass-fraction reconstruction,
+and SSP RK1/RK2/RK3 coefficients. `Hydro::Fluxes` advances the tracers after computing
+gas fluxes and before updating gas. RK4, FOFC, nonperiodic boundaries, diffusion,
+source terms, relativistic coordinates, and coupled modules are rejected explicitly.
+
+At each stage, the GPU requests current nonzero pairs, live saved RK registers, and
+face-neighbor receivers. The allocation mask is applied before any receiver update.
+Each slot groups the current state, saved RK state, and one flux array per active
+dimension. At the completed step only exact-zero current states may be dropped.
+There is no threshold truncation: tiny advective tails can retain storage indefinitely.
+The pool is a user-specified fixed capacity, and overflow fails rather than dropping data.
+
+`passive_tracers/storage` selects these controls:
+
+| Mode | Storage and transport |
+| --- | --- |
+| `native` | Original `hydro/nscalars` kernels and buffers; requires `nscalars=nfields` |
+| `dense` | Ordinary dense array using the pilot's transport kernels |
+| `forced` | Same pilot kernels through an all-allocated sparse slot map |
+| `sparse` | GPU allocation requests, bounded slots, and exact-zero pruning |
+
+For independent timing use `compare_dense=false` and `hydro/nscalars=0` outside native
+mode. For correctness use `compare_dense=true` and `nscalars=nfields`; the problem
+generator checks every conserved tracer cell against native scalars, each label's total
+mass, finiteness, and positivity within precision-appropriate roundoff. `tracers.json`
+reports these errors and reserved payload/metadata. Native payload attribution includes
+eight existing scalar arrays; the 2D pilot uses four. Thus native-to-sparse savings
+include both fewer buffers and spatial sparsity; compare `dense` to isolate the latter.
+Common gas arrays, boundary buffers, allocator overhead and transient peaks are excluded.
+
+### Non-emitting SC beam
+
+Run `athena -i tst/inputs/sc_beam_sparse.athinput
+nr_radiation/intensity_storage=sparse`. This is a fixed-support 2D `sc_beam` pilot with
+user/vacuum boundaries, tiled sweeps, integral coupling, no fluid, no scattering, and
+no local emission. It must not be used as an angular-selection policy for emitting LTE
+gas. Original global ordinate IDs and quadrature weights are retained unchanged.
+
+The host computes conservative reachability from injected boundary cells using both
+actual short-characteristics interpolation donors. A block-direction pair is stored
+if support touches its interior or required ghost footprint. This includes numerical
+beam broadening, not just a geometric ray. The compact work list is reused for all
+sweeps. Absent intensities read as zero, and a nonzero write outside support aborts.
+Ghost exchange uses explicit local mesh neighbors; moments use the original weights.
+
+`nr_radiation/intensity_storage` controls:
+
+| Mode | Stored intensities |
+| --- | --- |
+| `dense` | Original full-angle storage, sweeps, moments and boundary exchange |
+| `selected` | Dense injected directions on every block, using the pilot kernels |
+| `forced` | All original directions through the sparse map, using pilot kernels |
+| `sparse` | Only supported block-direction pairs |
+
+The selected-direction dense control is essential: removing globally dark directions
+can explain most of a full-angle speedup without spatial sparsity helping runtime.
+`beam_diagnostics=true` writes `beam.json`; `dump_final=true` also writes every original
+intensity and all ten moments for comparison. Reported memory is intensity storage
+and its metadata, excluding common moments/material arrays, boundary buffers, and
+transient allocations. Existing native SC configurations retain their original boundary
+kernel and do not write pilot diagnostics by default.
+
+### Validation, timing and movies
+
+With sparse tests enabled, `ctest --test-dir BUILD --output-on-failure` covers generic
+storage, transport, native tracer comparisons in 1D/2D/3D, and full-intensity/moment
+beam comparisons for multiple tile/block shapes and injection faces. The existing
+dense SC beam SMR regression also exercises the unchanged native paths. Neither pilot
+supports restart; both read and write paths fail explicitly.
+
+On an allocated GPU, from the repository root:
+
+```sh
+bash tst/sparse/run_physics_gpu.sh BUILD FRESH_RESULTS
+python3 tst/sparse/run_physics.py --exe BUILD/src/athena \
+  --suite movies --output FRESH_FRAMES
+MPLCONFIGDIR=SCRATCH/mpl-cache python3 tst/sparse/render_physics.py \
+  --frames FRESH_FRAMES --output VIDEOS
+```
+
+The timing runner discards one warm-up per mode and randomizes five measured trials.
+`time/profile_evolution=true` fences the complete evolution task loop; setup and final
+verification/output are outside this measurement. Per-stage fenced tracer profiling
+and sanitizer runs are separate. Movies enable additional synchronized frame I/O and
+must not be used as timing evidence. Tracer movies show physical time; the quasi-static
+beam movie shows convergence iterations, not photon propagation in physical time.
+Movie allocation maps count live pairs, while memory figures include the reserved pool
+capacity. Default full-size capacity does not save reserved payload memory.

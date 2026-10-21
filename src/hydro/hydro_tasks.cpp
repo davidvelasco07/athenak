@@ -25,6 +25,7 @@
 #include "shearing_box/shearing_box.hpp"
 #include "shearing_box/orbital_advection.hpp"
 #include "hydro/hydro.hpp"
+#include "tracers/passive_tracers.hpp"
 
 namespace hydro {
 //----------------------------------------------------------------------------------------
@@ -228,6 +229,7 @@ TaskStatus Hydro::Fluxes(Driver *pdrive, int stage) {
     }
   }
 
+  if (ptracers) ptracers->Advance(pdrive,stage);
   return TaskStatus::complete;
 }
 
@@ -439,6 +441,10 @@ TaskStatus Hydro::ConToPrim(Driver *pdrive, int stage) {
   int n2m1 = (indcs.nx2 > 1)? (indcs.nx2 + 2*ng - 1) : 0;
   int n3m1 = (indcs.nx3 > 1)? (indcs.nx3 + 2*ng - 1) : 0;
   peos->ConsToPrim(u0, w0, false, 0, n1m1, 0, n2m1, 0, n3m1);
+  if (ptracers && stage == pdrive->nexp_stages) {
+    ptracers->WriteFrame(pmy_pack->pmesh->ncycle+1,
+                        pmy_pack->pmesh->time+pmy_pack->pmesh->dt);
+  }
   return TaskStatus::complete;
 }
 

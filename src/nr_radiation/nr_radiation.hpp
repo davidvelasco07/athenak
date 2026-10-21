@@ -31,6 +31,8 @@
 class Driver;
 
 namespace nr_radiation {
+class BeamStorage;
+struct IntensityView;
 
 //----------------------------------------------------------------------------------------
 //! \struct SCTaskIDs
@@ -160,6 +162,17 @@ class SC {
   bool converged;    // true if the last SolveTransfer met iter_tol
 
   // intensity: (nmb, nang_tot, nx3, nx2, nx1) with ghost zones
+  std::string intensity_storage = "dense"; // dense / selected / forced / sparse
+  std::unique_ptr<BeamStorage> beam_storage;
+  int beam_frame_interval = 0;
+  std::string beam_frame_directory;
+  bool beam_dump_final = false, beam_diagnostics = false;
+  IntensityView GetIntensityView() const;
+  void ConfigureBeamStorage(ParameterInput *pin);
+  void FormalSolutionBeam();
+  void ComputeBeamMoments(bool full);
+  void WriteBeamFrame(int iteration);
+  void DumpBeamState();
   DvceArray5D<Real> ir;
   DvceArray5D<Real> coarse_ir;
 

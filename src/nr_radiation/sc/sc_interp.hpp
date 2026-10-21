@@ -110,8 +110,9 @@ void InterpQuadSourceSlopeLim(Real dtaum, Real dtaup, Real S0, Real S1, Real S2,
 //! \fn Real IrGet()
 //! \brief Intensity read, `ir(m,angg,k,j,i)`: the one place the gather spells the layout.
 
+template<class Intensity>
 KOKKOS_INLINE_FUNCTION
-Real IrGet(const DvceArray5D<Real> &ir_, int m, int angg, int k, int j, int i) {
+Real IrGet(const Intensity &ir_, int m, int angg, int k, int j, int i) {
   return ir_(m, angg, k, j, i);
 }
 
@@ -194,10 +195,11 @@ SCRayInv ComputeSCAngleInv(Real mux, Real muy, Real muz,
 //! invariants `inv` from ComputeSCAngleInv. The sweep kernels call it directly with inv
 //! from RayGeometry (formal_solution.cpp).
 
+template<class Intensity>
 KOKKOS_INLINE_FUNCTION
 Real GatherSolveSC(
     const DvceArray4D<Real> &chi_, const DvceArray5D<Real> &srad_,
-    const DvceArray5D<Real> &ir_, int m, int angg,
+    const Intensity &ir_, int m, int angg,
     int i, int j, int k, const SCRayInv &inv,
     int ndim, int ks, int js,
     Real *a1_out, Real *a0_out = nullptr, Real *edtau_out = nullptr) {

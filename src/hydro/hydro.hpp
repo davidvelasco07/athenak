@@ -27,6 +27,7 @@ class SourceTerms;
 class OrbitalAdvectionCC;
 class ShearingBoxCC;
 class Driver;
+namespace tracers {class PassiveTracers;}
 
 // constants that enumerate Hydro Riemann Solver options
 enum class Hydro_RSolver {advect, llf, hlle, hllc, roe,    // non-relativistic
@@ -76,6 +77,7 @@ class Hydro {
   EquationOfState *peos;  // chosen EOS
 
   int nhydro;             // number of hydro variables (5/4 for ideal/isothermal EOS)
+  std::unique_ptr<tracers::PassiveTracers> ptracers;
   int nscalars;           // number of passive scalars
   DvceArray5D<Real> u0;   // conserved variables
   DvceArray5D<Real> w0;   // primitive variables

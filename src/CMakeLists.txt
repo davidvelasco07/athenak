@@ -65,6 +65,7 @@ add_executable(
         gravity/gravity.cpp
         gravity/mg_gravity.cpp
 
+        tracers/passive_tracers.cpp
         hydro/hydro.cpp
         hydro/hydro_fluxes.cpp
         hydro/hydro_fofc.cpp
@@ -122,6 +123,7 @@ add_executable(
         outputs/pdf.cpp
 
         pgen/pgen.cpp
+        pgen/tests/sparse_tracers.cpp
         pgen/tests/advection.cpp
         pgen/tests/cpaw.cpp
         pgen/tests/cshock.cpp
@@ -160,6 +162,7 @@ add_executable(
         nr_radiation/nr_radiation.cpp
         nr_radiation/angular_grid.cpp
         nr_radiation/sc/formal_solution.cpp
+        nr_radiation/sc/beam_storage.cpp
         nr_radiation/sc/iteration.cpp
         nr_radiation/sc/get_moments.cpp
         nr_radiation/sc/coupling.cpp

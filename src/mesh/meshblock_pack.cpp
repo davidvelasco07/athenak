@@ -1,3 +1,4 @@
+#include <stdexcept>
 //========================================================================================
 // Athena++ astrophysical MHD code
 // Copyright(C) 2014 James M. Stone <jmstone@princeton.edu> and other code contributors
@@ -105,6 +106,9 @@ void MeshBlockPack::AddCoordinates(ParameterInput *pin) {
 // <blocks> are present in the input file.  Called from main().
 
 void MeshBlockPack::AddPhysics(ParameterInput *pin) {
+  if (pin->DoesBlockExist("passive_tracers") && !pin->DoesBlockExist("hydro")) {
+    throw std::runtime_error("passive_tracers requires the hydro module");
+  }
   int nphysics = 0;
   TaskID none(0);
 

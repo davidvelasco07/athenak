@@ -29,6 +29,7 @@
 #include "nr_radiation/nr_radiation.hpp"
 #include "srcterms/turb_driver.hpp"
 #include "pgen.hpp"
+#include <stdexcept>
 
 
 //----------------------------------------------------------------------------------------
@@ -135,6 +136,10 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
     user_srcs(false),
     user_hist(false),
     pmy_mesh_(pm) {
+  if (pin->DoesBlockExist("passive_tracers") ||
+      (pm->pmb_pack->pnrrad && pm->pmb_pack->pnrrad->intensity_storage != "dense")) {
+    throw std::runtime_error("Sparse physics pilot restart is not implemented");
+  }
   // check for user-defined boundary conditions
   for (int dir=0; dir<6; ++dir) {
     if (pm->mesh_bcs[dir] == BoundaryFlag::user) {
@@ -1045,6 +1050,8 @@ void ProblemGenerator::CallProblemGenerator(ParameterInput *pin, bool is_restart
     RadiationLinearWave(pin, is_restart);
   } else if (pgen_fun_name.compare("rad_beam") == 0) {
     RadiationBeam(pin, is_restart);
+  } else if (pgen_fun_name.compare("sparse_tracers") == 0) {
+    SparseTracers(pin, is_restart);
   } else if (pgen_fun_name.compare("sc_beam") == 0) {
     SCBeam(pin, is_restart);
   } else if (pgen_fun_name.compare("sc_linwave") == 0) {

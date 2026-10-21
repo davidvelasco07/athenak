@@ -26,3 +26,15 @@ add_test(NAME sparse_benchmark_partial COMMAND sparse_benchmark
   --blocks 16 --cells 16 --fields 17 --fraction 0.25 --iterations 8 --repeats 1)
 add_test(NAME sparse_benchmark_full COMMAND sparse_benchmark
   --blocks 8 --cells 8 --fields 7 --fraction 1 --iterations 5 --repeats 1)
+
+foreach(case forward reverse dc reject_rk4 forced dense native oneblock one_d three_d)
+  add_test(NAME sparse_hydro_${case} COMMAND ${Python3_EXECUTABLE}
+    ${CMAKE_CURRENT_SOURCE_DIR}/physics_test.py $<TARGET_FILE:athena>
+    ${CMAKE_SOURCE_DIR}/tst/inputs/sparse_tracers.athinput ${case})
+endforeach()
+
+foreach(case uniform tiles rectangular vertical)
+  add_test(NAME sparse_sc_beam_${case} COMMAND ${Python3_EXECUTABLE}
+    ${CMAKE_CURRENT_SOURCE_DIR}/beam_test.py $<TARGET_FILE:athena>
+    ${CMAKE_SOURCE_DIR}/tst/inputs/sc_beam_sparse.athinput ${case})
+endforeach()
