@@ -187,6 +187,8 @@ class MHD {
   Real mood_eps0_eq;        // WB: round-off floor relative to the equilibrium (hydro.hpp)
   Real mood_atol;
   bool mood_sed;
+  bool mood_candidate_diffusion = false;  // true: diffusion fluxes before the fallback,
+                                          // re-added face-locally on revised faces
   int n_fb_tiers;
   int mood_halo0;
   // Frozen EMFs: immutable candidate exchange, integer cascade exchange per revision.
@@ -216,6 +218,16 @@ class MHD {
   DvceEdgeFld4D<Real> mood_edc{"mood_edc",1,1,1,1};
   DvceArray4D<int> fb_level;
   DvceArray4D<Real> bmag_ref;
+  // relaxed-DMP bounds of the NAD reference quantities over the cell neighbourhood,
+  // computed once per stage by separable sweeps (utils/mood_bounds.hpp): per-cell
+  // values, min, max and max-scratch, one slot per tested quantity (val doubles as the
+  // min-scratch; see MoodNeighborhoodBounds for which pair holds the result)
+  DvceArray5D<Real> mood_val, mood_qmn, mood_qmx, mood_tmx;
+  DvceArray1D<int> mood_cnt;    // detection counters (atomics; see mhd_mood.cpp)
+  // split detection (mhd_mood.cpp): per-cell status and rcfl band scale from the prep
+  // kernel, per-cell NAD flag raised by the per-pass kernel
+  DvceArray4D<int> mood_stat, mood_nadf;
+  DvceArray4D<Real> mood_crtol;
   // Touched-cell restriction of revisions >= 2 (mhd_mood.cpp): only cells within the
   // dependency radius of a face revised in the previous pass are re-candidated,
   // re-tested and re-detected.  Bitwise-identical to the full re-test; mood_touched and

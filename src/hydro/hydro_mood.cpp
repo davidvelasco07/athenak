@@ -27,7 +27,10 @@
 //! are restricted at fine/coarse AMR boundaries like any other flux (conservative).
 //! Detection is evaluated on the interior plus one ghost layer so neighboring
 //! MeshBlocks make identical decisions about their shared faces (as FOFC does).
-//! Like FOFC, revised faces lose any viscous/conduction flux contribution.
+//! Explicit viscous/conduction fluxes: with mood_candidate_diffusion (default) they are
+//! in the candidate and every revised face gets its face-local diffusive flux re-added
+//! after the replacement; with it off they are added after this loop (detector sees the
+//! purely hyperbolic candidate).
 
 #include <algorithm>
 
@@ -35,10 +38,14 @@
 #include "mesh/mesh.hpp"
 #include "driver/driver.hpp"
 #include "coordinates/coordinates.hpp"
+#include "coordinates/cell_locations.hpp"
 #include "eos/eos.hpp"
+#include "diffusion/viscosity.hpp"
+#include "diffusion/conduction.hpp"
 #include "reconstruct/recon.hpp"
 #include "hydro/rsolvers/solve_face_hyd.hpp"
 #include "hydro/well_balance.hpp"
+#include "utils/mood_bounds.hpp"
 #include "hydro.hpp"
 
 namespace hydro {
@@ -196,7 +203,6 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
   if (three_d) { kl = ks-hmax, ku = ke+hmax; }
 
   // neighborhood extents for DMP/SED (only active dimensions)
-  const int ndi = 1;
   const int ndj = (multi_d) ? 1 : 0;
   const int ndk = (three_d) ? 1 : 0;
 
@@ -230,6 +236,52 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
     }
   }
 
+  // face-local re-add of the explicit diffusion fluxes on revised faces (see
+  // mood_candidate_diffusion in hydro.cpp); the bulk pass used the same functions
+  const bool readd_visc = mood_candidate_diffusion && has_explicit_viscosity;
+  const bool readd_cond = mood_candidate_diffusion && has_explicit_conduction;
+  const ViscFaceParams vfp =
+      (pvisc != nullptr) ? pvisc->FaceParams(eos_) : ViscFaceParams{};
+  const Real cond_alpha = (pcond != nullptr) ? pcond->alpha_iso : 0.0;
+  const Real cond_gm1 = eos_.gamma - 1.0;
+
+  // debug/validation: forced demotion of the region x1 < x1max (see hydro.cpp)
+  const bool dbg_demote = mood_debug_demote;
+  const Real dbg_x1max = mood_debug_demote_x1max;
+
+  //--------------------------------------------------------------------------------------
+  // Relaxed-DMP bounds of the NAD reference quantities over the 3^d-cell neighbourhood,
+  // once per stage (the reference state is immutable through the revision loop):
+  // per-cell values gathered into mood_val, then separable 3-point sweeps over all
+  // slots at once (utils/mood_bounds.hpp; bmn/bmx name the arrays holding the result)
+  // -- bit-identical to the direct scan the detection kernel used to repeat per
+  // variable, per cell, per revision.
+  // Slots: [0,nhe) density, energy; WB: [nhe,2*nhe) the same in FULL state (the
+  // tolerance scale, see the note above); then the scalar concentrations.
+  const int nhe = (is_ideal_ && nad_energy) ? 2 : 1;
+  const int s_full = wb ? nhe : 0;
+  const int s_sc = nhe*(wb ? 2 : 1);
+  auto bmn = mood_qmn;
+  auto bmx = mood_qmx;
+  if (nrevs > 0) {
+    auto val = mood_val;
+    const int nsc = nad_scalars ? (nvars - nhyd_) : 0;
+    // values one cell beyond the first-revision detection halo (il..ku at hmax)
+    par_for("mood_bnd_val", DevExeSpace(), 0, nmb1, kl-ndk, ku+ndk, jl-ndj, ju+ndj,
+            il-1, iu+1,
+    KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      for (int p=0; p<nhe; ++p) {
+        const int n = (p == 0) ? IDN : IEN;
+        const Real q = (newtonian) ? wnad_(m,n,k,j,i) : u0_(m,n,k,j,i);
+        val(m,p,k,j,i) = q;
+        if (wb) { val(m,nhe+p,k,j,i) = q + weq_(m,n,k,j,i); }
+      }
+      for (int sc=0; sc<nsc; ++sc) { val(m,s_sc+sc,k,j,i) = w0_(m,nhyd_+sc,k,j,i); }
+    });
+    MoodNeighborhoodBounds(nmb1, s_sc+nsc, il, iu, jl, ju, kl, ku, multi_d, three_d,
+                           mood_val, mood_qmn, mood_qmx, mood_tmx, bmn, bmx);
+  }
+
   // detect / demote / revise loop
   int ndemoted_total = 0;
   for (int rev=1; rev<=nrevs; ++rev) {
@@ -238,12 +290,6 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
     il = is-dh; iu = ie+dh;
     if (multi_d) { jl = js-dh; ju = je+dh; }
     if (three_d) { kl = ks-dh; ku = ke+dh; }
-
-    // flattened-index helpers for the detection parallel_reduce
-    const int ni   = (iu - il + 1);
-    const int nji  = (ju - jl + 1)*ni;
-    const int nkji = (ku - kl + 1)*nji;
-    const int nmkji = nmb*nkji;
 
     //------------------------------------------------------------------------------------
     // (1) candidate update with the exact RK stage combination, over this iteration's
@@ -277,18 +323,15 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
 
     //------------------------------------------------------------------------------------
     // (3) NaN + NAD detection; combine with PAD; filter out cells that cannot descend
-    // further; demote survivors and count them
-    int ndemoted = 0, ndemoted_int = 0;
-    Kokkos::parallel_reduce("mood_detect",
-    Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
-    KOKKOS_LAMBDA(const int &idx, int &sum, int &sum_int) {
-      int m = (idx)/nkji;
-      int k = (idx - m*nkji)/nji;
-      int j = (idx - m*nkji - k*nji)/ni;
-      int i = (idx - m*nkji - k*nji - j*ni) + il;
-      j += jl;
-      k += kl;
-
+    // further; demote survivors and count them.  A plain par_for with atomic counters
+    // (incremented only by flagged cells) instead of a multi-value parallel_reduce: the
+    // counts are exact integers either way, the reduction epilogue is gone, and the few
+    // flagged cells make atomic contention negligible.  cnt(0) = demoted incl. the halo
+    // (loop exit), cnt(1) = demoted interior cells (event counter).
+    auto cnt_ = mood_cnt;
+    Kokkos::deep_copy(cnt_, 0);
+    par_for("mood_detect", DevExeSpace(), 0, nmb1, kl, ku, jl, ju, il, iu,
+    KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
       // cells already at the bottom tier cannot be revised further
       const int lv = fb_level_(m,k,j,i);
       if (lv >= n_fb) {
@@ -376,25 +419,13 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
             q_new = utest_(m,IEN,k,j,i) - 0.5*(SQR(utest_(m,IM1,k,j,i))
                   + SQR(utest_(m,IM2,k,j,i)) + SQR(utest_(m,IM3,k,j,i)))/dtst;
           }
-          // DMP bounds from the stage-input state over the neighborhood
-          // (WB: DMP bounds on the perturbation; the tolerance scale smn/smx from the
-          // full-state bounds, see the note at the top of the loop)
-          const DvceArray5D<Real> &qref = (newtonian) ? wnad_ : u0_;
-          Real qmn = qref(m,n,k,j,i), qmx = qmn;
-          Real smn = qmn + (wb ? weq_(m,n,k,j,i) : 0.0), smx = smn;
-          for (int dk=-ndk; dk<=ndk; ++dk) {
-          for (int dj=-ndj; dj<=ndj; ++dj) {
-          for (int di=-ndi; di<=ndi; ++di) {
-            Real q = qref(m,n,k+dk,j+dj,i+di);
-            qmn = fmin(qmn, q);
-            qmx = fmax(qmx, q);
-            if (wb) {
-              Real qf = q + weq_(m,n,k+dk,j+dj,i+di);
-              smn = fmin(smn, qf);
-              smx = fmax(smx, qf);
-            }
-          }}}
-          if (!wb) { smn = qmn; smx = qmx; }
+          // DMP bounds from the stage-input state over the neighborhood, precomputed
+          // per stage (mood_bnd_val above).  WB: DMP bounds on the perturbation; the
+          // tolerance scale smn/smx from the full-state bounds (note at the top).
+          const DvceArray5D<Real> &qref = (newtonian) ? wnad_ : u0_;   // for SED
+          const Real qmn = bmn(m,pass,k,j,i), qmx = bmx(m,pass,k,j,i);
+          const Real smn = wb ? bmn(m,s_full+pass,k,j,i) : qmn;
+          const Real smx = wb ? bmx(m,s_full+pass,k,j,i) : qmx;
           // Local relative relaxation of the neighboring lower/upper bounds.
           Real eps_m = fmax(cell_rtol*fabs(smn), atol);
           Real eps_p = fmax(cell_rtol*fabs(smx), atol);
@@ -431,14 +462,8 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
           // a non-positive candidate density is already PAD's business; skip the ratio
           if (!(dtst > 0.0)) break;
           const Real q_new = utest_(m,n,k,j,i)/dtst;
-          Real qmn = w0_(m,n,k,j,i), qmx = qmn;
-          for (int dk=-ndk; dk<=ndk; ++dk) {
-          for (int dj=-ndj; dj<=ndj; ++dj) {
-          for (int di=-ndi; di<=ndi; ++di) {
-            Real q = w0_(m,n,k+dk,j+dj,i+di);
-            qmn = fmin(qmn, q);
-            qmx = fmax(qmx, q);
-          }}}
+          const int sq = s_sc + (n - nhyd_);   // precomputed bounds (mood_bnd_val)
+          const Real qmn = bmn(m,sq,k,j,i), qmx = bmx(m,sq,k,j,i);
           Real eps_m = fmax(cell_rtol*fabs(qmn), atol);
           Real eps_p = fmax(cell_rtol*fabs(qmx), atol);
           eps_m = fmax(eps_m, eps0*fabs(qmn));
@@ -451,6 +476,13 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
         }
       }
 
+      // debug/validation: force demotion of a chosen region (hydro.cpp)
+      if (dbg_demote) {
+        Real x1v = CellCenterX(i-is, indcs_.nx1, size_.d_view(m).x1min,
+                               size_.d_view(m).x1max);
+        if (x1v < dbg_x1max) { trouble = true; }
+      }
+
       // demote flagged cells one tier; fofc marks "newly demoted" for the revise pass.
       // sum (incl. the ghost halo) controls the loop exit and must be consistent with
       // the neighbor blocks' decisions; sum_int (interior only) is the diagnostic
@@ -458,12 +490,15 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
       fofc_(m,k,j,i) = trouble;
       if (trouble) {
         fb_level_(m,k,j,i) += 1;
-        sum++;
+        Kokkos::atomic_inc(&cnt_(0));
         if (i >= is && i <= ie && j >= js && j <= je && k >= ks && k <= ke) {
-          sum_int++;
+          Kokkos::atomic_inc(&cnt_(1));
         }
       }
-    }, Kokkos::Sum<int>(ndemoted), Kokkos::Sum<int>(ndemoted_int));
+    });
+    auto cnt_h = Kokkos::create_mirror_view(cnt_);
+    Kokkos::deep_copy(cnt_h, cnt_);
+    const int ndemoted = cnt_h(0), ndemoted_int = cnt_h(1);
 
     if (ndemoted == 0) break;
     ndemoted_total += ndemoted_int;
@@ -513,6 +548,18 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
             }
           }
         }
+        // face-local re-add of the explicit diffusion fluxes this revision overwrote
+        if (readd_visc) {
+          const ViscFaceFlux vf = ViscousFluxX1(vfp, w0_, size_.d_view(m), m, k, j, i);
+          flx1(m,IM1,k,j,i) -= vf.nud*vf.fvx;
+          flx1(m,IM2,k,j,i) -= vf.nud*vf.fvy;
+          flx1(m,IM3,k,j,i) -= vf.nud*vf.fvz;
+          if (vfp.is_ideal) {flx1(m,IEN,k,j,i) -= 0.5*vf.nud*vf.ve;}
+        }
+        if (readd_cond) {
+          flx1(m,IEN,k,j,i) -= HeatFluxIsoX1(cond_alpha, cond_gm1, w0_, size_.d_view(m),
+                                             m, k, j, i);
+        }
       }
     });
 
@@ -555,6 +602,18 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
                 flx2(m,n,k,j,i) = flx2(m,IDN,k,j,i)*wr_(m,n,k,j,i);
               }
             }
+          }
+          // face-local re-add of the explicit diffusion fluxes this revision overwrote
+          if (readd_visc) {
+            const ViscFaceFlux vf = ViscousFluxX2(vfp, w0_, size_.d_view(m), m, k, j, i);
+            flx2(m,IM1,k,j,i) -= vf.nud*vf.fvx;
+            flx2(m,IM2,k,j,i) -= vf.nud*vf.fvy;
+            flx2(m,IM3,k,j,i) -= vf.nud*vf.fvz;
+            if (vfp.is_ideal) {flx2(m,IEN,k,j,i) -= 0.5*vf.nud*vf.ve;}
+          }
+          if (readd_cond) {
+            flx2(m,IEN,k,j,i) -= HeatFluxIsoX2(cond_alpha, cond_gm1, w0_, size_.d_view(m),
+                                               m, k, j, i);
           }
         }
       });
@@ -599,6 +658,18 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
                 flx3(m,n,k,j,i) = flx3(m,IDN,k,j,i)*wr_(m,n,k,j,i);
               }
             }
+          }
+          // face-local re-add of the explicit diffusion fluxes this revision overwrote
+          if (readd_visc) {
+            const ViscFaceFlux vf = ViscousFluxX3(vfp, w0_, size_.d_view(m), m, k, j, i);
+            flx3(m,IM1,k,j,i) -= vf.nud*vf.fvx;
+            flx3(m,IM2,k,j,i) -= vf.nud*vf.fvy;
+            flx3(m,IM3,k,j,i) -= vf.nud*vf.fvz;
+            if (vfp.is_ideal) {flx3(m,IEN,k,j,i) -= 0.5*vf.nud*vf.ve;}
+          }
+          if (readd_cond) {
+            flx3(m,IEN,k,j,i) -= HeatFluxIsoX3(cond_alpha, cond_gm1, w0_, size_.d_view(m),
+                                               m, k, j, i);
           }
         }
       });

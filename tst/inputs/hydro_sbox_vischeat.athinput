@@ -1,0 +1,74 @@
+# AthenaK input file for the shearing-box viscous-heating exact gate.
+# Uniform ideal gas at rest in the shearing frame (v' = 0) with constant kinematic
+# viscosity. The stress of the background shear is uniform, so the momentum must stay
+# exactly zero while the total energy grows at exactly rho*nu*(q*Omega)^2 per volume.
+# Use with the shwave.cpp problem generator (ipert=1, amp=0).
+
+<comment>
+problem   = shearing-box viscous heating of the background shear
+reference = Keplerian disc heating rate (9/4) rho nu Omega^2
+
+<job>
+basename  = vischeat  # problem ID: basename of output filenames
+
+<mesh>
+nghost    = 3         # Number of ghost cells
+nx1       = 32        # Number of zones in X1-direction
+x1min     = -0.25     # minimum value of X1
+x1max     = 0.25      # maximum value of X1
+ix1_bc    = shear_periodic  # Inner-X1 boundary condition flag
+ox1_bc    = shear_periodic  # Outer-X1 boundary condition flag
+
+nx2       = 32        # Number of zones in X2-direction
+x2min     = -0.25     # minimum value of X2
+x2max     = 0.25      # maximum value of X2
+ix2_bc    = periodic  # Inner-X2 boundary condition flag
+ox2_bc    = periodic  # Outer-X2 boundary condition flag
+
+nx3       = 32        # Number of zones in X3-direction
+x3min     = -0.25     # minimum value of X3
+x3max     = 0.25      # maximum value of X3
+ix3_bc    = periodic  # Inner-X3 boundary condition flag
+ox3_bc    = periodic  # Outer-X3 boundary condition flag
+
+<meshblock>
+nx1       = 16        # Number of cells in each MeshBlock, X1-dir
+nx2       = 16        # Number of cells in each MeshBlock, X2-dir
+nx3       = 16        # Number of cells in each MeshBlock, X3-dir
+
+<time>
+evolution  = dynamic  # dynamic/kinematic/static
+integrator = rk2      # time integration algorithm
+cfl_number = 0.3      # The Courant, Friedrichs, & Lewy (CFL) Number
+nlim       = -1       # cycle limit
+tlim       = 1.0      # time limit
+ndiag      = 50       # cycles between diagostic output
+
+<shearing_box>
+qshear = 1.5
+omega0 = 1.0
+
+<hydro>
+eos         = ideal       # EOS type
+gamma       = 1.6666666666666667  # ratio of specific heats
+reconstruct = plm         # spatial reconstruction method
+rsolver     = hllc        # Riemann-solver to be used
+nu_iso      = 0.01        # isotropic kinematic viscosity
+mood        = false       # a-posteriori fallback (enabled by the fv4 test case)
+mood_debug_demote_x1max = -1.0   # <= x1min: off (forced-demotion test sets 0.0)
+mood_candidate_diffusion = false # false (default): diffusion added after the MOOD/FOFC fallback
+
+<problem>
+pgen_name = shwave  # problem generator name
+ipert     = 1       # epicyclic-motion setup; amp = 0 leaves the gas at rest
+d0        = 1.0     # background density
+p0        = 1.0     # background pressure
+amp       = 0.0     # no perturbation
+nwx       = 0       # unused
+nwy       = 0       # unused
+nwz       = 0       # unused
+
+<output1>
+file_type   = hst      # History data dump
+dt          = 0.1      # time increment between outputs
+data_format = %.17e    # full double precision for the exact gate

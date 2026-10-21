@@ -234,11 +234,21 @@ TaskStatus Hydro::Fluxes(Driver *pdrive, int stage) {
     CalculateFluxes<Hydro_RSolver::hlle_gr>(pdrive, stage);
   }
 
-  // Terms selected for STS are advanced only in the parabolic half-sweeps.
-  AddSelectedDiffusionFluxes(parabolic::DiffusionSelection::explicit_only);
-
-  if (!mood_frozen_flux) return ApplyFallback(pdrive, stage);
-  return TaskStatus::complete;
+  // Explicit diffusion fluxes and the a-posteriori fallback (mood_candidate_diffusion,
+  // hydro.cpp).  Default: add them first, so the detector judges the full candidate; the
+  // revise passes re-add them face-locally on every face they overwrite.  Negative
+  // control: add them after the fallback (detector sees the inviscid candidate).  Terms
+  // selected for STS are advanced only in the parabolic half-sweeps.  (mood_frozen_flux
+  // runs ApplyFallback as a later task, but it is only supported without diffusion.)
+  if (mood_candidate_diffusion) {
+    AddSelectedDiffusionFluxes(parabolic::DiffusionSelection::explicit_only);
+  }
+  TaskStatus tstat = TaskStatus::complete;
+  if (!mood_frozen_flux) tstat = ApplyFallback(pdrive, stage);
+  if (!mood_candidate_diffusion) {
+    AddSelectedDiffusionFluxes(parabolic::DiffusionSelection::explicit_only);
+  }
+  return tstat;
 }
 
 TaskStatus Hydro::ApplyFallback(Driver *pdrive, int stage) {
@@ -319,7 +329,13 @@ TaskStatus Hydro::HydroSrcTerms(Driver *pdrive, int stage) {
   if (psrc != nullptr) psrc->ApplySrcTerms(w0, peos->eos_data,  beta_dt, u0);
 
   // Add shearing box source terms for cell-centered hydro variables
-  if (psbox_u != nullptr) psbox_u->SourceTermsCC(w0, peos->eos_data, beta_dt, u0);
+  if (psbox_u != nullptr) {
+    psbox_u->SourceTermsCC(w0, peos->eos_data, beta_dt, u0);
+    // viscous heating by the background shear (stress uses the velocity perturbation)
+    if (has_explicit_viscosity) {
+      pvisc->AddShearingBoxHeating(w0, peos->eos_data, beta_dt, u0);
+    }
+  }
 
   // Add coordinate source terms in GR.  Again, must be computed with only primitives.
   if (pmy_pack->pcoord->is_general_relativistic) {

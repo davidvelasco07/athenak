@@ -1,0 +1,75 @@
+# AthenaK input file for the shearing-box viscous forced epicycle (T5).
+# Uniform ideal gas pressure, rho = d0 (1 + amp sin kx x), v' = 0: an exact hydrodynamic
+# steady state (stationary contact, HLLC).  With viscosity the background-shear stress
+# sigma_xy = -rho nu q Omega has a divergence where rho varies and forces v_y; the linear
+# response (Coriolis + pressure + viscous damping) is integrated in the test script.
+# Use with the shwave.cpp problem generator (ipert=5).
+
+<comment>
+problem   = shearing-box viscous forced epicycle (background-shear stress on a density wave)
+reference = linear theory, see test_sbox_viscepicycle_mpicpu.py
+
+<job>
+basename  = viscepi   # problem ID: basename of output filenames
+
+<mesh>
+nghost    = 3         # Number of ghost cells
+nx1       = 32        # Number of zones in X1-direction
+x1min     = -0.25     # minimum value of X1
+x1max     = 0.25      # maximum value of X1
+ix1_bc    = shear_periodic  # Inner-X1 boundary condition flag
+ox1_bc    = shear_periodic  # Outer-X1 boundary condition flag
+
+nx2       = 32        # Number of zones in X2-direction
+x2min     = -0.25     # minimum value of X2
+x2max     = 0.25      # maximum value of X2
+ix2_bc    = periodic  # Inner-X2 boundary condition flag
+ox2_bc    = periodic  # Outer-X2 boundary condition flag
+
+nx3       = 32        # Number of zones in X3-direction
+x3min     = -0.25     # minimum value of X3
+x3max     = 0.25      # maximum value of X3
+ix3_bc    = periodic  # Inner-X3 boundary condition flag
+ox3_bc    = periodic  # Outer-X3 boundary condition flag
+
+<meshblock>
+nx1       = 16        # Number of cells in each MeshBlock, X1-dir
+nx2       = 16        # Number of cells in each MeshBlock, X2-dir
+nx3       = 16        # Number of cells in each MeshBlock, X3-dir
+
+<time>
+evolution  = dynamic  # dynamic/kinematic/static
+integrator = rk2      # time integration algorithm
+cfl_number = 0.3      # The Courant, Friedrichs, & Lewy (CFL) Number
+nlim       = -1       # cycle limit
+tlim       = 2.0      # time limit
+ndiag      = 50       # cycles between diagostic output
+
+<shearing_box>
+qshear = 1.5
+omega0 = 1.0
+
+<hydro>
+eos         = ideal       # EOS type
+gamma       = 1.6666666666666667  # ratio of specific heats
+reconstruct = plm         # spatial reconstruction method
+rsolver     = hllc        # Riemann-solver to be used
+nu_iso      = 1.0e-4      # isotropic kinematic viscosity
+mood        = false       # a-posteriori fallback (enabled by the fv4 test case)
+mood_debug_demote_x1max = -1.0   # <= x1min: off (forced-demotion test sets 0.0)
+mood_candidate_diffusion = false # false (default): diffusion added after the MOOD/FOFC fallback
+
+<problem>
+pgen_name = shwave  # problem generator name
+ipert     = 5       # viscous forced epicycle (uniform P, rho = d0(1 + amp sin kx x), v=0)
+d0        = 1.0     # background density
+p0        = 1.0     # background pressure
+amp       = 0.1     # relative density amplitude
+nwx       = 1       # density wavelengths in x
+nwy       = 0       # unused
+nwz       = 0       # unused
+
+<output1>
+file_type   = hst      # History data dump
+dt          = 0.02     # time increment between outputs
+data_format = %.17e    # full double precision for the exact gate

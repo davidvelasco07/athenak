@@ -273,11 +273,20 @@ TaskStatus MHD::Fluxes(Driver *pdrive, int stage) {
     CalculateFluxes<MHD_RSolver::hlle_gr>(pdrive, stage);
   }
 
+  // Explicit diffusion fluxes and the a-posteriori fallback (mood_candidate_diffusion,
+  // mhd.cpp): default = add them first (detector judges the full candidate; revised faces
+  // re-add them face-locally), negative control = add them after the fallback.
   // STS-selected diffusion is advanced only in the parabolic half-sweeps.
-  AddSelectedDiffusionFluxes(parabolic::DiffusionSelection::explicit_only);
-
-  if (!mood_frozen_emf) return ApplyFallback(pdrive, stage);
-  return TaskStatus::complete;
+  // (mood_frozen_emf runs ApplyFallback as a later task; diffusion is unsupported there.)
+  if (mood_candidate_diffusion) {
+    AddSelectedDiffusionFluxes(parabolic::DiffusionSelection::explicit_only);
+  }
+  TaskStatus tstat = TaskStatus::complete;
+  if (!mood_frozen_emf) tstat = ApplyFallback(pdrive, stage);
+  if (!mood_candidate_diffusion) {
+    AddSelectedDiffusionFluxes(parabolic::DiffusionSelection::explicit_only);
+  }
+  return tstat;
 }
 
 TaskStatus MHD::ApplyFallback(Driver *pdrive, int stage) {
@@ -446,7 +455,13 @@ TaskStatus MHD::MHDSrcTerms(Driver *pdrive, int stage) {
   if (psrc != nullptr) psrc->ApplySrcTerms(w0, peos->eos_data,  beta_dt, u0);
 
   // Add shearing box source terms for CC MHD variables
-  if (psbox_u != nullptr) psbox_u->SourceTermsCC(w0, bcc0, peos->eos_data, beta_dt, u0);
+  if (psbox_u != nullptr) {
+    psbox_u->SourceTermsCC(w0, bcc0, peos->eos_data, beta_dt, u0);
+    // viscous heating by the background shear (stress uses the velocity perturbation)
+    if (has_explicit_viscosity) {
+      pvisc->AddShearingBoxHeating(w0, peos->eos_data, beta_dt, u0);
+    }
+  }
 
   // Add coordinate source terms in GR.  Again, must be computed with only primitives.
   if (pmy_pack->pcoord->is_general_relativistic &&

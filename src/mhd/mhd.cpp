@@ -353,6 +353,21 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
       std::exit(EXIT_FAILURE);
     }
     mood_sed = pin->GetOrAddBoolean("mhd","mood_sed",true);
+    // Diffusion fluxes vs the fallback: see the same parameter in hydro.cpp (default
+    // false = inviscid candidate).  The resistive energy flux has no face-local form, so
+    // true is refused with resistivity.
+    const bool diff_readd_ok =
+        ((pcond == nullptr) || (pcond->alpha_aniso == 0.0 && !pcond->alpha_spitzer)) &&
+        !(presist != nullptr && has_explicit_resistivity && peos->eos_data.is_ideal);
+    mood_candidate_diffusion =
+        pin->GetOrAddBoolean("mhd","mood_candidate_diffusion", false);
+    if (mood_candidate_diffusion && !diff_readd_ok && (use_mood || use_fofc)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+        << std::endl << "<mhd> mood_candidate_diffusion=true needs face-local diffusion "
+        << "fluxes: not available for anisotropic/Spitzer conduction or resistivity"
+        << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
     // Restrict revisions >= 2 to the cells a revised face can reach (mhd_mood.cpp).
     // Same answer bit for bit; skips the candidate update, the floor test (the GR
     // inversion) and the detection everywhere else.
@@ -888,6 +903,22 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
       }
       if (use_mood) {
         Kokkos::realloc(fb_level, nmb, ncells3, ncells2, ncells1);
+        // NAD bound slots (mhd_mood.cpp): density, energy (ideal gas with
+        // mood_nad_energy), B (|B| or 3 components), each also in full state with
+        // well_balanced; velocity (|v| or 3 components); scalars
+        const int nwb = well_balanced ? 2 : 1;
+        int nbnd = ((peos->eos_data.is_ideal && mood_nad_energy) ? 2 : 1)*nwb;
+        nbnd += ((mood_nad_b == 0) ? 1 : 3)*nwb;
+        nbnd += (mood_nad_v == 1) ? 1 : (mood_nad_v == 2) ? 3 : 0;
+        if (mood_nad_scalars) nbnd += nscalars;
+        Kokkos::realloc(mood_val, nmb, nbnd, ncells3, ncells2, ncells1);
+        Kokkos::realloc(mood_qmn, nmb, nbnd, ncells3, ncells2, ncells1);
+        Kokkos::realloc(mood_qmx, nmb, nbnd, ncells3, ncells2, ncells1);
+        Kokkos::realloc(mood_tmx, nmb, nbnd, ncells3, ncells2, ncells1);
+        Kokkos::realloc(mood_cnt, 8);
+        Kokkos::realloc(mood_stat, nmb, ncells3, ncells2, ncells1);
+        Kokkos::realloc(mood_nadf, nmb, ncells3, ncells2, ncells1);
+        Kokkos::realloc(mood_crtol, nmb, ncells3, ncells2, ncells1);
         if (mood_touched_only) {
           Kokkos::realloc(mood_touched, nmb, ncells3, ncells2, ncells1);
           Kokkos::realloc(mood_tmp,     nmb, ncells3, ncells2, ncells1);

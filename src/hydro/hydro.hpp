@@ -153,8 +153,19 @@ class Hydro {
                             // (default 0, see hydro.cpp)
   Real mood_atol;           // absolute floor of the NAD tolerance
   bool mood_sed;            // exempt smooth extrema from NAD detection
+  bool mood_candidate_diffusion = false;  // true: explicit diffusion fluxes BEFORE the
+                            // MOOD/FOFC fallback (detector sees the full candidate),
+                            // re-added face-locally on revised faces; false: after it
+  bool mood_debug_demote = false;  // DEBUG: force demotion of cells with x1 < x1max
+  Real mood_debug_demote_x1max = 0.0;  // (validation of revised-face bookkeeping only)
   int n_fb_tiers;           // # of fallback tiers below base scheme (2, or 1 if base=plm)
   DvceArray4D<int> fb_level;    // per-cell cascade level (0=base, 1=plm, 2=dc)
+  // relaxed-DMP bounds of the NAD reference quantities over the cell neighbourhood,
+  // computed once per stage by separable sweeps (utils/mood_bounds.hpp): per-cell
+  // values, min, max and max-scratch, one slot per tested quantity (val doubles as the
+  // min-scratch; see MoodNeighborhoodBounds for which pair holds the result)
+  DvceArray5D<Real> mood_val, mood_qmn, mood_qmx, mood_tmx;
+  DvceArray1D<int> mood_cnt;    // detection counters (atomics; see hydro_mood.cpp)
 
   // following used for the well-balanced (WB) scheme (hydro_wb.cpp).  With
   // well_balanced=true, u0 holds the PERTURBATION U' = U - U_eq over a static

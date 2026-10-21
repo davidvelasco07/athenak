@@ -14,6 +14,11 @@
 //! - ipert = 2 - Hydro incompressible (vortical) shwave test of JG5
 //! - ipert = 3 - Hydro compressible shwave test of JG5
 //! - ipert = 4 - MHD compressible shwave test of JGG8
+//! - ipert = 5 - Hydro viscous forced epicycle: uniform pressure,
+//!               rho = d0 (1 + amp sin kx x), v' = 0.  With viscosity the background
+//!               shear stress -q Omega rho nu has a divergence where rho varies and
+//!               forces v_y
+//!               (see tst/test_suite/sbox/test_sbox_viscepicycle_mpicpu.py).
 
 
 // C++ headers
@@ -92,9 +97,9 @@ void ProblemGenerator::Shwave(ParameterInput *pin, const bool restart) {
                 << std::endl;
       exit(EXIT_FAILURE);
     }
-    if ((ipert < 1) || (ipert > 3)) {
+    if ((ipert < 1) || (ipert > 3) && (ipert != 5)) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "ipert must be 1,2, or 3 for hydro shwaves" << std::endl;
+                << std::endl << "ipert must be 1,2,3 or 5 for hydro shwaves" << std::endl;
       exit(EXIT_FAILURE);
     }
 
@@ -162,6 +167,27 @@ void ProblemGenerator::Shwave(ParameterInput *pin, const bool restart) {
         u0(m,IM3,k,j,i) = 0.0;
         if (eos.is_ideal) {
           u0(m,IEN,k,j,i) = p0/gm1 + 0.5*d0*(SQR(rvx) + SQR(rvy));
+        }
+      });
+    // viscous forced epicycle: rho = d0 (1 + amp sin(kx x)) as CELL AVERAGES, uniform
+    // pressure, zero velocity in the shearing frame
+    } else if (ipert == 5) {
+      auto sv = shw_var;
+      par_for("shwave5", DevExeSpace(), 0,(pmbp->nmb_thispack-1),ks,ke,js,je,is,ie,
+      KOKKOS_LAMBDA(int m, int k, int j, int i) {
+        Real &x1min = size.d_view(m).x1min;
+        Real &x1max = size.d_view(m).x1max;
+        Real x1v = CellCenterX(i-is, indcs.nx1, x1min, x1max);
+        Real dx1 = (x1max - x1min)/static_cast<Real>(indcs.nx1);
+        // cell average of sin(k x) = sin(k x_c) * sin(k dx/2)/(k dx/2)
+        Real hk = 0.5*sv.kx*dx1;
+        Real cavg = (hk != 0.0) ? sin(hk)/hk : 1.0;
+        u0(m,IDN,k,j,i) = d0*(1.0 + amp*cavg*sin(sv.kx*x1v));
+        u0(m,IM1,k,j,i) = 0.0;
+        u0(m,IM2,k,j,i) = 0.0;
+        u0(m,IM3,k,j,i) = 0.0;
+        if (eos.is_ideal) {
+          u0(m,IEN,k,j,i) = p0/gm1;
         }
       });
     }

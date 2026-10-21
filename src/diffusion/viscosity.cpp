@@ -64,6 +64,32 @@ Viscosity::Viscosity(std::string block, MeshBlockPack *pp, ParameterInput *pin) 
               << "STS requires positive constant isotropic viscosity" << std::endl;
     std::exit(EXIT_FAILURE);
   }
+
+  // Shearing box: the stored velocity is the perturbation v' = v - v_K, so the stress
+  // needs the background shear d(v_K)/dx added explicitly (see AddViscousFluxIso and
+  // AddShearingBoxHeating).  In 2D the box is r-z and the azimuth is x3.
+  shear_rate = 0.0;
+  shear_dir = IVY;
+  if (pin->DoesBlockExist("shearing_box")) {
+    Real qshear = pin->GetReal("shearing_box", "qshear");
+    Real omega0 = pin->GetReal("shearing_box", "omega0");
+    shear_rate = -qshear*omega0;
+    shear_dir = (pp->pmesh->three_d) ? IVY : IVZ;
+    if (nu_aniso != 0.0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "<" << block << ">/nu_aniso is not supported in the "
+                << "shearing box" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (mode == parabolic::DiffusionSelection::sts_only) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "<" << block << ">/viscosity_integrator = sts is not "
+                << "supported in the shearing box: the parabolic stages do not apply "
+                << "shear-periodic boundaries or the shear-heating source. Use explicit."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
 }
 
 //----------------------------------------------------------------------------------------
@@ -83,7 +109,7 @@ void Viscosity::AddViscousFluxes(const DvceArray5D<Real> &w0, const EOS_Data &eo
   if (nu_iso != 0.0) {
     AddViscousFluxIso(w0, eos, flx);
   }
-  if (nu_iso != 0.0) {
+  if (nu_aniso != 0.0) {
     AddViscousFluxAniso(w0, eos, flx);
   }
   return;
@@ -93,153 +119,67 @@ void Viscosity::AddViscousFluxes(const DvceArray5D<Real> &w0, const EOS_Data &eo
 //! \fn void AddViscousFluxIso
 //  \brief Adds viscous fluxes to face-centered fluxes of conserved variables
 
+ViscFaceParams Viscosity::FaceParams(const EOS_Data &eos) const {
+  ViscFaceParams p;
+  p.nu = nu_iso;
+  p.add_shear = (shear_rate != 0.0);
+  p.sr_y = (shear_dir == IVY) ? shear_rate : 0.0;
+  p.sr_z = (shear_dir == IVZ) ? shear_rate : 0.0;
+  p.multi_d = pmy_pack->pmesh->multi_d;
+  p.three_d = pmy_pack->pmesh->three_d;
+  p.is_ideal = eos.is_ideal;
+  return p;
+}
+
 void Viscosity::AddViscousFluxIso(const DvceArray5D<Real> &w0, const EOS_Data &eos,
     DvceFaceFld5D<Real> &flx) {
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   int is = indcs.is, ie = indcs.ie;
   int js = indcs.js, je = indcs.je;
   int ks = indcs.ks, ke = indcs.ke;
-  int ncells1 = indcs.nx1 + 2*(indcs.ng);
   int nmb1 = pmy_pack->nmb_thispack - 1;
   auto size = pmy_pack->pmb->mb_size;
-  bool &multi_d = pmy_pack->pmesh->multi_d;
-  bool &three_d = pmy_pack->pmesh->three_d;
-  Real nu_iso_ = nu_iso;
+  const ViscFaceParams p = FaceParams(eos);
 
-  // fluxes in x1-direction
-  int scr_level = 0;
-  size_t scr_size = (ScrArray1D<Real>::shmem_size(ncells1)) * 3;
+  // fluxes in x1-direction (face-local function shared with the MOOD/FOFC revise passes)
   auto flx1 = flx.x1f;
-
-  par_for_outer("visc1",DevExeSpace(), scr_size, scr_level, 0, nmb1, ks, ke, js, je,
-  KOKKOS_LAMBDA(TeamMember_t member, const int m, const int k, const int j) {
-    ScrArray1D<Real> fvx(member.team_scratch(scr_level), ncells1);
-    ScrArray1D<Real> fvy(member.team_scratch(scr_level), ncells1);
-    ScrArray1D<Real> fvz(member.team_scratch(scr_level), ncells1);
-
-    // Add [2(dVx/dx)-(2/3)dVx/dx, dVy/dx, dVz/dx]
-    par_for_inner(member, is, ie+1, [&](const int i) {
-      fvx(i) = 4.0*(w0(m,IVX,k,j,i) - w0(m,IVX,k,j,i-1))/(3.0*size.d_view(m).dx1);
-      fvy(i) =     (w0(m,IVY,k,j,i) - w0(m,IVY,k,j,i-1))/size.d_view(m).dx1;
-      fvz(i) =     (w0(m,IVZ,k,j,i) - w0(m,IVZ,k,j,i-1))/size.d_view(m).dx1;
-    });
-
-    // In 2D/3D Add [(-2/3)dVy/dy, dVx/dy, 0]
-    if (multi_d) {
-      par_for_inner(member, is, ie+1, [&](const int i) {
-        fvx(i) -= ((w0(m,IVY,k,j+1,i) + w0(m,IVY,k,j+1,i-1)) -
-                   (w0(m,IVY,k,j-1,i) + w0(m,IVY,k,j-1,i-1)))/(6.0*size.d_view(m).dx2);
-        fvy(i) += ((w0(m,IVX,k,j+1,i) + w0(m,IVX,k,j+1,i-1)) -
-                   (w0(m,IVX,k,j-1,i) + w0(m,IVX,k,j-1,i-1)))/(4.0*size.d_view(m).dx2);
-      });
+  par_for("visc1", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie+1,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    const ViscFaceFlux f = ViscousFluxX1(p, w0, size.d_view(m), m, k, j, i);
+    flx1(m,IVX,k,j,i) -= f.nud*f.fvx;
+    flx1(m,IVY,k,j,i) -= f.nud*f.fvy;
+    flx1(m,IVZ,k,j,i) -= f.nud*f.fvz;
+    if (p.is_ideal) {
+      flx1(m,IEN,k,j,i) -= 0.5*f.nud*f.ve;
     }
-
-    // In 3D Add [(-2/3)dVz/dz, 0,  dVx/dz]
-    if (three_d) {
-      par_for_inner(member, is, ie+1, [&](const int i) {
-        fvx(i) -= ((w0(m,IVZ,k+1,j,i) + w0(m,IVZ,k+1,j,i-1)) -
-                   (w0(m,IVZ,k-1,j,i) + w0(m,IVZ,k-1,j,i-1)))/(6.0*size.d_view(m).dx3);
-        fvz(i) += ((w0(m,IVX,k+1,j,i) + w0(m,IVX,k+1,j,i-1)) -
-                   (w0(m,IVX,k-1,j,i) + w0(m,IVX,k-1,j,i-1)))/(4.0*size.d_view(m).dx3);
-      });
-    }
-
-    // Sum viscous fluxes into fluxes of conserved variables; including energy fluxes
-    par_for_inner(member, is, ie+1, [&](const int i) {
-      Real nud = 0.5*nu_iso_*(w0(m,IDN,k,j,i) + w0(m,IDN,k,j,i-1));
-      flx1(m,IVX,k,j,i) -= nud*fvx(i);
-      flx1(m,IVY,k,j,i) -= nud*fvy(i);
-      flx1(m,IVZ,k,j,i) -= nud*fvz(i);
-      if (eos.is_ideal) {
-        flx1(m,IEN,k,j,i) -= 0.5*nud*((w0(m,IVX,k,j,i-1) + w0(m,IVX,k,j,i))*fvx(i) +
-                                      (w0(m,IVY,k,j,i-1) + w0(m,IVY,k,j,i))*fvy(i) +
-                                      (w0(m,IVZ,k,j,i-1) + w0(m,IVZ,k,j,i))*fvz(i));
-      }
-    });
   });
   if (pmy_pack->pmesh->one_d) {return;}
 
   // fluxes in x2-direction
   auto flx2 = flx.x2f;
-
-  par_for_outer("visc2",DevExeSpace(), scr_size, scr_level, 0, nmb1, ks, ke, js, je+1,
-  KOKKOS_LAMBDA(TeamMember_t member, const int m, const int k, const int j) {
-    ScrArray1D<Real> fvx(member.team_scratch(scr_level), ncells1);
-    ScrArray1D<Real> fvy(member.team_scratch(scr_level), ncells1);
-    ScrArray1D<Real> fvz(member.team_scratch(scr_level), ncells1);
-
-    // Add [(dVx/dy+dVy/dx), 2(dVy/dy)-(2/3)(dVx/dx+dVy/dy), dVz/dy]
-    par_for_inner(member, is, ie, [&](const int i) {
-      fvx(i) = (w0(m,IVX,k,j,i  ) - w0(m,IVX,k,j-1,i  ))/size.d_view(m).dx2 +
-              ((w0(m,IVY,k,j,i+1) + w0(m,IVY,k,j-1,i+1)) -
-               (w0(m,IVY,k,j,i-1) + w0(m,IVY,k,j-1,i-1)))/(4.0*size.d_view(m).dx1);
-      fvy(i) = (w0(m,IVY,k,j,i) - w0(m,IVY,k,j-1,i))*4.0/(3.0*size.d_view(m).dx2) -
-              ((w0(m,IVX,k,j,i+1) + w0(m,IVX,k,j-1,i+1)) -
-               (w0(m,IVX,k,j,i-1) + w0(m,IVX,k,j-1,i-1)))/(6.0*size.d_view(m).dx1);
-      fvz(i) = (w0(m,IVZ,k,j,i  ) - w0(m,IVZ,k,j-1,i  ))/size.d_view(m).dx2;
-    });
-
-    // In 3D Add [0, (-2/3)dVz/dz, dVy/dz]
-    if (three_d) {
-      par_for_inner(member, is, ie, [&](const int i) {
-        fvy(i) -= ((w0(m,IVZ,k+1,j,i) + w0(m,IVZ,k+1,j-1,i)) -
-                   (w0(m,IVZ,k-1,j,i) + w0(m,IVZ,k-1,j-1,i)))/(6.0*size.d_view(m).dx3);
-        fvz(i) += ((w0(m,IVY,k+1,j,i) + w0(m,IVY,k+1,j-1,i)) -
-                   (w0(m,IVY,k-1,j,i) + w0(m,IVY,k-1,j-1,i)))/(4.0*size.d_view(m).dx3);
-      });
+  par_for("visc2", DevExeSpace(), 0, nmb1, ks, ke, js, je+1, is, ie,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    const ViscFaceFlux f = ViscousFluxX2(p, w0, size.d_view(m), m, k, j, i);
+    flx2(m,IVX,k,j,i) -= f.nud*f.fvx;
+    flx2(m,IVY,k,j,i) -= f.nud*f.fvy;
+    flx2(m,IVZ,k,j,i) -= f.nud*f.fvz;
+    if (p.is_ideal) {
+      flx2(m,IEN,k,j,i) -= 0.5*f.nud*f.ve;
     }
-
-    // Sum viscous fluxes into fluxes of conserved variables; including energy fluxes
-    par_for_inner(member, is, ie, [&](const int i) {
-      Real nud = 0.5*nu_iso_*(w0(m,IDN,k,j,i) + w0(m,IDN,k,j-1,i));
-      flx2(m,IVX,k,j,i) -= nud*fvx(i);
-      flx2(m,IVY,k,j,i) -= nud*fvy(i);
-      flx2(m,IVZ,k,j,i) -= nud*fvz(i);
-      if (eos.is_ideal) {
-        flx2(m,IEN,k,j,i) -= 0.5*nud*((w0(m,IVX,k,j-1,i) + w0(m,IVX,k,j,i))*fvx(i) +
-                                      (w0(m,IVY,k,j-1,i) + w0(m,IVY,k,j,i))*fvy(i) +
-                                      (w0(m,IVZ,k,j-1,i) + w0(m,IVZ,k,j,i))*fvz(i));
-      }
-    });
   });
   if (pmy_pack->pmesh->two_d) {return;}
 
   // fluxes in x3-direction
   auto flx3 = flx.x3f;
-
-  par_for_outer("visc3",DevExeSpace(), scr_size, scr_level, 0, nmb1, ks, ke+1, js, je,
-  KOKKOS_LAMBDA(TeamMember_t member, const int m, const int k, const int j) {
-    ScrArray1D<Real> fvx(member.team_scratch(scr_level), ncells1);
-    ScrArray1D<Real> fvy(member.team_scratch(scr_level), ncells1);
-    ScrArray1D<Real> fvz(member.team_scratch(scr_level), ncells1);
-
-    // Add [(dVx/dz+dVz/dx), (dVy/dz+dVz/dy), 2(dVz/dz)-(2/3)(dVx/dx+dVy/dy+dVz/dz)]
-    par_for_inner(member, is, ie, [&](const int i) {
-      fvx(i) = (w0(m,IVX,k,j,i  ) - w0(m,IVX,k-1,j,i  ))/size.d_view(m).dx3 +
-              ((w0(m,IVZ,k,j,i+1) + w0(m,IVZ,k-1,j,i+1)) -
-               (w0(m,IVZ,k,j,i-1) + w0(m,IVZ,k-1,j,i-1)))/(4.0*size.d_view(m).dx1);
-      fvy(i) = (w0(m,IVY,k,j,i  ) - w0(m,IVY,k-1,j,i  ))/size.d_view(m).dx3 +
-              ((w0(m,IVZ,k,j+1,i) + w0(m,IVZ,k-1,j+1,i)) -
-               (w0(m,IVZ,k,j-1,i) + w0(m,IVZ,k-1,j-1,i)))/(4.0*size.d_view(m).dx2);
-      fvz(i) = (w0(m,IVZ,k,j,i) - w0(m,IVZ,k-1,j,i))*4.0/(3.0*size.d_view(m).dx3) -
-              ((w0(m,IVX,k,j,i+1) + w0(m,IVX,k-1,j,i+1)) -
-               (w0(m,IVX,k,j,i-1) + w0(m,IVX,k-1,j,i-1)))/(6.0*size.d_view(m).dx1) -
-              ((w0(m,IVY,k,j+1,i) + w0(m,IVY,k-1,j+1,i)) -
-               (w0(m,IVY,k,j-1,i) + w0(m,IVY,k-1,j-1,i)))/(6.0*size.d_view(m).dx2);
-    });
-
-    // Sum viscous fluxes into fluxes of conserved variables; including energy fluxes
-    par_for_inner(member, is, ie, [&](const int i) {
-      Real nud = 0.5*nu_iso_*(w0(m,IDN,k,j,i) + w0(m,IDN,k-1,j,i));
-      flx3(m,IVX,k,j,i) -= nud*fvx(i);
-      flx3(m,IVY,k,j,i) -= nud*fvy(i);
-      flx3(m,IVZ,k,j,i) -= nud*fvz(i);
-      if (eos.is_ideal) {
-        flx3(m,IEN,k,j,i) -= 0.5*nud*((w0(m,IVX,k-1,j,i) + w0(m,IVX,k,j,i))*fvx(i) +
-                                      (w0(m,IVY,k-1,j,i) + w0(m,IVY,k,j,i))*fvy(i) +
-                                      (w0(m,IVZ,k-1,j,i) + w0(m,IVZ,k,j,i))*fvz(i));
-      }
-    });
+  par_for("visc3", DevExeSpace(), 0, nmb1, ks, ke+1, js, je, is, ie,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    const ViscFaceFlux f = ViscousFluxX3(p, w0, size.d_view(m), m, k, j, i);
+    flx3(m,IVX,k,j,i) -= f.nud*f.fvx;
+    flx3(m,IVY,k,j,i) -= f.nud*f.fvy;
+    flx3(m,IVZ,k,j,i) -= f.nud*f.fvz;
+    if (p.is_ideal) {
+      flx3(m,IEN,k,j,i) -= 0.5*f.nud*f.ve;
+    }
   });
 
   return;
@@ -251,6 +191,45 @@ void Viscosity::AddViscousFluxIso(const DvceArray5D<Real> &w0, const EOS_Data &e
 
 void Viscosity::AddViscousFluxAniso(const DvceArray5D<Real> &w0, const EOS_Data &eos,
     DvceFaceFld5D<Real> &flx) {
+  return;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void Viscosity::AddShearingBoxHeating
+//! \brief Shearing box: the evolved energy is E' = rho v'^2/2 + e with v' = v - v_K, so
+//! the viscous work of the background shear appears as a source
+//!   dE'/dt = sigma : grad(v_K) = (d v_K/dx) sigma_{x,az} = -q Omega sigma_{x,az},
+//! where sigma_{x,az} = rho nu (d v'_az/dx + d v'_x/d az + d v_K/dx) is the FULL stress
+//! (the flux term -sigma.v' already uses the full stress with the perturbation velocity).
+//! For v' = 0 this is rho nu q^2 Omega^2 = (9/4) rho nu Omega^2 for Keplerian shear.
+//! Evaluated at cell centres with central differences, like the other shearing-box
+//! source terms.  Must be called with primitives of the stage (w0), never with u0.
+
+void Viscosity::AddShearingBoxHeating(const DvceArray5D<Real> &w0, const EOS_Data &eos,
+                                      const Real bdt, DvceArray5D<Real> &u0) {
+  if (shear_rate == 0.0 || nu_iso == 0.0 || !(eos.is_ideal)) return;
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  int is = indcs.is, ie = indcs.ie;
+  int js = indcs.js, je = indcs.je;
+  int ks = indcs.ks, ke = indcs.ke;
+  int nmb1 = pmy_pack->nmb_thispack - 1;
+  auto size = pmy_pack->pmb->mb_size;
+  const Real nu_iso_ = nu_iso;
+  const Real sr = shear_rate;
+  const int az = shear_dir;
+  // in the 2D (r-z) box the azimuth x3 is the invariant direction: d v'_x / d az = 0
+  const bool az_is_y = (az == IVY);
+
+  par_for("visc_sbox_heat", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    Real dvaz_dx = (w0(m,az,k,j,i+1) - w0(m,az,k,j,i-1))/(2.0*size.d_view(m).dx1);
+    Real dvx_daz = 0.0;
+    if (az_is_y) {
+      dvx_daz = (w0(m,IVX,k,j+1,i) - w0(m,IVX,k,j-1,i))/(2.0*size.d_view(m).dx2);
+    }
+    Real sigma = nu_iso_*w0(m,IDN,k,j,i)*(dvaz_dx + dvx_daz + sr);
+    u0(m,IEN,k,j,i) += bdt*sr*sigma;
+  });
   return;
 }
 

@@ -225,6 +225,42 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
     ppm_bc_closure = pin->GetOrAddBoolean("hydro","ppm_boundary_closure",true);
 
     mood_sed = pin->GetOrAddBoolean("hydro","mood_sed",true);
+    // DEBUG / validation only.  If mood_debug_demote_x1max is given, every cell with
+    // x1 < x1max is flagged and demoted at every revision of every stage, whatever the
+    // detector says, so the revise pass runs over a chosen part of the box even on a
+    // state the detector never flags.  Exists to test the flux bookkeeping on revised
+    // faces (e.g. that diffusion fluxes survive revision); never for production runs.
+    // A value at or below the mesh x1min (the default) switches it off, so an input
+    // file can carry the parameter and a test can enable it from the command line.
+    mood_debug_demote_x1max = pin->GetOrAddReal("hydro","mood_debug_demote_x1max",
+                                                pmy_pack->pmesh->mesh_size.x1min);
+    mood_debug_demote = (mood_debug_demote_x1max > pmy_pack->pmesh->mesh_size.x1min);
+
+    // Explicit diffusion fluxes and the a-posteriori fallback.  false (default): the
+    // diffusion fluxes are added AFTER MOOD/FOFC, so the detector judges the inviscid
+    // candidate and every face, revised or not, then receives its diffusive flux.  true:
+    // add them BEFORE the fallback (detector judges the full candidate) and re-add the
+    // face-local diffusive flux on every face the revise pass overwrites (hydro_mood.cpp,
+    // hydro_fofc.cpp; the face functions in diffusion/viscosity.hpp and
+    // diffusion/conduction.hpp are the ones the bulk pass uses).  The two agree to ~1% in
+    // demotion counts on viscous Shu-Osher tests at cell Reynolds numbers 0.4-4; the
+    // inviscid candidate is cheaper and proved more robust against energy floors at
+    // demoted shock faces when the time step is large, so it is the default.  Only the
+    // isotropic viscous and heat fluxes have face-local forms, and the well-balanced FOFC
+    // kernel writes faces in place, so those configurations cannot use true.
+    const bool diff_readd_ok =
+        ((pcond == nullptr) || (pcond->alpha_aniso == 0.0 && !pcond->alpha_spitzer)) &&
+        !(pin->GetOrAddBoolean("hydro","well_balanced",false) && use_fofc);
+    mood_candidate_diffusion =
+        pin->GetOrAddBoolean("hydro","mood_candidate_diffusion", false);
+    if (mood_candidate_diffusion && !diff_readd_ok && (use_mood || use_fofc)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+        << std::endl << "<hydro> mood_candidate_diffusion=true needs face-local "
+        << "diffusion fluxes: not available for anisotropic/Spitzer conduction or "
+        << "well-balanced FOFC"
+        << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
     if (use_mood && use_fofc) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
         << std::endl << "<hydro> mood=true and fofc=true cannot be used together"
@@ -539,6 +575,16 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
       }
       if (use_mood) {
         Kokkos::realloc(fb_level, nmb, ncells3, ncells2, ncells1);
+        // NAD bound slots (hydro_mood.cpp): density, energy (ideal gas with
+        // mood_nad_energy), the same in full state (well-balanced), scalars
+        int nbnd = (peos->eos_data.is_ideal && mood_nad_energy) ? 2 : 1;
+        if (well_balanced) nbnd *= 2;
+        if (mood_nad_scalars) nbnd += nscalars;
+        Kokkos::realloc(mood_val, nmb, nbnd, ncells3, ncells2, ncells1);
+        Kokkos::realloc(mood_qmn, nmb, nbnd, ncells3, ncells2, ncells1);
+        Kokkos::realloc(mood_qmx, nmb, nbnd, ncells3, ncells2, ncells1);
+        Kokkos::realloc(mood_tmx, nmb, nbnd, ncells3, ncells2, ncells1);
+        Kokkos::realloc(mood_cnt, 8);
       }
       // well-balanced equilibrium and perturbation arrays.  u_eq/w_eq carry the scalar
       // slots (always zero) so the standard EOS kernels can be applied to them.

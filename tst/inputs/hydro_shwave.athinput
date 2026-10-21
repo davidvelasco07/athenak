@@ -50,6 +50,9 @@ eos             = isothermal   # EOS type
 reconstruct     = ppmx        # spatial reconstruction method
 rsolver         = hlle         # Riemann-solver to be used
 iso_sound_speed = 1.0         # isothermal sound speed
+nu_iso          = 0.0         # kinematic viscosity (viscous shwave test sets it)
+mood            = false       # a-posteriori fallback (fv4 test case enables it)
+mood_candidate_diffusion = false # false (default): diffusion added after the MOOD/FOFC fallback
 
 <problem>
 pgen_name = shwave  # problem generator name

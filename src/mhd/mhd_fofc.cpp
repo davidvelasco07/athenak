@@ -13,6 +13,8 @@
 #include "coordinates/cartesian_ks.hpp"
 #include "coordinates/cell_locations.hpp"
 #include "eos/eos.hpp"
+#include "diffusion/viscosity.hpp"
+#include "diffusion/conduction.hpp"
 #include "mhd/rsolvers/llf_mhd_singlestate.hpp"
 #include "mhd.hpp"
 
@@ -203,6 +205,14 @@ void MHD::FOFC(Driver *pdriver, int stage) {
   auto &use_excise_ = pmy_pack->pcoord->coord_data.bh_excise;
   auto &excision_flux_ = pmy_pack->pcoord->excision_flux;
   auto &w0_ = w0;
+  // face-local re-add of the explicit diffusion fluxes on replaced faces (see
+  // mood_candidate_diffusion in mhd.cpp); the bulk pass used the same functions
+  const bool readd_visc = mood_candidate_diffusion && has_explicit_viscosity;
+  const bool readd_cond = mood_candidate_diffusion && has_explicit_conduction;
+  const ViscFaceParams vfp =
+      (pvisc != nullptr) ? pvisc->FaceParams(eos) : ViscFaceParams{};
+  const Real cond_alpha = (pcond != nullptr) ? pcond->alpha_iso : 0.0;
+  const Real cond_gm1 = eos.gamma - 1.0;
   auto &b0_ = b0;
   // well-balanced scheme: replacement fluxes through the face equilibrium (WBFaceLLF_MHD)
   const bool wb_ = well_balanced;
@@ -277,6 +287,17 @@ void MHD::FOFC(Driver *pdriver, int stage) {
           SingleStateLLF_MHD(wim1, wi, bxi, eos, flux);
         }
 
+        if (readd_visc) {
+          const ViscFaceFlux vf = ViscousFluxX1(vfp, w0_, size.d_view(m), m, k, j, i);
+          flux.mx -= vf.nud*vf.fvx;
+          flux.my -= vf.nud*vf.fvy;
+          flux.mz -= vf.nud*vf.fvz;
+          flux.e -= 0.5*vf.nud*vf.ve;
+        }
+        if (readd_cond) {
+          flux.e -= HeatFluxIsoX1(cond_alpha, cond_gm1, w0_, size.d_view(m),
+                                    m, k, j, i);
+        }
         // store 1st-order fluxes.
         flx1(m,IDN,k,j,i) = flux.d;
         flx1(m,IM1,k,j,i) = flux.mx;
@@ -332,6 +353,17 @@ void MHD::FOFC(Driver *pdriver, int stage) {
           SingleStateLLF_MHD(wjm1, wj, bxi, eos, flux);
         }
 
+        if (readd_visc) {
+          const ViscFaceFlux vf = ViscousFluxX2(vfp, w0_, size.d_view(m), m, k, j, i);
+          flux.mx -= vf.nud*vf.fvy;
+          flux.my -= vf.nud*vf.fvz;
+          flux.mz -= vf.nud*vf.fvx;
+          flux.e -= 0.5*vf.nud*vf.ve;
+        }
+        if (readd_cond) {
+          flux.e -= HeatFluxIsoX2(cond_alpha, cond_gm1, w0_, size.d_view(m),
+                                    m, k, j, i);
+        }
         // store 1st-order fluxes, permutting indices.
         flx2(m,IDN,k,j,i) = flux.d;
         flx2(m,IM2,k,j,i) = flux.mx;
@@ -387,6 +419,17 @@ void MHD::FOFC(Driver *pdriver, int stage) {
           SingleStateLLF_MHD(wkm1, wk, bxi, eos, flux);
         }
 
+        if (readd_visc) {
+          const ViscFaceFlux vf = ViscousFluxX3(vfp, w0_, size.d_view(m), m, k, j, i);
+          flux.mx -= vf.nud*vf.fvz;
+          flux.my -= vf.nud*vf.fvx;
+          flux.mz -= vf.nud*vf.fvy;
+          flux.e -= 0.5*vf.nud*vf.ve;
+        }
+        if (readd_cond) {
+          flux.e -= HeatFluxIsoX3(cond_alpha, cond_gm1, w0_, size.d_view(m),
+                                    m, k, j, i);
+        }
         // store 1st-order fluxes, permutting indices.
         flx3(m,IDN,k,j,i) = flux.d;
         flx3(m,IM3,k,j,i) = flux.mx;
@@ -460,6 +503,17 @@ void MHD::FOFC(Driver *pdriver, int stage) {
           SingleStateLLF_MHD(wi, wip1, bxi, eos, flux);
         }
 
+        if (readd_visc) {
+          const ViscFaceFlux vf = ViscousFluxX1(vfp, w0_, size.d_view(m), m, k, j, i+1);
+          flux.mx -= vf.nud*vf.fvx;
+          flux.my -= vf.nud*vf.fvy;
+          flux.mz -= vf.nud*vf.fvz;
+          flux.e -= 0.5*vf.nud*vf.ve;
+        }
+        if (readd_cond) {
+          flux.e -= HeatFluxIsoX1(cond_alpha, cond_gm1, w0_, size.d_view(m),
+                                    m, k, j, i+1);
+        }
         // store 1st-order fluxes.
         flx1(m,IDN,k,j,i+1) = flux.d;
         flx1(m,IM1,k,j,i+1) = flux.mx;
@@ -515,6 +569,17 @@ void MHD::FOFC(Driver *pdriver, int stage) {
           SingleStateLLF_MHD(wj, wjp1, bxi, eos, flux);
         }
 
+        if (readd_visc) {
+          const ViscFaceFlux vf = ViscousFluxX2(vfp, w0_, size.d_view(m), m, k, j+1, i);
+          flux.mx -= vf.nud*vf.fvy;
+          flux.my -= vf.nud*vf.fvz;
+          flux.mz -= vf.nud*vf.fvx;
+          flux.e -= 0.5*vf.nud*vf.ve;
+        }
+        if (readd_cond) {
+          flux.e -= HeatFluxIsoX2(cond_alpha, cond_gm1, w0_, size.d_view(m),
+                                    m, k, j+1, i);
+        }
         // store 1st-order fluxes, permutting indices.
         flx2(m,IDN,k,j+1,i) = flux.d;
         flx2(m,IM2,k,j+1,i) = flux.mx;
@@ -570,6 +635,17 @@ void MHD::FOFC(Driver *pdriver, int stage) {
           SingleStateLLF_MHD(wk, wkp1, bxi, eos, flux);
         }
 
+        if (readd_visc) {
+          const ViscFaceFlux vf = ViscousFluxX3(vfp, w0_, size.d_view(m), m, k+1, j, i);
+          flux.mx -= vf.nud*vf.fvz;
+          flux.my -= vf.nud*vf.fvx;
+          flux.mz -= vf.nud*vf.fvy;
+          flux.e -= 0.5*vf.nud*vf.ve;
+        }
+        if (readd_cond) {
+          flux.e -= HeatFluxIsoX3(cond_alpha, cond_gm1, w0_, size.d_view(m),
+                                    m, k+1, j, i);
+        }
         // store 1st-order fluxes, permutting indices.
         flx3(m,IDN,k+1,j,i) = flux.d;
         flx3(m,IM3,k+1,j,i) = flux.mx;

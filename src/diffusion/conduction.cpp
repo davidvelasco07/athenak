@@ -147,15 +147,11 @@ void Conduction::AddHeatFluxIso(const DvceArray5D<Real> &w0, const EOS_Data &eos
   Real gm1 = eos.gamma-1.0;
   Real &alpha_ = alpha_iso;
 
-  // fluxes in x1-direction
+  // fluxes in x1-direction (face-local function shared with the MOOD/FOFC revise passes)
   auto &flx1 = flx.x1f;
   par_for("conduct1", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie+1,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-    Real tempr = w0(m,IEN,k,j,i  )/w0(m,IDN,k,j,i  );
-    Real templ = w0(m,IEN,k,j,i-1)/w0(m,IDN,k,j,i-1);
-    Real dtempdx = (tempr - templ) * gm1 / size.d_view(m).dx1;
-    Real densf = 0.5*(w0(m,IDN,k,j,i) + w0(m,IDN,k,j,i-1));
-    flx1(m,IEN,k,j,i) -= alpha_ * densf * dtempdx;
+    flx1(m,IEN,k,j,i) -= HeatFluxIsoX1(alpha_, gm1, w0, size.d_view(m), m, k, j, i);
   });
   if (pmy_pack->pmesh->one_d) {return;}
 
@@ -163,11 +159,7 @@ void Conduction::AddHeatFluxIso(const DvceArray5D<Real> &w0, const EOS_Data &eos
   auto &flx2 = flx.x2f;
   par_for("conduct2",DevExeSpace(), 0, nmb1, ks, ke, js, je+1, is, ie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-    Real tempr = w0(m,IEN,k,j  ,i)/w0(m,IDN,k,j  ,i);
-    Real templ = w0(m,IEN,k,j-1,i)/w0(m,IDN,k,j-1,i);
-    Real dtempdx = (tempr - templ) * gm1 / size.d_view(m).dx2;
-    Real densf = 0.5*(w0(m,IDN,k,j,i) + w0(m,IDN,k,j-1,i));
-    flx2(m,IEN,k,j,i) -= alpha_ * densf * dtempdx;
+    flx2(m,IEN,k,j,i) -= HeatFluxIsoX2(alpha_, gm1, w0, size.d_view(m), m, k, j, i);
   });
   if (pmy_pack->pmesh->two_d) {return;}
 
@@ -175,11 +167,7 @@ void Conduction::AddHeatFluxIso(const DvceArray5D<Real> &w0, const EOS_Data &eos
   auto &flx3 = flx.x3f;
   par_for("conduct3",DevExeSpace(), 0, nmb1, ks, ke+1, js, je, is, ie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-    Real tempr = w0(m,IEN,k  ,j,i)/w0(m,IDN,k  ,j,i);
-    Real templ = w0(m,IEN,k-1,j,i)/w0(m,IDN,k-1,j,i);
-    Real dtempdx = (tempr - templ) * gm1 / size.d_view(m).dx3;
-    Real densf = 0.5*(w0(m,IDN,k,j,i) + w0(m,IDN,k-1,j,i));
-    flx3(m,IEN,k,j,i) -= alpha_ * densf * dtempdx;
+    flx3(m,IEN,k,j,i) -= HeatFluxIsoX3(alpha_, gm1, w0, size.d_view(m), m, k, j, i);
   });
   return;
 }
