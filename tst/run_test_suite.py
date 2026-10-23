@@ -60,7 +60,7 @@ def verify_test_files(test_paths):
         elif path.is_dir():
             files = list(path.rglob("*.py"))
         else:
-            raise RuntimeError("{path} does not exist.")
+            raise RuntimeError(f"{path} does not exist.")
 
         for f in files:
             for suffix in ["cpu", "mpicpu", "gpu"]:
@@ -135,7 +135,7 @@ if args.test is not None:
                 setattr(args, key, [])
 
     if args.cpu is None and args.mpicpu is None and args.gpu is None:
-        raise RuntimeError("{test} does not contain any valid test files.")
+        raise RuntimeError(f"{tests} does not contain any valid test files.")
 
 tests = [os.path.abspath(p) for p in tests]
 
