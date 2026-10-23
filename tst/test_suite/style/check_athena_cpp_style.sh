@@ -15,10 +15,14 @@
 #
 # LOG:      Updated by @pdmullen on 1/12/2022 for use in AthenaK
 
-# Obtain Google C++ Style Linter:
+# Obtain Google C++ Style Linter, pinned to a fixed commit so results are reproducible.
+# This is the last commit on cpplint's frozen master branch (version string 1.7.0);
+# cpplint 2.x adds checks that src/ does not yet pass.
+CPPLINT_COMMIT=fbe5715abf20913c017adb7c14cc7f0605971a42
 echo "Obtaining Google C++ Style cpplint.py test"
-curl https://raw.githubusercontent.com/cpplint/cpplint/master/cpplint.py \
---output cpplint.py --silent
+curl https://raw.githubusercontent.com/cpplint/cpplint/${CPPLINT_COMMIT}/cpplint.py \
+--output cpplint.py --silent --show-error --fail
+if [ $? -ne 0 ]; then echo "ERROR: could not download cpplint.py"; exit 1; fi
 
 # Apply Google C++ Style Linter to all source code files at once:
 echo "Starting Google C++ Style cpplint.py test"
