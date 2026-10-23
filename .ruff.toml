@@ -1,0 +1,18 @@
+# Ruff configuration for linting AthenaK's Python code, run by tst/run_test_suite.py --style.
+# The version is pinned because the preview rules enabled below change between releases.
+required-version = "==0.17.1"
+line-length = 90
+extend-exclude = ["kokkos", "cpplint.py"]
+
+[lint]
+# pycodestyle's whitespace and blank-line rules (E1, E2, E3) are preview-only in ruff
+preview = true
+# pycodestyle (E, W) and pyflakes (F), as flake8 checked, plus RUF027 for strings
+# with {placeholders} that are missing the f prefix
+select = ["E", "W", "F", "RUF027"]
+# flake8's default ignore list, restricted to the codes ruff implements
+ignore = ["E226", "E241", "E242"]
+
+[lint.per-file-ignores]
+# Unlike pycodestyle, ruff reads the minus signs in this aligned table as binary operators
+"tst/test_suite/sbox/test_sbox_mhdshwave_mpicpu.py" = ["E221"]

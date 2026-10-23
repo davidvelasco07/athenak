@@ -58,7 +58,7 @@ echo "End of \t, closing brace, and #pragma test"
 
 # Search src/ C++ source code for trailing whitespace errors
 # (Google C++ Style Linter does not check for this,
-# but flake8 via pycodestyle warning W291 will check *.py)
+# but ruff via pycodestyle warning W291 will check *.py)
 echo "Checking for trailing whitespace in src/"
 find ../../../src -type f \( -name "*.cpp" -o -name "*.hpp*" \) \
 -exec grep -n -E " +$" {} +

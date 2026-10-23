@@ -4,6 +4,7 @@ Checks source code style, based on Google style guide with some custom modificat
 
 # Modules
 import os
+import sys
 import pytest
 from subprocess import Popen, PIPE
 
@@ -37,15 +38,15 @@ def test_style():
 
 def test_lint_python():
     """
-    Checks Python source code to ensure it adheres to the coding standards using pylint.
-    If any linting issues are found, the test will fail.
+    Checks Python source code to ensure it adheres to the coding standards using ruff
+    (configured in .ruff.toml). If any linting issues are found, the test will fail.
     """
     original_dir = os.getcwd()
     os.chdir("..")
     try:
         print("Running Python linting...")
         print("Current directory:", os.getcwd())
-        command = ["python", "-m", "flake8"]
+        command = [sys.executable, "-m", "ruff", "check"]
         process = Popen(command, stdout=PIPE, stderr=PIPE)
         output, errors = process.communicate()
         status = process.returncode == 0
