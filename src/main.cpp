@@ -416,6 +416,8 @@ int main(int argc, char *argv[]) {
   // clean up, and terminate
   // Note anything containing a Kokkos::view must be deleted before Kokkos::finalize()
 
+  // a run stopped by <time>/dt_guard did not reach its end, so report failure
+  const int exit_code = pdriver->dt_guard_tripped ? EXIT_FAILURE : 0;
   delete pout;
   delete pdriver;
   delete pmesh;
@@ -424,5 +426,5 @@ int main(int argc, char *argv[]) {
 #if MPI_PARALLEL_ENABLED
   MPI_Finalize();
 #endif
-  return(0);
+  return(exit_code);
 }

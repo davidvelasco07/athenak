@@ -80,6 +80,8 @@ Driver::Driver(ParameterInput *pin, Mesh *pmesh, Real wtlim, Kokkos::Timer* ptim
   nmb_updated_(0),
   npart_updated_(0),
   lb_efficiency_(0) {
+  // let problem generators reach tlim (see Mesh::pmy_driver)
+  pmesh->pmy_driver = this;
   // set time-evolution option (no default)
   {
     std::string evolution_t = pin->GetString("time","evolution");
@@ -102,6 +104,8 @@ Driver::Driver(ParameterInput *pin, Mesh *pmesh, Real wtlim, Kokkos::Timer* ptim
     tlim = pin->GetReal("time", "tlim");
     nlim = pin->GetOrAddInteger("time", "nlim", -1);
     ndiag = pin->GetOrAddInteger("time", "ndiag", 1);
+    dt_guard_ = pin->GetOrAddReal("time", "dt_guard", 0.0);
+    dt_guard_window_ = pin->GetOrAddInteger("time", "dt_guard_window", 100);
 
     if (integrator == "rk1") {
       // RK1: first-order Runge-Kutta / the forward Euler (FE) method
@@ -651,6 +655,30 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout, bool wdfla
       pmesh->NewTimeStep(tlim);
       RefreshSTSCycleState(pmesh);
 
+      // Fail fast on a collapsing timestep instead of spinning at frozen time until the
+      // wall-clock limit. dt is already reduced over all ranks, so every rank takes the
+      // same branch; Finalize() then writes every output at the failing state.
+      if (dt_guard_ > 0.0) {
+        if (!recent_dt_.empty()) {
+          Real dt_ref = *std::max_element(recent_dt_.begin(), recent_dt_.end());
+          if (pmesh->dt < dt_guard_*dt_ref) {
+            dt_guard_tripped = true;
+            if (global_variable::my_rank == 0) {
+              std::cout << std::endl << "### DT GUARD: dt=" << pmesh->dt << " < "
+                        << dt_guard_
+                        << " * max(dt over last " << recent_dt_.size() << " cycles)="
+                        << dt_ref << " at cycle=" << pmesh->ncycle << " time="
+                        << pmesh->time << "; writing outputs and stopping" << std::endl;
+            }
+            break;
+          }
+        }
+        recent_dt_.push_back(pmesh->dt);
+        if (static_cast<int>(recent_dt_.size()) > dt_guard_window_) {
+          recent_dt_.pop_front();
+        }
+      }
+
       // Update wall clock time if needed.
       if (wall_time > 0.) {
         elapsed_time = UpdateWallClock();
@@ -691,7 +719,10 @@ void Driver::Finalize(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
     if (global_variable::my_rank == 0) {
       // Print diagnostic messages related to the end of the simulation
       OutputCycleDiagnostics(pmesh);
-      if (pmesh->ncycle == nlim) {
+      if (dt_guard_tripped) {
+        std::cout << std::endl << "Terminating on dt guard (collapsing timestep)"
+                  << std::endl;
+      } else if (pmesh->ncycle == nlim) {
         std::cout << std::endl << "Terminating on cycle limit" << std::endl;
       } else if (pmesh->time >= tlim) {
         std::cout << std::endl << "Terminating on time limit" << std::endl;
