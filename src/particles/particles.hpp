@@ -91,6 +91,13 @@ class ParticlePopulation {
 
   ParticlesPusher pusher;
 
+  // Position-based ownership (ReownByPosition). prev_pos_index >= 0 names three
+  // contiguous real columns (x0, y0, z0) holding a start-of-step position, shifted
+  // together with the position when a periodic wrap moves it. retain_escaped keeps the
+  // PGID of a particle that leaves the domain instead of treating it as an error.
+  int prev_pos_index = -1;
+  bool retain_escaped = false;
+
   // Boundary communication buffers and functions for particles
   ParticlesBoundaryValues *pbval_part;
 
@@ -104,6 +111,8 @@ class ParticlePopulation {
   TaskStatus ApplyUserPostUpdate(Driver *pdriver, int stage);
   TaskStatus PurgeDeleted(Driver *pdriver, int stage);
   TaskStatus NewGID(Driver *pdriver, int stage);
+  TaskStatus ReownByPosition(Driver *pdriver, int stage);
+  void ReconcileOwnership(Driver *pdriver, int stage);
   TaskStatus SendCnt(Driver *pdriver, int stage);
   TaskStatus InitRecv(Driver *pdriver, int stage);
   TaskStatus SendP(Driver *pdriver, int stage);
@@ -224,6 +233,9 @@ class Particles {
   std::int64_t AppendParticles(ParticleCreation &creation);
   void AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> tl);
   TaskStatus NewTimeStep(Driver *pdriver, int stage);
+  // Re-derive every population's ownership after an AMR regrid or load balance; a no-op
+  // when the mesh has not changed since the last call.
+  void ReconcileOwnership(Driver *pdriver, int stage);
   void WriteRestart(const std::string &filename) const;
   void LoadRestart(const std::string &filename);
 
@@ -231,6 +243,7 @@ class Particles {
   std::int64_t RunParticleInjection(bool initial);
   std::int64_t NextTagFromParticles() const;
   std::vector<ParticlePopulation*> populations_;
+  int owner_mesh_seq_ = 0;  // mesh update sequence number ownership was last derived at
   std::int64_t next_tag_;
   std::string tag_assignment_;
   bool restart_sort_by_tag_;

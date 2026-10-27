@@ -105,6 +105,7 @@ class ProblemGenerator {
   void Monopole(ParameterInput *pin, const bool restart);
   void MRI3d(ParameterInput *pin, const bool restart);
   void OrszagTang(ParameterInput *pin, const bool restart);
+  void ParticleAMR(ParameterInput *pin, const bool restart);
   void ParticleDrift(ParameterInput *pin, const bool restart);
   void ParticleInjection(ParameterInput *pin, const bool restart);
   void ParticleLagrangianMC(ParameterInput *pin, const bool restart);

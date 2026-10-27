@@ -11,7 +11,7 @@ from test_suite.particles.test_particles_startup_gpu import (
 @pytest.mark.parametrize("input_name", ("particle_migration", "particle_lagrangian_mc"))
 @pytest.mark.parametrize("refinement", ("none", "static", "adaptive"))
 def test_particle_amr_gate_mpicpu(tmp_path, monkeypatch, input_name, refinement):
-    """Reject unsupported refinement without stranding another rank at startup."""
+    """Accept drift particles with AMR and reject Lagrangian MC without stranding a rank."""
     _check_particle_amr_gate(tmp_path, monkeypatch, input_name, refinement, mpi=True)
 
 

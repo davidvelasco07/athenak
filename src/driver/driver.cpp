@@ -642,6 +642,11 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout, bool wdfla
 
       // AMR
       if (pmesh->adaptive) {pmesh->pmr->AdaptiveMeshRefinement(this, pin);}
+      // A regrid renumbers MeshBlocks and load balancing may move them to other ranks;
+      // re-derive particle ownership from position before anything reads PGID again.
+      if (pmesh->pmb_pack->ppart != nullptr) {
+        pmesh->pmb_pack->ppart->ReconcileOwnership(this, nexp_stages);
+      }
       // compute new timestep AFTER all Meshblocks refined/derefined
       pmesh->NewTimeStep(tlim);
       RefreshSTSCycleState(pmesh);

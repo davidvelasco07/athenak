@@ -133,6 +133,7 @@ add_executable(
         particles/particles_creation.cpp
         particles/particles_restart.cpp
         particles/particles_newdt.cpp
+        particles/particles_ownership.cpp
         particles/particles_pushers.cpp
         particles/pushers/drift.cpp
         particles/pushers/lagrangian_mc.cpp
@@ -153,6 +154,7 @@ add_executable(
         pgen/tests/mri3d.cpp
         pgen/tests/shock_tube.cpp
         pgen/tests/shwave.cpp
+        pgen/tests/particle_amr.cpp
         pgen/tests/particle_drift.cpp
         pgen/tests/particle_injection.cpp
         pgen/tests/particle_lagrangian_mc.cpp

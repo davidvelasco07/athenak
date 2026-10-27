@@ -1,0 +1,66 @@
+# Drifting particles on an adaptive mesh with a moving refined region. Exercises
+# position-based ownership after regrids and load balancing.
+
+<job>
+basename = particle_amr
+
+<mesh>
+nghost = 2
+nx1 = 16
+x1min = -1.0
+x1max = 1.0
+ix1_bc = periodic
+ox1_bc = periodic
+nx2 = 16
+x2min = -1.0
+x2max = 1.0
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 16
+x3min = -1.0
+x3max = 1.0
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 4
+nx2 = 4
+nx3 = 4
+
+<mesh_refinement>
+refinement = adaptive
+num_levels = 2
+max_nmb_per_rank = 512
+
+<amr_criterion0>
+method = user
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.8
+nlim = 40
+tlim = 100.0
+ndiag = 1
+
+<particles>
+particle_type = cosmic_ray
+ppc = 0.0
+pusher = drift
+
+<problem>
+pgen_name = particle_amr
+particle_dt = 0.05
+drift_vx = 0.3
+drift_vy = 0.2
+drift_vz = 0.1
+region_radius = 0.6
+region_x0 = -0.5
+region_vx = 2.0
+user_hist = true
+
+<output1>
+file_type = hst
+data_format = %24.16e
+dcycle = 1
+user_hist_only = true

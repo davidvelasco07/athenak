@@ -133,12 +133,6 @@ ParticlePopulation::ParticlePopulation(const std::string &population_name,
               << "Particle module only works in 2D/3D" <<std::endl;
     std::exit(EXIT_FAILURE);
   }
-  if (pmy_pack->pmesh->adaptive) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "Particles do not support adaptive mesh refinement"
-              << std::endl;
-    std::exit(EXIT_FAILURE);
-  }
   for (int dir=0; dir<6; ++dir) {
     if (pmy_pack->pmesh->mesh_bcs[dir] == BoundaryFlag::shear_periodic) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -211,6 +205,14 @@ ParticlePopulation::ParticlePopulation(const std::string &population_name,
                   << std::endl << "Particle pusher 'lagrangian_mc' requires "
                   << "particle type "
                   << "'lagrangian_mc'" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      // Ownership survives regrids (Particles::ReconcileOwnership), but the SMR flux
+      // buffers and accumulated face integrals this pusher reads do not.
+      if (pmy_pack->pmesh->adaptive) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Lagrangian MC particles do not support adaptive mesh "
+                  << "refinement" << std::endl;
         std::exit(EXIT_FAILURE);
       }
       const bool has_hydro = pmy_pack->phydro != nullptr;

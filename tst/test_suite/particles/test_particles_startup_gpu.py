@@ -29,18 +29,26 @@ def _run_particle_startup(tmp_path, monkeypatch, input_file, arguments, mpi=Fals
 
 def _check_particle_amr_gate(tmp_path, monkeypatch, input_name, refinement, mpi=False):
     input_file = tmp_path / f"{input_name}_refinement.athinput"
+    # adaptive meshes need a refinement criterion; "location" needs no fluid
+    criterion = (
+        "\n<amr_criterion0>\nmethod = location\n" if refinement == "adaptive" else ""
+    )
     input_file.write_text(
         Path(f"inputs/{input_name}.athinput").read_text()
         + f"\n<mesh_refinement>\nrefinement = {refinement}\n"
         + "num_levels = 2\nmax_nmb_per_rank = 32\n"
+        + criterion
     )
     result = _run_particle_startup(
         tmp_path, monkeypatch, input_file, [], mpi=mpi,
     )
     output = result.stdout + result.stderr
-    if refinement == "adaptive":
+    if refinement == "adaptive" and input_name == "particle_lagrangian_mc":
+        # ownership survives regrids, but the Lagrangian MC flux buffers do not
         assert result.returncode != 0, output
-        assert "Particles do not support adaptive mesh refinement" in output
+        assert (
+            "Lagrangian MC particles do not support adaptive mesh refinement" in output
+        )
         assert "Setup complete" not in output
     else:
         assert result.returncode == 0, output
@@ -74,7 +82,7 @@ def _check_particle_vtk_gid_gate(tmp_path, monkeypatch, gid, mpi=False):
 @pytest.mark.parametrize("input_name", ("particle_migration", "particle_lagrangian_mc"))
 @pytest.mark.parametrize("refinement", ("none", "static", "adaptive"))
 def test_particle_amr_gate_gpu(tmp_path, monkeypatch, input_name, refinement):
-    """Both pushers accept fixed meshes and reject adaptive refinement at startup."""
+    """Both pushers accept fixed meshes; only Lagrangian MC rejects adaptive ones."""
     _check_particle_amr_gate(tmp_path, monkeypatch, input_name, refinement)
 
 
