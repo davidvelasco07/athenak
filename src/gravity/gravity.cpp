@@ -35,9 +35,11 @@ Gravity::Gravity(MeshBlockPack *pmbp, ParameterInput *pin):
     phi("phi",1,1,1,1,1),
     coarse_phi("coarse",1,1,1,1,1),
     def("defect",1,1,1,1,1),
+    rho("grav_rho",1,1,1,1,1),
     four_pi_G(-1.0),
     output_defect(false),
     fill_ghost(false) {
+    moon_exchange = pin->GetOrAddBoolean("gravity", "moon_exchange", false);
     four_pi_G = pin->GetOrAddReal("gravity", "four_pi_G",-1.0);
     output_defect = pin->GetOrAddBoolean("gravity", "output_defect", false);
     fill_ghost = pin->GetOrAddBoolean("gravity", "fill_ghost", true);
@@ -63,6 +65,57 @@ Gravity::Gravity(MeshBlockPack *pmbp, ParameterInput *pin):
     int ncells2 = (indcs.nx2 > 1)? (indcs.nx2 + 2*(indcs.ng)) : 1;
     int ncells3 = (indcs.nx3 > 1)? (indcs.nx3 + 2*(indcs.ng)) : 1;
     Kokkos::realloc(phi, nmb, 1, ncells3, ncells2, ncells1);
+    Kokkos::realloc(rho, nmb, 1, ncells3, ncells2, ncells1);
+    // coarse buffer for phi, used by the cell-centered boundary exchange at coarse-fine
+    // (AMR) boundaries. Must be sized like any coarse CC array (cf. hydro coarse_u0);
+    // leaving it (1,1,1,1,1) causes out-of-bounds access when phi is exchanged under AMR.
+    int n_ccells1 = indcs.cnx1 + 2*(indcs.ng);
+    int n_ccells2 = (indcs.cnx2 > 1)? (indcs.cnx2 + 2*(indcs.ng)) : 1;
+    int n_ccells3 = (indcs.cnx3 > 1)? (indcs.cnx3 + 2*(indcs.ng)) : 1;
+    Kokkos::realloc(coarse_phi, nmb, 1, n_ccells3, n_ccells2, n_ccells1);
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void Gravity::RegisterSourceDensity(DvceArray5D<Real> *parr, int comp, Real fac)
+//! \brief Register a mass-density contribution to the gravitational source. Called once
+//! at setup by each gravitating module (gas, particle-mesh, ...). The solver never needs
+//! to know who contributes -- it only consumes the assembled `rho`.
+
+void Gravity::RegisterSourceDensity(DvceArray5D<Real> *parr, int comp, Real fac) {
+  source_terms_.push_back(GravSourceDensity{parr, comp, fac});
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void Gravity::AssembleSource()
+//! \brief Sum all registered density contributions into `rho`, the total gravitating mass
+//! density. Run once per solve (ahead of the solver), after the contributing fields are
+//! up to date (e.g. after the particle-mesh deposit). Solver-agnostic: multigrid, FFT, or
+//! FMM all consume `rho`.
+
+void Gravity::AssembleSource() {
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  int nmb = pmy_pack->nmb_thispack;
+  int ncells1 = indcs.nx1 + 2*(indcs.ng);
+  int ncells2 = (indcs.nx2 > 1)? (indcs.nx2 + 2*(indcs.ng)) : 1;
+  int ncells3 = (indcs.nx3 > 1)? (indcs.nx3 + 2*(indcs.ng)) : 1;
+  // reallocate if AMR has changed the number of MeshBlocks in this pack
+  if (static_cast<int>(rho.extent_int(0)) != nmb) {
+    Kokkos::realloc(rho, nmb, 1, ncells3, ncells2, ncells1);
+  }
+
+  Kokkos::deep_copy(rho, 0.0);
+
+  auto r = rho;
+  for (auto &st : source_terms_) {
+    auto src = *(st.parr);
+    const int comp = st.comp;
+    const Real fac = st.fac;
+    par_for("GravAssembleSource", DevExeSpace(),
+            0, nmb-1, 0, ncells3-1, 0, ncells2-1, 0, ncells1-1,
+    KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      r(m, 0, k, j, i) += fac * src(m, comp, k, j, i);
+    });
+  }
 }
 
 //----------------------------------------------------------------------------------------
@@ -71,4 +124,60 @@ Gravity::Gravity(MeshBlockPack *pmbp, ParameterInput *pin):
 Gravity::~Gravity() {
     delete pmg;
 }
+
+// Preserve the MG first face ghost on fine blocks bordering coarser blocks.
+// The remaining halo is filled by the normal particle potential exchange.
+void Gravity::SaveFaceBoundaries() {
+  if (!moon_exchange || !pmy_pack->pmesh->multilevel) return;
+  const auto ix=pmy_pack->pmesh->mb_indcs;
+  const int nmb=pmy_pack->nmb_thispack;
+  auto p=phi; auto nb=pmy_pack->pmb->nghbr.d_view;
+  auto lev=pmy_pack->pmb->mb_lev.d_view;
+  const int slots[6]={0,4,8,12,24,28};
+  for (int face=0; face<6; ++face) {
+    const int axis=face/2, side=face%2, slot=slots[face];
+    const int na=(axis==0?ix.nx2:ix.nx1);
+    const int nc=(axis==2?ix.nx2:ix.nx3);
+    Kokkos::realloc(fbuf_[face],nmb,1,1,1,na*nc);
+    auto buf=fbuf_[face];
+    par_for("SaveFaceBoundaries",DevExeSpace(),0,nmb-1,0,na*nc-1,
+      KOKKOS_LAMBDA(int m,int q) {
+        if(nb(m,slot).gid<0 || nb(m,slot).lev>=lev(m)) return;
+        const int a=q%na,c=q/na;
+        const int i=axis==0?(side?ix.ie+1:ix.is-1):ix.is+a;
+        const int j=axis==1?(side?ix.je+1:ix.js-1):ix.js+(axis==0?a:c);
+        const int k=axis==2?(side?ix.ke+1:ix.ks-1):ix.ks+c;
+        buf(m,0,0,0,q)=p(m,0,k,j,i);
+      });
+  }
+}
+
+
+// Preserve the MG first face ghost on fine blocks bordering coarser blocks.
+// The remaining halo is filled by the normal particle potential exchange.
+void Gravity::RestoreFaceBoundaries() {
+  if (!moon_exchange || !pmy_pack->pmesh->multilevel) return;
+  const auto ix=pmy_pack->pmesh->mb_indcs;
+  const int nmb=pmy_pack->nmb_thispack;
+  auto p=phi; auto nb=pmy_pack->pmb->nghbr.d_view;
+  auto lev=pmy_pack->pmb->mb_lev.d_view;
+  const int slots[6]={0,4,8,12,24,28};
+  for (int face=0; face<6; ++face) {
+    const int axis=face/2, side=face%2, slot=slots[face];
+    const int na=(axis==0?ix.nx2:ix.nx1);
+    const int nc=(axis==2?ix.nx2:ix.nx3);
+
+    auto buf=fbuf_[face];
+    par_for("RestoreFaceBoundaries",DevExeSpace(),0,nmb-1,0,na*nc-1,
+      KOKKOS_LAMBDA(int m,int q) {
+        if(nb(m,slot).gid<0 || nb(m,slot).lev>=lev(m)) return;
+        const int a=q%na,c=q/na;
+        const int i=axis==0?(side?ix.ie+1:ix.is-1):ix.is+a;
+        const int j=axis==1?(side?ix.je+1:ix.js-1):ix.js+(axis==0?a:c);
+        const int k=axis==2?(side?ix.ke+1:ix.ks-1):ix.ks+c;
+        p(m,0,k,j,i)=buf(m,0,0,0,q);
+      });
+  }
+}
+
 } // namespace gravity

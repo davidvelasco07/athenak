@@ -249,6 +249,15 @@ void MeshBlockPack::AddPhysics(ParameterInput *pin, bool is_restart) {
     // Gravity module uses Multigrid module
     pgrav = new gravity::Gravity(this, pin);
     //pgrav->AssembleTasks(tl_map);
+    // Push the gravitating mass-density contributions into the gravity source
+    // registry. The solver consumes only the assembled pgrav->rho, so it stays
+    // agnostic about what gravitates (gas, particles, ...). Done here -- after all
+    // physics modules exist -- to avoid construction-order coupling.
+    if (pmhd != nullptr) {
+      pgrav->RegisterSourceDensity(&(pmhd->u0), IDN, 1.0);
+    } else if (phydro != nullptr) {
+      pgrav->RegisterSourceDensity(&(phydro->u0), IDN, 1.0);
+    }
     nphysics++;
   } else {
     pgrav = nullptr;

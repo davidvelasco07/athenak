@@ -203,6 +203,19 @@ void MGGravityDriver::Solve(Driver *pdriver, int stage, Real dt) {
       int ncells2 = (indcs_.nx2 > 1) ? (indcs_.nx2 + 2*indcs_.ng) : 1;
       int ncells3 = (indcs_.nx3 > 1) ? (indcs_.nx3 + 2*indcs_.ng) : 1;
       Kokkos::realloc(pmy_pack_->pgrav->phi, nmb, 1, ncells3, ncells2, ncells1);
+      // keep the coarse phi buffer (used by the AMR boundary exchange) sized to match
+      int nc1 = indcs_.cnx1 + 2*indcs_.ng;
+      int nc2 = (indcs_.cnx2 > 1) ? (indcs_.cnx2 + 2*indcs_.ng) : 1;
+      int nc3 = (indcs_.cnx3 > 1) ? (indcs_.cnx3 + 2*indcs_.ng) : 1;
+      Kokkos::realloc(pmy_pack_->pgrav->coarse_phi, nmb, 1, nc3, nc2, nc1);
+      // Zero the freshly reallocated arrays. Kokkos::realloc does NOT initialize new
+      // memory, so newly-created (post-regrid) MeshBlocks' ghost cells that the exchange
+      // does not overwrite retain uninitialized contents -- benign (~0) on CPU but
+      // catastrophic garbage (e.g. 1e252) on GPU, which the particle gravity gather then
+      // reads as huge spurious forces. Zeroing makes unfilled ghosts harmless on every
+      // backend.
+      Kokkos::deep_copy(pmy_pack_->pgrav->phi, 0.0);
+      Kokkos::deep_copy(pmy_pack_->pgrav->coarse_phi, 0.0);
     }
   }
 
@@ -211,9 +224,10 @@ void MGGravityDriver::Solve(Driver *pdriver, int stage, Real dt) {
   // convention: Laplacian(u) = 6u - neighbors = -dx²∇²u).  To obtain the
   // standard Poisson equation ∇²φ = 4πGρ we must load the source with a
   // negative sign so that -∇²φ = -4πGρ, i.e. ∇²φ = +4πGρ.
-  auto &u0 = (pmy_pack_->pmhd != nullptr) ? pmy_pack_->pmhd->u0
-                                            : pmy_pack_->phydro->u0;
-  mglevels_->LoadSource(u0, IDN, indcs_.ng, -four_pi_G_);
+  // Consume the assembled total gravitating mass density (gas + particles + ...),
+  // built by Gravity::AssembleSource() ahead of this solve. The solver is agnostic
+  // about what contributed to the source.
+  mglevels_->LoadSource(pmy_pack_->pgrav->rho, 0, indcs_.ng, -four_pi_G_);
 
   // Apply source mask (zero source outside mask_radius_)
   mglevels_->ApplyMask();
