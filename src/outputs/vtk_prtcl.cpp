@@ -61,9 +61,10 @@ ParticleVTKOutput::ParticleVTKOutput(ParameterInput *pin, Mesh *pm, OutputParame
     FatalParticleVTKOutput("file_type=pvtk requires particles");
   }
   particles::ParticlePopulation *population =
-      pm->pmb_pack->ppart->FindPopulation("particles");
+      pm->pmb_pack->ppart->FindPopulation(out_params.population);
   if (population == nullptr) {
-    FatalParticleVTKOutput("particle population 'particles' was not found");
+    FatalParticleVTKOutput("particle population '" + out_params.population +
+                           "' was not found");
   }
   if (pm->pgen != nullptr) {
     for (const auto &variable : pm->pgen->user_particle_vtk_output_variables) {
@@ -92,9 +93,17 @@ ParticleVTKOutput::ParticleVTKOutput(ParameterInput *pin, Mesh *pm, OutputParame
 
 void ParticleVTKOutput::LoadOutputData(Mesh *pm) {
   particles::ParticlePopulation *pp =
-      pm->pmb_pack->ppart->FindPopulation("particles");
-  npout_thisrank = pm->nprtcl_thisrank;
-  npout_total = pm->nprtcl_total;
+      pm->pmb_pack->ppart->FindPopulation(out_params.population);
+  // Counts of THIS population; the Mesh counts aggregate every population.
+  npout_thisrank = pp->nprtcl_thispack;
+  npout_eachrank.assign(global_variable::nranks, 0);
+  npout_eachrank[global_variable::my_rank] = npout_thisrank;
+#if MPI_PARALLEL_ENABLED
+  MPI_Allgather(&npout_thisrank, 1, MPI_INT, npout_eachrank.data(), 1, MPI_INT,
+                MPI_COMM_WORLD);
+#endif
+  npout_total = 0;
+  for (int n=0; n<global_variable::nranks; ++n) {npout_total += npout_eachrank[n];}
   Kokkos::realloc(outpart_rdata, pp->nrdata, npout_thisrank);
   Kokkos::realloc(outpart_idata, pp->nidata, npout_thisrank);
   Kokkos::realloc(outpart_user_rdata, user_real_names.size(), npout_thisrank);
@@ -156,7 +165,7 @@ void ParticleVTKOutput::LoadOutputData(Mesh *pm) {
 
 void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   particles::ParticlePopulation *pp =
-      pm->pmb_pack->ppart->FindPopulation("particles");
+      pm->pmb_pack->ppart->FindPopulation(out_params.population);
   int big_end = IsBigEndian(); // =1 on big endian machine
 
   // create filename: "vtk/file_basename"."file_id"."XXXXX".part.vtk
@@ -229,10 +238,10 @@ void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   }
   // calculate local data offset
   std::vector<int> rank_offset(global_variable::nranks, 0);
-  int npout_min = pm->nprtcl_eachrank[0];
+  int npout_min = npout_eachrank[0];
   for (int n=1; n<global_variable::nranks; ++n) {
-    rank_offset[n] = rank_offset[n-1] + pm->nprtcl_eachrank[n-1];
-    npout_min = std::min(npout_min, pm->nprtcl_eachrank[n]);
+    rank_offset[n] = rank_offset[n-1] + npout_eachrank[n-1];
+    npout_min = std::min(npout_min, npout_eachrank[n]);
   }
 
   // Write particle positions
@@ -250,7 +259,7 @@ void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     }
     // individual writes for remaining particles on each rank
     myoffset += datasize*3*npout_min;
-    int nremain = pm->nprtcl_thisrank - npout_min;
+    int nremain = npout_thisrank - npout_min;
     if (nremain > 0) {
       if (partfile.Write_any_type_at(&(data[3*npout_min]),3*nremain,myoffset,"float")
             != static_cast<size_t>(3*nremain)) {
@@ -260,7 +269,7 @@ void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
         exit(EXIT_FAILURE);
       }
     }
-    header_offset += 3*pm->nprtcl_total*datasize;
+    header_offset += 3*npout_total*datasize;
   }
 
   // Write Part 6: scalar particle data
@@ -309,7 +318,7 @@ void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     }
     // individual writes for remaining particles on each rank
     myoffset += datasize*npout_min;
-    int nremain = pm->nprtcl_thisrank - npout_min;
+    int nremain = npout_thisrank - npout_min;
     if (nremain > 0) {
       if (partfile.Write_any_type_at(&(idata[npout_min]),nremain,myoffset,"int")
             != static_cast<size_t>(nremain)) {
@@ -319,7 +328,7 @@ void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
         exit(EXIT_FAILURE);
       }
     }
-    header_offset += pm->nprtcl_total*datasize;
+    header_offset += npout_total*datasize;
   }
   delete[] idata;
 
@@ -367,7 +376,7 @@ void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
       exit(EXIT_FAILURE);
     }
     myoffset += datasize*npout_min;
-    int nremain = pm->nprtcl_thisrank - npout_min;
+    int nremain = npout_thisrank - npout_min;
     if (nremain > 0) {
       if (partfile.Write_any_type_at(&(data[npout_min]),nremain,myoffset,"float")
             != static_cast<size_t>(nremain)) {
@@ -377,7 +386,7 @@ void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
         exit(EXIT_FAILURE);
       }
     }
-    header_offset += pm->nprtcl_total*datasize;
+    header_offset += npout_total*datasize;
   }
 
   // close the output file and clean up

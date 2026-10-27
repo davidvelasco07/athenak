@@ -213,6 +213,8 @@ class Particles {
 
   ParticlePopulation* FindPopulation(const std::string &name);
   const ParticlePopulation* FindPopulation(const std::string &name) const;
+  ParticlePopulation* FindPopulationOfType(ParticleType type);
+  const std::vector<ParticlePopulation*>& Populations() const {return populations_;}
 
   int GetLocalCount() const;
   Real GetTimestep() const;

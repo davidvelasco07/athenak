@@ -29,6 +29,7 @@
 #include "srcterms/srcterms.hpp"
 #include "srcterms/turb_driver.hpp"
 #include "gravity/gravity.hpp"
+#include "particles/particles.hpp"
 #include "outputs.hpp"
 
 #if MPI_PARALLEL_ENABLED
@@ -167,6 +168,14 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
        << "Output of particles requested in <output> block '"
        << out_params.block_name << "' but particle object not constructed."
        << std::endl << "Input file is likely missing corresponding block" << std::endl;
+    exit(EXIT_FAILURE);
+  }
+  if ((ivar>=151) && (ivar<153) &&
+      (pm->pmb_pack->ppart->FindPopulation(out_params.population) == nullptr)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+       << "Output of particles requested in <output> block '"
+       << out_params.block_name << "' but particle population '"
+       << out_params.population << "' does not exist." << std::endl;
     exit(EXIT_FAILURE);
   }
   if (ivar==153 && (pm->pmb_pack->pgrav == nullptr)) {

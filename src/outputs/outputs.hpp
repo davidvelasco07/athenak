@@ -123,6 +123,7 @@ struct OutputParameters {
   std::string file_type;
   std::string file_id;
   std::string variable;
+  std::string population;     // particle population for particle outputs
   bool include_gzs;
   int gid;
   bool slice1, slice2, slice3;
@@ -355,6 +356,7 @@ class ParticleVTKOutput : public BaseTypeOutput {
  protected:
   int npout_thisrank;
   int npout_total;
+  std::vector<int> npout_eachrank;  // particles of this population on each rank
   std::vector<std::string> user_real_names;
   HostArray2D<Real> outpart_rdata;
   HostArray2D<int>  outpart_idata;

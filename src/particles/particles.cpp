@@ -34,8 +34,24 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin, bool is_restart)
     restart_sort_by_tag_(
         pin->GetOrAddBoolean("particles","restart_sort_by_tag",false)),
     pmy_pack_(ppack) {
+  // <particles> defines the default population "particles"; every <particles_NAME>
+  // block adds a population called NAME, in input-file order (restart files match
+  // populations by that order and name).
   populations_.emplace_back(
       new ParticlePopulation("particles", "particles", ppack, pin, is_restart));
+  const std::string prefix = "particles_";
+  for (const auto &block : pin->block) {
+    if (block.block_name.compare(0, prefix.size(), prefix) != 0) continue;
+    const std::string name = block.block_name.substr(prefix.size());
+    if (name.empty() || FindPopulation(name) != nullptr) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Input block <" << block.block_name
+                << "> does not name a new particle population" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    populations_.emplace_back(
+        new ParticlePopulation(name, block.block_name, ppack, pin, is_restart));
+  }
 }
 
 //----------------------------------------------------------------------------------------
@@ -60,6 +76,16 @@ ParticlePopulation* Particles::FindPopulation(const std::string &name) {
 const ParticlePopulation* Particles::FindPopulation(const std::string &name) const {
   for (const auto *population : populations_) {
     if (population->name == name) return population;
+  }
+  return nullptr;
+}
+
+//----------------------------------------------------------------------------------------
+//! \brief Return the first population of the given type, or nullptr when there is none.
+
+ParticlePopulation* Particles::FindPopulationOfType(ParticleType type) {
+  for (auto *population : populations_) {
+    if (population->particle_type == type) return population;
   }
   return nullptr;
 }

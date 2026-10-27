@@ -1257,7 +1257,7 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
   if (name.compare("prtcl_d") == 0) {
     Kokkos::realloc(derived_var, nmb_alloc, 1, n3, n2, n1);
     auto pdens = derived_var;
-    auto *population = pm->pmb_pack->ppart->FindPopulation("particles");
+    auto *population = pm->pmb_pack->ppart->FindPopulation(out_params.population);
     auto pr = population->prtcl_rdata;
     auto pi = population->prtcl_idata;
     const int npart = population->nprtcl_thispack;
