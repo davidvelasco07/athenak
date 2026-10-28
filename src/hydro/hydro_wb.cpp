@@ -201,10 +201,11 @@ void Hydro::WBSetEquilibrium() {
   // (4) single-valued face equilibrium: the unlimited central interpolation of the
   //     equilibrium cell averages at the order of the base scheme (fv6/fv8: their own
   //     interpolant, so that fvN(w_eq) + fvN(w') is fvN(w_eq + w') up to round-off;
-  //     4th order for every other method), shared by every reconstruction method and
-  //     MOOD tier.  Floored like a reconstructed state.  Valid on faces
-  //     req .. n-req (FVFaceRadius), which has to cover every face the flux kernels
-  //     visit (is-ext .. ie+1+ext, ext = the MOOD / FOFC halo).
+  //     fv7/fv9 the fv6/fv8 one of the same radius; 4th order for every other method),
+  //     shared by every reconstruction method and MOOD tier.  Floored like a
+  //     reconstructed state.  Valid on faces req .. n-req (FVFaceRadius), which has to
+  //     cover every face the flux kernels visit (is-ext .. ie+1+ext, ext = the MOOD /
+  //     FOFC halo).
   const int req = FVFaceRadius(recon_method);
   const auto rm_ = recon_method;
   {
@@ -391,9 +392,7 @@ void Hydro::WBCalculateFluxes(Driver *pdriver, int stage) {
   const bool floors = (recon_method_ == ReconstructionMethod::ppmx ||
                        recon_method_ == ReconstructionMethod::wenoz ||
                        recon_method_ == ReconstructionMethod::teno ||
-                       recon_method_ == ReconstructionMethod::fv4 ||
-                       recon_method_ == ReconstructionMethod::fv6 ||
-                       recon_method_ == ReconstructionMethod::fv8);
+                       IsUnlimitedFV(recon_method_));
 
   int il1 = is, iu1 = ie+1, jl2 = js, ju2 = je+1, kl3 = ks, ku3 = ke+1;
   int itl = is, itu = ie, jtl = js, jtu = je, ktl = ks, ktu = ke;

@@ -17,17 +17,20 @@ namespace mhd_bcc {
 
 KOKKOS_INLINE_FUNCTION
 bool IsFV(ReconstructionMethod recon) {
-  return recon == ReconstructionMethod::fv4 || recon == ReconstructionMethod::fv6 ||
-         recon == ReconstructionMethod::fv8;
+  return IsUnlimitedFV(recon);
 }
 
+// fv5/fv7/fv9 integrate the same even-order polynomial as fv4/fv6/fv8 (same radius).
 inline constexpr int Reach(ReconstructionMethod recon) {
   switch (recon) {
     case ReconstructionMethod::dc: return 1;
     case ReconstructionMethod::plm: return 2;
     case ReconstructionMethod::fv4: return 2;
+    case ReconstructionMethod::fv5: return 2;
     case ReconstructionMethod::fv6: return 3;
+    case ReconstructionMethod::fv7: return 3;
     case ReconstructionMethod::fv8: return 4;
+    case ReconstructionMethod::fv9: return 4;
     default: return 3;
   }
 }
@@ -83,10 +86,13 @@ Real FaceToCenterInterp(const ReconstructionMethod recon,
       TENO(bf_im1, bf_i, bf_ip1, bf_ip2, bf_ip3, dum, qR);   // center face i+1 → qR at cc
       return 0.5*(qL + qR);
     case ReconstructionMethod::fv4:
+    case ReconstructionMethod::fv5:
       return FV4VolumeAverage(bf_im1, bf_i, bf_ip1, bf_ip2);
     case ReconstructionMethod::fv6:
+    case ReconstructionMethod::fv7:
       return FV6VolumeAverage(bf_im2, bf_im1, bf_i, bf_ip1, bf_ip2, bf_ip3);
     case ReconstructionMethod::fv8:
+    case ReconstructionMethod::fv9:
       return FV8VolumeAverage(bf_im3, bf_im2, bf_im1, bf_i, bf_ip1, bf_ip2,
                               bf_ip3, bf_ip4);
   }
@@ -102,14 +108,16 @@ Real CellCenteredComponent(const ReconstructionMethod recon,
     const int dk, const int dj, const int di, const int lo, const int hi) {
   const int c = dk*k + dj*j + di*i;
   if (IsFV(recon)) {
-    if (recon == ReconstructionMethod::fv8 && c > lo+2 && c < hi-2) {
+    if ((recon == ReconstructionMethod::fv8 || recon == ReconstructionMethod::fv9) &&
+        c > lo+2 && c < hi-2) {
       return FV8VolumeAverage(
           b(m,k-3*dk,j-3*dj,i-3*di), b(m,k-2*dk,j-2*dj,i-2*di),
           b(m,k-dk,j-dj,i-di), b(m,k,j,i), b(m,k+dk,j+dj,i+di),
           b(m,k+2*dk,j+2*dj,i+2*di), b(m,k+3*dk,j+3*dj,i+3*di),
           b(m,k+4*dk,j+4*dj,i+4*di));
     }
-    if (recon != ReconstructionMethod::fv4 && c > lo+1 && c < hi-1) {
+    if (recon != ReconstructionMethod::fv4 && recon != ReconstructionMethod::fv5 &&
+        c > lo+1 && c < hi-1) {
       return FV6VolumeAverage(
           b(m,k-2*dk,j-2*dj,i-2*di), b(m,k-dk,j-dj,i-di), b(m,k,j,i),
           b(m,k+dk,j+dj,i+di), b(m,k+2*dk,j+2*dj,i+2*di),

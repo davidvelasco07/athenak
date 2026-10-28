@@ -36,12 +36,12 @@
 //!
 //! q(o) returns the value at position i+o.  Only the offsets a method needs are read:
 //! PLM reads i-2..i+1, the limited 5-point methods (PPM4/PPMX/WENOZ/TENO) i-3..i+2, and
-//! the unlimited cell-polynomial methods i-(r+1)..i+r with r = 2, 3, 4 for fv4/fv6/fv8
-//! (ReconEdgeReach in athena.hpp).
+//! the unlimited cell-polynomial methods i-(r+1)..i+r with r = 2, 3, 4 for fv4|fv5,
+//! fv6|fv7, fv8|fv9 (ReconEdgeReach in athena.hpp).
 //! Returns: qL = left state at i-1/2 (reconstructed from cell i-1 toward right)
 //!          qR = right state at i-1/2 (reconstructed from cell i toward left)
-//! For fv4/fv6/fv8 each side is its own cell polynomial evaluated at the edge (fv.hpp),
-//! so the two states differ at O(h^{p+1}) and the UCT upwinding acts on that jump.
+//! For fv4..fv9 each side is its own cell polynomial evaluated at the edge (fv.hpp),
+//! so the two states differ at O(h^N) and the UCT upwinding acts on that jump.
 
 template <typename F>
 KOKKOS_INLINE_FUNCTION
@@ -75,6 +75,18 @@ void ReconstructEdge(const ReconstructionMethod recon, const F &q, Real &qL, Rea
     case ReconstructionMethod::fv8:
       qL = FV8Left(q(3), q(2), q(1), q(0), q(-1), q(-2), q(-3), q(-4), q(-5));
       qR = FV8Left(q(-4), q(-3), q(-2), q(-1), q(0), q(1), q(2), q(3), q(4));
+      break;
+    case ReconstructionMethod::fv5:
+      qL = FV5Left(q(1), q(0), q(-1), q(-2), q(-3));
+      qR = FV5Left(q(-2), q(-1), q(0), q(1), q(2));
+      break;
+    case ReconstructionMethod::fv7:
+      qL = FV7Left(q(2), q(1), q(0), q(-1), q(-2), q(-3), q(-4));
+      qR = FV7Left(q(-3), q(-2), q(-1), q(0), q(1), q(2), q(3));
+      break;
+    case ReconstructionMethod::fv9:
+      qL = FV9Left(q(3), q(2), q(1), q(0), q(-1), q(-2), q(-3), q(-4), q(-5));
+      qR = FV9Left(q(-4), q(-3), q(-2), q(-1), q(0), q(1), q(2), q(3), q(4));
       break;
     case ReconstructionMethod::wenoz:
       WENOZ(q(-3), q(-2), q(-1), q(0), q(1), qL, dum);
@@ -167,7 +179,7 @@ void ReconstructEdgeB(const ReconstructionMethod recon, const bool wb,
   ReconstructEdge(recon, [&](const int o) {
       return b(m,KK(o),JJ(o),II(o)) - beq(m,KK(o),JJ(o),II(o));
     }, pL, pR);
-  // same-order central interpolant of b_eq (fv6/fv8: theirs, else 4th order):
+  // same-radius central interpolant of b_eq (fv6/7, fv8/9: 6th, 8th; else 4th):
   // a single-valued equilibrium edge value, exact at rest (see the note above)
   qe = FVFaceAt(recon, [&](const int o) {return beq(m,KK(o),JJ(o),II(o));});
   qL = pL + qe;

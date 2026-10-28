@@ -292,6 +292,9 @@ TaskStatus OrbitalAdvectionFC::RecvAndUnpackFC(DvceFaceFld4D<Real> &b0,
       case ReconstructionMethod::fv4:
       case ReconstructionMethod::fv6:
       case ReconstructionMethod::fv8:
+      case ReconstructionMethod::fv5:
+      case ReconstructionMethod::fv7:
+      case ReconstructionMethod::fv9:
         PPMX_RemapFlx(member, (jfs-joffset), (jfe+1-joffset), epsi, b0_, flx);
         break;
       default:

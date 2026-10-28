@@ -113,9 +113,9 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
 
   // For UCT the corner-EMF composition needs the face-stored UCT coefficients over a
   // wider transverse range than the fluxes themselves.  ReconstructEdge at the edge
-  // i-1/2 reads faces i-reach..i+(reach-1) (reach = ReconEdgeReach: 1 dc, 2 plm/fv4,
-  // 3 ppm4/ppmx/wenoz/teno/fv6, 4 fv8), over an edge range that already runs out to
-  // ie+1, so the fill has to reach ie+reach.  This was previously keyed off the
+  // i-1/2 reads faces i-reach..i+(reach-1) (reach = ReconEdgeReach: 1 dc, 2 plm, 3
+  // ppm4/ppmx/wenoz/teno/fv4/fv5, 4 fv6/fv7, 5 fv8/fv9), over an edge range that runs
+  // out to ie+1, so the fill has to reach ie+reach.  This was previously keyed off the
   // reconstruction ORDER (3 for the high-order methods, 1 otherwise), which is one
   // cell short for PLM: the composition then interpolated Kokkos::realloc ZEROS into
   // the upwind weights.  Because the partner weight is formed as (1 - aL) both weights

@@ -124,6 +124,9 @@ TaskStatus ShearingBoxFC::PackAndSendFC(DvceFaceFld4D<Real> &b,
         case ReconstructionMethod::fv4:
         case ReconstructionMethod::fv6:
         case ReconstructionMethod::fv8:
+        case ReconstructionMethod::fv5:
+        case ReconstructionMethod::fv7:
+        case ReconstructionMethod::fv9:
           PPMX_RemapFlx(member, js, (je+1), eps, a_, flx);
           break;
         default:

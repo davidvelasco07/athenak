@@ -211,7 +211,7 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
     mood_atol = pin->GetOrAddReal("hydro","mood_atol",0.0);
     mood_nad_energy = pin->GetOrAddBoolean("hydro","mood_nad_energy",true);
     mood_nad_scalars = pin->GetOrAddBoolean("hydro","mood_nad_scalars",true);
-    // DETECTION OFF -- the negative control for the whole cascade.  reconstruct=fv4/fv6/fv8
+    // DETECTION OFF -- the negative control for the whole cascade.  reconstruct=fv4..fv9
     // is unlimited and requires mood=true, so before this flag existed there was no way to
     // run the base scheme on its own and ask which of its properties the detector is
     // actually responsible for.  mood_detect=false keeps mood=true (so the guard above
@@ -346,17 +346,24 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
       } else if (xorder.compare("teno") == 0) {
         recon_method = ReconstructionMethod::teno;
       }
-    } else if (xorder.compare("fv4") == 0 ||
-               xorder.compare("fv6") == 0 ||
-               xorder.compare("fv8") == 0) {
-      // Unlimited central face interpolation.  No upwind dissipation of its own, so it
-      // is only stable behind the MOOD fallback.  Stencil half-width is 2/3/4.
+    } else if (xorder.compare("fv4") == 0 || xorder.compare("fv5") == 0 ||
+               xorder.compare("fv6") == 0 || xorder.compare("fv7") == 0 ||
+               xorder.compare("fv8") == 0 || xorder.compare("fv9") == 0) {
+      // Unlimited cell-polynomial reconstruction (fv.hpp); no limiter of its own, so it
+      // is only stable behind the MOOD fallback.  Stencil half-width is 2 (fv4, fv5),
+      // 3 (fv6, fv7) or 4 (fv8, fv9).
       if (xorder.compare("fv4") == 0) {
         recon_method = ReconstructionMethod::fv4;
+      } else if (xorder.compare("fv5") == 0) {
+        recon_method = ReconstructionMethod::fv5;
       } else if (xorder.compare("fv6") == 0) {
         recon_method = ReconstructionMethod::fv6;
-      } else {
+      } else if (xorder.compare("fv7") == 0) {
+        recon_method = ReconstructionMethod::fv7;
+      } else if (xorder.compare("fv8") == 0) {
         recon_method = ReconstructionMethod::fv8;
+      } else {
+        recon_method = ReconstructionMethod::fv9;
       }
       if (!use_mood) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -382,7 +389,7 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
     } else if (xorder.compare("ppm") == 0) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
         << std::endl << "<hydro> reconstruct=ppm was renamed to fv4 "
-        << "(unlimited 4th-order; also available: fv6, fv8)" << std::endl;
+        << "(unlimited 4th-order; also available: fv5 .. fv9)" << std::endl;
       std::exit(EXIT_FAILURE);
     } else {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -400,13 +407,11 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
         !pin->DoesBlockExist("shearing_box") &&
         !(pmy_pack->pcoord->is_general_relativistic &&
           pmy_pack->pcoord->coord_data.bh_excise) &&
-        (recon_method == ReconstructionMethod::fv4 ||
-         recon_method == ReconstructionMethod::fv6 ||
-         recon_method == ReconstructionMethod::fv8);
+        IsUnlimitedFV(recon_method);
     mood_frozen_flux = pin->GetOrAddBoolean("hydro", "mood_frozen_flux", frozen_supported);
     if (mood_frozen_flux && !frozen_supported) {
       std::cerr << "Frozen hydro fluxes require dynamic MOOD with periodic uniform "
-                << "FV4/FV6/FV8, ideal EOS, and no diffusion, scalars, shear, "
+                << "FV4..FV9, ideal EOS, and no diffusion, scalars, shear, "
                 << "excision or well balance\n";
       std::exit(EXIT_FAILURE);
     }

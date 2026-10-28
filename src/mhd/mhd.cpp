@@ -389,16 +389,22 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
           << std::endl;
         std::exit(EXIT_FAILURE);
       }
-    } else if (xorder.compare("fv4") == 0 ||
-               xorder.compare("fv6") == 0 ||
-               xorder.compare("fv8") == 0) {
+    } else if (xorder.compare("fv4") == 0 || xorder.compare("fv5") == 0 ||
+               xorder.compare("fv6") == 0 || xorder.compare("fv7") == 0 ||
+               xorder.compare("fv8") == 0 || xorder.compare("fv9") == 0) {
       // Unlimited cell-polynomial reconstruction (fv.hpp); no limiter of its own.
       if (xorder.compare("fv4") == 0) {
         recon_method = ReconstructionMethod::fv4;
+      } else if (xorder.compare("fv5") == 0) {
+        recon_method = ReconstructionMethod::fv5;
       } else if (xorder.compare("fv6") == 0) {
         recon_method = ReconstructionMethod::fv6;
-      } else {
+      } else if (xorder.compare("fv7") == 0) {
+        recon_method = ReconstructionMethod::fv7;
+      } else if (xorder.compare("fv8") == 0) {
         recon_method = ReconstructionMethod::fv8;
+      } else {
+        recon_method = ReconstructionMethod::fv9;
       }
       if (!use_mood) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -417,7 +423,7 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
     } else if (xorder.compare("ppm") == 0) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
         << std::endl << "<mhd> reconstruct=ppm was renamed to fv4 "
-        << "(unlimited 4th-order; also available: fv6, fv8)" << std::endl;
+        << "(unlimited 4th-order; also available: fv5 .. fv9)" << std::endl;
       std::exit(EXIT_FAILURE);
     } else if (xorder.compare("plm") == 0) {
       recon_method = ReconstructionMethod::plm;
@@ -606,13 +612,11 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
         !pin->GetOrAddBoolean("mhd", "well_balanced", false) &&
         !(pmy_pack->pcoord->is_general_relativistic &&
           pmy_pack->pcoord->coord_data.bh_excise) &&
-        (recon_method == ReconstructionMethod::fv4 ||
-         recon_method == ReconstructionMethod::fv6 ||
-         recon_method == ReconstructionMethod::fv8);
+        IsUnlimitedFV(recon_method);
     mood_frozen_emf = pin->GetOrAddBoolean("mhd", "mood_frozen_emf", frozen_supported);
     if (mood_frozen_emf && !frozen_supported) {
       std::cerr << "Frozen EMF requires dynamic MOOD with periodic uniform "
-                << "multidimensional UCT, FV4/FV6/FV8, ideal EOS, mood_nad_bcc=avg, "
+                << "multidimensional UCT, FV4..FV9, ideal EOS, mood_nad_bcc=avg, "
                 << "mood_edge=flag/auto, mood_touched_only=false, and no diffusion, "
                 << "scalars, shear, excision or well balance\n";
       std::exit(EXIT_FAILURE);

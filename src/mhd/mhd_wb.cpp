@@ -222,7 +222,7 @@ void MHD::WBSetEquilibrium() {
   if (!well_balanced) return;
 
   // face equilibrium: central interpolation of the cell averages (fluid and cc-B) at the
-  // order of the base scheme (fv6/fv8: their own interpolant, 4th order otherwise; see
+  // order of the base scheme (fv6|fv7, fv8|fv9: 6th, 8th order, 4th otherwise; see
   // Hydro::WBSetEquilibrium), valid on faces req .. n-req, which has to cover every
   // face the flux kernels visit (is-ext .. ie+1+ext, ext = the MOOD / FOFC halo)
   const int req = FVFaceRadius(recon_method);
@@ -486,9 +486,7 @@ void MHD::WBCalculateFluxes(Driver *pdriver, int stage) {
   const bool floors = (recon_method_ == ReconstructionMethod::ppmx ||
                        recon_method_ == ReconstructionMethod::wenoz ||
                        recon_method_ == ReconstructionMethod::teno ||
-                       recon_method_ == ReconstructionMethod::fv4 ||
-                       recon_method_ == ReconstructionMethod::fv6 ||
-                       recon_method_ == ReconstructionMethod::fv8);
+                       IsUnlimitedFV(recon_method_));
 
   const int mext = use_mood ? mood_halo0 : (use_fofc ? 1 : 0);
   int il1 = is-mext, iu1 = ie+1+mext;

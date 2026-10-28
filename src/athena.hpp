@@ -72,10 +72,20 @@ enum MetricIndex {I00=0, I01=1, I02=2, I03=3, I11=4, I12=5, I13=6, I22=7, I23=8,
 enum ParticlesIndex {PGID=0, PTAG=1, IPX=0, IPVX=1, IPY=2, IPVY=3, IPZ=4, IPVZ=5};
 
 // integer constants to specify spatial reconstruction methods
-// fv4/fv6/fv8 = UNLIMITED 4th/6th/8th-order cell-polynomial reconstruction of cell
-// averages (reconstruct/fv.hpp): each cell evaluates its own degree-p polynomial at its
-// faces, so the Riemann solver sees an O(h^{p+1}) jump; these require mood=true.
-enum ReconstructionMethod {dc, plm, ppm4, ppmx, wenoz, teno, fv4, fv6, fv8};
+// fv4..fv9 = UNLIMITED 4th..9th-order cell-polynomial reconstruction of cell averages
+// (reconstruct/fv.hpp): each cell evaluates its own polynomial at its faces, so the
+// Riemann solver sees an O(h^N) jump; these require mood=true.  fv5/fv7/fv9 read the
+// same 5/7/9 cells as fv4/fv6/fv8 (the full-degree polynomial instead of the average of
+// the two biased kernels).
+enum ReconstructionMethod {dc, plm, ppm4, ppmx, wenoz, teno,
+                           fv4, fv5, fv6, fv7, fv8, fv9};
+
+// True for the unlimited cell-polynomial methods fv4..fv9 (reconstruct/fv.hpp).
+inline constexpr bool IsUnlimitedFV(ReconstructionMethod r) {
+  return r == ReconstructionMethod::fv4 || r == ReconstructionMethod::fv5 ||
+         r == ReconstructionMethod::fv6 || r == ReconstructionMethod::fv7 ||
+         r == ReconstructionMethod::fv8 || r == ReconstructionMethod::fv9;
+}
 
 // Half-width (cells on each side of the cell being reconstructed) of the stencil read
 // by ReconCellT for each method.  Used by the Hydro/MHD constructors to size the ghost
@@ -84,20 +94,25 @@ inline constexpr int ReconStencilRadius(ReconstructionMethod r) {
   switch (r) {
     case ReconstructionMethod::dc:   return 0;
     case ReconstructionMethod::plm:  return 1;
-    case ReconstructionMethod::fv6:  return 3;
-    case ReconstructionMethod::fv8:  return 4;
-    default:                         return 2;  // ppm4, ppmx, wenoz, teno, fv4
+    case ReconstructionMethod::fv6:
+    case ReconstructionMethod::fv7:  return 3;
+    case ReconstructionMethod::fv8:
+    case ReconstructionMethod::fv9:  return 4;
+    default:                         return 2;  // ppm4, ppmx, wenoz, teno, fv4, fv5
   }
 }
 
 // Half-width of the symmetric central face interpolant FVFaceAt (reconstruct/fv.hpp)
 // that the well-balanced scheme uses for the single-valued face equilibrium: the
 // scheme's own interpolant for the unlimited fvN methods (so fvN(w_eq) + fvN(w') is the
-// base scheme applied to w_eq + w'), the 4th-order one otherwise.
+// base scheme applied to w_eq + w'), the 4th-order one otherwise.  The odd methods use
+// the even central interpolant of the same radius (fv5/fv7/fv9 -> fv4/fv6/fv8).
 inline constexpr int FVFaceRadius(ReconstructionMethod r) {
   switch (r) {
-    case ReconstructionMethod::fv6:  return 3;
-    case ReconstructionMethod::fv8:  return 4;
+    case ReconstructionMethod::fv6:
+    case ReconstructionMethod::fv7:  return 3;
+    case ReconstructionMethod::fv8:
+    case ReconstructionMethod::fv9:  return 4;
     default:                         return 2;
   }
 }
@@ -110,9 +125,12 @@ inline constexpr int ReconEdgeReach(ReconstructionMethod r) {
   switch (r) {
     case ReconstructionMethod::dc:   return 1;
     case ReconstructionMethod::plm:  return 2;
-    case ReconstructionMethod::fv4:  return 3;
-    case ReconstructionMethod::fv6:  return 4;
-    case ReconstructionMethod::fv8:  return 5;
+    case ReconstructionMethod::fv4:
+    case ReconstructionMethod::fv5:  return 3;
+    case ReconstructionMethod::fv6:
+    case ReconstructionMethod::fv7:  return 4;
+    case ReconstructionMethod::fv8:
+    case ReconstructionMethod::fv9:  return 5;
     default:                         return 3;  // ppm4, ppmx, wenoz, teno
   }
 }
