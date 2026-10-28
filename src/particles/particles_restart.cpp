@@ -26,6 +26,8 @@
 #include "cosmic_ray.hpp"
 #include "lagrangian_mc.hpp"
 #include "particles.hpp"
+#include "sink.hpp"
+#include "sink_particles.hpp"
 
 #if MPI_PARALLEL_ENABLED
 #include <mpi.h>
@@ -212,6 +214,8 @@ std::uint32_t ParticleTypeID(ParticleType type) {
       return 1;
     case ParticleType::lagrangian_mc:
       return 2;
+    case ParticleType::sink:
+      return 3;
     default:
       RestartError("Particle type has no restart identifier.");
   }
@@ -240,6 +244,8 @@ int ParticlePopulation::RestartLayoutVersion() const {
       return cosmic_ray::RESTART_LAYOUT_VERSION;
     case ParticleType::lagrangian_mc:
       return lagrangian_mc::RESTART_LAYOUT_VERSION;
+    case ParticleType::sink:
+      return sink::RESTART_LAYOUT_VERSION;
     default:
       RestartError("Particle type has no restart layout version.");
   }
@@ -247,9 +253,16 @@ int ParticlePopulation::RestartLayoutVersion() const {
 }
 
 //----------------------------------------------------------------------------------------
-//! \brief Pack durable model state that is not stored in the particle arrays.
+//! \brief Pack durable model state that is not stored in the particle arrays. Sinks
+//! store the count of sinks created so far, which numbers the next created tag.
 
 std::vector<char> ParticlePopulation::RestartMetadata() const {
+  if (particle_type == ParticleType::sink) {
+    const std::int64_t created = psink->created_total_;
+    std::vector<char> metadata(sizeof(created));
+    std::memcpy(metadata.data(), &created, sizeof(created));
+    return metadata;
+  }
   return {};
 }
 
@@ -258,12 +271,29 @@ std::vector<char> ParticlePopulation::RestartMetadata() const {
 
 void ParticlePopulation::ValidateRestartMetadata(
     const std::vector<char> &metadata) const {
+  if (particle_type == ParticleType::sink) {
+    if (metadata.size() != sizeof(std::int64_t)) {
+      RestartError("Sink particle restart metadata has the wrong size.");
+    }
+    return;
+  }
   if (particle_type != ParticleType::cosmic_ray &&
       particle_type != ParticleType::lagrangian_mc) {
     RestartError("Particle type has no restart metadata contract.");
   }
   if (!metadata.empty()) {
     RestartError("Particle restart contains unexpected model metadata.");
+  }
+}
+
+//----------------------------------------------------------------------------------------
+//! \brief Restore durable model state validated by ValidateRestartMetadata.
+
+void ParticlePopulation::ApplyRestartMetadata(const std::vector<char> &metadata) {
+  if (particle_type == ParticleType::sink) {
+    std::int64_t created = 0;
+    std::memcpy(&created, metadata.data(), sizeof(created));
+    psink->created_total_ = static_cast<int>(created);
   }
 }
 
@@ -447,7 +477,22 @@ void Particles::WriteRestart(const std::string &filename) const {
 
 void Particles::LoadRestart(const std::string &filename) {
   if (filename.empty()) {
-    RestartError("A particle restart file must be specified with '-p <file>'.");
+    // Restart files written before particle restart files existed hold no particles.
+    // Sink populations can rebuild themselves from their trk output instead
+    // (restart_trk), or explicitly start empty (restart_without_sinks); every other
+    // population needs '-p'.
+    for (auto *population : populations_) {
+      const SinkParticles *ps = population->psink;
+      if (ps == nullptr || (ps->restart_trk.empty() && !ps->restart_without_sinks)) {
+        RestartError("A particle restart file must be specified with '-p <file>'.");
+      }
+    }
+    for (auto *population : populations_) {
+      if (!population->psink->restart_trk.empty()) {
+        population->psink->RestoreSinksFromTrk(population->psink->restart_trk);
+      }
+    }
+    return;
   }
   const std::uint64_t actual_file_size = FileSize(filename);
   IOWrapper file;
@@ -538,6 +583,7 @@ void Particles::LoadRestart(const std::string &filename) {
     std::vector<char> metadata(entry.metadata_size);
     ReadBytesAt(file, metadata.data(), metadata.size(), next_offset);
     populations_[p]->ValidateRestartMetadata(metadata);
+    populations_[p]->ApplyRestartMetadata(metadata);
     next_offset = CheckedAdd(next_offset, entry.metadata_size);
   }
 

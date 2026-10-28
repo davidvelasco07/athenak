@@ -23,6 +23,8 @@
 #include "cosmic_ray.hpp"
 #include "lagrangian_mc.hpp"
 #include "particles.hpp"
+#include "sink.hpp"
+#include "sink_particles.hpp"
 
 namespace particles {
 //----------------------------------------------------------------------------------------
@@ -180,6 +182,8 @@ ParticlePopulation::ParticlePopulation(const std::string &population_name,
       particle_type = ParticleType::cosmic_ray;
     } else if (ptype.compare("lagrangian_mc") == 0) {
       particle_type = ParticleType::lagrangian_mc;
+    } else if (ptype.compare("sink") == 0) {
+      particle_type = ParticleType::sink;
     } else {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Particle type = '" << ptype << "' not recognized"
@@ -301,9 +305,30 @@ ParticlePopulation::ParticlePopulation(const std::string &population_name,
         pbval_lmc_flux = new MeshBoundaryValuesCC(pmy_pack, pin, false);
         pbval_lmc_flux->InitializeBuffers(2);
       }
+    } else if (ppush.compare("leapfrog") == 0 || ppush.compare("rk3") == 0) {
+      // self-gravitating pushers, stage-synchronized with the gas and the gravity solve:
+      // a kick-drift-kick leapfrog over the two RK2 stages, or the SSPRK(3,3) stages
+      pusher = (ppush.compare("rk3") == 0) ? ParticlesPusher::rk3
+                                           : ParticlesPusher::leap_frog;
+      const std::string time_integrator =
+          pin->GetOrAddString("time", "integrator", "rk2");
+      const std::string required = (pusher == ParticlesPusher::rk3) ? "rk3" : "rk2";
+      if (time_integrator != required || particle_type != ParticleType::sink) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Particle pusher '" << ppush << "' requires particle "
+                  << "type 'sink' and time/integrator=" << required << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
     } else {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Particle pusher = '" << ppush << "' not recognized"
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (particle_type == ParticleType::sink && pusher != ParticlesPusher::leap_frog &&
+        pusher != ParticlesPusher::rk3) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Sink particles require pusher 'leapfrog' or 'rk3'"
                 << std::endl;
       std::exit(EXIT_FAILURE);
     }
@@ -336,6 +361,22 @@ ParticlePopulation::ParticlePopulation(const std::string &population_name,
         int_output = lagrangian_mc::int_output;
         break;
       }
+    case ParticleType::sink:
+      {
+        // The full 3D layout in 2D as well (z columns stay zero). rk3 adds the
+        // start-of-step velocity.
+        nrdata = (pusher == ParticlesPusher::rk3) ? sink::NREAL_RK3 : sink::NREAL;
+        nidata = sink::NINT;
+        real_names = sink::real_names;
+        int_names = sink::int_names;
+        real_output = sink::real_output;
+        int_output = sink::int_output;
+        // the start-of-step position wraps with the position; sinks that leave the
+        // domain through an outflow boundary keep their owner
+        prev_pos_index = sink::IPX0;
+        retain_escaped = true;
+        break;
+      }
     default:
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Particle type has no storage definition" << std::endl;
@@ -353,12 +394,17 @@ ParticlePopulation::ParticlePopulation(const std::string &population_name,
 
   // allocate boundary object
   pbval_part = new ParticlesBoundaryValues(this, pin);
+
+  if (particle_type == ParticleType::sink) {
+    psink = new SinkParticles(this, pmy_pack, pin, input_block_);
+  }
 }
 
 //----------------------------------------------------------------------------------------
 // destructor
 
 ParticlePopulation::~ParticlePopulation() {
+  delete psink;
   delete pbval_part;
   delete pbval_lmc_flux;
 }

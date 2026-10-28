@@ -12,6 +12,7 @@
 #include "athena.hpp"
 #include "driver/driver.hpp"
 #include "particles.hpp"
+#include "sink_particles.hpp"
 
 namespace particles {
 //----------------------------------------------------------------------------------------
@@ -24,6 +25,9 @@ TaskStatus ParticlePopulation::Push(Driver *pdriver, int stage) {
       return PushDrift(pdriver, stage);
     case ParticlesPusher::lagrangian_mc:
       return PushLagrangianMC(pdriver, stage);
+    case ParticlesPusher::leap_frog:
+    case ParticlesPusher::rk3:
+      return psink->Push(pdriver, stage);
     default:
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Particle pusher has no implementation" << std::endl;

@@ -22,10 +22,10 @@
 // forward declarations
 
 // constants that enumerate ParticlesPusher options
-enum class ParticlesPusher {drift, leap_frog, lagrangian_tracer, lagrangian_mc};
+enum class ParticlesPusher {drift, leap_frog, rk3, lagrangian_tracer, lagrangian_mc};
 
 // constants that enumerate ParticleTypes
-enum class ParticleType {cosmic_ray, lagrangian_mc};
+enum class ParticleType {cosmic_ray, lagrangian_mc, sink};
 
 // common array indices used by type-independent particle machinery
 enum ParticleRealIndex {IPX=0, IPY=1, IPZ=2};
@@ -59,6 +59,8 @@ struct ParticleTaskIDs {
 };
 
 namespace particles {
+
+class SinkParticles;
 
 //----------------------------------------------------------------------------------------
 //! \class ParticlePopulation
@@ -101,6 +103,10 @@ class ParticlePopulation {
   // Boundary communication buffers and functions for particles
   ParticlesBoundaryValues *pbval_part;
 
+  // Sink physics (particle-mesh gravity, accretion, creation, merging) of a population
+  // of type sink, which schedules its own tasks; nullptr for every other type.
+  SinkParticles *psink = nullptr;
+
   // container to hold names of TaskIDs
   ParticleTaskIDs id;
 
@@ -134,6 +140,7 @@ class ParticlePopulation {
   int RestartLayoutVersion() const;
   std::vector<char> RestartMetadata() const;
   void ValidateRestartMetadata(const std::vector<char> &metadata) const;
+  void ApplyRestartMetadata(const std::vector<char> &metadata);
 
  private:
   std::string input_block_;

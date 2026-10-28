@@ -19,6 +19,7 @@
 #include "mesh/mesh.hpp"
 #include "bvals/bvals.hpp"
 #include "particles.hpp"
+#include "sink_particles.hpp"
 
 namespace particles {
 //----------------------------------------------------------------------------------------
@@ -92,6 +93,12 @@ void ParticlePopulation::AssembleTasks(
             &ParticlePopulation::NewTimeStep, this, update_done);
         break;
       }
+    case ParticlesPusher::leap_frog:
+    case ParticlesPusher::rk3:
+      // Sinks are integrated per RK stage around the gravity solve and run their own
+      // deposit, potential exchange, migration and creation/merging/accretion tasks.
+      psink->AssembleTasks(tl);
+      break;
     default:
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Particle pusher has no task schedule" << std::endl;

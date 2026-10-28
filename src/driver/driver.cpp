@@ -26,6 +26,7 @@
 #include "ion-neutral/ion-neutral.hpp"
 #include "radiation/radiation.hpp"
 #include "particles/particles.hpp"
+#include "particles/sink_particles.hpp"
 #include "driver.hpp"
 #include "gravity/gravity.hpp"
 #include "utils/utils.hpp"
@@ -694,6 +695,15 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout, bool wdfla
 //!  and printing diagnostic messages
 
 void Driver::Finalize(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
+  // host/MPI phase breakdown of the sink populations, when SINK_TIMERS is set
+  if (pmesh->pmb_pack->ppart != nullptr) {
+    for (auto *population : pmesh->pmb_pack->ppart->Populations()) {
+      if (population->psink != nullptr) {
+        population->psink->ReportSinkTimers(pwall_clock_->seconds());
+      }
+    }
+  }
+
   // cycle through output Types and load data / write files
   //  This design allows for asynchronous outputs to implemented in the future.
   for (auto &out : pout->pout_list) {

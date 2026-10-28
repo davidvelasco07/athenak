@@ -29,6 +29,8 @@
 #include "radiation/radiation.hpp"
 #include "srcterms/turb_driver.hpp"
 #include "particles/particles.hpp"
+#include "particles/sink_particles.hpp"
+#include "particles/particle_mesh.hpp"
 #include "units/units.hpp"
 #include "meshblock_pack.hpp"
 #include "gravity/gravity.hpp"
@@ -257,6 +259,13 @@ void MeshBlockPack::AddPhysics(ParameterInput *pin, bool is_restart) {
       pgrav->RegisterSourceDensity(&(pmhd->u0), IDN, 1.0);
     } else if (phydro != nullptr) {
       pgrav->RegisterSourceDensity(&(phydro->u0), IDN, 1.0);
+    }
+    if (ppart != nullptr) {
+      for (auto *population : ppart->Populations()) {
+        if (population->psink != nullptr) {
+          pgrav->RegisterSourceDensity(&(population->psink->ppm->dmesh), 0, 1.0);
+        }
+      }
     }
     nphysics++;
   } else {

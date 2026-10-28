@@ -138,6 +138,12 @@ add_executable(
         particles/pushers/drift.cpp
         particles/pushers/lagrangian_mc.cpp
         particles/particles_tasks.cpp
+        particles/particle_mesh.cpp
+        particles/sink_accretion.cpp
+        particles/sink_creation.cpp
+        particles/sink_merger.cpp
+        particles/sink_particles.cpp
+        particles/sink_tasks.cpp
         outputs/pdf.cpp
 
         pgen/pgen.cpp

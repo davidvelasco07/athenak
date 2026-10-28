@@ -43,6 +43,12 @@ TaskStatus ParticlePopulation::NewTimeStep(Driver*, int) {
     case ParticlesPusher::lagrangian_mc:
       // Lagrangian MC transport follows the fluid CFL limit.
       break;
+    case ParticlesPusher::leap_frog:
+    case ParticlesPusher::rk3:
+      // Sinks refresh dtnew in their own task at the end of every cycle
+      // (SinkParticles::NewTimeStep); before the first cycle it holds what the problem
+      // generator seeded, or no limit.
+      return TaskStatus::complete;
     default:
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Particle pusher has no timestep implementation"
