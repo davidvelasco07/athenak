@@ -46,6 +46,7 @@ MGGravityDriver::MGGravityDriver(MeshBlockPack *pmbp, ParameterInput *pin)
     npostsmooth_ = pin->GetOrAddReal("gravity", "npostsmooth", npostsmooth_);
     full_multigrid_ = pin->GetOrAddBoolean("gravity", "full_multigrid", false);
     fmg_ncycle_ = pin->GetOrAddInteger("gravity", "fmg_ncycle", 1);
+    fmg_first_only_ = pin->GetOrAddBoolean("gravity", "fmg_first_solve_only", false);
     fshowdef_ = pin->GetOrAddInteger("gravity", "show_defect", 0);
     mg_verbose_ = pin->GetOrAddInteger("gravity", "mg_verbose", 0);
     fsubtract_average_ = pin->GetOrAddBoolean("gravity", "subtract_average", true);
@@ -177,11 +178,16 @@ MGGravity::~MGGravity() {
 void MGGravityDriver::Solve(Driver *pdriver, int stage, Real dt) {
   RegionIndcs &indcs_ = pmy_pack_->pmesh->mb_indcs;
 
-  // Reallocate MG arrays and phi if AMR has changed the mesh
+  // Reallocate MG arrays and phi if AMR has changed the mesh.  The mesh-change test
+  // mirrors PrepareForAMR(), which clears needinit_ before returning.
+  const bool mesh_changed = (pmy_mesh_->nmb_total != nbtotal_) ||
+                            (pmy_mesh_->GetAMRLoadBalanceUpdateSeq() != amr_seq_);
   PrepareForAMR();
+  bool phi_reallocated = false;
   {
     int nmb = pmy_pack_->nmb_thispack;
     if (static_cast<int>(pmy_pack_->pgrav->phi.extent_int(0)) != nmb) {
+      phi_reallocated = true;
       int ncells1 = indcs_.nx1 + 2*indcs_.ng;
       int ncells2 = (indcs_.nx2 > 1) ? (indcs_.nx2 + 2*indcs_.ng) : 1;
       int ncells3 = (indcs_.nx3 > 1) ? (indcs_.nx3 + 2*indcs_.ng) : 1;
@@ -201,8 +207,19 @@ void MGGravityDriver::Solve(Driver *pdriver, int stage, Real dt) {
   // Apply source mask (zero source outside mask_radius_)
   mglevels_->ApplyMask();
 
+  // With fmg_first_solve_only, full multigrid runs exactly when there is no usable
+  // potential, whatever full_multigrid says: the first solve, a reallocated phi, or a
+  // mesh change (AMR regrid or load balance; phi is not carried across either).  Every
+  // other solve warm-starts the V-cycles from the previous phi, which is within one
+  // time step of the answer.
+  if (mesh_changed || phi_reallocated) have_phi_ = false;
+  const bool use_fmg = fmg_first_only_ ? !have_phi_ : full_multigrid_;
+  if (fmg_first_only_ && use_fmg && mg_verbose_ && global_variable::my_rank == 0) {
+    std::cout << "MGGravityDriver::Solve: no usable potential, running full multigrid"
+              << std::endl;
+  }
   // iterative mode - load initial guess
-  if (!full_multigrid_) {
+  if (!use_fmg) {
     mglevels_->LoadFinestData(pmy_pack_->pgrav->phi, 0, indcs_.ng);
   }
 
@@ -218,12 +235,13 @@ void MGGravityDriver::Solve(Driver *pdriver, int stage, Real dt) {
 
   auto t_start = std::chrono::high_resolution_clock::now();
 
-  if (full_multigrid_)
+  if (use_fmg)
     SolveFMG(pdriver);
   else
     SolveMG(pdriver);
 
   Kokkos::fence();
+  have_phi_ = true;
 
   if (fshowdef_ >= 1) {
     auto t_end = std::chrono::high_resolution_clock::now();
