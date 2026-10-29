@@ -153,6 +153,8 @@ class Hydro {
                             // (default 0, see hydro.cpp)
   Real mood_atol;           // absolute floor of the NAD tolerance
   bool mood_sed;            // exempt smooth extrema from NAD detection
+  bool mood_euler_predictor = false;  // trial state: RK stage combination (default)
+                            // or full-dt forward Euler from the stage input (true)
   bool mood_candidate_diffusion = false;  // true: explicit diffusion fluxes BEFORE the
                             // MOOD/FOFC fallback (detector sees the full candidate),
                             // re-added face-locally on revised faces; false: after it

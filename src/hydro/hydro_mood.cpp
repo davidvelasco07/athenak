@@ -9,8 +9,9 @@
 //! superfv reference implementation (github.com/jpalafou/superfv).
 //!
 //! Each RK stage, after the base high-order fluxes are computed, a candidate update is
-//! built with the exact stage combination.  Cells where the candidate is inadmissible
-//! are detected using:
+//! built with the RK stage combination (mood_predictor=stage, default) or with a
+//! full-step forward-Euler predictor from the stage input (mood_predictor=euler).
+//! Cells where the candidate is inadmissible are detected using:
 //!   PAD:  physical admissibility — conversion to primitives would require floors
 //!         (existing EOS ConsToPrim only_testfloors path, same as FOFC),
 //!   NaN:  any non-finite candidate value,
@@ -128,9 +129,13 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
   int &nhyd_ = nhydro;
   int nvars = nhydro + nscalars;
 
-  Real &gam0 = pdriver->gam0[stage-1];
-  Real &gam1 = pdriver->gam1[stage-1];
-  Real beta_dt = (pdriver->beta[stage-1])*(pmy_pack->pmesh->dt);
+  // Trial-state coefficients (mood_predictor): the RK stage combination (default), or a
+  // full-step forward Euler from the stage input.  Only the trial state uses them; the
+  // accepted RK update is unchanged.
+  const bool euler_pred = mood_euler_predictor;
+  const Real gam0 = euler_pred ? 1.0 : pdriver->gam0[stage-1];
+  const Real gam1 = euler_pred ? 0.0 : pdriver->gam1[stage-1];
+  const Real beta_dt = (euler_pred ? 1.0 : pdriver->beta[stage-1])*(pmy_pack->pmesh->dt);
 
   auto &eos_ = peos->eos_data;
   auto &size_ = pmy_pack->pmb->mb_size;
@@ -292,8 +297,8 @@ void Hydro::MOODLoop(Driver *pdriver, int stage) {
     if (three_d) { kl = ks-dh; ku = ke+dh; }
 
     //------------------------------------------------------------------------------------
-    // (1) candidate update with the exact RK stage combination, over this iteration's
-    // detection halo.
+    // (1) candidate update (mood_predictor: the RK stage combination, or forward Euler
+    // over the full timestep), over this iteration's detection halo.
     Kokkos::deep_copy(fofc_, false);
     par_for("mood_newu", DevExeSpace(), 0, nmb1, kl, ku, jl, ju, il, iu,
     KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {

@@ -353,6 +353,23 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
       std::exit(EXIT_FAILURE);
     }
     mood_sed = pin->GetOrAddBoolean("mhd","mood_sed",true);
+    // Trial state the detector judges at every RK stage.  "stage" (default): the RK stage
+    // combination gam0*u + gam1*u_n + beta*dt*L(u), the state the update actually writes.
+    // "euler": a full-step forward-Euler predictor from the stage-input state,
+    // u + dt*L(u), so every stage is tested on what a whole step of its fluxes would do;
+    // stricter (13-48% more demotions on Orszag-Tang and Shu-Osher, and less accurate on
+    // those and on a smooth CPAW, 2026-10-28).  Only the trial state changes; the
+    // accepted RK update is the same either way.
+    {
+      const std::string pred = pin->GetOrAddString("mhd","mood_predictor","stage");
+      if (pred != "euler" && pred != "stage") {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "<mhd>/mood_predictor = '" << pred
+                  << "' not implemented (euler|stage)" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      mood_euler_predictor = (pred == "euler");
+    }
     // Diffusion fluxes vs the fallback: see the same parameter in hydro.cpp (default
     // false = inviscid candidate).  The resistive energy flux has no face-local form, so
     // true is refused with resistivity.

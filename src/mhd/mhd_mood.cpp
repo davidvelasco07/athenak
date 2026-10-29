@@ -11,7 +11,8 @@
 //! - The candidate update consists of the conserved hydro variables (flux divergence)
 //!   AND a candidate cell-averaged magnetic field bcctest, built from the stage
 //!   combination of the cell-averaged fields plus finite differences of the
-//!   face-centered electric fields (the FOFC estimate, mhd_fofc.cpp).
+//!   face-centered electric fields (the FOFC estimate, mhd_fofc.cpp);
+//!   mood_predictor=euler uses a full-step forward-Euler update instead.
 //! - Detection adds the candidate B to the NAD check: either the rotation-invariant
 //!   magnitude |B| (mood_nad_b=mag) or the three components (mood_nad_b=comps),
 //!   with DMP bounds from the stage-input cell-centered field.
@@ -439,9 +440,13 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
   int &nmhd_ = nmhd;
   int nvars = nmhd + nscalars;
 
-  Real &gam0 = pdriver->gam0[stage-1];
-  Real &gam1 = pdriver->gam1[stage-1];
-  Real beta_dt = (pdriver->beta[stage-1])*(pmy_pack->pmesh->dt);
+  // Trial-state coefficients (mood_predictor): the RK stage combination (default), or a
+  // full-step forward Euler from the stage input.  Only the trial state uses them; the
+  // accepted RK update is unchanged.
+  const bool euler_pred = mood_euler_predictor;
+  const Real gam0 = euler_pred ? 1.0 : pdriver->gam0[stage-1];
+  const Real gam1 = euler_pred ? 0.0 : pdriver->gam1[stage-1];
+  const Real beta_dt = (euler_pred ? 1.0 : pdriver->beta[stage-1])*(pmy_pack->pmesh->dt);
 
   auto &eos_ = peos->eos_data;
   auto &size_ = pmy_pack->pmb->mb_size;

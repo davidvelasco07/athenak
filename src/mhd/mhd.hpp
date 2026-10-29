@@ -187,6 +187,7 @@ class MHD {
   Real mood_eps0_eq;        // WB: round-off floor relative to the equilibrium (hydro.hpp)
   Real mood_atol;
   bool mood_sed;
+  bool mood_euler_predictor = false;  // trial state: RK stage (false) or forward Euler
   bool mood_candidate_diffusion = false;  // true: diffusion fluxes before the fallback,
                                           // re-added face-locally on revised faces
   int n_fb_tiers;
