@@ -393,7 +393,7 @@ class MultigridDriver {
        std::vector<Real> &cbuf, std::vector<Real> &cbufold,
        int nvar, int un_nc, const LogicalLocation &loc,
        int ox1, int ox2, int ox3, bool folddata);
-  void ApplyPhysicalBoundariesOctet(MGOctet &oct, bool fcbuf);
+  void ApplyPhysicalBoundariesOctet(MGOctet &oct, bool fcbuf, bool fold = false);
 
   // physics-dependent octet operations (virtual, overridden in derived drivers)
   virtual void SmoothOctet(MGOctet &oct, int rlev, int color) = 0;
