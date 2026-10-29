@@ -77,6 +77,10 @@ class MGGravityDriver : public MultigridDriver {
 
  private:
   Real four_pi_G_, omega_;
+  // gravity/fmg_first_solve_only: full multigrid only when no usable potential exists
+  // (first solve, phi reallocated, mesh changed); otherwise warm-start V-cycles from phi
+  bool fmg_first_only_ = false;
+  bool have_phi_ = false;
 };
 
 #endif // GRAVITY_MG_GRAVITY_HPP_

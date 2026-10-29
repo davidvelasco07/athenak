@@ -64,6 +64,7 @@ npresmooth = 2
 npostsmooth = 2
 full_multigrid = true
 fmg_ncycle = 1
+fmg_first_solve_only = false   # true: FMG only without a potential, then warm V-cycles
 show_defect = 0
 mg_nghost = 1
 
