@@ -238,13 +238,13 @@ void MGGravityDriver::Solve(Driver *pdriver, int stage, Real dt) {
   // Apply source mask (zero source outside mask_radius_)
   mglevels_->ApplyMask();
 
-  // With fmg_first_solve_only, full multigrid runs only without a usable potential:
-  // the first solve, a reallocated phi, or a mesh change (AMR regrid or load balance).
-  // Every other solve warm-starts the V-cycles from the previous phi, which is within
-  // one time step of the answer.
+  // With fmg_first_solve_only, full multigrid runs exactly when there is no usable
+  // potential, whatever full_multigrid says: the first solve, a reallocated phi, or a
+  // mesh change (AMR regrid or load balance; phi is not carried across either).  Every
+  // other solve warm-starts the V-cycles from the previous phi, which is within one
+  // time step of the answer.
   if (mesh_changed || phi_reallocated) have_phi_ = false;
-  const bool use_fmg = fmg_first_only_ ? (full_multigrid_ && !have_phi_)
-                                       : full_multigrid_;
+  const bool use_fmg = fmg_first_only_ ? !have_phi_ : full_multigrid_;
   if (fmg_first_only_ && use_fmg && mg_verbose_ && global_variable::my_rank == 0) {
     std::cout << "MGGravityDriver::Solve: no usable potential, running full multigrid"
               << std::endl;
