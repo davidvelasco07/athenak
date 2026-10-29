@@ -1984,12 +1984,18 @@ void MultigridDriver::SetOctetBoundariesBeforeTransfer(bool folddata) {
       }
     }
 
+    // The blocks prolongate the correction u - uold from these octets, ghosts included,
+    // so the old data needs the same physical boundary as the new (Athena++ applies it
+    // to cbufold too). Without it the correction is wrong wherever refinement touches a
+    // physical boundary, and the V-cycle stalls at a finite defect.
     ApplyPhysicalBoundariesOctet(oct, true);
+    if (folddata) ApplyPhysicalBoundariesOctet(oct, true, true);
     if (folddata)
       ProlongateOctetBoundaries(oct, cbuf_, cbufold_, nvar_, ncoarse_, folddata);
     else
       ProlongateOctetBoundaries(oct, cbuf_, cbufold_, nvar_, ncoarse_, false);
     ApplyPhysicalBoundariesOctet(oct, false);
+    if (folddata) ApplyPhysicalBoundariesOctet(oct, false, true);
   }
 }
 
@@ -1999,7 +2005,7 @@ void MultigridDriver::SetOctetBoundariesBeforeTransfer(bool folddata) {
 //! \brief Apply physical boundary conditions to an octet at the domain boundary.
 //! fcbuf=true: apply to the coarse buffer (ngh x ngh), fcbuf=false: apply to oct.u
 
-void MultigridDriver::ApplyPhysicalBoundariesOctet(MGOctet &oct, bool fcbuf) {
+void MultigridDriver::ApplyPhysicalBoundariesOctet(MGOctet &oct, bool fcbuf, bool fold) {
   if (pmy_mesh_->strictly_periodic) return;
   const LogicalLocation &loc = oct.loc;
   int lev = loc.level - locrootlevel_;
@@ -2009,11 +2015,94 @@ void MultigridDriver::ApplyPhysicalBoundariesOctet(MGOctet &oct, bool fcbuf) {
 
   // For zerofixed: ghost = -interior (antisymmetric reflection)
   // For zerograd:  ghost = +interior (symmetric reflection)
-  // For multipole: ghost = 2*phi_mp - interior (linear extrapolation)
-  // We implement zerofixed and zerograd here. Multipole at octet level
-  // uses the same reflection approach (the root-level multipole already
-  // sets the correct values; octets near the boundary inherit from the
-  // root through the coarser-level boundary exchange).
+  // For multipole: ghost = 2*phi_mp - interior, with phi_mp the expansion evaluated on
+  // the face, as on the blocks and the root grid. fold selects the old data (oct.uold or
+  // cbufold_) instead of the current data.
+
+  auto is_mp = [&](BoundaryFace f) {
+    return mporder_ > 0 && mg_mesh_bcs_[f] == BoundaryFlag::mg_multipole;
+  };
+
+  // Multipole faces, with Athena++'s ranges: x1 faces cover the transverse ghost rows
+  // unless that side is physical, x2 faces every x1 column, x3 faces every x1 and x2
+  // column. Cell centres come from the octet's logical location: an octet spans its
+  // parent block and has two cells per direction; the coarse buffer has one cell per
+  // parent block.
+  auto apply_mp = [&](Real *data, int nc) {
+    auto ref = [&](int v, int k, int j, int i) -> Real& {
+      return data[((v*nc + k)*nc + j)*nc + i];
+    };
+    const auto &ms = pmy_mesh_->mesh_size;
+    const int maxl1 = nrbx1_ << lev, maxl2 = nrbx2_ << lev, maxl3 = nrbx3_ << lev;
+    const Real pw1 = (ms.x1max - ms.x1min)/static_cast<Real>(maxl1);
+    const Real pw2 = (ms.x2max - ms.x2min)/static_cast<Real>(maxl2);
+    const Real pw3 = (ms.x3max - ms.x3min)/static_cast<Real>(maxl3);
+    const Real cs1 = fcbuf ? pw1 : 0.5*pw1;
+    const Real cs2 = fcbuf ? pw2 : 0.5*pw2;
+    const Real cs3 = fcbuf ? pw3 : 0.5*pw3;
+    const Real ox = ms.x1min + static_cast<Real>(loc.lx1)*pw1;
+    const Real oy = ms.x2min + static_cast<Real>(loc.lx2)*pw2;
+    const Real oz = ms.x3min + static_cast<Real>(loc.lx3)*pw3;
+    auto xc = [&](int i) { return ox + (i - ngh + 0.5)*cs1 - mpo_[0]; };
+    auto yc = [&](int j) { return oy + (j - ngh + 0.5)*cs2 - mpo_[1]; };
+    auto zc = [&](int k) { return oz + (k - ngh + 0.5)*cs3 - mpo_[2]; };
+    auto mp = [&](Real x, Real y, Real z) {
+      return EvalMultipolePhi(x, y, z, mpcoeff_, mporder_);
+    };
+    const int lo = l, hi = r, all1 = nc - 1;
+    const int jt0 = (loc.lx2 != 0) ? 0 : lo, jt1 = (loc.lx2 != maxl2 - 1) ? all1 : hi;
+    const int kt0 = (loc.lx3 != 0) ? 0 : lo, kt1 = (loc.lx3 != maxl3 - 1) ? all1 : hi;
+    for (int v = 0; v < nvar_; ++v) {
+      if (loc.lx1 == 0 && is_mp(BoundaryFace::inner_x1)) {
+        for (int k = kt0; k <= kt1; ++k)
+          for (int j = jt0; j <= jt1; ++j) {
+            Real p = mp(ox - mpo_[0], yc(j), zc(k));
+            for (int n = 0; n < ngh; ++n)
+              ref(v, k, j, lo-1-n) = 2.0*p - ref(v, k, j, lo+n);
+          }
+      }
+      if (loc.lx1 == maxl1 - 1 && is_mp(BoundaryFace::outer_x1)) {
+        for (int k = kt0; k <= kt1; ++k)
+          for (int j = jt0; j <= jt1; ++j) {
+            Real p = mp(ox + pw1 - mpo_[0], yc(j), zc(k));
+            for (int n = 0; n < ngh; ++n)
+              ref(v, k, j, hi+1+n) = 2.0*p - ref(v, k, j, hi-n);
+          }
+      }
+      if (loc.lx2 == 0 && is_mp(BoundaryFace::inner_x2)) {
+        for (int k = kt0; k <= kt1; ++k)
+          for (int i = 0; i <= all1; ++i) {
+            Real p = mp(xc(i), oy - mpo_[1], zc(k));
+            for (int n = 0; n < ngh; ++n)
+              ref(v, k, lo-1-n, i) = 2.0*p - ref(v, k, lo+n, i);
+          }
+      }
+      if (loc.lx2 == maxl2 - 1 && is_mp(BoundaryFace::outer_x2)) {
+        for (int k = kt0; k <= kt1; ++k)
+          for (int i = 0; i <= all1; ++i) {
+            Real p = mp(xc(i), oy + pw2 - mpo_[1], zc(k));
+            for (int n = 0; n < ngh; ++n)
+              ref(v, k, hi+1+n, i) = 2.0*p - ref(v, k, hi-n, i);
+          }
+      }
+      if (loc.lx3 == 0 && is_mp(BoundaryFace::inner_x3)) {
+        for (int j = 0; j <= all1; ++j)
+          for (int i = 0; i <= all1; ++i) {
+            Real p = mp(xc(i), yc(j), oz - mpo_[2]);
+            for (int n = 0; n < ngh; ++n)
+              ref(v, lo-1-n, j, i) = 2.0*p - ref(v, lo+n, j, i);
+          }
+      }
+      if (loc.lx3 == maxl3 - 1 && is_mp(BoundaryFace::outer_x3)) {
+        for (int j = 0; j <= all1; ++j)
+          for (int i = 0; i <= all1; ++i) {
+            Real p = mp(xc(i), yc(j), oz + pw3 - mpo_[2]);
+            for (int n = 0; n < ngh; ++n)
+              ref(v, hi+1+n, j, i) = 2.0*p - ref(v, hi-n, j, i);
+          }
+      }
+    }
+  };
 
   auto apply_bc = [&](Real *data, int nc) {
     auto ref = [&](int v, int k, int j, int i) -> Real& {
@@ -2021,7 +2110,8 @@ void MultigridDriver::ApplyPhysicalBoundariesOctet(MGOctet &oct, bool fcbuf) {
     };
 
     // inner x1
-    if (loc.lx1 == 0 && mg_mesh_bcs_[BoundaryFace::inner_x1] != BoundaryFlag::periodic) {
+    if (loc.lx1 == 0 && mg_mesh_bcs_[BoundaryFace::inner_x1] != BoundaryFlag::periodic
+        && !is_mp(BoundaryFace::inner_x1)) {
       Real sign = (mg_mesh_bcs_[BoundaryFace::inner_x1] == BoundaryFlag::mg_zerofixed)
                   ? -1.0 : 1.0;
       for (int v = 0; v < nvar_; ++v)
@@ -2033,7 +2123,8 @@ void MultigridDriver::ApplyPhysicalBoundariesOctet(MGOctet &oct, bool fcbuf) {
     // outer x1
     int maxlx1 = nrbx1_ << lev;
     if (loc.lx1 == maxlx1-1
-        && mg_mesh_bcs_[BoundaryFace::outer_x1] != BoundaryFlag::periodic) {
+        && mg_mesh_bcs_[BoundaryFace::outer_x1] != BoundaryFlag::periodic
+        && !is_mp(BoundaryFace::outer_x1)) {
       Real sign = (mg_mesh_bcs_[BoundaryFace::outer_x1] == BoundaryFlag::mg_zerofixed)
                   ? -1.0 : 1.0;
       int ie = fcbuf ? ngh : ngh + 1;
@@ -2044,7 +2135,8 @@ void MultigridDriver::ApplyPhysicalBoundariesOctet(MGOctet &oct, bool fcbuf) {
               ref(v, k, j, ie+n+1) = sign * ref(v, k, j, ie-n);
     }
     // inner x2
-    if (loc.lx2 == 0 && mg_mesh_bcs_[BoundaryFace::inner_x2] != BoundaryFlag::periodic) {
+    if (loc.lx2 == 0 && mg_mesh_bcs_[BoundaryFace::inner_x2] != BoundaryFlag::periodic
+        && !is_mp(BoundaryFace::inner_x2)) {
       Real sign = (mg_mesh_bcs_[BoundaryFace::inner_x2] == BoundaryFlag::mg_zerofixed)
                   ? -1.0 : 1.0;
       for (int v = 0; v < nvar_; ++v)
@@ -2056,7 +2148,8 @@ void MultigridDriver::ApplyPhysicalBoundariesOctet(MGOctet &oct, bool fcbuf) {
     // outer x2
     int maxlx2 = nrbx2_ << lev;
     if (loc.lx2 == maxlx2-1
-        && mg_mesh_bcs_[BoundaryFace::outer_x2] != BoundaryFlag::periodic) {
+        && mg_mesh_bcs_[BoundaryFace::outer_x2] != BoundaryFlag::periodic
+        && !is_mp(BoundaryFace::outer_x2)) {
       Real sign = (mg_mesh_bcs_[BoundaryFace::outer_x2] == BoundaryFlag::mg_zerofixed)
                   ? -1.0 : 1.0;
       int je = fcbuf ? ngh : ngh + 1;
@@ -2067,7 +2160,8 @@ void MultigridDriver::ApplyPhysicalBoundariesOctet(MGOctet &oct, bool fcbuf) {
               ref(v, k, je+n+1, i) = sign * ref(v, k, je-n, i);
     }
     // inner x3
-    if (loc.lx3 == 0 && mg_mesh_bcs_[BoundaryFace::inner_x3] != BoundaryFlag::periodic) {
+    if (loc.lx3 == 0 && mg_mesh_bcs_[BoundaryFace::inner_x3] != BoundaryFlag::periodic
+        && !is_mp(BoundaryFace::inner_x3)) {
       Real sign = (mg_mesh_bcs_[BoundaryFace::inner_x3] == BoundaryFlag::mg_zerofixed)
                   ? -1.0 : 1.0;
       for (int v = 0; v < nvar_; ++v)
@@ -2079,7 +2173,8 @@ void MultigridDriver::ApplyPhysicalBoundariesOctet(MGOctet &oct, bool fcbuf) {
     // outer x3
     int maxlx3 = nrbx3_ << lev;
     if (loc.lx3 == maxlx3-1
-        && mg_mesh_bcs_[BoundaryFace::outer_x3] != BoundaryFlag::periodic) {
+        && mg_mesh_bcs_[BoundaryFace::outer_x3] != BoundaryFlag::periodic
+        && !is_mp(BoundaryFace::outer_x3)) {
       Real sign = (mg_mesh_bcs_[BoundaryFace::outer_x3] == BoundaryFlag::mg_zerofixed)
                   ? -1.0 : 1.0;
       int ke = fcbuf ? ngh : ngh + 1;
@@ -2093,9 +2188,13 @@ void MultigridDriver::ApplyPhysicalBoundariesOctet(MGOctet &oct, bool fcbuf) {
 
   if (fcbuf) {
     int nc_cbuf = 1 + 2*ngh;
-    apply_bc(cbuf_.data(), nc_cbuf);
+    Real *data = fold ? cbufold_.data() : cbuf_.data();
+    apply_bc(data, nc_cbuf);
+    apply_mp(data, nc_cbuf);
   } else {
-    apply_bc(oct.u, oct.nc);
+    Real *data = fold ? oct.uold : oct.u;
+    apply_bc(data, oct.nc);
+    apply_mp(data, oct.nc);
   }
 }
 
@@ -2208,7 +2307,9 @@ void MultigridDriver::MGRootBoundary() {
         }
       });
 
-    // Multipole expansion boundaries on device
+    // Multipole expansion boundaries on device. As in Athena++, x2 faces cover every
+    // x1 column and x3 faces every x1 and x2 column, so domain edges and corners
+    // are set.
     if (mporder_ > 0) {
       int ncx = (mgroot_->indcs_.nx1 >> ll);
       int ncy = (mgroot_->indcs_.nx2 >> ll);
@@ -2257,7 +2358,7 @@ void MultigridDriver::MGRootBoundary() {
             Real yf = x2min_v - yo;
             for (int k = ngh; k < ngh + ncz; ++k) {
               Real zv = x3min_v + (k - ngh + 0.5)*dx3 - zo;
-              for (int i = ngh; i < ngh + ncx; ++i) {
+              for (int i = 0; i < ncx + 2*ngh; ++i) {
                 Real xv = x1min_v + (i - ngh + 0.5)*dx1 - xo;
                 Real phis = EvalMultipolePhi(xv, yf, zv, d_mpc.data(), order);
                 for (int n = 0; n < ngh; ++n)
@@ -2269,7 +2370,7 @@ void MultigridDriver::MGRootBoundary() {
             Real yf = x2max_v - yo;
             for (int k = ngh; k < ngh + ncz; ++k) {
               Real zv = x3min_v + (k - ngh + 0.5)*dx3 - zo;
-              for (int i = ngh; i < ngh + ncx; ++i) {
+              for (int i = 0; i < ncx + 2*ngh; ++i) {
                 Real xv = x1min_v + (i - ngh + 0.5)*dx1 - xo;
                 Real phis = EvalMultipolePhi(xv, yf, zv, d_mpc.data(), order);
                 for (int n = 0; n < ngh; ++n)
@@ -2279,9 +2380,9 @@ void MultigridDriver::MGRootBoundary() {
           }
           if (bc_ix3 == BoundaryFlag::mg_multipole) {
             Real zf = x3min_v - zo;
-            for (int j = ngh; j < ngh + ncy; ++j) {
+            for (int j = 0; j < ncy + 2*ngh; ++j) {
               Real yv = x2min_v + (j - ngh + 0.5)*dx2 - yo;
-              for (int i = ngh; i < ngh + ncx; ++i) {
+              for (int i = 0; i < ncx + 2*ngh; ++i) {
                 Real xv = x1min_v + (i - ngh + 0.5)*dx1 - xo;
                 Real phis = EvalMultipolePhi(xv, yv, zf, d_mpc.data(), order);
                 for (int n = 0; n < ngh; ++n)
@@ -2291,9 +2392,9 @@ void MultigridDriver::MGRootBoundary() {
           }
           if (bc_ox3 == BoundaryFlag::mg_multipole) {
             Real zf = x3max_v - zo;
-            for (int j = ngh; j < ngh + ncy; ++j) {
+            for (int j = 0; j < ncy + 2*ngh; ++j) {
               Real yv = x2min_v + (j - ngh + 0.5)*dx2 - yo;
-              for (int i = ngh; i < ngh + ncx; ++i) {
+              for (int i = 0; i < ncx + 2*ngh; ++i) {
                 Real xv = x1min_v + (i - ngh + 0.5)*dx1 - xo;
                 Real phis = EvalMultipolePhi(xv, yv, zf, d_mpc.data(), order);
                 for (int n = 0; n < ngh; ++n)
@@ -2422,7 +2523,7 @@ void MultigridDriver::MGRootBoundary() {
         Real y = x2min_v - yo_v;
         for (int k = ngh; k < ngh + ncz; ++k) {
           Real z = x3min_v + (k - ngh + 0.5)*dx3 - zo_v;
-          for (int i = ngh; i < ngh + ncx; ++i) {
+          for (int i = 0; i < ncx + 2*ngh; ++i) {
             Real x = x1min_v + (i - ngh + 0.5)*dx1 - xo;
             Real phis = eval_phi(x, y, z);
             for (int n = 0; n < ngh; ++n)
@@ -2434,7 +2535,7 @@ void MultigridDriver::MGRootBoundary() {
         Real y = x2max_v - yo_v;
         for (int k = ngh; k < ngh + ncz; ++k) {
           Real z = x3min_v + (k - ngh + 0.5)*dx3 - zo_v;
-          for (int i = ngh; i < ngh + ncx; ++i) {
+          for (int i = 0; i < ncx + 2*ngh; ++i) {
             Real x = x1min_v + (i - ngh + 0.5)*dx1 - xo;
             Real phis = eval_phi(x, y, z);
             for (int n = 0; n < ngh; ++n)
@@ -2444,9 +2545,9 @@ void MultigridDriver::MGRootBoundary() {
       }
       if (bc_ix3 == BoundaryFlag::mg_multipole) {
         Real z = x3min_v - zo_v;
-        for (int j = ngh; j < ngh + ncy; ++j) {
+        for (int j = 0; j < ncy + 2*ngh; ++j) {
           Real y = x2min_v + (j - ngh + 0.5)*dx2 - yo_v;
-          for (int i = ngh; i < ngh + ncx; ++i) {
+          for (int i = 0; i < ncx + 2*ngh; ++i) {
             Real x = x1min_v + (i - ngh + 0.5)*dx1 - xo;
             Real phis = eval_phi(x, y, z);
             for (int n = 0; n < ngh; ++n)
@@ -2456,9 +2557,9 @@ void MultigridDriver::MGRootBoundary() {
       }
       if (bc_ox3 == BoundaryFlag::mg_multipole) {
         Real z = x3max_v - zo_v;
-        for (int j = ngh; j < ngh + ncy; ++j) {
+        for (int j = 0; j < ncy + 2*ngh; ++j) {
           Real y = x2min_v + (j - ngh + 0.5)*dx2 - yo_v;
-          for (int i = ngh; i < ngh + ncx; ++i) {
+          for (int i = 0; i < ncx + 2*ngh; ++i) {
             Real x = x1min_v + (i - ngh + 0.5)*dx1 - xo;
             Real phis = eval_phi(x, y, z);
             for (int n = 0; n < ngh; ++n)
