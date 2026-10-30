@@ -59,6 +59,7 @@ iso_sound_speed = 1.0
 <gravity>
 four_pi_G = 1.0
 threshold = -1
+rel_threshold = -1   # >= 0: stop at max(threshold, rel_threshold * RMS(source))
 niteration = 5
 npresmooth = 2
 npostsmooth = 2

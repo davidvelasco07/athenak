@@ -40,7 +40,12 @@ MGGravityDriver::MGGravityDriver(MeshBlockPack *pmbp, ParameterInput *pin)
     : MultigridDriver(pmbp, 1) {
     four_pi_G_ = pin->GetOrAddReal("gravity", "four_pi_G", -1.0);
     omega_ = pin->GetOrAddReal("gravity", "omega", 1.15);
+    // Iterate until the defect, the volume-weighted RMS of src - L phi over the finest
+    // level, is <= max(threshold, rel_threshold * RMS(src)). rel_threshold makes the
+    // target independent of the source amplitude and the mesh; a V-cycle reduces the
+    // defect by about 14 orders from a cold start before round-off stops it.
     eps_ = pin->GetOrAddReal("gravity", "threshold", -1.0);
+    eps_rel_ = pin->GetOrAddReal("gravity", "rel_threshold", -1.0);
     niter_ = pin->GetOrAddInteger("gravity", "niteration", -1);
     npresmooth_ = pin->GetOrAddReal("gravity", "npresmooth", npresmooth_);
     npostsmooth_ = pin->GetOrAddReal("gravity", "npostsmooth", npostsmooth_);
@@ -49,9 +54,9 @@ MGGravityDriver::MGGravityDriver(MeshBlockPack *pmbp, ParameterInput *pin)
     fshowdef_ = pin->GetOrAddInteger("gravity", "show_defect", 0);
     mg_verbose_ = pin->GetOrAddInteger("gravity", "mg_verbose", 0);
     fsubtract_average_ = pin->GetOrAddBoolean("gravity", "subtract_average", true);
-    if (eps_ < 0.0 && niter_ < 0) {
+    if (eps_ < 0.0 && eps_rel_ < 0.0 && niter_ < 0) {
         std::cout<< "### FATAL ERROR in MGGravityDriver::MGGravityDriver" << std::endl
-        << "Either \"threshold\" or \"niteration\" parameter must be set "
+        << "One of \"threshold\", \"rel_threshold\" or \"niteration\" must be set "
         << "in the <gravity> block." << std::endl
         << "When both parameters are specified, \"niteration\" is ignored." << std::endl
         << "Set \"threshold = 0.0\" for automatic convergence control." << std::endl;

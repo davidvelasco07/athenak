@@ -495,6 +495,7 @@ class MultigridDriver {
   int amr_seq_;  // tracks cumulative AMR events to detect mesh changes
   Real last_ave_;
   Real eps_;
+  Real eps_rel_ = -1.0;  // stop when defect <= rel_threshold * RMS(source) (if >= 0)
   int niter_, npresmooth_, npostsmooth_;
   int os_, oe_;
   int coffset_;

@@ -734,7 +734,7 @@ void MultigridDriver::SolveVCycle(Driver *pdriver, int npresmooth, int npostsmoo
 //! \brief Multigrid (MG) solve using V-cycles
 
 void MultigridDriver::SolveMG(Driver *pdriver) {
-  if (eps_ >= 0.0) {
+  if (eps_ >= 0.0 || eps_rel_ >= 0.0) {
     SolveIterative(pdriver);
   } else {
     SolveIterativeFixedTimes(pdriver);
@@ -795,15 +795,22 @@ void MultigridDriver::SolveFMGCoarser() {
 //! \brief Solve iteratively until defect norm drops below eps_
 
 void MultigridDriver::SolveIterative(Driver *pdriver) {
+  // target = max(threshold, rel_threshold * RMS(source)); a negative parameter is unused
+  Real target = std::max(eps_, static_cast<Real>(0.0));
+  if (eps_rel_ >= 0.0) {
+    Real srcnorm = CalculateSourceNorm(MGNormType::l2, 0);
+    target = std::max(target, eps_rel_ * srcnorm);
+  }
   Real def = 0.0;
   for (int v = 0; v < nvar_; ++v) {
     def += CalculateDefectNorm(MGNormType::l2, v);
   }
   if (fshowdef_ >= 2 && global_variable::my_rank == 0) {
-    std::cout << "MG initial defect = " << def << std::endl;
+    std::cout << "MG initial defect = " << def << " (target " << target << ")"
+              << std::endl;
   }
   int n = 0;
-  while (def > eps_) {
+  while (def > target) {
     SolveVCycle(pdriver, npresmooth_, npostsmooth_);
     Real olddef = def;
     def = 0.0;
@@ -814,7 +821,7 @@ void MultigridDriver::SolveIterative(Driver *pdriver) {
       std::cout << "MG iteration " << n << ": defect = " << def << std::endl;
     }
     if (def/olddef > 0.9) {
-      if (eps_ == 0.0) break;
+      if (target == 0.0) break;
       if (fshowdef_ >= 1 && global_variable::my_rank == 0) {
         std::cout << "### WARNING in MultigridDriver::SolveIterative" << std::endl
                   << "Slow convergence: defect ratio = " << def/olddef << std::endl;
@@ -825,7 +832,7 @@ void MultigridDriver::SolveIterative(Driver *pdriver) {
       if (global_variable::my_rank == 0) {
         std::cout << "### FATAL ERROR in MultigridDriver::SolveIterative" << std::endl
                   << "Failed to converge after " << n << " iterations (defect = "
-                  << def << ", threshold = " << eps_ << ")" << std::endl;
+                  << def << ", target = " << target << ")" << std::endl;
       }
       pdriver->nlim = pmy_mesh_->ncycle;
       break;
