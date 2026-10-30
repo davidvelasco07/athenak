@@ -321,3 +321,17 @@ def assert_defect_consistency(defects: List[float], max_spread: float,
             f"{label}Defect spread {spread:.2f} orders exceeds threshold "
             f"{max_spread}. Values: {[f'{d:.3e}' for d in defects]}"
         )
+
+
+def weighted_threshold(threshold: float, ncells: int, volume: float = 1.0) -> float:
+    """Express a threshold tuned for the old, unweighted defect norm in the
+    volume-weighted norm the solver now reports.
+
+    The solver used to report sqrt(sum def^2 / V), with every cell counted alike; it now
+    reports the volume-weighted RMS sqrt(sum def^2 dV / V), as Athena++ does. The two
+    differ by the square root of the mean cell volume, V / ncells, so the scaled threshold
+    stops a solve at the same V-cycle as before on a uniform mesh. The SMR tests pass
+    their effective finest resolution, the uniform mesh they are compared with; they
+    need the same V-cycles as before or one more.
+    """
+    return threshold * (volume / ncells) ** 0.5

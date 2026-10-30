@@ -225,6 +225,8 @@ class Multigrid {
   void CalculateMatrixPack(Real dt);
   void SetFromRootGrid(bool folddata);
   Real CalculateDefectNorm(MGNormType nrm, int n);
+  Real CalculateSourceNorm(MGNormType nrm, int n);
+  Real LevelNorm(DualArray5D<Real> &arr, MGNormType nrm, int n);
   Real CalculateAverage(MGVariable type);
   Real CalculateTotal(MGVariable type, int n);
   void SubtractAverage(MGVariable type, int n, Real ave);
@@ -467,6 +469,8 @@ class MultigridDriver {
 
   virtual void SolveCoarsestGrid();
   Real CalculateDefectNorm(MGNormType nrm, int n);
+  Real CalculateSourceNorm(MGNormType nrm, int n);
+  Real GlobalNorm(Real local, MGNormType nrm);
   void CalculateMatrix(Real dt);
   Multigrid* FindMultigrid(int tgid);
   // container to hold names of TaskIDs

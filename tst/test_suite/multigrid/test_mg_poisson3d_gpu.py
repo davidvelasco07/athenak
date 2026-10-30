@@ -10,6 +10,7 @@ show_defect modes: 1 = final only, 2 = per-iteration (initial + each V-cycle).
 from test_suite.multigrid.mg_utils import (
     run_athenak, assert_solver_convergence,
     parse_final_defect, assert_defect_consistency, cleanup,
+    weighted_threshold,
 )
 
 threshold = 1E-8
@@ -24,7 +25,7 @@ def _selfgravity_flags_gpu(res, mb=None, soe="hydro"):
         f"meshblock/nx1={mb}", f"meshblock/nx2={mb}", f"meshblock/nx3={mb}",
         "time/nlim=1",
         "gravity/show_defect=2",
-        f"gravity/threshold={threshold}",
+        f"gravity/threshold={weighted_threshold(threshold, res**3)}",
         "gravity/npresmooth=2",
         "gravity/npostsmooth=2",
         "gravity/full_multigrid=true",
@@ -40,7 +41,7 @@ def test_selfgravity_uniform_hydro_gpu():
         )
         assert results[0], "Selfgravity hydro GPU run failed"
         assert_solver_convergence(
-            results[1], threshold, max_iterations=10,
+            results[1], weighted_threshold(threshold, 64**3), max_iterations=10,
             max_avg_ratio=0.07, label="selfgravity_uniform_hydro_gpu: ")
     finally:
         cleanup()
@@ -55,7 +56,7 @@ def test_selfgravity_uniform_mhd_gpu():
         )
         assert results[0], "Selfgravity MHD GPU run failed"
         assert_solver_convergence(
-            results[1], threshold, max_iterations=10,
+            results[1], weighted_threshold(threshold, 64**3), max_iterations=10,
             max_avg_ratio=0.07, label="selfgravity_uniform_mhd_gpu: ")
     finally:
         cleanup()

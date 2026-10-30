@@ -906,15 +906,26 @@ void MultigridDriver::SolveCoarsestGrid() {
 //! \brief calculate the defect norm
 
 Real MultigridDriver::CalculateDefectNorm(MGNormType nrm, int n) {
-  Real norm = 0.0;
-  if (mglevels_ != nullptr) {
-    Real mg_norm = mglevels_->CalculateDefectNorm(nrm, n);
-    if (nrm == MGNormType::max) {
-      norm = std::max(norm, mg_norm);
-    } else {
-      norm += mg_norm;
-    }
-  }
+  Real norm = (mglevels_ != nullptr) ? mglevels_->CalculateDefectNorm(nrm, n) : 0.0;
+  return GlobalNorm(norm, nrm);
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn Real MultigridDriver::CalculateSourceNorm(MGNormType nrm, int n)
+//! \brief the norm of the source on the finest level, with the same weighting
+
+Real MultigridDriver::CalculateSourceNorm(MGNormType nrm, int n) {
+  Real norm = (mglevels_ != nullptr) ? mglevels_->CalculateSourceNorm(nrm, n) : 0.0;
+  return GlobalNorm(norm, nrm);
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn Real MultigridDriver::GlobalNorm(Real local, MGNormType nrm)
+//! \brief Reduce a rank-local norm over all ranks. l1 and l2 sums are volume-weighted, so
+//! dividing by the domain volume gives the mean |a| (l1) and the root mean square (l2).
+
+Real MultigridDriver::GlobalNorm(Real local, MGNormType nrm) {
+  Real norm = local;
   #if MPI_PARALLEL_ENABLED
   Real global_norm = 0.0;
   if (nrm == MGNormType::max) {

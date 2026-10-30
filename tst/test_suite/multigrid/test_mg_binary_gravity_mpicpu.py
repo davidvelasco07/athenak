@@ -18,13 +18,15 @@ import pytest
 from test_suite.multigrid.mg_utils import (
     run_athenak, assert_solver_convergence,
     parse_final_defect, assert_defect_consistency, cleanup,
+    weighted_threshold,
 )
 
 threshold = 1E-10
 
+NCELLS_SMR = 32**3  # SMR test mesh at its effective finest resolution, 32^3
+
 _GRAVITY_FLAGS = [
     "time/nlim=1",
-    f"gravity/threshold={threshold}",
     "gravity/npresmooth=2",
     "gravity/npostsmooth=2",
     "gravity/full_multigrid=true",
@@ -48,11 +50,13 @@ def test_binary_gravity_uniform_mpicpu():
                 "meshblock/nx1=16", "meshblock/nx2=16", "meshblock/nx3=16",
                 "mesh_refinement/refinement=none",
                 "gravity/show_defect=2",
+                f"gravity/threshold={weighted_threshold(threshold, 32**3)}",
             ] + _GRAVITY_FLAGS,
             mpi=True, threads=4,
         )
         assert results[0], "Binary gravity uniform MPI run failed"
-        assert_solver_convergence(results[1], threshold, max_iterations=9,
+        assert_solver_convergence(results[1], weighted_threshold(threshold, 32**3),
+                                  max_iterations=9,
                                   max_avg_ratio=0.05,
                                   label="binary_gravity_uniform_mpicpu: ")
         d = parse_final_defect(results[1])
@@ -74,11 +78,13 @@ def test_binary_gravity_smr_mpicpu():
                 "refined_region3/level=1",
                 "refined_region4/level=1",
                 "gravity/show_defect=2",
+                f"gravity/threshold={weighted_threshold(threshold, NCELLS_SMR)}",
             ] + _GRAVITY_FLAGS,
             mpi=True, threads=4,
         )
         assert results[0], "Binary gravity SMR MPI run failed"
-        assert_solver_convergence(results[1], threshold, max_iterations=9,
+        assert_solver_convergence(results[1], weighted_threshold(threshold, NCELLS_SMR),
+                                  max_iterations=9,
                                   max_avg_ratio=0.05,
                                   label="binary_gravity_smr_mpicpu: ")
         d = parse_final_defect(results[1])

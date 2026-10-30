@@ -11,6 +11,7 @@ import pytest
 from test_suite.multigrid.mg_utils import (
     run_athenak, assert_solver_convergence,
     parse_final_defect, assert_defect_consistency, cleanup,
+    weighted_threshold,
 )
 
 threshold = 1E-9
@@ -24,7 +25,7 @@ def _selfgravity_flags_mpi(res, nsmooth, fmg, mb=None):
         f"mesh/nx1={res}", f"mesh/nx2={res}", f"mesh/nx3={res}",
         f"meshblock/nx1={mb}", f"meshblock/nx2={mb}", f"meshblock/nx3={mb}",
         "time/nlim=1",
-        f"gravity/threshold={threshold}",
+        f"gravity/threshold={weighted_threshold(threshold, res**3)}",
         f"gravity/npresmooth={nsmooth}",
         f"gravity/npostsmooth={nsmooth}",
         f"gravity/full_multigrid={fmg}",
@@ -47,7 +48,7 @@ def test_selfgravity_uniform_hydro_mpicpu(nsmooth, method):
         )
         assert results[0], "Selfgravity hydro MPI run failed"
         assert_solver_convergence(
-            results[1], threshold, max_iterations=7,
+            results[1], weighted_threshold(threshold, 64**3), max_iterations=7,
             max_avg_ratio=0.14, label="selfgravity_uniform_hydro_mpipu: ")
     finally:
         cleanup()

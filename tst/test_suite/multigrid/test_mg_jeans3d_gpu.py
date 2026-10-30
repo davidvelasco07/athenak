@@ -20,7 +20,12 @@ import pytest
 from test_suite.multigrid.mg_utils import (
     run_athenak, assert_jeans_growth_rate, assert_solver_convergence,
     parse_jeans_omega, parse_amr_block_counts, cleanup,
+    weighted_threshold,
 )
+
+# threshold 1e-8 of the old, unweighted norm on the iterative-solve mesh
+# (nx1 x nx1/2 x nx1/2 cells in a 1 x 0.5 x 0.5 box), in the volume-weighted norm
+ITERATIVE_THRESHOLD = weighted_threshold(1.0e-8, 64 * 32**2, volume=0.25)
 
 input_file = "inputs/jeans_wave.athinput"
 
@@ -79,7 +84,7 @@ def test_jeans_solve_iterative_gpu():
                 "time/cfl_number=0.3",
                 "problem/n_jeans=2.0",
                 "problem/amp=1.0e-6",
-                "gravity/threshold=1.0e-8",
+                f"gravity/threshold={ITERATIVE_THRESHOLD}",
                 "gravity/niteration=-1",
                 "gravity/npresmooth=1",
                 "gravity/npostsmooth=1",
@@ -90,7 +95,7 @@ def test_jeans_solve_iterative_gpu():
         assert results[0], "SolveIterative Jeans GPU run failed"
         assert_solver_convergence(
             results[1],
-            threshold=1.0e-8,
+            threshold=ITERATIVE_THRESHOLD,
             max_iterations=6,
             max_avg_ratio=0.11,
             label="jeans_solve_iterative_gpu: ",

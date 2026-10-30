@@ -20,12 +20,14 @@ from test_suite.multigrid.mg_utils import (
     parse_final_defect,
     assert_defect_consistency,
     cleanup,
+    weighted_threshold,
 )
 threshold = 4E-9
 
+NCELLS_SMR = 128**3  # SMR test mesh at its effective finest resolution, 128^3
+
 _GRAVITY_FLAGS = [
     "time/nlim=1",
-    f"gravity/threshold={threshold}",
     "gravity/niteration=-1",
     "gravity/npresmooth=2",
     "gravity/npostsmooth=2",
@@ -52,10 +54,12 @@ def test_binary_gravity_uniform_gpu(res, rg):
                 f"meshblock/nx3={res//rg}",
                 "mesh_refinement/refinement=none",
                 "gravity/show_defect=2",
+                f"gravity/threshold={weighted_threshold(threshold, res**3)}",
             ] + _GRAVITY_FLAGS,
         )
         assert results[0], "Binary gravity uniform GPU run failed"
-        assert_solver_convergence(results[1], threshold, max_iterations=10,
+        assert_solver_convergence(results[1], weighted_threshold(threshold, res**3),
+                                  max_iterations=10,
                                   max_avg_ratio=0.0625,
                                   label="binary_gravity_uniform_gpu: ")
         d = parse_final_defect(results[1])
@@ -80,10 +84,12 @@ def test_binary_gravity_smr_gpu(res, rg):
                 "refined_region3/level=2",
                 "refined_region4/level=2",
                 "gravity/show_defect=2",
+                f"gravity/threshold={weighted_threshold(threshold, NCELLS_SMR)}",
             ] + _GRAVITY_FLAGS,
         )
         assert results[0], "Binary gravity SMR GPU run failed"
-        assert_solver_convergence(results[1], threshold, max_iterations=16,
+        assert_solver_convergence(results[1], weighted_threshold(threshold, NCELLS_SMR),
+                                  max_iterations=16,
                                   max_avg_ratio=0.18,
                                   label="binary_gravity_smr_gpu: ")
         d = parse_final_defect(results[1])

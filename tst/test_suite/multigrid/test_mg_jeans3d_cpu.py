@@ -14,7 +14,12 @@ import pytest
 
 from test_suite.multigrid.mg_utils import (
     run_athenak, assert_jeans_growth_rate, assert_solver_convergence, cleanup,
+    weighted_threshold,
 )
+
+# threshold 1e-8 of the old, unweighted norm on the iterative-solve mesh
+# (nx1 x nx1/2 x nx1/2 cells in a 1 x 0.5 x 0.5 box), in the volume-weighted norm
+ITERATIVE_THRESHOLD = weighted_threshold(1.0e-8, 32 * 16**2, volume=0.25)
 
 
 def _growth_rate_flags(res, n_jeans, fmg):
@@ -84,7 +89,7 @@ def test_jeans_solve_iterative_cpu():
                 "time/cfl_number=0.3",
                 "problem/n_jeans=2.0",
                 "problem/amp=1.0e-6",
-                "gravity/threshold=1.0e-8",
+                f"gravity/threshold={ITERATIVE_THRESHOLD}",
                 "gravity/niteration=40",
                 "gravity/npresmooth=2",
                 "gravity/npostsmooth=2",
@@ -96,7 +101,7 @@ def test_jeans_solve_iterative_cpu():
         assert results[0], "SolveIterative Jeans CPU run failed"
         assert_solver_convergence(
             results[1],
-            threshold=1.0e-8,
+            threshold=ITERATIVE_THRESHOLD,
             max_iterations=4,
             max_avg_ratio=0.05,
             label="jeans_solve_iterative_cpu: ",

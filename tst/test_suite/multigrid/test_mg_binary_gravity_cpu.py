@@ -12,12 +12,14 @@ import pytest
 from test_suite.multigrid.mg_utils import (
     assert_solver_convergence, run_athenak,
     parse_final_defect, assert_defect_consistency, cleanup,
+    weighted_threshold,
 )
 threshold = 1E-9
 
+NCELLS_SMR = 64**3  # SMR test mesh at its effective finest resolution, 64^3
+
 _GRAVITY_FLAGS = [
     "time/nlim=1",
-    f"gravity/threshold={threshold}",
     "gravity/niteration=-1",
     "gravity/npresmooth=2",
     "gravity/npostsmooth=2",
@@ -44,12 +46,13 @@ def test_binary_gravity_uniform_cpu(res, rg):
                 f"meshblock/nx3={mb}",
                 "mesh_refinement/refinement=none",
                 "gravity/show_defect=2",
+                f"gravity/threshold={weighted_threshold(threshold, res**3)}",
             ] + _GRAVITY_FLAGS,
         )
         assert results[0], "Binary gravity uniform CPU run failed"
         assert_solver_convergence(
             results[1],
-            threshold,
+            weighted_threshold(threshold, res**3),
             max_iterations=10,
             max_avg_ratio=0.0625,
             label="binary_gravity_uniform_cpu: ",
@@ -76,11 +79,15 @@ def test_binary_gravity_smr_cpu(res, rg):
                 "refined_region3/level=2",
                 "refined_region4/level=2",
                 "gravity/show_defect=2",
+                f"gravity/threshold={weighted_threshold(threshold, NCELLS_SMR)}",
             ] + _GRAVITY_FLAGS,
         )
         assert results[0], "Binary gravity SMR CPU run failed"
-        assert_solver_convergence(results[1], threshold, max_iterations=13,
-                                  max_avg_ratio=0.125,
+        # The volume-weighted norm counts the coarse cells by their volume: this mesh
+        # needs one V-cycle more than with the old norm (14) and averages 0.127.
+        assert_solver_convergence(results[1], weighted_threshold(threshold, NCELLS_SMR),
+                                  max_iterations=14,
+                                  max_avg_ratio=0.13,
                                   label="binary_gravity_smr_cpu: ")
         d = parse_final_defect(results[1])
         if d is not None:
@@ -97,8 +104,12 @@ def test_binary_gravity_defect_consistency_cpu():
     """Final defect should be comparable between uniform 64^3 and 2-level SMR."""
     if "uniform" not in _stored_defects or "smr" not in _stored_defects:
         pytest.skip("Prerequisite tests did not run or failed")
+    # A threshold-stopped solve lands anywhere within one V-cycle's reduction (about
+    # 16x) below the target, so the two final defects need not agree closely; 0.5
+    # orders as in the MPI test (0.11 with the old norm, 0.25 with the volume-weighted
+    # one, both runs below the same target).
     assert_defect_consistency(
         [_stored_defects["uniform"], _stored_defects["smr"]],
-        max_spread=0.16,
+        max_spread=0.5,
         label="binary_gravity_defect_consistency_cpu: ",
     )

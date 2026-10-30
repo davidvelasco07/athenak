@@ -677,83 +677,75 @@ void Multigrid::SetFromRootGrid(bool folddata) {
 
 
 //----------------------------------------------------------------------------------------
+//! \fn Real WeightedNorm(...)
+//! \brief Volume-weighted reduction over the active cells of every MeshBlock of the
+//! pack at one level: sum |a| dV (l1), sum a^2 dV (l2) or max |a| (max). Block m has
+//! cell width brdx(m) 2^ll (cubic cells, as the multigrid stencil assumes), so cells of
+//! refined blocks carry their own, smaller volume.
+
+namespace {
+template <typename ExeSpace, typename ViewType, typename RdxType>
+Real WeightedNorm(const ViewType &a, const RdxType &brdx, MGNormType nrm, int n, int nmb,
+                  int ll, int is, int ie, int js, int je, int ks, int ke) {
+  Real norm = 0.0;
+  const Real fac = static_cast<Real>(1 << ll);
+  auto policy = Kokkos::MDRangePolicy<ExeSpace, Kokkos::Rank<4>>({0, ks, js, is},
+                                                                 {nmb, ke+1, je+1, ie+1});
+  if (nrm == MGNormType::max) {
+    Kokkos::parallel_reduce("MG::Norm_Linf", policy,
+      KOKKOS_LAMBDA(const int m, const int k, const int j, const int i, Real &lmax) {
+        lmax = Kokkos::fmax(lmax, Kokkos::fabs(a(m, n, k, j, i)));
+      }, Kokkos::Max<Real>(norm));
+  } else if (nrm == MGNormType::l1) {
+    Kokkos::parallel_reduce("MG::Norm_L1", policy,
+      KOKKOS_LAMBDA(const int m, const int k, const int j, const int i, Real &lsum) {
+        Real dx = brdx(m) * fac;
+        lsum += Kokkos::fabs(a(m, n, k, j, i)) * dx * dx * dx;
+      }, Kokkos::Sum<Real>(norm));
+  } else {
+    Kokkos::parallel_reduce("MG::Norm_L2", policy,
+      KOKKOS_LAMBDA(const int m, const int k, const int j, const int i, Real &lsum) {
+        Real dx = brdx(m) * fac;
+        Real val = a(m, n, k, j, i);
+        lsum += val * val * dx * dx * dx;
+      }, Kokkos::Sum<Real>(norm));
+  }
+  return norm;
+}
+}  // namespace
+
+//----------------------------------------------------------------------------------------
 //! \fn Real Multigrid::CalculateDefectNorm(MGNormType nrm, int n)
-//! \brief calculate the residual norm
+//! \brief Rank-local part of the defect norm at the current level: the volume-weighted
+//! sum (l1, l2) or the maximum (max). MultigridDriver::CalculateDefectNorm reduces it
+//! over ranks and divides by the domain volume, as in Athena++.
 
 Real Multigrid::CalculateDefectNorm(MGNormType nrm, int n) {
-  int ll=nlevel_-1-current_level_;
-  int is, ie, js, je, ks, ke;
-  is=js=ks=ngh_;
-  ie=is+(indcs_.nx1>>ll)-1, je=js+(indcs_.nx2>>ll)-1, ke=ks+(indcs_.nx3>>ll)-1;
-  Real dx = rdx_ * static_cast<Real>(1 << ll);
-  Real dy = rdy_ * static_cast<Real>(1 << ll);
-  Real dz = rdz_ * static_cast<Real>(1 << ll);
-  Real dV = dx * dy * dz;
   CalculateDefectPack();
-
-  Real norm = 0.0;
-
-  if (on_host_) {
-    auto &def = def_[current_level_].h_view;
-    if (nrm == MGNormType::max) {
-      Kokkos::parallel_reduce("MG::DefectNorm_Linf",
-        Kokkos::MDRangePolicy<HostExeSpace, Kokkos::Rank<5>>(
-            {0, n, ks, js, is}, {nmmb_, n+1, ke+1, je+1, ie+1}),
-        KOKKOS_LAMBDA(const int m, const int v, const int k, const int j,
-                       const int i, Real &local_max) {
-          local_max = std::max(local_max, std::abs(def(m, v, k, j, i)));
-        }, Kokkos::Max<Real>(norm));
-      return norm;
-    } else if (nrm == MGNormType::l1) {
-      Kokkos::parallel_reduce("MG::DefectNorm_L1",
-        Kokkos::MDRangePolicy<HostExeSpace, Kokkos::Rank<5>>(
-            {0, n, ks, js, is}, {nmmb_, n+1, ke+1, je+1, ie+1}),
-        KOKKOS_LAMBDA(const int m, const int v, const int k, const int j,
-                       const int i, Real &local_sum) {
-          local_sum += std::abs(def(m, v, k, j, i));
-        }, Kokkos::Sum<Real>(norm));
-    } else {
-      Kokkos::parallel_reduce("MG::DefectNorm_L2",
-        Kokkos::MDRangePolicy<HostExeSpace, Kokkos::Rank<5>>(
-            {0, n, ks, js, is}, {nmmb_, n+1, ke+1, je+1, ie+1}),
-        KOKKOS_LAMBDA(const int m, const int v, const int k, const int j,
-                       const int i, Real &local_sum) {
-          Real val = def(m, v, k, j, i);
-          local_sum += val * val;
-        }, Kokkos::Sum<Real>(norm));
-    }
-  } else {
-    auto &def = def_[current_level_].d_view;
-    if (nrm == MGNormType::max) {
-      Kokkos::parallel_reduce("MG::DefectNorm_Linf",
-        Kokkos::MDRangePolicy<DevExeSpace, Kokkos::Rank<5>>(
-            {0, n, ks, js, is}, {nmmb_, n+1, ke+1, je+1, ie+1}),
-        KOKKOS_LAMBDA(const int m, const int v, const int k, const int j,
-                       const int i, Real &local_max) {
-          local_max = std::max(local_max, std::abs(def(m, v, k, j, i)));
-        }, Kokkos::Max<Real>(norm));
-      return norm;
-    } else if (nrm == MGNormType::l1) {
-      Kokkos::parallel_reduce("MG::DefectNorm_L1",
-        Kokkos::MDRangePolicy<DevExeSpace, Kokkos::Rank<5>>(
-            {0, n, ks, js, is}, {nmmb_, n+1, ke+1, je+1, ie+1}),
-        KOKKOS_LAMBDA(const int m, const int v, const int k, const int j,
-                       const int i, Real &local_sum) {
-          local_sum += std::abs(def(m, v, k, j, i));
-        }, Kokkos::Sum<Real>(norm));
-    } else {
-      Kokkos::parallel_reduce("MG::DefectNorm_L2",
-        Kokkos::MDRangePolicy<DevExeSpace, Kokkos::Rank<5>>(
-            {0, n, ks, js, is}, {nmmb_, n+1, ke+1, je+1, ie+1}),
-        KOKKOS_LAMBDA(const int m, const int v, const int k, const int j,
-                       const int i, Real &local_sum) {
-          Real val = def(m, v, k, j, i);
-          local_sum += val * val;
-        }, Kokkos::Sum<Real>(norm));
-    }
-  }
-  norm *= defscale_;
+  Real norm = LevelNorm(def_[current_level_], nrm, n);
+  if (nrm != MGNormType::max) norm *= defscale_;
   return norm;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn Real Multigrid::CalculateSourceNorm(MGNormType nrm, int n)
+//! \brief Rank-local part of the source norm at the current level (same weighting).
+
+Real Multigrid::CalculateSourceNorm(MGNormType nrm, int n) {
+  return LevelNorm(src_[current_level_], nrm, n);
+}
+
+Real Multigrid::LevelNorm(DualArray5D<Real> &arr, MGNormType nrm, int n) {
+  int ll = nlevel_ - 1 - current_level_;
+  int is = ngh_, ie = is + (indcs_.nx1 >> ll) - 1;
+  int js = ngh_, je = js + (indcs_.nx2 >> ll) - 1;
+  int ks = ngh_, ke = ks + (indcs_.nx3 >> ll) - 1;
+  if (on_host_) {
+    return WeightedNorm<HostExeSpace>(arr.h_view, block_rdx_.h_view, nrm, n, nmmb_, ll,
+                                      is, ie, js, je, ks, ke);
+  }
+  return WeightedNorm<DevExeSpace>(arr.d_view, block_rdx_.d_view, nrm, n, nmmb_, ll,
+                                   is, ie, js, je, ks, ke);
 }
 
 //----------------------------------------------------------------------------------------
