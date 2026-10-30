@@ -1459,6 +1459,63 @@ TaskStatus MultigridBoundaryValues::ProlongateFCMG(DvceArray5D<Real> &u) {
           }
         }
       });
+      tmember.team_barrier();
+
+      // Edge and corner ghosts on the parent's interior side of a coarser face (or edge)
+      // neighbor. A coarser edge/corner neighbor is listed only on the exterior of the
+      // parent; on the interior side the region belongs to the coarser face (edge)
+      // neighbor, whose message already carries those coarse cells (the receive range is
+      // extended by ngh toward the parent interior). The 7-point smoother never reads
+      // these ghosts, but the trilinear prolongation of the correction and the FMG
+      // prolongation do, so inject them like the exterior edges and corners above. One
+      // thread per direction: each writes its own ghost region, read only from
+      // coarse_buf_, and only for directions without a neighbor slot of their own.
+      Kokkos::parallel_for(Kokkos::TeamThreadRange(tmember, 27), [&](const int d) {
+        const int ox1 = d % 3 - 1, ox2 = (d / 3) % 3 - 1, ox3 = d / 9 - 1;
+        const int child[3] = {child_x, child_y, child_z};
+        const int o[3] = {ox1, ox2, ox3};
+        int nface = (ox1!=0?1:0) + (ox2!=0?1:0) + (ox3!=0?1:0);
+        if (nface < 2) return;
+        if (nghbr_d(m, NeighborIndex(ox1, ox2, ox3, 0, 0)).gid >= 0) return;
+        if (nface == 2 && nghbr_d(m, NeighborIndex(ox1, ox2, ox3, 1, 0)).gid >= 0) return;
+        // drop the offsets that point into the parent (child 0 -> +1, child 1 -> -1)
+        int r[3];
+        for (int q = 0; q < 3; ++q) r[q] = (o[q] == 1 - 2*child[q]) ? 0 : o[q];
+        int nr = (r[0]!=0?1:0) + (r[1]!=0?1:0) + (r[2]!=0?1:0);
+        if (nr == 0 || nr == nface) return;
+        // slot of a coarser neighbor in direction r (see MeshBlock::SetNeighbors)
+        int fa, fb = 0;
+        if (nr == 1) {
+          fa = (r[0] != 0) ? child[1] : child[0];
+          fb = (r[2] != 0) ? child[1] : child[2];
+        } else {
+          fa = (r[2] == 0) ? child[2] : (r[1] == 0) ? child[1] : child[0];
+        }
+        int n = NeighborIndex(r[0], r[1], r[2], fa, fb);
+        if (nghbr_d(m, n).gid < 0 || nghbr_d(m, n).lev >= m_lev) return;
+
+        int gis = (ox1 < 0) ? 0 : (ox1 > 0) ? ngh_l + ncells_l : ngh_l;
+        int gjs = (ox2 < 0) ? 0 : (ox2 > 0) ? ngh_l + ncells_l : ngh_l;
+        int gks = (ox3 < 0) ? 0 : (ox3 > 0) ? ngh_l + ncells_l : ngh_l;
+        int gie = (ox1 == 0) ? ngh_l + ncells_l - 1 : gis + ngh_l - 1;
+        int gje = (ox2 == 0) ? ngh_l + ncells_l - 1 : gjs + ngh_l - 1;
+        int gke = (ox3 == 0) ? ngh_l + ncells_l - 1 : gks + ngh_l - 1;
+        for (int v = 0; v < nvar_l; ++v) {
+          for (int gk = gks; gk <= gke; ++gk) {
+            for (int gj = gjs; gj <= gje; ++gj) {
+              for (int gi = gis; gi <= gie; ++gi) {
+                int ci = (ox1 < 0) ? ngh_l - 1 : (ox1 > 0) ? ngh_l + half
+                                                           : ngh_l + (gi - ngh_l)/2;
+                int cj = (ox2 < 0) ? ngh_l - 1 : (ox2 > 0) ? ngh_l + half
+                                                           : ngh_l + (gj - ngh_l)/2;
+                int ck = (ox3 < 0) ? ngh_l - 1 : (ox3 > 0) ? ngh_l + half
+                                                           : ngh_l + (gk - ngh_l)/2;
+                u(m, v, gk, gj, gi) = cbuf(m, v, ck, cj, ci);
+              }
+            }
+          }
+        }
+      });
   });
 
   return TaskStatus::complete;
