@@ -424,6 +424,15 @@ class IdealGRMHD : public EquationOfState {
                   const bool only_testfloors,
                   const int il, const int iu, const int jl, const int ju,
                   const int kl, const int ku) override;
+  // Optional scratch output for MOOD: recover the trial velocity while testing PAD.
+  // Uses the supplied candidate cell-centered B; never changes cons, prim or bcc
+  // when only_testfloors=true. An empty view preserves the original interface.
+  void ConsToPrim(DvceArray5D<Real> &cons, const DvceFaceFld4D<Real> &b,
+                  DvceArray5D<Real> &prim, DvceArray5D<Real> &bcc,
+                  const bool only_testfloors,
+                  const int il, const int iu, const int jl, const int ju,
+                  const int kl, const int ku,
+                  const DvceArray5D<Real> &trial_velocity);
   void PrimToCons(const DvceArray5D<Real> &prim, const DvceArray5D<Real> &bcc,
                   DvceArray5D<Real> &cons, const int il, const int iu,
                   const int jl, const int ju, const int kl, const int ku) override;

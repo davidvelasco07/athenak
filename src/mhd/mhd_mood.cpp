@@ -160,6 +160,8 @@ enum MoodCellStatus : int { ST_SKIP = 0, ST_DANGER = 1, ST_NONAD = 2, ST_TEST = 
 
 struct MoodNadPassCtx {
   DvceArray5D<Real> utest_, bcctest_, ueq_, weq_, bcceq_, w0_, bcc0_, wnad_, u0_, bnad_;
+  DvceArray5D<Real> trial_velocity_;
+  bool gr_velocity;
   DvceArray5D<Real> bmn, bmx;
   DvceArray4D<Real> btpad1, btpad2, btpad3, beq1, beq2, beq3, bmag_;
   DvceArray4D<bool> fofc_, touched_;
@@ -308,8 +310,14 @@ struct MoodNadPassCtx {
       // candidate value of the checked variable
       Real q_new;
       if (vpass) {
-        // candidate velocity from the trial conserved state (newtonian: mom/rho)
-        if (nad_vmag) {
+        // GR S_i/D is not the stored primitive velocity. Use the primitive
+        // recovered from this same U*, B* and metric by the PAD conversion.
+        if (gr_velocity) {
+          q_new = nad_vmag ? sqrt(SQR(trial_velocity_(m,0,k,j,i)) +
+                                  SQR(trial_velocity_(m,1,k,j,i)) +
+                                  SQR(trial_velocity_(m,2,k,j,i)))
+                           : trial_velocity_(m,vidx,k,j,i);
+        } else if (nad_vmag) {
           q_new = sqrt(SQR(utest_(m,IM1,k,j,i)) + SQR(utest_(m,IM2,k,j,i))
                      + SQR(utest_(m,IM3,k,j,i))) / dtst;
         } else {
@@ -524,6 +532,13 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
   const int ntest = (nad_scalars) ? nvars : nmhd_;
   const bool nad_bmag = (mood_nad_b == 0);
   const bool nad_von = (mood_nad_v > 0);      // velocity in NAD
+  auto *gr_eos = dynamic_cast<IdealGRMHD*>(peos);
+  const bool gr_velocity = nad_von && (gr_eos != nullptr);
+  DvceArray5D<Real> trial_velocity;
+  if (gr_velocity) {
+    trial_velocity = DvceArray5D<Real>("mmood_gr_velocity", nmb, 3,
+                                     ncells3, ncells2, ncells1);
+  }
   const bool nad_vmag = (mood_nad_v == 1);    // |v| (else components)
   const int n_fb = n_fb_tiers;
   const int nrevs = mood_max_revs;
@@ -1181,6 +1196,9 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
     peos->use_c2p_mask = masked;
     if (wb) {
       peos->ConsToPrimWB(utest_, u_eq, b0, w0_, bcctest_, true, il, iu, jl, ju, kl, ku);
+    } else if (gr_velocity) {
+      gr_eos->ConsToPrim(utest_, b0, w0_, bcctest_, true, il, iu, jl, ju, kl, ku,
+                        trial_velocity);
     } else {
       peos->ConsToPrim(utest_, b0, w0_, bcctest_, true, il, iu, jl, ju, kl, ku);
     }
@@ -1206,6 +1224,7 @@ void MHD::MOODLoop(Driver *pdriver, int stage) {
     auto nadf_ = mood_nadf;
     Kokkos::deep_copy(cnt_, 0);
     MoodNadPassCtx ctx;
+    ctx.trial_velocity_ = trial_velocity; ctx.gr_velocity = gr_velocity;
     ctx.utest_ = utest_;  ctx.bcctest_ = bcctest_;  ctx.ueq_ = ueq_;  ctx.weq_ = weq_;
     ctx.bcceq_ = bcceq_;  ctx.w0_ = w0_;  ctx.bcc0_ = bcc0_;  ctx.wnad_ = wnad_;
     ctx.u0_ = u0_;  ctx.bnad_ = bnad_;  ctx.bmn = bmn;  ctx.bmx = bmx;

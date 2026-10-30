@@ -39,6 +39,20 @@ void IdealGRMHD::ConsToPrim(DvceArray5D<Real> &cons, const DvceFaceFld4D<Real> &
                             const bool only_testfloors,
                             const int il, const int iu, const int jl, const int ju,
                             const int kl, const int ku) {
+  ConsToPrim(cons, b, prim, bcc, only_testfloors, il, iu, jl, ju, kl, ku,
+             DvceArray5D<Real>());
+}
+
+// The extra view is diagnostic scratch, not a replacement for the immutable
+// stage-input primitive state. Reuse the same C2P solve and PAD flags below.
+void IdealGRMHD::ConsToPrim(DvceArray5D<Real> &cons, const DvceFaceFld4D<Real> &b,
+                            DvceArray5D<Real> &prim, DvceArray5D<Real> &bcc,
+                            const bool only_testfloors,
+                            const int il, const int iu, const int jl, const int ju,
+                            const int kl, const int ku,
+                            const DvceArray5D<Real> &trial_velocity) {
+  const bool save_velocity = only_testfloors && trial_velocity.extent(1) == 3;
+  const auto velocity_ = trial_velocity;
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   int &is = indcs.is, &js = indcs.js, &ks = indcs.ks;
   auto &size = pmy_pack->pmb->mb_size;
@@ -166,7 +180,17 @@ void IdealGRMHD::ConsToPrim(DvceArray5D<Real> &cons, const DvceFaceFld4D<Real> &
 
     // set FOFC flag and quit loop if this function called only to check floors
     if (only_testfloors) {
-      if (dfloor_used || efloor_used || vceiling_used || c2p_failure) {
+      if (save_velocity) {
+        // Excision-flux cells can bypass C2P with an uninitialized w. They are
+        // excluded from GR MOOD; write zeros without reading that local state.
+        velocity_(m,0,k,j,i) = excised ? 0.0 : w.vx;
+        velocity_(m,1,k,j,i) = excised ? 0.0 : w.vy;
+        velocity_(m,2,k,j,i) = excised ? 0.0 : w.vz;
+      }
+      const bool invalid_velocity = save_velocity && !excised &&
+          (!isfinite(w.vx) || !isfinite(w.vy) || !isfinite(w.vz));
+      if (dfloor_used || efloor_used || vceiling_used || c2p_failure ||
+          invalid_velocity) {
         fofc_(m,k,j,i) = true;
         sumd++;  // use dfloor as counter for when either is true
       }
