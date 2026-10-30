@@ -247,7 +247,14 @@ void MultigridDriver::SetupMultigrid(Real dt, bool ftrivial) {
   oe_ = os_+1;
 
   if (fsubtract_average_) {
+    // A periodic problem is solvable only if the source has zero mean. The source still
+    // carries the background (-4 pi G rho_bar, about -12.6 per cell for rho_bar = 1),
+    // and a sum over N cells of that is accurate to about eps * |rho_bar| * sqrt(N):
+    // one pass leaves a mean of 1e-12 to 1e-10 that no V-cycle can remove, so the
+    // defect stops there whatever the amplitude of the perturbation. The second pass
+    // sums values of the size of the perturbation and removes that residue.
     pmg = mglevels_;
+    SubtractAverage(MGVariable::src);
     SubtractAverage(MGVariable::src);
   }
   current_level_ = ntotallevel_ - 1;
