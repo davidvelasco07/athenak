@@ -165,10 +165,9 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     }
   }
 
-  // constant particle timestep: keep sub-cell motion per step
-  auto &mbsize = pmbp->pmb->mb_size;
-  Real dxmin = std::min({mbsize.h_view(0).dx1, mbsize.h_view(0).dx2,
-                         mbsize.h_view(0).dx3});
+  // particle timestep for cycle 0 (SinkParticles::NewTimeStep refreshes it every cycle):
+  // keep sub-cell motion per step
+  Real dxmin = particles::SinkPopulation(pmbp)->MinCellWidth();
   Real &dtnew_ = particles::SinkPopulation(pmbp)->dtnew;
   dtnew_ = 0.25*dxmin/std::max(vorb, 1.0e-30);
 

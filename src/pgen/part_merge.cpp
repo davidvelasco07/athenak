@@ -204,7 +204,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   }
 
   // small constant particle timestep floor (NewTimeStep refines it each cycle)
-  Real dxmin = std::min({mbsz.h_view(0).dx1, mbsz.h_view(0).dx2, mbsz.h_view(0).dx3});
+  Real dxmin = particles::SinkPopulation(pmbp)->MinCellWidth();
   Real vmax = std::max({std::fabs(vapp), std::fabs(ux), std::fabs(uy), std::fabs(uz),
                         1.0e-3});
   particles::SinkPopulation(pmbp)->dtnew = 0.1*dxmin/vmax;

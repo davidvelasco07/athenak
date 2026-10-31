@@ -126,7 +126,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     });
   }
 
-  Real dxmin = std::min({mbsz.h_view(0).dx1, mbsz.h_view(0).dx2, mbsz.h_view(0).dx3});
+  Real dxmin = particles::SinkPopulation(pmbp)->MinCellWidth();
   Real &dtnew_ = particles::SinkPopulation(pmbp)->dtnew;
   dtnew_ = dxmin;  // particle drift dt; the hydro CFL will usually be smaller
 

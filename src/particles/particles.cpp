@@ -115,6 +115,21 @@ Real Particles::GetTimestep() const {
 }
 
 //----------------------------------------------------------------------------------------
+//! \fn Real ParticlePopulation::MinCellWidth()
+//! \brief Smallest cell width over this rank's MeshBlocks (host copy of mb_size). Used to
+//! seed dtnew in problem generators; see the declaration in particles.hpp.
+
+Real ParticlePopulation::MinCellWidth() const {
+  auto &mbsize = pmy_pack->pmb->mb_size;
+  Real dxmin = std::numeric_limits<Real>::max();
+  for (int m = 0; m < pmy_pack->nmb_thispack; ++m) {
+    dxmin = std::min({dxmin, mbsize.h_view(m).dx1, mbsize.h_view(m).dx2,
+                      mbsize.h_view(m).dx3});
+  }
+  return dxmin;
+}
+
+//----------------------------------------------------------------------------------------
 // ParticlePopulation constructor, initializes data structures and parameters
 
 ParticlePopulation::ParticlePopulation(const std::string &population_name,

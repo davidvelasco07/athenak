@@ -6,6 +6,7 @@
 //! \file sink_tasks.cpp
 //! \brief sink-particle task schedule, pushers, potential/deposit exchanges and timestep
 
+#include <limits>
 #include <map>
 #include <memory>
 #include <string>
@@ -397,11 +398,17 @@ TaskStatus SinkParticles::Push(Driver *pdriver, int stage) {
 //! Mesh::NewTimeStep applies NO cfl factor to the particle dt, so the safety factor lives
 //! here; cfl_par=0.5 (default) guarantees at most one cell crossed per step, as the
 //! control-volume accretion's cell-crossing correction assumes.
+//! Every rank resets dtnew every cycle. A rank with no particles, or with all of them at
+//! rest, imposes no constraint. It used to keep its previous value (the pgen seed, or the
+//! value from when it last held a particle), and since Mesh::NewTimeStep takes the MPI
+//! minimum, the time step then depended on which ranks had held particles: the same run
+//! took different steps on different rank counts.
 
 TaskStatus SinkParticles::NewTimeStep(Driver *pdriver, int stage) {
   if (stage != pdriver->nexp_stages) return TaskStatus::complete;  // once per cycle
   CheckSinkSanity("timestep", stage);
   const int npart = ppop->nprtcl_thispack;
+  ppop->dtnew = std::numeric_limits<float>::max();
   if (npart <= 0) return TaskStatus::complete;
 
   auto &pr = ppop->prtcl_rdata;
@@ -425,8 +432,6 @@ TaskStatus SinkParticles::NewTimeStep(Driver *pdriver, int stage) {
   if (max_vdx > 0.0) {
     ppop->dtnew = cfl_par/max_vdx;
   }
-  // else: all particles at rest -- keep the previous (or pgen-seeded) dtnew
-
   return TaskStatus::complete;
 }
 

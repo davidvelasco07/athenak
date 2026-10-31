@@ -126,6 +126,10 @@ class ParticlePopulation {
   TaskStatus ClearSend(Driver *pdriver, int stage);
   TaskStatus ClearRecv(Driver *pdriver, int stage);
   TaskStatus NewTimeStep(Driver *pdriver, int stage);
+  // Smallest cell width over this rank's MeshBlocks. Problem generators seed dtnew from
+  // it rather than from MeshBlock 0: Mesh::NewTimeStep takes the MPI minimum, which then
+  // is the finest width on the mesh whatever blocks each rank owns.
+  Real MinCellWidth() const;
 
   // particle pusher implementations
   TaskStatus PushDrift(Driver *pdriver, int stage);
